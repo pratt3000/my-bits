@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Whispering Grove",
+  "description": "Wander a calm, endless 3D forest and discover animals and nature-words hidden among the trees. Walk up and tap to gather them for tiered points, each revealing a super-interesting fact. Rustle the leaves, follow the soft chimes, and no two visits are the same.",
+  "tags": ["3d", "forest", "explore", "relaxing", "collect"],
+  "permissions": ["haptics", "backgroundMusic"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "grove": {
+        "label": "Grove Explorer Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
