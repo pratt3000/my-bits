@@ -15,8 +15,12 @@ loops, then overdub more layers to build a whole song** — all on-screen.
 - **Workflow:** pick an instrument → tap **● REC** → after a 1-bar count-in,
   play the pads for one loop → the layer loops forever → hit **● REC** again to
   overdub the next instrument on top.
-- Per-track **mute** and **delete**, adjustable **tempo** (50–180 bpm) and loop
-  length (1 / 2 / 4 bars), a **metronome**, and a sweeping loop timeline.
+- Per-track **volume mixer** (tap a track to cycle level / mute) and **delete**,
+  adjustable **tempo** (50–180 bpm), loop length (1 / 2 / 4 bars), **key/scale**
+  and **swing**, a **metronome**, and a sweeping loop timeline.
+- **Deepest Jam leaderboard** (🏆): a Plethora `memory.record` channel — the
+  number of layers you stack is your score, auto-submitted (best-per-user) with
+  global/following and daily/weekly/all-time views.
 - Melodic pads are locked to **A minor pentatonic**, so every layer stays in
   key. Your song **auto-saves** on the device.
 
