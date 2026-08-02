@@ -99,6 +99,30 @@ window.plethoraBit = {
       .wg-factext { font-size:16px; line-height:1.6; opacity:.95; margin-bottom:20px; font-weight:500; }
       .wg-dismiss { font-size:13px; opacity:.7; font-weight:600; letter-spacing:.4px; }
       .wg-plus { font-weight:800; }
+
+      .wg-lb { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:22px;
+        pointer-events:none; opacity:0; transition:opacity .25s ease;
+        background:radial-gradient(130% 100% at 50% 40%, rgba(8,22,13,.5), rgba(4,12,8,.82)); }
+      .wg-lb.show { opacity:1; pointer-events:auto; }
+      .wg-lb-card { width:100%; max-width:380px; background:rgba(14,28,18,.74); border:1px solid rgba(255,255,255,.16);
+        border-radius:20px; padding:18px 16px 16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+      .wg-lb-head { font-size:22px; font-weight:800; text-align:center; margin-bottom:12px; }
+      .wg-lb-tabs { display:flex; gap:6px; margin-bottom:12px; }
+      .wg-lb-tabs button { flex:1; pointer-events:auto; padding:8px 0; border-radius:999px; border:1px solid rgba(255,255,255,.18);
+        background:rgba(255,255,255,.05); color:#dfeede; font-size:13px; font-weight:700; cursor:pointer; }
+      .wg-lb-tabs button.on { background:linear-gradient(180deg,#8fe089,#6cc06a); color:#0d2313; border-color:transparent; }
+      .wg-lb-list { display:flex; flex-direction:column; gap:5px; min-height:130px; max-height:46vh; overflow-y:auto; }
+      .wg-lb-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;
+        background:rgba(255,255,255,.05); font-size:15px; }
+      .wg-lb-row .r { min-width:34px; font-weight:800; text-align:center; }
+      .wg-lb-row .nm { flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .wg-lb-row .sc { font-weight:800; color:#ffe29a; }
+      .wg-lb-row.you { background:rgba(143,224,137,.18); border:1px solid rgba(143,224,137,.4); }
+      .wg-lb-me { margin-top:8px; }
+      .wg-lb-empty { text-align:center; opacity:.82; padding:30px 8px; font-weight:600; line-height:1.5; }
+      .wg-lb-close { margin-top:14px; width:100%; pointer-events:auto; padding:12px; border-radius:12px; border:none;
+        background:rgba(255,255,255,.1); color:#eafff0; font-size:15px; font-weight:700; cursor:pointer; }
+      .wg-lb-close:active { transform:scale(.97); }
     `;
     root.appendChild(style);
 
@@ -112,6 +136,7 @@ window.plethoraBit = {
         <div class="wg-best"></div>
       </div>
       <div class="wg-top-right" style="opacity:0;transition:opacity .5s ease">
+        <button class="wg-btn wg-lbbtn" aria-label="Leaderboard">🏆</button>
         <button class="wg-btn wg-mute" aria-label="Sound">🔊</button>
         <button class="wg-btn wg-info" aria-label="How to play">?</button>
       </div>
@@ -130,6 +155,20 @@ window.plethoraBit = {
             <div>🍃 <b>Tap the trees</b> to rustle their leaves</div>
           </div>
           <button class="wg-cta wait">Waking the grove…</button>
+        </div>
+      </div>
+
+      <div class="wg-lb">
+        <div class="wg-lb-card">
+          <div class="wg-lb-head">🏆 Grove Leaderboard</div>
+          <div class="wg-lb-tabs">
+            <button data-p="daily">Today</button>
+            <button data-p="weekly">This week</button>
+            <button data-p="all_time" class="on">All time</button>
+          </div>
+          <div class="wg-lb-list"></div>
+          <div class="wg-lb-me"></div>
+          <button class="wg-lb-close">Close</button>
         </div>
       </div>
 
@@ -152,9 +191,10 @@ window.plethoraBit = {
       scoreVal: $(".wg-score .val"), found: $(".found"), best: $(".wg-best"),
       toast: $(".wg-toast"), joy: $(".wg-joy"), knob: $(".wg-knob"),
       intro: $(".wg-intro"), cta: $(".wg-cta"),
-      mute: $(".wg-mute"), info: $(".wg-info"),
+      mute: $(".wg-mute"), info: $(".wg-info"), lbBtn: $(".wg-lbbtn"),
       fact: $(".wg-fact"), fEmoji: $(".wg-emoji"), fWord: $(".wg-word"),
-      fName: $(".wg-name"), fBadge: $(".wg-badge"), fText: $(".wg-factext")
+      fName: $(".wg-name"), fBadge: $(".wg-badge"), fText: $(".wg-factext"),
+      lb: $(".wg-lb"), lbList: $(".wg-lb-list"), lbMe: $(".wg-lb-me"), lbClose: $(".wg-lb-close")
     };
 
     // We have a visible first frame now (the intro). Tell the host.
@@ -204,8 +244,13 @@ window.plethoraBit = {
       { e: "🦆", n: "Duck", t: "common", f: "A duck's quack really does echo — the popular myth that it doesn't is simply false." },
       { e: "🐛", n: "Caterpillar", t: "common", f: "A caterpillar has around 4,000 muscles. A human body has roughly 600." },
       { e: "🐞", n: "Ladybird", t: "common", f: "A single ladybird can devour 5,000 aphids over its lifetime." },
+      { e: "🦋", n: "Butterfly", t: "common", f: "A butterfly tastes with its feet — standing on a leaf tells it whether to lay eggs there." },
+      { e: "🐁", n: "Wood Mouse", t: "common", f: "A mouse's heart can beat up to 600 times a minute — around ten beats every second." },
+      { e: "🐢", n: "Turtle", t: "common", f: "Some turtles can breathe through their skin, letting them stay underwater for months." },
       // uncommon
       { e: "🦊", n: "Fox", t: "uncommon", f: "Foxes seem to use Earth's magnetic field to aim their pounce — like a living compass." },
+      { e: "🦝", n: "Raccoon", t: "uncommon", f: "Raccoons have hyper-sensitive paws and 'wash' food mainly to feel it better, not to clean it." },
+      { e: "🐦", n: "Robin", t: "uncommon", f: "A robin can sense Earth's magnetic field, helping it find its way when it migrates." },
       { e: "🦔", n: "Hedgehog", t: "uncommon", f: "Meeting a new smell, a hedgehog licks it and paints the frothy spit onto its own spines." },
       { e: "🦇", n: "Bat", t: "uncommon", f: "Bats almost always turn left leaving a cave, and they're the only mammals that truly fly." },
       { e: "🦡", n: "Badger", t: "uncommon", f: "Badgers keep tidy underground toilets and even change their grassy bedding to stay clean." },
@@ -398,7 +443,7 @@ window.plethoraBit = {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SKY);
-    scene.fog = new THREE.Fog(SKY, 9, 60); // close, cozy haze so the forest feels deep
+    scene.fog = new THREE.Fog(SKY, 9, 70); // close, cozy haze so the forest feels deep
 
     const camera = new THREE.PerspectiveCamera(64, ctx.width / ctx.height, 0.1, 400);
 
@@ -411,7 +456,7 @@ window.plethoraBit = {
     scene.add(fill);
 
     // --- shared wind: sways grass, canopies and bushes in the vertex shader ---
-    const GRASS_R = 30;                 // grass radius around the player
+    const GRASS_R = 34;                 // grass radius around the player
     const windU = { value: 0 };
     function applyWind(mat, mode) {
       mat.onBeforeCompile = (sh) => {
@@ -459,7 +504,7 @@ window.plethoraBit = {
     const UP = new THREE.Vector3(0, 1, 0);
 
     // -- trees --
-    const MAX_TREES = 190;
+    const MAX_TREES = 300;
     const trunkGeo = new THREE.CylinderGeometry(0.12, 0.24, 2.6, 6);
     trunkGeo.translate(0, 1.3, 0);
     const canopyGeo = new THREE.IcosahedronGeometry(1, 1); // rounder canopy
@@ -508,12 +553,12 @@ window.plethoraBit = {
       let x, z;
       if (ahead) {
         const ang = camYaw + (Math.random() - 0.5) * Math.PI * 1.4;
-        const d = 34 + Math.random() * 26;
+        const d = 42 + Math.random() * 32;
         x = player.x + Math.sin(ang) * d;
         z = player.z + Math.cos(ang) * d;
       } else {
         const ang = Math.random() * Math.PI * 2;
-        const d = 3 + Math.random() * 57;
+        const d = 3 + Math.random() * 70;
         x = player.x + Math.cos(ang) * d;
         z = player.z + Math.sin(ang) * d;
       }
@@ -530,7 +575,7 @@ window.plethoraBit = {
     }
 
     // -- bushes (mid-layer cover that hides creatures) --
-    const MAX_BUSH = 150;
+    const MAX_BUSH = 220;
     const bushGeo = new THREE.IcosahedronGeometry(1, 0);
     const bushMat = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true });
     applyWind(bushMat, "canopy");
@@ -560,7 +605,7 @@ window.plethoraBit = {
         z = player.z + Math.cos(ang) * d;
       } else {
         const ang = Math.random() * Math.PI * 2;
-        const d = 2 + Math.random() * 34;
+        const d = 2 + Math.random() * 42;
         x = player.x + Math.cos(ang) * d;
         z = player.z + Math.sin(ang) * d;
       }
@@ -573,7 +618,7 @@ window.plethoraBit = {
     }
 
     // -- grass: thousands of instanced blades that sway and fade at the edge --
-    const GRASS = 2600;
+    const GRASS = 3400;
     const bladeGeo = new THREE.BufferGeometry();
     const bh = 0.6, bw = 0.055;
     bladeGeo.setAttribute("position", new THREE.Float32BufferAttribute(
@@ -626,7 +671,7 @@ window.plethoraBit = {
     //    No giveaway beacon — a soft glow + firefly only appear up close, and
     //    the discovery chime hints when one is near.
     // ---------------------------------------------------------------------
-    const COLLECT_COUNT = 20;
+    const COLLECT_COUNT = 30;
     const COLLECT_REACH = 9;       // must be within this many metres to gather
     const NEAR_CHIME = 17;         // discovery chime range
     const FIND_GLOW = 14;          // glow + firefly reveal range
@@ -634,7 +679,7 @@ window.plethoraBit = {
     const pickables = [];          // main sprites for raycasting
 
     function randomContent() {
-      if (Math.random() < 0.45) {
+      if (Math.random() < 0.3) {
         const w = WORDS[(Math.random() * WORDS.length) | 0];
         return { kind: "word", tier: "word", emoji: null, word: w.w, name: w.w, fact: w.f };
       }
@@ -679,7 +724,7 @@ window.plethoraBit = {
       const tier = TIERS[content.tier];
       c.mainMat.map = content.kind === "word" ? wordTexture(content.word) : emojiTexture(content.emoji);
       c.mainMat.needsUpdate = true;
-      const mainScale = content.kind === "word" ? 2.5 : 1.45;
+      const mainScale = content.kind === "word" ? 1.2 : 1.95;
       c.main.scale.set(mainScale, mainScale, 1);
       c.glowMat.color.setHex(tier.color);
       c.sparkMat.color.setHex(content.tier === "word" ? 0xbfffe6 : 0xfff2c0);
@@ -688,7 +733,7 @@ window.plethoraBit = {
 
       // Nestle animals beside a bush (tucked, partly hidden); words drift a bit
       // more in the open. Fall back to a plain ring if no bush is handy.
-      const minD = initial ? 8 : 16, maxD = initial ? 26 : 40;
+      const minD = initial ? 8 : 16, maxD = initial ? 32 : 48;
       let x = null, z = null;
       if (content.kind === "animal" && bushes.length) {
         for (let tries = 0; tries < 6; tries++) {
@@ -978,6 +1023,69 @@ window.plethoraBit = {
         const v = mine && (mine.value ?? mine.score);
         if (typeof v === "number" && v > 0) { best = v; el.best.textContent = "best ✦ " + best; }
       } catch (_) {}
+    }
+
+    // ---------------------------------------------------------------------
+    // 10b. In-bit leaderboard panel (reads the same "grove" record).
+    // ---------------------------------------------------------------------
+    let lbPeriod = "all_time", lbOpen = false;
+    function lbEsc(s) { return String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c])); }
+    function lbFmt(n) { const x = Math.round(Number(n) || 0); return x.toLocaleString ? x.toLocaleString() : String(x); }
+    function lbYou(e) { return !!(e && (e.isYou || e.you || e.self || e.isSelf || e.mine)); }
+    function lbNorm(e, i) {
+      const u = e.user || {};
+      return {
+        rank: e.rank ?? e.position ?? (i + 1),
+        name: e.displayName || e.name || e.handle || e.username || u.displayName || u.name || u.handle || (lbYou(e) ? "You" : "Explorer"),
+        value: e.value ?? e.score ?? e.points ?? (e.entry && e.entry.value) ?? 0,
+        you: lbYou(e)
+      };
+    }
+    function openLeaderboard() {
+      lbOpen = true;
+      el.lb.classList.add("show");
+      el.lbList.innerHTML = '<div class="wg-lb-empty">Loading…</div>';
+      el.lbMe.innerHTML = "";
+      Promise.resolve(maybeSubmit(true)).catch(() => {}).then(loadLeaderboard);
+    }
+    function closeLeaderboard() { lbOpen = false; el.lb.classList.remove("show"); }
+    async function loadLeaderboard() {
+      if (!ctx.memory || !ctx.memory.record) {
+        el.lbList.innerHTML = '<div class="wg-lb-empty">Leaderboard isn\'t available here.</div>';
+        return;
+      }
+      let lb;
+      try { lb = await ctx.memory.record("grove").leaderboard({ scope: "global", period: lbPeriod }); }
+      catch (_) { el.lbList.innerHTML = '<div class="wg-lb-empty">Couldn\'t load the board — try again.</div>'; return; }
+      if (!lbOpen) return;
+      const raw = (lb && (lb.entries || lb.rows || lb.leaderboard || lb.top || lb.results)) || [];
+      const entries = raw.map(lbNorm);
+      const meRaw = lb && (lb.you || lb.self || lb.me || lb.viewer);
+      const me = meRaw ? lbNorm(meRaw, ((meRaw.rank ?? 0) || 1) - 1) : entries.find((x) => x.you);
+      if (!entries.length) {
+        el.lbList.innerHTML = '<div class="wg-lb-empty">No scores yet.<br>Be the first to wander the grove! 🌿</div>';
+      } else {
+        const medal = ["🥇", "🥈", "🥉"];
+        el.lbList.innerHTML = entries.slice(0, 12).map((e) =>
+          '<div class="wg-lb-row' + (e.you ? " you" : "") + '"><span class="r">' +
+          (medal[e.rank - 1] || ("#" + e.rank)) + '</span><span class="nm">' +
+          lbEsc(e.name) + '</span><span class="sc">✦ ' + lbFmt(e.value) + "</span></div>").join("");
+      }
+      const meVal = me ? me.value : score;
+      const meRank = me && me.rank ? ("#" + me.rank) : "—";
+      el.lbMe.innerHTML = '<div class="wg-lb-row you"><span class="r">' + meRank +
+        '</span><span class="nm">You' + (me ? "" : " · this run") + '</span><span class="sc">✦ ' + lbFmt(meVal) + "</span></div>";
+    }
+    ctx.listen(el.lbBtn, "click", () => { resumeAC(); sfxTap(); openLeaderboard(); });
+    ctx.listen(el.lbClose, "click", () => { sfxTap(); closeLeaderboard(); });
+    ctx.listen(el.lb, "pointerup", (e) => { if (e.target === el.lb) closeLeaderboard(); });
+    for (const tab of ui.querySelectorAll(".wg-lb-tabs button")) {
+      ctx.listen(tab, "click", () => {
+        lbPeriod = tab.dataset.p;
+        for (const t of ui.querySelectorAll(".wg-lb-tabs button")) t.classList.toggle("on", t === tab);
+        sfxTap();
+        loadLeaderboard();
+      });
     }
 
     // ---------------------------------------------------------------------
@@ -1276,12 +1384,12 @@ window.plethoraBit = {
 
       // --- recycle trees ---
       let td = false;
-      for (let k = 0; k < 20; k++) {
+      for (let k = 0; k < 26; k++) {
         const i = (treeCursor + k) % MAX_TREES;
         const t = trees[i];
-        if (Math.hypot(t.x - player.x, t.z - player.z) > 66) { placeTree(i, true); td = true; }
+        if (Math.hypot(t.x - player.x, t.z - player.z) > 80) { placeTree(i, true); td = true; }
       }
-      treeCursor = (treeCursor + 20) % MAX_TREES;
+      treeCursor = (treeCursor + 26) % MAX_TREES;
       if (td) {
         trunkMesh.instanceMatrix.needsUpdate = true;
         foliage1.instanceMatrix.needsUpdate = true;
@@ -1295,7 +1403,7 @@ window.plethoraBit = {
       for (let k = 0; k < 12; k++) {
         const i = (bushCursor + k) % MAX_BUSH;
         const b = bushes[i];
-        if (Math.hypot(b.x - player.x, b.z - player.z) > 40) { placeBush(i, true); bdrt = true; }
+        if (Math.hypot(b.x - player.x, b.z - player.z) > 48) { placeBush(i, true); bdrt = true; }
       }
       bushCursor = (bushCursor + 12) % MAX_BUSH;
       if (bdrt) {
@@ -1305,12 +1413,12 @@ window.plethoraBit = {
 
       // --- recycle grass ---
       let gdrt = false;
-      for (let k = 0; k < 300; k++) {
+      for (let k = 0; k < 360; k++) {
         const i = (grassCursor + k) % GRASS;
         const b = blades[i];
         if (Math.hypot(b.x - player.x, b.z - player.z) > GRASS_R + 4) { placeBlade(i, true); gdrt = true; }
       }
-      grassCursor = (grassCursor + 300) % GRASS;
+      grassCursor = (grassCursor + 360) % GRASS;
       if (gdrt) {
         grassMesh.instanceMatrix.needsUpdate = true;
         if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
@@ -1320,7 +1428,7 @@ window.plethoraBit = {
       for (const c of collectibles) {
         if (c.dead) continue;
         const d = Math.hypot(c.x - player.x, c.z - player.z);
-        if (d > 58) { spawnCollectible(c, false); continue; }
+        if (d > 66) { spawnCollectible(c, false); continue; }
         const y = c.baseY + Math.sin(timeMs * 0.0018 + c.phase) * c.floatAmp;
         c.group.position.set(c.x, y, c.z);
         const near = d < FIND_GLOW ? (FIND_GLOW - d) / FIND_GLOW : 0;
