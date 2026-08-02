@@ -156,6 +156,28 @@ window.plethoraBit = {
     // We have a visible first frame now (the intro). Tell the host.
     ctx.markVisualReady("intro");
 
+    // Diagnostics: surface any failure on-screen (no dev console in the WebView).
+    let readyCalled = false, booted = false;
+    function safeReady() { if (!readyCalled) { readyCalled = true; try { ctx.platform.ready(); } catch (_) {} } }
+    function showFatal(stage, err) {
+      const m = err && (err.message || err.reason || err.toString) ? String(err.message || err.reason || err) : String(err);
+      try { ctx.platform.error && ctx.platform.error({ stage: stage, message: m }); } catch (_) {}
+      if (booted) return; // grove already running — don't hijack a working screen
+      el.cta.classList.remove("wait");
+      el.cta.textContent = "Show error";
+      const tag = ui.querySelector(".wg-tag");
+      if (tag) {
+        tag.textContent = "⚠ " + stage + " — " + m;
+        tag.style.color = "#ffd7d7";
+        tag.style.userSelect = "text";
+        tag.style.webkitUserSelect = "text";
+      }
+      el.intro.style.display = "flex";
+      safeReady();
+    }
+    ctx.listen(window, "error", (e) => showFatal("runtime", (e && e.error) || (e && e.message) || e));
+    ctx.listen(window, "unhandledrejection", (e) => showFatal("promise", (e && e.reason) || e));
+
     // ---------------------------------------------------------------------
     // 1. Content: tiers, animals and words with their facts.
     // ---------------------------------------------------------------------
@@ -222,15 +244,24 @@ window.plethoraBit = {
     // 2. Load Three.js (streams in the background while intro is shown).
     // ---------------------------------------------------------------------
     let THREE;
+    const THREE_URL = "https://libs.plethora.studio/three/0.164.1/three.module.js";
     try {
       THREE = await ctx.importModule("three", "0.164.1");
-    } catch (err) {
-      ctx.platform && ctx.platform.error && ctx.platform.error({ where: "importModule", message: String(err) });
-      el.cta.classList.remove("wait");
-      el.cta.textContent = "Couldn't load the grove ✕";
-      ctx.platform.ready();
+    } catch (err1) {
+      try {
+        THREE = await ctx.importModule(THREE_URL);
+      } catch (err2) {
+        showFatal("load three", err2 || err1);
+        return;
+      }
+    }
+    if (THREE && !THREE.WebGLRenderer && THREE.default) THREE = THREE.default;
+    if (!THREE || !THREE.WebGLRenderer) {
+      showFatal("three exports", new Error("WebGLRenderer missing (keys: " + Object.keys(THREE || {}).slice(0, 6).join(",") + ")"));
       return;
     }
+
+    try {
 
     // ---------------------------------------------------------------------
     // 3. Small canvas-texture factories (all assets are procedural — maxAssets is 0).
@@ -974,11 +1005,15 @@ window.plethoraBit = {
     // first render behind the intro, then hand off to host
     renderer.render(scene, camera);
     ctx.onFrame(update);
-    ctx.platform.ready();
+    safeReady();
+    booted = true;
 
     ctx.onDestroy(() => {
       try { if (musicHandle && musicHandle.stop) musicHandle.stop({ fadeOutMs: 300 }); } catch (_) {}
       try { renderer.dispose(); } catch (_) {}
     });
+    } catch (e) {
+      showFatal("init", e);
+    }
   }
 };
