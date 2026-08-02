@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Kaleido Bloom",
+  "description": "Drag a finger to paint glowing symmetric mandalas. An endless kaleidoscope fidget that breathes and shifts color on its own.",
+  "tags": [
+    "art",
+    "creative",
+    "fidget",
+    "touch",
+    "generative",
+    "sensory"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic"
+  ],
+  "dependencies": []
+}
