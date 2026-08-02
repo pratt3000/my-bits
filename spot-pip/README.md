@@ -26,6 +26,11 @@ you earn, and your total clear time goes on a **Fastest Clear** leaderboard.
   (striped shirts, red hats, glasses), so decoys get genuinely confusing.
 - **Reward for speed** — 3 / 2 / 1 stars per level by time, a points bonus that
   shrinks with time and wrong taps, and a total-time leaderboard.
+- **Multiplayer leaderboard** — the total clear time feeds a global (cross-player)
+  `best_time` record. You can view the rankings in-bit any time via the 🏆
+  button, or from the finish screen, with your own row highlighted. Player names
+  are HTML-escaped before rendering, and the panel degrades gracefully when the
+  board is empty or briefly unavailable.
 
 ## Contract notes
 

@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Spot Pip",
-  "description": "A hidden-object search game. Pinch and drag around a busy procedurally-generated crowd to find Pip — the one in the red-and-white striped hat and round glasses. Three levels, easy to hard. The faster you spot him, the more stars you earn.",
+  "description": "A hidden-object search game. Pinch and drag around a busy procedurally-generated crowd to find Pip — the one in the red-and-white striped hat and round glasses. Three levels, easy to hard. The faster you spot him, the more stars you earn — then race the world on a global Fastest-Clear leaderboard you can view right in the bit.",
   "tags": [
     "puzzle",
     "hidden-object",

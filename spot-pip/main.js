@@ -338,7 +338,8 @@ window.plethoraBit = {
             ? ["Total time  " + fmt(totalMs), "Score  " + totalScore]
             : ["Time  " + fmt(levelMs), "+" + gained + " pts"],
           button: last ? "Play again" : "Next level",
-          onButton: last ? finish : () => startLevel(levelIndex + 1)
+          onButton: last ? finish : () => startLevel(levelIndex + 1),
+          button2: last ? { label: "🏆 Leaderboard", onButton: openLeaderboard } : null
         });
         if (last) submitTime();
       }, 900);
@@ -557,9 +558,11 @@ window.plethoraBit = {
     meta.style.cssText = "flex:1;display:flex;justify-content:center;";
     meta.appendChild(pill);
 
+    const boardBtn = chip("🏆", "Leaderboard");
+    ctx.listen(boardBtn, "click", () => openLeaderboard());
     const help = chip("?", "How to play");
     ctx.listen(help, "click", () => toggleHelp());
-    top.append(card, meta, help);
+    top.append(card, meta, boardBtn, help);
 
     // right-side zoom controls (kept off the bottom safe area)
     const zoomCol = document.createElement("div");
@@ -580,7 +583,7 @@ window.plethoraBit = {
       "padding:24px;pointer-events:auto;background:rgba(10,8,16,0.5);";
     ui.appendChild(overlay);
     function hideOverlay() { overlay.style.display = "none"; overlay.innerHTML = ""; }
-    function showCard({ title, stars, lines, button, onButton }) {
+    function showCard({ title, stars, lines, button, onButton, button2 }) {
       overlay.innerHTML = "";
       const box = document.createElement("div");
       box.style.cssText =
@@ -602,6 +605,16 @@ window.plethoraBit = {
         "padding:14px 26px;border-radius:14px;touch-action:manipulation;box-shadow:0 4px 14px rgba(0,0,0,0.4);";
       ctx.listen(btn, "click", () => { if (ctx.capabilities.haptics) ctx.platform.haptic("light"); onButton(); });
       box.appendChild(btn);
+      if (button2) {
+        const b2 = document.createElement("button");
+        b2.textContent = button2.label;
+        b2.style.cssText =
+          "display:block;width:100%;margin-top:10px;pointer-events:auto;border:none;cursor:pointer;" +
+          "color:#f4f1ff;background:rgba(255,255,255,0.12);font:700 15px/1 -apple-system,system-ui,sans-serif;" +
+          "padding:12px 22px;border-radius:12px;touch-action:manipulation;";
+        ctx.listen(b2, "click", () => { if (ctx.capabilities.haptics) ctx.platform.haptic("light"); button2.onButton(); });
+        box.appendChild(b2);
+      }
       overlay.appendChild(box);
       overlay.style.display = "flex";
     }
@@ -620,7 +633,8 @@ window.plethoraBit = {
       "<li>• <b>Drag</b> to move around the crowd.</li>" +
       "<li>• <b>Pinch</b> or use <b>+ / −</b> to zoom in and out.</li>" +
       "<li>• <b>Tap</b> Pip when you spot him.</li>" +
-      "<li>• Faster finds earn more ⭐. Clear all three levels for the leaderboard.</li>" +
+      "<li>• Faster finds earn more ⭐. Clear all three levels to post your time.</li>" +
+      "<li>• Tap <b>🏆</b> to see the global leaderboard.</li>" +
       "</ul>" +
       '<p style="margin-top:16px;opacity:0.7;">Tap anywhere to close.</p></div>';
     ui.appendChild(helpPanel);
@@ -628,6 +642,77 @@ window.plethoraBit = {
       helpPanel.style.display = helpPanel.style.display === "none" ? "flex" : "none";
     }
     ctx.listen(helpPanel, "click", () => (helpPanel.style.display = "none"));
+
+    // ---- multiplayer leaderboard ------------------------------------------
+    // The `best_time` record is a global (cross-player) leaderboard. Here we
+    // fetch it and render it inside the bit. The shape of a leaderboard entry
+    // isn't pinned by the contract, so read fields defensively and HTML-escape
+    // every player-supplied value (names come from other people).
+    const boardPanel = document.createElement("div");
+    boardPanel.style.cssText =
+      "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
+      "padding:22px;pointer-events:auto;background:rgba(8,6,14,0.82);" +
+      "backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);";
+    ui.appendChild(boardPanel);
+    ctx.listen(boardPanel, "click", (e) => { if (e.target === boardPanel) boardPanel.style.display = "none"; });
+
+    const esc = (s) => String(s).replace(/[&<>"]/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const bArr = (o) => !o ? [] : Array.isArray(o) ? o
+      : (o.entries || o.rows || o.items || o.leaderboard || o.results ||
+         (o.data && (o.data.entries || o.data.rows)) || []);
+    const bSelf = (e) => !!(e && (e.self || e.isSelf || e.me || e.you || e.mine || e.isViewer || e.viewer));
+    const bName = (e) => e.name || e.displayName || e.handle || e.username ||
+      (e.user && (e.user.name || e.user.displayName || e.user.handle || e.user.username)) ||
+      (bSelf(e) ? "You" : "Player");
+    const bVal = (e) => e.label || e.formatted || e.valueLabel || e.display ||
+      (typeof e.value === "number" ? fmt(e.value) : (e.value != null ? String(e.value) : "—"));
+    const bRank = (e, i) => e.rank != null ? e.rank : (e.position != null ? e.position : i + 1);
+    function bRow(rank, name, val, self) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;' +
+        (self ? "background:rgba(255,210,63,0.18);" : "") + '">' +
+        '<div style="width:26px;text-align:right;font-weight:800;opacity:0.75;">' + esc(rank) + "</div>" +
+        '<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:' +
+        (self ? "#ffd23f" : "#f4f1ff") + ';">' + esc(name) + "</div>" +
+        '<div style="flex:0 0 auto;font-variant-numeric:tabular-nums;font-weight:700;">' + esc(val) + "</div></div>";
+    }
+    function renderBoard(lb) {
+      const arr = bArr(lb);
+      if (!arr.length) return '<div style="opacity:0.85;text-align:center;padding:14px 0;">No times yet — be the first! 🏁</div>';
+      const top = arr.slice(0, 8);
+      let html = top.map((e, i) => bRow(bRank(e, i), bName(e), bVal(e), bSelf(e))).join("");
+      const selfEntry = (lb && (lb.you || lb.self || lb.viewer || lb.me)) || arr.find(bSelf);
+      if (selfEntry && !top.some(bSelf)) {
+        html += '<div style="height:1px;background:rgba(255,255,255,0.12);margin:8px 2px;"></div>' +
+          bRow(bRank(selfEntry, arr.indexOf(selfEntry)), bName(selfEntry), bVal(selfEntry), true);
+      }
+      return '<div style="display:flex;flex-direction:column;gap:2px;">' + html + "</div>";
+    }
+    const boardHead =
+      '<div style="font-size:20px;font-weight:800;margin-bottom:2px;">🏆 Fastest Clear</div>' +
+      '<div style="opacity:0.6;font-size:13px;margin-bottom:14px;">Global · all time</div>';
+    async function openLeaderboard() {
+      boardPanel.style.display = "flex";
+      boardPanel.innerHTML = "";
+      const bx = document.createElement("div");
+      bx.style.cssText =
+        "width:100%;max-width:340px;max-height:80%;overflow:auto;padding:20px;border-radius:20px;" +
+        "background:rgba(24,20,36,0.96);color:#f4f1ff;box-shadow:0 12px 40px rgba(0,0,0,0.55);" +
+        "font-family:-apple-system,system-ui,sans-serif;";
+      bx.innerHTML = boardHead + '<div style="opacity:0.8;padding:10px 0;">Loading…</div>';
+      boardPanel.appendChild(bx);
+      if (ctx.capabilities.haptics) ctx.platform.haptic("light");
+      let inner;
+      try {
+        const lb = await ctx.memory.record("best_time").leaderboard({ scope: "global", period: "all_time" });
+        inner = renderBoard(lb);
+      } catch (err) {
+        inner = '<div style="opacity:0.8;text-align:center;padding:12px 0;">Leaderboard isn\'t available right now.</div>';
+      }
+      if (boardPanel.style.display === "none") return; // closed while loading
+      bx.innerHTML = boardHead + inner +
+        '<div style="text-align:center;margin-top:16px;opacity:0.55;font-size:13px;">Tap outside to close</div>';
+    }
 
     // ---- boot --------------------------------------------------------------
     let perf = 0;                         // running clock fed by onFrame timeMs
