@@ -70,13 +70,8 @@ window.plethoraBit = {
       metronome: false,
       tracks: [],          // { id, inst, events:[{step,note}], vol }
       nextId: 1,
-      lockInst: false,
-      lbScope: "global",   // leaderboard view
-      lbPeriod: "all_time",
-      lastSubmitted: 0     // highest layer count already sent this session
+      lockInst: false
     };
-    // Leaderboard is available only when the runtime exposes memory records.
-    const hasBoard = !!(ctx.memory && typeof ctx.memory.record === "function");
     const VOLS = [1, 0.66, 0.33, 0];          // per-track volume cycle
     const SPL = () => state.bars * STEPS_PER_BAR;
     const stepDur = () => (60 / state.bpm) / 4;
@@ -471,7 +466,6 @@ window.plethoraBit = {
       } else {
         ctx.platform.haptic("success");
         ctx.platform.milestone("layer_added");
-        submitScore();   // a new layer may be a new personal-best jam
       }
       renderAll();
       save();
@@ -519,56 +513,6 @@ window.plethoraBit = {
           events: (t.events || []).filter((e) => Number.isFinite(e.step))
         }));
       } catch (_) {}
-    }
-
-    // ----------------------------------------------------------- leaderboard
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, (c) =>
-        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    }
-    // Score = number of layers stacked into the jam. Only submit a new personal
-    // best; rejected writes are non-fatal (design for it, per the memory rules).
-    async function submitScore() {
-      if (!hasBoard) return;
-      const n = state.tracks.length;
-      if (n < 1 || n <= state.lastSubmitted) return;
-      state.lastSubmitted = n;
-      try {
-        await ctx.memory.record("layers").submit(n, { label: n + (n === 1 ? " layer" : " layers") });
-      } catch (_) {}
-    }
-    async function loadBoard() {
-      if (!hasBoard) return;
-      el.boardList.innerHTML = '<div class="lbempty">Loading…</div>';
-      try {
-        const lb = await ctx.memory.record("layers").leaderboard({ scope: state.lbScope, period: state.lbPeriod });
-        renderBoard(lb);
-      } catch (_) {
-        el.boardList.innerHTML = '<div class="lbempty">Leaderboard unavailable right now.</div>';
-      }
-    }
-    function renderBoard(lb) {
-      // pull an entries array out of whatever shape the runtime returns
-      const entries = (lb && (lb.entries || lb.rows || lb.leaderboard || lb.results || lb.items)) || [];
-      if (!entries.length) {
-        el.boardList.innerHTML = '<div class="lbempty">No jams yet — be the first. Stack some layers and check back!</div>';
-        return;
-      }
-      el.boardList.innerHTML = entries.slice(0, 50).map((e, i) => {
-        const rank = e.rank != null ? e.rank : i + 1;
-        const name = e.displayName || e.name || e.user || e.username || (e.self ? "You" : "Player");
-        const val = e.formatted != null ? e.formatted : (e.label != null ? e.label : (e.value != null ? e.value : e.score));
-        const me = (e.self || e.isSelf || e.isMe) ? " me" : "";
-        return `<div class="lbrow${me}"><span class="rk">${rank}</span>` +
-               `<span class="nm">${escapeHtml(String(name))}</span>` +
-               `<span class="vl">${escapeHtml(String(val == null ? "" : val))}</span></div>`;
-      }).join("");
-    }
-    function openBoard() {
-      el.myLayers.textContent = state.tracks.length + (state.tracks.length === 1 ? " layer" : " layers");
-      el.boardModal.style.display = "flex";
-      submitScore();   // register the current jam, then show the board
-      loadBoard();
     }
 
     // ------------------------------------------------------------------- view
@@ -671,14 +615,6 @@ window.plethoraBit = {
         .step { display:flex; align-items:center; gap:10px; }
         .step .val { min-width:82px; text-align:center; font-weight:800; font-size:15px;
           font-variant-numeric:tabular-nums; }
-        .lblist { max-height:44vh; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
-        .lbrow { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px;
-          background:#1b1c2e; font-size:13px; }
-        .lbrow.me { background:#5b8cff26; border:1px solid #5b8cff66; }
-        .lbrow .rk { min-width:22px; color:#8a8ca6; font-weight:800; text-align:center; }
-        .lbrow .nm { flex:1; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .lbrow .vl { font-weight:800; color:#ffd23f; }
-        .lbempty { color:#8a8ca6; font-size:12.5px; text-align:center; padding:20px 8px; line-height:1.5; }
         .toast { position:absolute; left:50%; bottom:78px; transform:translateX(-50%);
           background:#14152a; border:1px solid #2b2c46; color:#eef; padding:8px 14px; border-radius:999px;
           font-size:12.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:6; }
@@ -692,7 +628,6 @@ window.plethoraBit = {
             <div class="bpmv"><b id="bpmVal">90</b> <small>bpm</small></div>
             <button class="rnd" data-act="bpm+">+</button>
           </div>
-          <button class="chip" data-act="board" id="boardBtn">🏆</button>
           <button class="chip" data-act="settings" id="keyBtn">A · Pent</button>
           <button class="chip" data-act="help">?</button>
         </div>
@@ -726,7 +661,6 @@ window.plethoraBit = {
               <li>Stack layers to build a whole song. Tap a track to set its <b>volume</b> (or mute it), ✕ to delete.</li>
               <li><b>▶ Play / ■ Stop</b> runs everything. <b>Metro</b> toggles a click.</li>
               <li>Tap the <b>key chip</b> (top-right) for key, scale, loop length and swing.</li>
-              <li>Tap <b>🏆</b> for the <b>Deepest Jam</b> leaderboard — every layer you stack is your score.</li>
             </ol>
             <div class="note">All 12 instruments are synthesized live — no samples. Your song auto-saves on this device.</div>
             <button class="ok" data-act="close">Let's go</button>
@@ -767,24 +701,6 @@ window.plethoraBit = {
             <button class="ok" data-act="closeset">Done</button>
           </div>
         </div>
-
-        <div class="modal" id="boardModal">
-          <div class="card">
-            <h2>Deepest Jam 🏆</h2>
-            <div class="note" style="margin-bottom:10px">Your jam: <b id="myLayers">0 layers</b>. Every layer you stack is your score — build a bigger song to climb.</div>
-            <div class="seg" id="boardScope" style="margin-bottom:8px">
-              <button data-scope="global" class="on">Global</button>
-              <button data-scope="following">Following</button>
-            </div>
-            <div class="seg" id="boardPeriod" style="margin-bottom:12px">
-              <button data-period="daily">Today</button>
-              <button data-period="weekly">Week</button>
-              <button data-period="all_time" class="on">All-time</button>
-            </div>
-            <div class="lblist" id="boardList"></div>
-            <button class="ok" data-act="closeboard" style="margin-top:14px">Close</button>
-          </div>
-        </div>
         <div class="toast" id="toast"></div>
       </div>`;
 
@@ -795,9 +711,7 @@ window.plethoraBit = {
       tracks: $("tracks"), insts: $("insts"), pads: $("pads"), playBtn: $("playBtn"),
       recBtn: $("recBtn"), metroBtn: $("metroBtn"), modal: $("modal"), toast: $("toast"),
       setModal: $("setModal"), segBars: $("segBars"), segScale: $("segScale"),
-      rootVal: $("rootVal"), swingVal: $("swingVal"),
-      boardBtn: $("boardBtn"), boardModal: $("boardModal"), boardList: $("boardList"),
-      myLayers: $("myLayers"), boardScope: $("boardScope"), boardPeriod: $("boardPeriod")
+      rootVal: $("rootVal"), swingVal: $("swingVal")
     };
 
     let toastTimer = null;
@@ -899,7 +813,6 @@ window.plethoraBit = {
 
     function renderAll() {
       el.bpmVal.textContent = state.bpm;
-      el.boardBtn.style.display = hasBoard ? "" : "none";
       const scaleShort = { minPent: "Pent", majPent: "Pent+", minor: "min", major: "maj", dorian: "dor" };
       el.keyBtn.textContent = NOTE_NAMES[state.root] + " · " + (scaleShort[state.scale] || "");
       renderGrid(); renderInsts(); renderPads(); renderTracks(); renderTransport(); renderSettings();
@@ -953,21 +866,6 @@ window.plethoraBit = {
       renderAll(); save(); ctx.platform.haptic("light");
     });
 
-    ctx.listen(el.boardScope, "click", (e) => {
-      const b = e.target.closest("[data-scope]");
-      if (!b) return;
-      state.lbScope = b.dataset.scope;
-      for (const x of el.boardScope.children) x.classList.toggle("on", x === b);
-      loadBoard();
-    });
-    ctx.listen(el.boardPeriod, "click", (e) => {
-      const b = e.target.closest("[data-period]");
-      if (!b) return;
-      state.lbPeriod = b.dataset.period;
-      for (const x of el.boardPeriod.children) x.classList.toggle("on", x === b);
-      loadBoard();
-    });
-
     ctx.listen(el.tracks, "click", (e) => {
       const del = e.target.closest(".x");
       if (del) {
@@ -1003,8 +901,6 @@ window.plethoraBit = {
       else if (a === "swing+") { state.swing = Math.min(0.6, +(state.swing + 0.1).toFixed(2)); renderSettings(); save(); }
       else if (a === "settings") el.setModal.style.display = "flex";
       else if (a === "closeset") el.setModal.style.display = "none";
-      else if (a === "board") openBoard();
-      else if (a === "closeboard") el.boardModal.style.display = "none";
       else if (a === "play") {
         if (state.playing) { stopTransport(); ctx.platform.milestone("stop"); }
         else { ensureAudio(); ctx.platform.start(); startTransport(); }

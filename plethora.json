@@ -6,18 +6,5 @@
   "description": "A live looping station like a loop pedal: record a layer while it loops, then overdub drums, bass, keys, strings, plucks and a Vox synth to build a whole song on-screen.",
   "tags": ["music", "creative", "loop-pedal", "beats", "sequencer"],
   "permissions": ["audio", "haptics", "storage"],
-  "dependencies": [],
-  "memory": {
-    "records": {
-      "layers": {
-        "label": "Layers",
-        "valueType": "number",
-        "order": "desc",
-        "format": "integer",
-        "periods": ["daily", "weekly", "all_time"],
-        "scopes": ["global", "following"],
-        "dedupe": "best_per_user"
-      }
-    }
-  }
+  "dependencies": []
 }
