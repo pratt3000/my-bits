@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Loop Pedal",
+  "description": "Build a song live, layer by layer. Record drums, bass, keys, strings and a vocal-style pad into loops that stack on top of each other — loop-pedal style.",
+  "tags": [
+    "music",
+    "loop",
+    "beats",
+    "creative",
+    "toy"
+  ],
+  "permissions": [
+    "audio",
+    "haptics"
+  ],
+  "dependencies": []
+}
