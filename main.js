@@ -357,6 +357,10 @@ window.plethoraBit = {
 
     function schedulerTick() {
       if (!ac || !state.playing) return;
+      // Playback is driven by this timer, not a user gesture — mobile WebViews
+      // suspend the context between touches, which would silence the loop. Keep
+      // nudging it back to "running" while we're playing.
+      if (ac.state !== "running") { try { ac.resume(); } catch (_) {} }
       const ahead = ac.currentTime + 0.12;
       const dur = stepDur();
       const spl = SPL();
@@ -421,7 +425,7 @@ window.plethoraBit = {
     function stopTransport() {
       state.playing = false;
       if (state.armed || state.recording) cancelRecording(true);
-      renderTransport();
+      renderAll();   // full re-render: clears the record lock (dimmed instruments) and "· rec" label
     }
 
     function toggleRecord() {
