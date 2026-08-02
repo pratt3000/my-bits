@@ -89,10 +89,9 @@ window.plethoraBit = {
     }
 
     // ------------------------------------------------------------------- audio
-    let ac = null, master = null, noiseBuf = null, audioBlocked = false;
+    let ac = null, master = null, noiseBuf = null, audioBlocked = false, warnedAudio = false;
 
-    function ensureAudio() {
-      if (ac) { if (ac.state === "suspended") ac.resume(); return ac; }
+    function buildCtx() {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) { audioBlocked = true; showToast("Audio unavailable on this device"); return null; }
       try {
@@ -112,6 +111,36 @@ window.plethoraBit = {
       ctx.onDestroy(() => { try { ac.close(); } catch (_) {} });
       return ac;
     }
+
+    // Mobile WebViews start the AudioContext suspended and only unlock it from a
+    // real user gesture. Call this inside every gesture: resume + play a 1-frame
+    // silent buffer (the iOS unlock), then verify we actually reached "running".
+    function unlockAudio() {
+      if (!ac && !buildCtx()) return null;
+      try {
+        const p = ac.resume && ac.resume();
+        if (p && p.catch) p.catch(() => {});
+      } catch (_) {}
+      try {
+        const b = ac.createBuffer(1, 1, ac.sampleRate || 22050);
+        const s = ac.createBufferSource();
+        s.buffer = b; s.connect(ac.destination); s.start(0);
+      } catch (_) {}
+      if (ac.state !== "running" && !warnedAudio) {
+        // one more nudge on the next frame, then warn if still stuck
+        ctx.timeout(() => {
+          if (ac && ac.state !== "running") {
+            try { ac.resume(); } catch (_) {}
+            if (ac.state !== "running" && !warnedAudio) {
+              warnedAudio = true;
+              showToast("Tap a pad to enable sound 🔊");
+            }
+          }
+        }, 250);
+      }
+      return ac;
+    }
+    function ensureAudio() { return unlockAudio(); }
 
     function noiseSource() {
       const s = ac.createBufferSource();
@@ -897,6 +926,17 @@ window.plethoraBit = {
       el.playhead.style.transform = `translateX(${frac * (el.grid.clientWidth || ctx.width)}px)`;
       el.playhead.style.opacity = state.playing ? "1" : "0.25";
     });
+
+    // Unlock audio on the very first touch anywhere (capture phase, before any
+    // pad/transport handler), and re-resume whenever the bit returns to the
+    // foreground — Plethora may suspend the context while backgrounded.
+    ctx.listen(root, "pointerdown", () => unlockAudio(), { capture: true });
+    ctx.listen(root, "touchstart", () => unlockAudio(), { capture: true, passive: true });
+    try {
+      ctx.listen(document, "visibilitychange", () => {
+        if (!document.hidden && ac && ac.state !== "running") { try { ac.resume(); } catch (_) {} }
+      });
+    } catch (_) {}
 
     // -- boot -----------------------------------------------------------------
     // One persistent scheduler for the lifetime of the bit; it no-ops while
