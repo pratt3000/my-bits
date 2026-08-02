@@ -112,31 +112,39 @@ window.plethoraBit = {
       return ac;
     }
 
+    // Promise-safe resume: only one attempt in flight, and the returned promise
+    // is ALWAYS handled (both the resolve and the reject) so a failing resume on
+    // a locked-down WebView never surfaces as an "unhandled promise" error.
+    let resuming = false;
+    function tryResume() {
+      if (!ac || ac.state === "running" || resuming) return;
+      resuming = true;
+      let p;
+      try { p = ac.resume(); } catch (_) { resuming = false; return; }
+      if (p && p.then) p.then(() => { resuming = false; }, () => { resuming = false; });
+      else resuming = false;
+    }
+
     // Mobile WebViews start the AudioContext suspended and only unlock it from a
     // real user gesture. Call this inside every gesture: resume + play a 1-frame
     // silent buffer (the iOS unlock), then verify we actually reached "running".
     function unlockAudio() {
       if (!ac && !buildCtx()) return null;
-      try {
-        const p = ac.resume && ac.resume();
-        if (p && p.catch) p.catch(() => {});
-      } catch (_) {}
+      tryResume();
       try {
         const b = ac.createBuffer(1, 1, ac.sampleRate || 22050);
         const s = ac.createBufferSource();
         s.buffer = b; s.connect(ac.destination); s.start(0);
       } catch (_) {}
       if (ac.state !== "running" && !warnedAudio) {
-        // one more nudge on the next frame, then warn if still stuck
+        // one more nudge shortly after, then warn if still stuck
         ctx.timeout(() => {
-          if (ac && ac.state !== "running") {
-            try { ac.resume(); } catch (_) {}
-            if (ac.state !== "running" && !warnedAudio) {
-              warnedAudio = true;
-              showToast("Tap a pad to enable sound 🔊");
-            }
+          tryResume();
+          if (ac && ac.state !== "running" && !warnedAudio) {
+            warnedAudio = true;
+            showToast("Tap a pad to start sound 🔊");
           }
-        }, 250);
+        }, 300);
       }
       return ac;
     }
@@ -357,10 +365,6 @@ window.plethoraBit = {
 
     function schedulerTick() {
       if (!ac || !state.playing) return;
-      // Playback is driven by this timer, not a user gesture — mobile WebViews
-      // suspend the context between touches, which would silence the loop. Keep
-      // nudging it back to "running" while we're playing.
-      if (ac.state !== "running") { try { ac.resume(); } catch (_) {} }
       const ahead = ac.currentTime + 0.12;
       const dur = stepDur();
       const spl = SPL();
@@ -938,7 +942,7 @@ window.plethoraBit = {
     ctx.listen(root, "touchstart", () => unlockAudio(), { capture: true, passive: true });
     try {
       ctx.listen(document, "visibilitychange", () => {
-        if (!document.hidden && ac && ac.state !== "running") { try { ac.resume(); } catch (_) {} }
+        if (!document.hidden) tryResume();
       });
     } catch (_) {}
 
