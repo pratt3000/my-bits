@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Loop Lab",
+  "description": "A live looping station like a loop pedal: record a layer while it loops, then overdub drums, bass, keys, strings, plucks and a Vox synth to build a whole song on-screen.",
+  "tags": ["music", "creative", "loop-pedal", "beats", "sequencer"],
+  "permissions": ["audio", "haptics", "storage"],
+  "dependencies": []
+}
