@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Spot Pip",
+  "description": "A hidden-object search game. Pinch and drag around a busy procedurally-generated crowd to find Pip — the one in the red-and-white striped hat and round glasses. Three levels, easy to hard. The faster you spot him, the more stars you earn — then race the world on a global Fastest-Clear leaderboard you can view right in the bit.",
+  "tags": [
+    "puzzle",
+    "hidden-object",
+    "game",
+    "search",
+    "zoom",
+    "kids"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "best_time": {
+        "label": "Fastest Clear",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
