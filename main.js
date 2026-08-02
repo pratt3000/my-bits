@@ -235,13 +235,22 @@ window.plethoraBit = {
     // ---------------------------------------------------------------------
     // 3. Small canvas-texture factories (all assets are procedural — maxAssets is 0).
     // ---------------------------------------------------------------------
+    // Offscreen drawing surfaces must come from the SDK canvas factory rather
+    // than the raw DOM API (which the platform validator rejects).
+    // These are hidden — they exist only to bake textures onto the GPU.
     function makeCanvas(size) {
-      const c = document.createElement("canvas");
-      c.width = c.height = size;
+      const c = ctx.createCanvas2D();
+      c.style.display = "none";
+      c.width = size;
+      c.height = size;
       return c;
     }
 
+    const texCache = new Map();
+
     function emojiTexture(emoji) {
+      const key = "e:" + emoji;
+      if (texCache.has(key)) return texCache.get(key);
       const c = makeCanvas(160);
       const g = c.getContext("2d");
       g.clearRect(0, 0, 160, 160);
@@ -252,10 +261,13 @@ window.plethoraBit = {
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 2;
+      texCache.set(key, tex);
       return tex;
     }
 
     function wordTexture(word) {
+      const key = "w:" + word;
+      if (texCache.has(key)) return texCache.get(key);
       const c = makeCanvas(512);
       const g = c.getContext("2d");
       g.clearRect(0, 0, 512, 512);
@@ -275,6 +287,7 @@ window.plethoraBit = {
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 2;
+      texCache.set(key, tex);
       return tex;
     }
 
@@ -497,8 +510,7 @@ window.plethoraBit = {
       const content = randomContent();
       c.content = content;
       const tier = TIERS[content.tier];
-      // texture
-      if (c.mainMat.map) c.mainMat.map.dispose();
+      // texture (cached + shared — never disposed here)
       c.mainMat.map = content.kind === "word" ? wordTexture(content.word) : emojiTexture(content.emoji);
       c.mainMat.needsUpdate = true;
       const mainScale = content.kind === "word" ? 3.0 : 1.7;
