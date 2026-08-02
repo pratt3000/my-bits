@@ -2,12 +2,10 @@
  * Loop Lab — a live looping station (a la Ed Sheeran's loop pedal), on-screen.
  *
  * Record a layer while it loops, then overdub more layers to build a full song.
- * Instruments are procedurally synthesized with the Web Audio API (no packaged
- * assets): a drum kit, bass, keys, a strings pad, plucks, and a "Vox" vowel synth.
- *
- * Note on voice: the Plethora sandbox exposes the microphone as analysis-only and
- * forbids recording/uploading audio, so live vocal looping isn't available here.
- * The looping *workflow* is the real thing — you just perform on synth voices.
+ * 12 instruments, all procedurally synthesized with the Web Audio API (no
+ * packaged assets): drum kit, bass, keys, a one-tap chord pad, strings, plucks,
+ * lead, FM bells, marimba, organ, brass, and a "Vox" vowel synth. Key/scale,
+ * loop length, swing, and per-track volume are adjustable; songs auto-save.
  */
 window.plethoraBit = {
   meta: {
@@ -21,7 +19,15 @@ window.plethoraBit = {
     // ------------------------------------------------------------------ config
     const STEPS_PER_BAR = 16;                 // 16th-note grid
     const NOTE_NAMES = ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"];
-    const PENTA = [0, 3, 5, 7, 10, 12, 15, 17]; // A minor pentatonic degrees
+    const PADS = 8;                            // melodic pads per instrument
+    const SCALES = {
+      minPent: { name: "Minor Pent", iv: [0, 3, 5, 7, 10] },
+      majPent: { name: "Major Pent", iv: [0, 2, 4, 7, 9] },
+      minor:   { name: "Minor",      iv: [0, 2, 3, 5, 7, 8, 10] },
+      major:   { name: "Major",      iv: [0, 2, 4, 5, 7, 9, 11] },
+      dorian:  { name: "Dorian",     iv: [0, 2, 3, 5, 7, 9, 10] }
+    };
+    const SCALE_ORDER = ["minPent", "majPent", "minor", "major", "dorian"];
 
     const INSTRUMENTS = {
       kit:     { name: "Drums",   color: "#ff5470", type: "drum" },
@@ -51,6 +57,9 @@ window.plethoraBit = {
     const state = {
       bpm: 90,
       bars: 2,
+      root: 0,             // 0 = A .. 11 = G#
+      scale: "minPent",
+      swing: 0,            // 0..0.6 delay on off-16ths
       instrument: "kit",
       playing: false,
       armed: false,        // REC pressed, waiting for count-in / loop boundary
@@ -59,14 +68,25 @@ window.plethoraBit = {
       recStartLoop: 0,
       loop: 0,
       metronome: false,
-      tracks: [],          // { id, inst, events:[{step,note}], muted }
+      tracks: [],          // { id, inst, events:[{step,note}], vol }
       nextId: 1,
       lockInst: false
     };
+    const VOLS = [1, 0.66, 0.33, 0];          // per-track volume cycle
     const SPL = () => state.bars * STEPS_PER_BAR;
     const stepDur = () => (60 / state.bpm) / 4;
-    const noteFreq = (inst, semi) => (55 * Math.pow(2, INSTRUMENTS[inst].octave)) * Math.pow(2, semi / 12);
     const noteLabel = (semi) => NOTE_NAMES[((semi % 12) + 12) % 12];
+    // Build the 8 ascending pad notes for the current key + scale.
+    function scalePads(inst) {
+      const base = 55 * Math.pow(2, INSTRUMENTS[inst].octave);
+      const iv = SCALES[state.scale].iv;
+      const out = [];
+      for (let i = 0; i < PADS; i++) {
+        const semi = state.root + iv[i % iv.length] + 12 * Math.floor(i / iv.length);
+        out.push({ semi, freq: base * Math.pow(2, semi / 12), label: noteLabel(semi) });
+      }
+      return out;
+    }
 
     // ------------------------------------------------------------------- audio
     let ac = null, master = null, noiseBuf = null, audioBlocked = false;
@@ -324,16 +344,19 @@ window.plethoraBit = {
     }
 
     function scheduleStep(step, t) {
-      // metronome / count-in clicks on each beat
+      // metronome / count-in clicks stay on the straight grid
       if ((state.metronome || state.armed || state.recording) && step % 4 === 0) {
         click(t, step === 0);
       }
+      // swing: push the off-16ths a little late for groove
+      const nt = step % 2 === 1 && state.swing > 0 ? t + state.swing * stepDur() : t;
       for (const tr of state.tracks) {
-        if (tr.muted) continue;
+        const vol = tr.vol == null ? 1 : tr.vol;
+        if (vol <= 0) continue;
         // during the capture loop, the record track is voiced by live taps only
         if (state.recording && tr === state.recTrack && state.loop === state.recStartLoop) continue;
         for (const ev of tr.events) {
-          if (ev.step === step) play(tr.inst, ev.note, t, 0.95);
+          if (ev.step === step) play(tr.inst, ev.note, nt, 0.95 * vol);
         }
       }
     }
@@ -376,7 +399,7 @@ window.plethoraBit = {
       if (!ensureAudio()) return;
       ctx.platform.start();
       if (state.armed || state.recording) { cancelRecording(false); return; }
-      const track = { id: state.nextId++, inst: state.instrument, events: [], muted: false };
+      const track = { id: state.nextId++, inst: state.instrument, events: [], vol: 1 };
       state.tracks.push(track);
       state.recTrack = track;
       state.armed = true;
@@ -432,8 +455,8 @@ window.plethoraBit = {
       if (!ctx.capabilities.storage) return;
       try {
         ctx.storage.set("song", {
-          bpm: state.bpm, bars: state.bars,
-          tracks: state.tracks.map((t) => ({ inst: t.inst, events: t.events, muted: t.muted }))
+          bpm: state.bpm, bars: state.bars, root: state.root, scale: state.scale, swing: state.swing,
+          tracks: state.tracks.map((t) => ({ inst: t.inst, events: t.events, vol: t.vol }))
         });
       } catch (_) {}
     }
@@ -444,8 +467,12 @@ window.plethoraBit = {
         if (!s || !Array.isArray(s.tracks)) return;
         if (s.bpm) state.bpm = Math.min(180, Math.max(50, s.bpm | 0));
         if (s.bars) state.bars = [1, 2, 4].includes(s.bars) ? s.bars : 2;
+        if (Number.isFinite(s.root)) state.root = ((s.root % 12) + 12) % 12;
+        if (SCALES[s.scale]) state.scale = s.scale;
+        if (Number.isFinite(s.swing)) state.swing = Math.min(0.6, Math.max(0, s.swing));
         state.tracks = s.tracks.filter((t) => INSTRUMENTS[t.inst]).map((t) => ({
-          id: state.nextId++, inst: t.inst, muted: !!t.muted,
+          id: state.nextId++, inst: t.inst,
+          vol: Number.isFinite(t.vol) ? t.vol : (t.muted ? 0 : 1),
           events: (t.events || []).filter((e) => Number.isFinite(e.step))
         }));
       } catch (_) {}
@@ -500,7 +527,10 @@ window.plethoraBit = {
         .trk { display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:9px;
           background:#15162700; border:1px solid #2b2c46; font-size:12px; font-weight:700; white-space:nowrap; }
         .trk .sw { width:9px; height:9px; border-radius:3px; }
-        .trk.muted { opacity:.45; }
+        .trk.muted { opacity:.5; }
+        .trk .lvl { display:flex; align-items:flex-end; gap:2px; height:12px; }
+        .trk .lvl i { width:3px; background:currentColor; border-radius:1px; opacity:.3; }
+        .trk .lvl i.on { opacity:1; }
         .trk .x { color:#8a8ca6; font-weight:800; padding:0 2px; }
 
         .insts { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch;
@@ -538,6 +568,16 @@ window.plethoraBit = {
         .card .note { font-size:11.5px; color:#8a8ca6; line-height:1.45; margin-bottom:12px; }
         .card .ok { width:100%; padding:11px; border:none; border-radius:11px; font-weight:800;
           color:#0c0c16; background:linear-gradient(90deg,#ffb037,#ff5470); cursor:pointer; }
+        .row { margin-bottom:14px; }
+        .row .lbl { font-size:11px; font-weight:800; letter-spacing:.5px; color:#8a8ca6;
+          text-transform:uppercase; margin-bottom:7px; }
+        .seg { display:flex; flex-wrap:wrap; gap:6px; }
+        .seg button { flex:0 0 auto; background:#1b1c2e; border:1px solid #2b2c46; color:#cdd;
+          border-radius:9px; padding:8px 12px; font-size:13px; font-weight:700; cursor:pointer; }
+        .seg button.on { background:#5b8cff22; border-color:#5b8cff; color:#fff; }
+        .step { display:flex; align-items:center; gap:10px; }
+        .step .val { min-width:82px; text-align:center; font-weight:800; font-size:15px;
+          font-variant-numeric:tabular-nums; }
         .toast { position:absolute; left:50%; bottom:78px; transform:translateX(-50%);
           background:#14152a; border:1px solid #2b2c46; color:#eef; padding:8px 14px; border-radius:999px;
           font-size:12.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:6; }
@@ -551,7 +591,7 @@ window.plethoraBit = {
             <div class="bpmv"><b id="bpmVal">90</b> <small>bpm</small></div>
             <button class="rnd" data-act="bpm+">+</button>
           </div>
-          <button class="chip" data-act="bars" id="barsBtn">2 bars</button>
+          <button class="chip" data-act="settings" id="keyBtn">A · Pent</button>
           <button class="chip" data-act="help">?</button>
         </div>
 
@@ -581,11 +621,47 @@ window.plethoraBit = {
               <li>Pick an instrument — swipe the row for more (Drums, Bass, Keys, Chord, Strings, Pluck, Lead, Bells, Marimba, Organ, Brass, Vox).</li>
               <li>Tap <b>● REC</b>. After a 1-bar count-in, play the pads for one loop.</li>
               <li>Your layer now loops. Tap <b>● REC</b> again to overdub another instrument on top.</li>
-              <li>Stack layers to build a whole song. Mute or ✕ any track in the list.</li>
+              <li>Stack layers to build a whole song. Tap a track to set its <b>volume</b> (or mute it), ✕ to delete.</li>
               <li><b>▶ Play / ■ Stop</b> runs everything. <b>Metro</b> toggles a click.</li>
+              <li>Tap the <b>key chip</b> (top-right) for key, scale, loop length and swing.</li>
             </ol>
-            <div class="note">Note: the sandbox can't record a live microphone, so you loop synth voices (the "Vox" pad is a vowel synth) — the layering workflow is the real thing. Your song auto-saves on this device.</div>
+            <div class="note">All 12 instruments are synthesized live — no samples. Your song auto-saves on this device.</div>
             <button class="ok" data-act="close">Let's go</button>
+          </div>
+        </div>
+
+        <div class="modal" id="setModal">
+          <div class="card">
+            <h2>Settings</h2>
+            <div class="row">
+              <div class="lbl">Loop length</div>
+              <div class="seg" id="segBars">
+                <button data-bars="1">1 bar</button>
+                <button data-bars="2">2 bars</button>
+                <button data-bars="4">4 bars</button>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lbl">Key</div>
+              <div class="step">
+                <button class="rnd" data-act="root-">–</button>
+                <div class="val" id="rootVal">A</div>
+                <button class="rnd" data-act="root+">+</button>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lbl">Scale</div>
+              <div class="seg" id="segScale"></div>
+            </div>
+            <div class="row">
+              <div class="lbl">Swing</div>
+              <div class="step">
+                <button class="rnd" data-act="swing-">–</button>
+                <div class="val" id="swingVal">0%</div>
+                <button class="rnd" data-act="swing+">+</button>
+              </div>
+            </div>
+            <button class="ok" data-act="closeset">Done</button>
           </div>
         </div>
         <div class="toast" id="toast"></div>
@@ -593,10 +669,12 @@ window.plethoraBit = {
 
     const $ = (id) => root.querySelector("#" + id);
     const el = {
-      bpmVal: $("bpmVal"), barsBtn: $("barsBtn"), grid: $("grid"), lanes: $("lanes"),
+      bpmVal: $("bpmVal"), keyBtn: $("keyBtn"), grid: $("grid"), lanes: $("lanes"),
       playhead: $("playhead"), tlempty: $("tlempty"), recbadge: $("recbadge"), recTxt: $("recTxt"),
       tracks: $("tracks"), insts: $("insts"), pads: $("pads"), playBtn: $("playBtn"),
-      recBtn: $("recBtn"), metroBtn: $("metroBtn"), modal: $("modal"), toast: $("toast")
+      recBtn: $("recBtn"), metroBtn: $("metroBtn"), modal: $("modal"), toast: $("toast"),
+      setModal: $("setModal"), segBars: $("segBars"), segScale: $("segScale"),
+      rootVal: $("rootVal"), swingVal: $("swingVal")
     };
 
     let toastTimer = null;
@@ -636,10 +714,9 @@ window.plethoraBit = {
           `<button class="pad" data-note="${d.id}" style="background:linear-gradient(180deg,${shade(spec.color, 18)},${spec.color})">${d.label}</button>`
         ).join("");
       } else {
-        el.pads.innerHTML = PENTA.map((semi, i) => {
-          const f = noteFreq(inst, semi);
-          return `<button class="pad" data-note="${f.toFixed(3)}" data-semi="${semi}" style="background:linear-gradient(180deg,${shade(spec.color, 18)},${shade(spec.color, -8 - i * 3)})">${noteLabel(semi)}<small>${i + 1}</small></button>`;
-        }).join("");
+        el.pads.innerHTML = scalePads(inst).map((p, i) =>
+          `<button class="pad" data-note="${p.freq.toFixed(3)}" data-semi="${p.semi}" style="background:linear-gradient(180deg,${shade(spec.color, 18)},${shade(spec.color, -8 - i * 3)})">${p.label}<small>${i + 1}</small></button>`
+        ).join("");
       }
     }
 
@@ -650,18 +727,25 @@ window.plethoraBit = {
       el.lanes.innerHTML = state.tracks.map((tr) => {
         const c = INSTRUMENTS[tr.inst].color;
         const spl = SPL();
-        const dots = tr.muted ? "" : tr.events.map((e) =>
-          `<div class="dot" style="left:${((e.step + 0.5) / spl) * 100}%;color:${c};background:${c}"></div>`
+        const vol = tr.vol == null ? 1 : tr.vol;
+        const dots = vol <= 0 ? "" : tr.events.map((e) =>
+          `<div class="dot" style="left:${((e.step + 0.5) / spl) * 100}%;color:${c};background:${c};opacity:${0.35 + 0.65 * vol}"></div>`
         ).join("");
         return `<div class="lane">${dots}</div>`;
       }).join("");
-      // track chips
+      // track chips (tap to change volume, ✕ to delete)
       el.tracks.innerHTML = state.tracks.map((tr, i) => {
         const it = INSTRUMENTS[tr.inst];
+        const vol = tr.vol == null ? 1 : tr.vol;
         const rec = tr === state.recTrack ? " · rec" : "";
-        return `<div class="trk${tr.muted ? " muted" : ""}" data-tid="${tr.id}">
+        const bars = [0.33, 0.66, 1].map((th, bi) =>
+          `<i class="${vol >= th ? "on" : ""}" style="height:${5 + bi * 3}px"></i>`).join("");
+        const lvl = vol <= 0
+          ? `<span style="font-size:11px;color:#8a8ca6">muted</span>`
+          : `<span class="lvl" style="color:${it.color}">${bars}</span>`;
+        return `<div class="trk${vol <= 0 ? " muted" : ""}" data-tid="${tr.id}">
           <span class="sw" style="background:${it.color}"></span>${it.name} ${i + 1}${rec}
-          <span class="x" data-del="${tr.id}">✕</span></div>`;
+          ${lvl}<span class="x" data-del="${tr.id}">✕</span></div>`;
       }).join("");
     }
 
@@ -674,16 +758,27 @@ window.plethoraBit = {
       const showRec = state.armed || state.recording;
       el.recbadge.style.display = showRec ? "flex" : "none";
       el.recTxt.textContent = state.recording ? "RECORDING" : "COUNT-IN";
-      // lock instrument switching mid-capture
-      const disabled = state.playing;
-      el.barsBtn.style.opacity = disabled ? ".4" : "1";
-      el.bpmVal.parentElement.style.opacity = disabled ? ".4" : "1";
+      // BPM is locked while playing (loop timing stays coherent)
+      el.bpmVal.parentElement.style.opacity = state.playing ? ".4" : "1";
+    }
+
+    function renderSettings() {
+      for (const b of el.segBars.querySelectorAll("button")) {
+        b.classList.toggle("on", +b.dataset.bars === state.bars);
+        b.style.opacity = state.playing ? ".4" : "1";
+      }
+      el.segScale.innerHTML = SCALE_ORDER.map((k) =>
+        `<button data-scale="${k}" class="${state.scale === k ? "on" : ""}">${SCALES[k].name}</button>`
+      ).join("");
+      el.rootVal.textContent = NOTE_NAMES[state.root] + " " + (SCALES[state.scale].iv.includes(4) ? "maj" : "min");
+      el.swingVal.textContent = Math.round(state.swing / 0.6 * 100) + "%";
     }
 
     function renderAll() {
       el.bpmVal.textContent = state.bpm;
-      el.barsBtn.textContent = state.bars + (state.bars === 1 ? " bar" : " bars");
-      renderGrid(); renderInsts(); renderPads(); renderTracks(); renderTransport();
+      const scaleShort = { minPent: "Pent", majPent: "Pent+", minor: "min", major: "maj", dorian: "dor" };
+      el.keyBtn.textContent = NOTE_NAMES[state.root] + " · " + (scaleShort[state.scale] || "");
+      renderGrid(); renderInsts(); renderPads(); renderTracks(); renderTransport(); renderSettings();
     }
 
     // -- helpers --------------------------------------------------------------
@@ -718,6 +813,22 @@ window.plethoraBit = {
       renderInsts(); renderPads();
     });
 
+    ctx.listen(el.segBars, "click", (e) => {
+      const b = e.target.closest("[data-bars]");
+      if (!b || state.playing) return;                 // loop length is locked while playing
+      state.bars = +b.dataset.bars;
+      const spl = SPL();
+      state.tracks.forEach((t) => { t.events = t.events.filter((ev) => ev.step < spl); });
+      renderAll(); save(); ctx.platform.haptic("light");
+    });
+
+    ctx.listen(el.segScale, "click", (e) => {
+      const b = e.target.closest("[data-scale]");
+      if (!b) return;
+      state.scale = b.dataset.scale;
+      renderAll(); save(); ctx.platform.haptic("light");
+    });
+
     ctx.listen(el.tracks, "click", (e) => {
       const del = e.target.closest(".x");
       if (del) {
@@ -731,7 +842,14 @@ window.plethoraBit = {
       const chip = e.target.closest(".trk");
       if (!chip) return;
       const tr = state.tracks.find((t) => t.id === +chip.dataset.tid);
-      if (tr) { tr.muted = !tr.muted; renderTracks(); save(); ctx.platform.haptic("light"); }
+      if (tr) {
+        // cycle volume: 100% -> 66% -> 33% -> mute -> 100%
+        const cur = tr.vol == null ? 1 : tr.vol;
+        let idx = VOLS.indexOf(cur);
+        if (idx < 0) idx = 0;
+        tr.vol = VOLS[(idx + 1) % VOLS.length];
+        renderTracks(); save(); ctx.platform.haptic("light");
+      }
     });
 
     ctx.listen(root, "click", (e) => {
@@ -740,13 +858,12 @@ window.plethoraBit = {
       const a = act.dataset.act;
       if (a === "bpm-" && !state.playing) { state.bpm = Math.max(50, state.bpm - 5); el.bpmVal.textContent = state.bpm; save(); }
       else if (a === "bpm+" && !state.playing) { state.bpm = Math.min(180, state.bpm + 5); el.bpmVal.textContent = state.bpm; save(); }
-      else if (a === "bars" && !state.playing) {
-        state.bars = state.bars === 1 ? 2 : state.bars === 2 ? 4 : 1;
-        // clamp any events beyond new loop length
-        const spl = SPL();
-        state.tracks.forEach((t) => { t.events = t.events.filter((ev) => ev.step < spl); });
-        renderAll(); save();
-      }
+      else if (a === "root-") { state.root = (state.root + 11) % 12; renderAll(); save(); ctx.platform.haptic("light"); }
+      else if (a === "root+") { state.root = (state.root + 1) % 12; renderAll(); save(); ctx.platform.haptic("light"); }
+      else if (a === "swing-") { state.swing = Math.max(0, +(state.swing - 0.1).toFixed(2)); renderSettings(); save(); }
+      else if (a === "swing+") { state.swing = Math.min(0.6, +(state.swing + 0.1).toFixed(2)); renderSettings(); save(); }
+      else if (a === "settings") el.setModal.style.display = "flex";
+      else if (a === "closeset") el.setModal.style.display = "none";
       else if (a === "play") {
         if (state.playing) { stopTransport(); ctx.platform.milestone("stop"); }
         else { ensureAudio(); ctx.platform.start(); startTransport(); }
