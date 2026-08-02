@@ -15,7 +15,7 @@ window.plethoraBit = {
     title: "Whispering Grove",
     runtime: "plethora-bit@2",
     tags: ["3d", "forest", "explore", "relaxing", "collect"],
-    permissions: ["haptics", "backgroundMusic"]
+    permissions: ["haptics", "backgroundMusic", "audio"]
   },
 
   async init(ctx) {
@@ -635,6 +635,7 @@ window.plethoraBit = {
 
     ctx.listen(canvas, "pointerdown", (e) => {
       if (!started) return;
+      resumeAC();
       if (el.fact.classList.contains("show")) return; // fact card handles its own dismiss
       const p = canvasXY(e);
       pointers.set(e.pointerId, { sx: p.x, sy: p.y, moved: 0, t: e.timeStamp });
@@ -709,6 +710,7 @@ window.plethoraBit = {
           const dist = Math.hypot(c.x - player.x, c.z - player.z);
           if (dist <= COLLECT_REACH) { collect(c); return; }
           showToast("Move a little closer 🌿");
+          sfxTap();
           return;
         }
       }
@@ -718,12 +720,14 @@ window.plethoraBit = {
         const inst = tHit[0].instanceId;
         const t = trees[inst];
         rustle(tHit[0].point, t ? t.color : 0x4c8a3f);
+      } else {
+        sfxTap();
       }
     }
 
     function rustle(point, color) {
       burstLeaves(point.x, point.y, point.z, color);
-      sting("tap");
+      sfxRustle();
       ctx.platform.haptic && ctx.platform.haptic("light");
     }
 
@@ -741,16 +745,14 @@ window.plethoraBit = {
 
       ctx.platform.interact && ctx.platform.interact({ type: "collect", tier: content.tier });
       ctx.platform.setScore && ctx.platform.setScore(score);
+      sfxCollect(content.tier);
       if (content.tier === "legendary") {
         ctx.platform.milestone && ctx.platform.milestone("legendary_find", { name: content.name });
         ctx.platform.haptic && ctx.platform.haptic("success");
-        sting("win");
       } else if (content.tier === "rare") {
         ctx.platform.haptic && ctx.platform.haptic("medium");
-        sting("powerup");
       } else {
         ctx.platform.haptic && ctx.platform.haptic("light");
-        sting(content.kind === "word" ? "success" : "coin");
       }
 
       showFact(content, tier);
@@ -789,7 +791,7 @@ window.plethoraBit = {
       el.fact.classList.remove("show");
       maybeSubmit(true);
     }
-    ctx.listen(el.fact, "pointerup", () => { if (factOpen) hideFact(); });
+    ctx.listen(el.fact, "pointerup", () => { if (factOpen) { resumeAC(); sfxTap(); hideFact(); } });
 
     let toastToken = 0;
     function showToast(msg) {
@@ -825,32 +827,120 @@ window.plethoraBit = {
     }
 
     // ---------------------------------------------------------------------
-    // 11. Audio (background music bed + tiny stings). All permission-guarded.
+    // 11. Audio. A self-contained WebAudio synth drives every interaction
+    //     sound (guaranteed, no assets, no network); ctx.music is used for the
+    //     gentle ambient bed, with music stings as a fallback if WebAudio is
+    //     unavailable. All permission-guarded.
     // ---------------------------------------------------------------------
     let musicHandle = null, muted = false, audioReady = false;
     const canMusic = ctx.capabilities && ctx.capabilities.backgroundMusic;
+    const canAudio = ctx.capabilities && ctx.capabilities.audio;
+
+    let AC = null, master = null;
+    function ensureAC() {
+      if (AC || !canAudio) return;
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return;
+      try {
+        AC = new Ctor();
+        master = AC.createGain();
+        master.gain.value = muted ? 0 : 0.9;
+        master.connect(AC.destination);
+      } catch (_) { AC = null; master = null; }
+    }
+    function resumeAC() {
+      if (AC && AC.state === "suspended") { try { AC.resume(); } catch (_) {} }
+    }
+    function tone(freq, delay, dur, type, peak) {
+      if (!AC) return;
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = type || "sine";
+      o.frequency.value = freq;
+      o.connect(g); g.connect(master);
+      const t = AC.currentTime + (delay || 0);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(peak || 0.22, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + dur);
+      o.start(t);
+      o.stop(t + dur + 0.03);
+    }
+    function noiseBurst(dur, cutoff, peak) {
+      if (!AC) return;
+      const n = Math.max(1, Math.floor(AC.sampleRate * dur));
+      const buf = AC.createBuffer(1, n, AC.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = AC.createBufferSource(); src.buffer = buf;
+      const bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = cutoff || 3400; bp.Q.value = 0.8;
+      const g = AC.createGain(); g.gain.value = peak || 0.3;
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start();
+      src.stop(AC.currentTime + dur + 0.02);
+    }
+
+    // Fallback to ctx.music stings only when WebAudio isn't available.
+    function fbSting(name) {
+      if (AC || muted || !canMusic || !ctx.music || !ctx.music.sting) return;
+      try { ctx.music.sting(name); } catch (_) {}
+    }
+
+    const COLLECT_NOTES = {
+      common:    [523.25, 659.25],
+      uncommon:  [523.25, 783.99],
+      word:      [587.33, 880.00],
+      rare:      [659.25, 987.77, 1318.51],
+      legendary: [523.25, 659.25, 783.99, 1046.50, 1318.51]
+    };
+    function sfxCollect(tier) {
+      if (muted) return;
+      if (!AC) { fbSting(tier === "legendary" ? "win" : tier === "rare" ? "powerup" : "coin"); return; }
+      const notes = COLLECT_NOTES[tier] || COLLECT_NOTES.common;
+      notes.forEach((f, i) => tone(f, i * 0.058, 0.26, "triangle", 0.2));
+      if (tier === "legendary" || tier === "rare") tone(notes[notes.length - 1] * 2, notes.length * 0.058, 0.5, "sine", 0.09);
+    }
+    function sfxRustle() {
+      if (muted) return;
+      if (!AC) { fbSting("tap"); return; }
+      noiseBurst(0.16, 4200, 0.26);
+      noiseBurst(0.22, 2600, 0.16);
+    }
+    function sfxNear() {
+      if (muted || !AC) return;
+      tone(1244.51, 0, 0.16, "sine", 0.07);
+    }
+    function sfxTap() {
+      if (muted) return;
+      if (!AC) { fbSting("tap"); return; }
+      tone(320, 0, 0.08, "sine", 0.12);
+    }
+    function sfxStart() {
+      if (muted || !AC) return;
+      [392.0, 523.25, 659.25].forEach((f, i) => tone(f, i * 0.07, 0.5, "triangle", 0.16));
+    }
 
     async function startAudio() {
-      if (audioReady || !canMusic || !ctx.music) return;
+      if (audioReady) return;
       audioReady = true;
-      try {
-        await ctx.music.unlock();
-        musicHandle = await ctx.music.play({
-          preset: "drift", scale: "minorPentatonic", volume: muted ? 0 : 0.4,
-          intensity: 0.35, tempo: 74, fadeInMs: 2500
-        });
-      } catch (_) { /* audio optional */ }
-    }
-    function sting(name) {
-      if (muted || !canMusic || !ctx.music || !ctx.music.sting) return;
-      try { ctx.music.sting(name); } catch (_) {}
+      ensureAC();
+      resumeAC();
+      sfxStart();
+      if (canMusic && ctx.music) {
+        try {
+          await ctx.music.unlock();
+          musicHandle = await ctx.music.play({
+            preset: "drift", scale: "minorPentatonic", volume: muted ? 0 : 0.34,
+            intensity: 0.32, tempo: 72, fadeInMs: 2500
+          });
+        } catch (_) { /* ambient bed is optional */ }
+      }
     }
     ctx.listen(el.mute, "click", () => {
       muted = !muted;
       el.mute.textContent = muted ? "🔇" : "🔊";
+      if (master) { try { master.gain.value = muted ? 0 : 0.9; } catch (_) {} }
       try {
-        if (musicHandle && musicHandle.setVolume) musicHandle.setVolume(muted ? 0 : 0.4, { fadeMs: 400 });
-        else if (ctx.music && ctx.music.setVolume) ctx.music.setVolume(muted ? 0 : 0.4);
+        if (musicHandle && musicHandle.setVolume) musicHandle.setVolume(muted ? 0 : 0.34, { fadeMs: 400 });
+        else if (ctx.music && ctx.music.setVolume) ctx.music.setVolume(muted ? 0 : 0.34);
       } catch (_) {}
     });
 
@@ -977,7 +1067,7 @@ window.plethoraBit = {
         // discovery chime as a creature enters range
         if (started && !c.near && d < NEAR_CHIME) {
           c.near = true;
-          if (!factOpen) { sting("tap"); ctx.platform.haptic && ctx.platform.haptic("light"); }
+          if (!factOpen) { sfxNear(); ctx.platform.haptic && ctx.platform.haptic("light"); }
         } else if (c.near && d > NEAR_CHIME + 4) {
           c.near = false;
         }

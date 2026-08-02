@@ -5,7 +5,7 @@
   "title": "Whispering Grove",
   "description": "Wander a calm, endless 3D forest and discover animals and nature-words hidden among the trees. Walk up and tap to gather them for tiered points, each revealing a super-interesting fact. Rustle the leaves, follow the soft chimes, and no two visits are the same.",
   "tags": ["3d", "forest", "explore", "relaxing", "collect"],
-  "permissions": ["haptics", "backgroundMusic"],
+  "permissions": ["haptics", "backgroundMusic", "audio"],
   "dependencies": ["three@0.164.1"],
   "memory": {
     "records": {
