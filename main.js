@@ -38,6 +38,8 @@ window.plethoraBit = {
       .wg-ui { position:absolute; inset:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
         color:#f4fff2; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
       .wg-ui * { box-sizing:border-box; }
+      .wg-vignette { position:absolute; inset:0; pointer-events:none; mix-blend-mode:multiply;
+        background:radial-gradient(125% 105% at 50% 40%, rgba(255,255,255,0) 42%, rgba(30,50,26,.28) 76%, rgba(10,22,10,.55) 100%); }
       .wg-hud { position:absolute; top:calc(${sa.top}px + 12px); left:calc(${sa.left}px + 14px);
         pointer-events:none; text-shadow:0 1px 6px rgba(0,20,0,.55); }
       .wg-score { font-size:30px; font-weight:800; letter-spacing:.3px; display:flex; align-items:center; gap:7px; }
@@ -103,6 +105,7 @@ window.plethoraBit = {
     const ui = document.createElement("div");
     ui.className = "wg-ui";
     ui.innerHTML = `
+      <div class="wg-vignette"></div>
       <div class="wg-hud" style="opacity:0;transition:opacity .5s ease">
         <div class="wg-score"><span class="spark">✦</span><span class="val">0</span></div>
         <div class="wg-sub"><span class="found">0</span> discoveries</div>
@@ -122,7 +125,8 @@ window.plethoraBit = {
           <div class="wg-help">
             <div>🕹️ <b>Left side</b> — drag to walk</div>
             <div>👆 <b>Right side</b> — drag to look around</div>
-            <div>✨ <b>Tap</b> a glowing creature or word to collect it</div>
+            <div>🔔 <b>Listen</b> — a soft chime means something's near</div>
+            <div>✨ <b>Look low</b> in the bushes, then tap it to collect</div>
             <div>🍃 <b>Tap the trees</b> to rustle their leaves</div>
           </div>
           <button class="wg-cta wait">Waking the grove…</button>
@@ -344,77 +348,96 @@ window.plethoraBit = {
       return new THREE.CanvasTexture(c);
     }
 
-    function beamTexture() {
-      const c = makeCanvas(64);
-      const g = c.getContext("2d");
-      const grad = g.createLinearGradient(0, 0, 64, 0);
-      grad.addColorStop(0, "rgba(255,255,255,0)");
-      grad.addColorStop(0.5, "rgba(255,255,255,0.85)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
-      g.fillStyle = grad;
-      g.fillRect(0, 0, 64, 64);
-      return new THREE.CanvasTexture(c);
-    }
-
     function groundTexture() {
       const S = 512;
       const c = makeCanvas(S);
       const g = c.getContext("2d");
-      g.fillStyle = "#3f6b3a";
+      g.fillStyle = "#2f4d29";
       g.fillRect(0, 0, S, S);
-      // layered soft blobs of green + earth for a mossy floor
-      const blobs = [
-        ["#4b7a41", 900], ["#356032", 700], ["#5c8a4c", 500],
-        ["#2f5530", 400], ["#6b9450", 300], ["#7a5a34", 150]
+      // wrap-safe blobs: draw each near an edge again on the opposite side
+      function blob(col, x, y, r, a) {
+        g.fillStyle = col; g.globalAlpha = a;
+        for (const ox of [0, S, -S]) for (const oy of [0, S, -S]) {
+          if (Math.abs(x + ox - S / 2) > S && Math.abs(y + oy - S / 2) > S) continue;
+          g.beginPath(); g.arc(x + ox, y + oy, r, 0, Math.PI * 2); g.fill();
+        }
+      }
+      // mossy greens, dark hollows, dirt + leaf-litter speckle
+      const layers = [
+        ["#3a6031", 520, 8, 22, 0.35], ["#274021", 460, 6, 20, 0.4],
+        ["#4b7a3f", 360, 5, 16, 0.32], ["#5c8f49", 220, 4, 12, 0.3],
+        ["#6a4a2c", 180, 3, 9, 0.4], ["#7d5a33", 120, 2, 7, 0.45],
+        ["#89a94f", 200, 1, 4, 0.35]
       ];
-      for (const [col, count] of blobs) {
-        g.fillStyle = col;
+      for (const [col, count, rmin, rmax, a] of layers) {
         for (let i = 0; i < count; i++) {
-          const x = Math.random() * S, y = Math.random() * S;
-          const r = 3 + Math.random() * 12;
-          g.globalAlpha = 0.15 + Math.random() * 0.35;
-          g.beginPath();
-          g.arc(x, y, r, 0, Math.PI * 2);
-          g.fill();
+          blob(col, Math.random() * S, Math.random() * S, rmin + Math.random() * (rmax - rmin), a * (0.6 + Math.random() * 0.6));
         }
       }
       g.globalAlpha = 1;
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 4;
       return tex;
     }
 
     const leafTex = emojiTexture("🍃");
     const glowTex = radialTexture();
-    const beamTex = beamTexture();
 
     // ---------------------------------------------------------------------
     // 4. Scene, camera, renderer, lighting, fog.
     // ---------------------------------------------------------------------
-    const SKY = 0xbfe0c4;
+    const SKY = 0x93bd8f;         // hazy sunlit green
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(ctx.nativeDpr || window.devicePixelRatio || 1, 2));
     renderer.setSize(ctx.width, ctx.height, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SKY);
-    scene.fog = new THREE.Fog(SKY, 22, 110);
+    scene.fog = new THREE.Fog(SKY, 9, 60); // close, cozy haze so the forest feels deep
 
-    const camera = new THREE.PerspectiveCamera(62, ctx.width / ctx.height, 0.1, 400);
+    const camera = new THREE.PerspectiveCamera(64, ctx.width / ctx.height, 0.1, 400);
 
-    scene.add(new THREE.HemisphereLight(0xdff2d6, 0x40331f, 1.15));
-    const sun = new THREE.DirectionalLight(0xfff3d8, 1.35);
-    sun.position.set(30, 60, 20);
+    scene.add(new THREE.HemisphereLight(0xd6f0c8, 0x2c3a22, 1.0));
+    const sun = new THREE.DirectionalLight(0xfff1cf, 1.55);
+    sun.position.set(22, 34, 10);
     scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xbfe0ff, 0.35);
-    fill.position.set(-20, 25, -30);
+    const fill = new THREE.DirectionalLight(0xbfe0ff, 0.28);
+    fill.position.set(-18, 20, -26);
     scene.add(fill);
 
+    // --- shared wind: sways grass, canopies and bushes in the vertex shader ---
+    const GRASS_R = 30;                 // grass radius around the player
+    const windU = { value: 0 };
+    function applyWind(mat, mode) {
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = windU;
+        let inject;
+        if (mode === "grass") {
+          inject =
+            "float ph = instanceMatrix[3].x*0.35 + instanceMatrix[3].z*0.35;\n" +
+            "transformed.x += sin(uTime*1.7 + ph)*0.22*transformed.y;\n" +
+            "transformed.z += cos(uTime*1.3 + ph)*0.14*transformed.y;\n" +
+            "float gd = distance(cameraPosition.xz, vec2(instanceMatrix[3].x, instanceMatrix[3].z));\n" +
+            "transformed *= clamp((" + GRASS_R.toFixed(1) + " - gd)/7.0, 0.0, 1.0);\n";
+        } else {
+          inject =
+            "float ph = instanceMatrix[3].x*0.2 + instanceMatrix[3].z*0.2;\n" +
+            "transformed.x += sin(uTime*0.85 + ph)*0.13;\n" +
+            "transformed.z += cos(uTime*0.65 + ph)*0.10;\n";
+        }
+        sh.vertexShader = "uniform float uTime;\n" +
+          sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n" + inject);
+      };
+    }
+
     // Ground — follows the player so the forest floor is effectively endless.
-    const GROUND = 420;
-    const TILE = 7; // world metres per texture tile
+    const GROUND = 320;
+    const TILE = 5.5; // world metres per texture tile (finer detail)
     const gTex = groundTexture();
     gTex.repeat.set(GROUND / TILE, GROUND / TILE);
     const ground = new THREE.Mesh(
@@ -425,74 +448,188 @@ window.plethoraBit = {
     scene.add(ground);
 
     // ---------------------------------------------------------------------
-    // 5. Endless forest via two InstancedMeshes (trunks + foliage) that
-    //    recycle behind the player.
+    // 5. Endless forest: trunks + two canopy lobes, bushes and swaying grass,
+    //    all instanced and recycled behind the player.
     // ---------------------------------------------------------------------
-    const MAX_TREES = 150;
-    const trunkGeo = new THREE.CylinderGeometry(0.16, 0.28, 2.4, 6);
-    trunkGeo.translate(0, 1.2, 0); // base at y=0
-    const foliageGeo = new THREE.IcosahedronGeometry(1, 0);
-    const trunkMesh = new THREE.InstancedMesh(
-      trunkGeo, new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1, flatShading: true }), MAX_TREES);
-    const foliageMesh = new THREE.InstancedMesh(
-      foliageGeo, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), MAX_TREES);
-    trunkMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    foliageMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    scene.add(trunkMesh, foliageMesh);
-
-    const FOLIAGE_COLORS = [0x4c8a3f, 0x3f7a38, 0x5c9a4a, 0x6ba054, 0x3c6b46, 0x8a9a3a];
-    const trees = [];
     const _m = new THREE.Matrix4();
     const _q = new THREE.Quaternion();
     const _p = new THREE.Vector3();
     const _s = new THREE.Vector3();
     const _col = new THREE.Color();
+    const UP = new THREE.Vector3(0, 1, 0);
+
+    // -- trees --
+    const MAX_TREES = 190;
+    const trunkGeo = new THREE.CylinderGeometry(0.12, 0.24, 2.6, 6);
+    trunkGeo.translate(0, 1.3, 0);
+    const canopyGeo = new THREE.IcosahedronGeometry(1, 1); // rounder canopy
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x543a26, roughness: 1, flatShading: true });
+    const foliageMat1 = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true });
+    const foliageMat2 = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true });
+    applyWind(foliageMat1, "canopy");
+    applyWind(foliageMat2, "canopy");
+    const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, MAX_TREES);
+    const foliage1 = new THREE.InstancedMesh(canopyGeo, foliageMat1, MAX_TREES);
+    const foliage2 = new THREE.InstancedMesh(canopyGeo, foliageMat2, MAX_TREES);
+    [trunkMesh, foliage1, foliage2].forEach((m) => {
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.frustumCulled = false; // instances recycle around the player
+    });
+    scene.add(trunkMesh, foliage1, foliage2);
+
+    const FOLIAGE_DARK = [0x356b30, 0x2f5f2c, 0x3f7a38, 0x2b5228, 0x477f36];
+    const FOLIAGE_LITE = [0x6fae52, 0x7cb85a, 0x64a24a, 0x86bf5f, 0x5c9a46];
+    const trees = [];
 
     function writeTree(i) {
       const t = trees[i];
-      // trunk
-      _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot);
+      _q.setFromAxisAngle(UP, t.rot);
       _p.set(t.x, 0, t.z);
-      _s.set(t.scale, t.scale, t.scale);
+      _s.set(t.tw, t.scale, t.tw);
       _m.compose(_p, _q, _s);
       trunkMesh.setMatrixAt(i, _m);
-      // foliage — a squashed blob sitting on top of the trunk
-      _p.set(t.x, 2.4 * t.scale + t.fr * 0.7, t.z);
-      _s.set(t.fr, t.fr * 1.25, t.fr);
-      _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot * 1.7);
+      const top = 2.6 * t.scale;
+      _p.set(t.x, top - 0.2 * t.fr, t.z);
+      _s.set(t.fr, t.fr * 1.1, t.fr);
+      _q.setFromAxisAngle(UP, t.rot * 1.7);
       _m.compose(_p, _q, _s);
-      foliageMesh.setMatrixAt(i, _m);
-      foliageMesh.setColorAt(i, _col.setHex(t.color));
+      foliage1.setMatrixAt(i, _m);
+      foliage1.setColorAt(i, _col.setHex(t.color));
+      _p.set(t.x + t.lx, top + 0.7 * t.fr, t.z + t.lz);
+      _s.set(t.fr * 0.68, t.fr * 0.78, t.fr * 0.68);
+      _q.setFromAxisAngle(UP, t.rot * 2.3);
+      _m.compose(_p, _q, _s);
+      foliage2.setMatrixAt(i, _m);
+      foliage2.setColorAt(i, _col.setHex(t.color2));
     }
 
     function placeTree(i, ahead) {
       const t = trees[i] || (trees[i] = {});
       let x, z;
       if (ahead) {
-        const ang = camYaw + (Math.random() - 0.5) * Math.PI * 1.3;
-        const d = 42 + Math.random() * 26;
+        const ang = camYaw + (Math.random() - 0.5) * Math.PI * 1.4;
+        const d = 34 + Math.random() * 26;
         x = player.x + Math.sin(ang) * d;
         z = player.z + Math.cos(ang) * d;
       } else {
         const ang = Math.random() * Math.PI * 2;
-        const d = 6 + Math.random() * 58;
+        const d = 3 + Math.random() * 57;
         x = player.x + Math.cos(ang) * d;
         z = player.z + Math.sin(ang) * d;
       }
       t.x = x; t.z = z;
-      t.scale = 0.7 + Math.random() * 1.5;
-      t.fr = (1.5 + Math.random() * 1.6) * (0.75 + t.scale * 0.2);
+      t.scale = 0.75 + Math.random() * 1.6;
+      t.tw = 0.7 + Math.random() * 0.5;
+      t.fr = (1.5 + Math.random() * 1.5) * (0.8 + t.scale * 0.15);
       t.rot = Math.random() * Math.PI * 2;
-      t.color = FOLIAGE_COLORS[(Math.random() * FOLIAGE_COLORS.length) | 0];
+      t.lx = (Math.random() - 0.5) * t.fr;
+      t.lz = (Math.random() - 0.5) * t.fr;
+      t.color = FOLIAGE_DARK[(Math.random() * FOLIAGE_DARK.length) | 0];
+      t.color2 = FOLIAGE_LITE[(Math.random() * FOLIAGE_LITE.length) | 0];
       writeTree(i);
     }
 
+    // -- bushes (mid-layer cover that hides creatures) --
+    const MAX_BUSH = 150;
+    const bushGeo = new THREE.IcosahedronGeometry(1, 0);
+    const bushMat = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true });
+    applyWind(bushMat, "canopy");
+    const bushMesh = new THREE.InstancedMesh(bushGeo, bushMat, MAX_BUSH);
+    bushMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    bushMesh.frustumCulled = false;
+    scene.add(bushMesh);
+    const BUSH_COLORS = [0x37652f, 0x2f5a2a, 0x40763a, 0x315730, 0x4a833c];
+    const bushes = [];
+
+    function writeBush(i) {
+      const b = bushes[i];
+      _p.set(b.x, b.h * 0.55, b.z);
+      _s.set(b.w, b.h, b.w);
+      _q.setFromAxisAngle(UP, b.rot);
+      _m.compose(_p, _q, _s);
+      bushMesh.setMatrixAt(i, _m);
+      bushMesh.setColorAt(i, _col.setHex(b.color));
+    }
+    function placeBush(i, ahead) {
+      const b = bushes[i] || (bushes[i] = {});
+      let x, z;
+      if (ahead) {
+        const ang = camYaw + (Math.random() - 0.5) * Math.PI * 1.5;
+        const d = 20 + Math.random() * 18;
+        x = player.x + Math.sin(ang) * d;
+        z = player.z + Math.cos(ang) * d;
+      } else {
+        const ang = Math.random() * Math.PI * 2;
+        const d = 2 + Math.random() * 34;
+        x = player.x + Math.cos(ang) * d;
+        z = player.z + Math.sin(ang) * d;
+      }
+      b.x = x; b.z = z;
+      b.w = 0.7 + Math.random() * 1.3;
+      b.h = (0.5 + Math.random() * 0.6) * b.w;
+      b.rot = Math.random() * Math.PI * 2;
+      b.color = BUSH_COLORS[(Math.random() * BUSH_COLORS.length) | 0];
+      writeBush(i);
+    }
+
+    // -- grass: thousands of instanced blades that sway and fade at the edge --
+    const GRASS = 2600;
+    const bladeGeo = new THREE.BufferGeometry();
+    const bh = 0.6, bw = 0.055;
+    bladeGeo.setAttribute("position", new THREE.Float32BufferAttribute(
+      [-bw, 0, 0, bw, 0, 0, 0, bh, 0], 3));
+    bladeGeo.setAttribute("normal", new THREE.Float32BufferAttribute(
+      [0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+    bladeGeo.setIndex([0, 1, 2]);
+    const grassMat = new THREE.MeshStandardMaterial({ roughness: 1, side: THREE.DoubleSide });
+    applyWind(grassMat, "grass");
+    const grassMesh = new THREE.InstancedMesh(bladeGeo, grassMat, GRASS);
+    grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    grassMesh.frustumCulled = false;
+    scene.add(grassMesh);
+    const GRASS_COLORS = [0x5f9e43, 0x6fae4c, 0x538f3a, 0x7bbb55, 0x4c8a3c, 0x86c25e];
+    const blades = [];
+
+    function writeBlade(i) {
+      const b = blades[i];
+      _p.set(b.x, 0, b.z);
+      _s.set(b.s, b.hs, 1);
+      _q.setFromAxisAngle(UP, b.rot);
+      _m.compose(_p, _q, _s);
+      grassMesh.setMatrixAt(i, _m);
+      grassMesh.setColorAt(i, _col.setHex(b.color));
+    }
+    function placeBlade(i, ahead) {
+      const b = blades[i] || (blades[i] = {});
+      let x, z;
+      if (ahead) {
+        const ang = camYaw + (Math.random() - 0.5) * Math.PI * 1.6;
+        const d = GRASS_R - 6 + Math.random() * 6;
+        x = player.x + Math.sin(ang) * d;
+        z = player.z + Math.cos(ang) * d;
+      } else {
+        const ang = Math.random() * Math.PI * 2;
+        const d = 0.5 + Math.random() * (GRASS_R - 1);
+        x = player.x + Math.cos(ang) * d;
+        z = player.z + Math.sin(ang) * d;
+      }
+      b.x = x; b.z = z;
+      b.s = 0.7 + Math.random() * 0.9;
+      b.hs = 0.7 + Math.random() * 1.1;
+      b.rot = Math.random() * Math.PI * 2;
+      b.color = GRASS_COLORS[(Math.random() * GRASS_COLORS.length) | 0];
+      writeBlade(i);
+    }
+
     // ---------------------------------------------------------------------
-    // 6. Collectibles: floating animals + words that recycle around player.
+    // 6. Collectibles: animals hidden low among the bushes, words drifting.
+    //    No giveaway beacon — a soft glow + firefly only appear up close, and
+    //    the discovery chime hints when one is near.
     // ---------------------------------------------------------------------
-    const COLLECT_COUNT = 16;
-    const COLLECT_REACH = 10;      // must be within this many metres to gather
-    const NEAR_CHIME = 19;         // discovery chime range
+    const COLLECT_COUNT = 20;
+    const COLLECT_REACH = 9;       // must be within this many metres to gather
+    const NEAR_CHIME = 17;         // discovery chime range
+    const FIND_GLOW = 14;          // glow + firefly reveal range
     const collectibles = [];
     const pickables = [];          // main sprites for raycasting
 
@@ -514,23 +651,22 @@ window.plethoraBit = {
     function makeCollectible(i) {
       const group = new THREE.Group();
 
-      const glowMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.6 });
+      const glowMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, toneMapped: false });
       const glow = new THREE.Sprite(glowMat);
-      glow.scale.set(3.2, 3.2, 1);
+      glow.scale.set(2.0, 2.0, 1);
       group.add(glow);
 
-      const beamMat = new THREE.SpriteMaterial({ map: beamTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.28 });
-      const beam = new THREE.Sprite(beamMat);
-      beam.scale.set(0.9, 9, 1);
-      beam.position.y = 3.2;
-      group.add(beam);
+      const sparkMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, color: 0xfff2c0, toneMapped: false });
+      const spark = new THREE.Sprite(sparkMat);
+      spark.scale.set(0.5, 0.5, 1);
+      group.add(spark);
 
-      const mainMat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false });
+      const mainMat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, toneMapped: false });
       const main = new THREE.Sprite(mainMat);
       group.add(main);
 
       scene.add(group);
-      const c = { group, glow, glowMat, beam, beamMat, main, mainMat, content: null, x: 0, z: 0, baseY: 1.3, phase: Math.random() * Math.PI * 2, near: false, dead: false };
+      const c = { group, glow, glowMat, spark, sparkMat, main, mainMat, content: null, x: 0, z: 0, baseY: 0.6, floatAmp: 0.06, phase: Math.random() * Math.PI * 2, near: false, dead: false };
       main.userData.col = c;
       pickables.push(main);
       collectibles[i] = c;
@@ -541,24 +677,40 @@ window.plethoraBit = {
       const content = randomContent();
       c.content = content;
       const tier = TIERS[content.tier];
-      // texture (cached + shared — never disposed here)
       c.mainMat.map = content.kind === "word" ? wordTexture(content.word) : emojiTexture(content.emoji);
       c.mainMat.needsUpdate = true;
-      const mainScale = content.kind === "word" ? 3.0 : 1.7;
-      c.main.scale.set(content.kind === "word" ? mainScale * 1.0 : mainScale, mainScale, 1);
-      c.main.position.y = 0;
-      // tint glow + beam by tier
+      const mainScale = content.kind === "word" ? 2.5 : 1.45;
+      c.main.scale.set(mainScale, mainScale, 1);
       c.glowMat.color.setHex(tier.color);
-      c.beamMat.color.setHex(tier.color);
+      c.sparkMat.color.setHex(content.tier === "word" ? 0xbfffe6 : 0xfff2c0);
       const legend = content.tier === "legendary";
-      c.glow.scale.setScalar(legend ? 4.2 : content.tier === "rare" ? 3.6 : 3.0);
-      c.beamMat.opacity = legend ? 0.42 : 0.26;
-      // position: random ring around the player, never right on top of them
-      const ang = Math.random() * Math.PI * 2;
-      const d = (initial ? 10 : 20) + Math.random() * 26;
-      c.x = player.x + Math.cos(ang) * d;
-      c.z = player.z + Math.sin(ang) * d;
-      c.baseY = 1.15 + Math.random() * 0.5;
+      c.glow.scale.setScalar(legend ? 2.8 : content.tier === "rare" ? 2.3 : 1.9);
+
+      // Nestle animals beside a bush (tucked, partly hidden); words drift a bit
+      // more in the open. Fall back to a plain ring if no bush is handy.
+      const minD = initial ? 8 : 16, maxD = initial ? 26 : 40;
+      let x = null, z = null;
+      if (content.kind === "animal" && bushes.length) {
+        for (let tries = 0; tries < 6; tries++) {
+          const b = bushes[(Math.random() * bushes.length) | 0];
+          if (!b) continue;
+          const bd = Math.hypot(b.x - player.x, b.z - player.z);
+          if (bd >= minD && bd <= maxD) {
+            const a = Math.random() * Math.PI * 2, off = 0.8 + Math.random() * 1.2;
+            x = b.x + Math.cos(a) * off; z = b.z + Math.sin(a) * off;
+            break;
+          }
+        }
+      }
+      if (x === null) {
+        const ang = Math.random() * Math.PI * 2;
+        const d = minD + Math.random() * (maxD - minD);
+        x = player.x + Math.cos(ang) * d;
+        z = player.z + Math.sin(ang) * d;
+      }
+      c.x = x; c.z = z;
+      if (content.kind === "word") { c.baseY = 1.2 + Math.random() * 0.5; c.floatAmp = 0.22; }
+      else { c.baseY = 0.72 + Math.random() * 0.22; c.floatAmp = 0.05; }
       c.near = false;
       c.dead = false;
       c.group.visible = true;
@@ -714,12 +866,14 @@ window.plethoraBit = {
           return;
         }
       }
-      // otherwise try the trees for a rustle
-      const tHit = raycaster.intersectObject(foliageMesh, false);
-      if (tHit.length && tHit[0].distance < 26) {
-        const inst = tHit[0].instanceId;
-        const t = trees[inst];
-        rustle(tHit[0].point, t ? t.color : 0x4c8a3f);
+      // otherwise try the foliage / bushes for a rustle
+      const tHit = raycaster.intersectObjects([foliage1, foliage2, bushMesh], false);
+      if (tHit.length && tHit[0].distance < 30) {
+        const h = tHit[0];
+        let color = 0x4c8a3f;
+        if (h.object === bushMesh) { const b = bushes[h.instanceId]; if (b) color = b.color; }
+        else { const t = trees[h.instanceId]; if (t) color = t.color2 || t.color; }
+        rustle(h.point, color);
       } else {
         sfxTap();
       }
@@ -971,8 +1125,16 @@ window.plethoraBit = {
     // ---------------------------------------------------------------------
     for (let i = 0; i < MAX_TREES; i++) placeTree(i, false);
     trunkMesh.instanceMatrix.needsUpdate = true;
-    foliageMesh.instanceMatrix.needsUpdate = true;
-    if (foliageMesh.instanceColor) foliageMesh.instanceColor.needsUpdate = true;
+    foliage1.instanceMatrix.needsUpdate = true;
+    foliage2.instanceMatrix.needsUpdate = true;
+    if (foliage1.instanceColor) foliage1.instanceColor.needsUpdate = true;
+    if (foliage2.instanceColor) foliage2.instanceColor.needsUpdate = true;
+    for (let i = 0; i < MAX_BUSH; i++) placeBush(i, false);
+    bushMesh.instanceMatrix.needsUpdate = true;
+    if (bushMesh.instanceColor) bushMesh.instanceColor.needsUpdate = true;
+    for (let i = 0; i < GRASS; i++) placeBlade(i, false);
+    grassMesh.instanceMatrix.needsUpdate = true;
+    if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
     for (let i = 0; i < COLLECT_COUNT; i++) makeCollectible(i);
 
     function resize() {
@@ -992,9 +1154,8 @@ window.plethoraBit = {
     // ---------------------------------------------------------------------
     // 14. Frame loop.
     // ---------------------------------------------------------------------
-    const _fwd = new THREE.Vector3();
     let nowMs = 0;
-    let treeCursor = 0;
+    let treeCursor = 0, bushCursor = 0, grassCursor = 0;
     loadBest();
 
     function update(dtMs, timeMs) {
@@ -1041,30 +1202,68 @@ window.plethoraBit = {
       }
       moteGeo.attributes.position.needsUpdate = true;
 
-      // --- recycle trees that fall behind ---
-      let treesDirty = false;
-      for (let k = 0; k < 18; k++) {
+      // --- wind ---
+      windU.value = timeMs * 0.001;
+
+      // --- recycle trees ---
+      let td = false;
+      for (let k = 0; k < 20; k++) {
         const i = (treeCursor + k) % MAX_TREES;
         const t = trees[i];
-        const d = Math.hypot(t.x - player.x, t.z - player.z);
-        if (d > 78) { placeTree(i, true); treesDirty = true; }
+        if (Math.hypot(t.x - player.x, t.z - player.z) > 66) { placeTree(i, true); td = true; }
       }
-      treeCursor = (treeCursor + 18) % MAX_TREES;
-      if (treesDirty) {
+      treeCursor = (treeCursor + 20) % MAX_TREES;
+      if (td) {
         trunkMesh.instanceMatrix.needsUpdate = true;
-        foliageMesh.instanceMatrix.needsUpdate = true;
-        if (foliageMesh.instanceColor) foliageMesh.instanceColor.needsUpdate = true;
+        foliage1.instanceMatrix.needsUpdate = true;
+        foliage2.instanceMatrix.needsUpdate = true;
+        if (foliage1.instanceColor) foliage1.instanceColor.needsUpdate = true;
+        if (foliage2.instanceColor) foliage2.instanceColor.needsUpdate = true;
       }
 
-      // --- collectibles: bob, face gently, recycle, discovery chime ---
+      // --- recycle bushes ---
+      let bdrt = false;
+      for (let k = 0; k < 12; k++) {
+        const i = (bushCursor + k) % MAX_BUSH;
+        const b = bushes[i];
+        if (Math.hypot(b.x - player.x, b.z - player.z) > 40) { placeBush(i, true); bdrt = true; }
+      }
+      bushCursor = (bushCursor + 12) % MAX_BUSH;
+      if (bdrt) {
+        bushMesh.instanceMatrix.needsUpdate = true;
+        if (bushMesh.instanceColor) bushMesh.instanceColor.needsUpdate = true;
+      }
+
+      // --- recycle grass ---
+      let gdrt = false;
+      for (let k = 0; k < 300; k++) {
+        const i = (grassCursor + k) % GRASS;
+        const b = blades[i];
+        if (Math.hypot(b.x - player.x, b.z - player.z) > GRASS_R + 4) { placeBlade(i, true); gdrt = true; }
+      }
+      grassCursor = (grassCursor + 300) % GRASS;
+      if (gdrt) {
+        grassMesh.instanceMatrix.needsUpdate = true;
+        if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+      }
+
+      // --- collectibles: bob, recycle, reveal only up close, discovery chime ---
       for (const c of collectibles) {
         if (c.dead) continue;
         const d = Math.hypot(c.x - player.x, c.z - player.z);
-        if (d > 62) { spawnCollectible(c, false); continue; }
-        c.group.position.set(c.x, c.baseY + Math.sin(timeMs * 0.0018 + c.phase) * 0.28, c.z);
-        const pulse = 0.85 + Math.sin(timeMs * 0.004 + c.phase) * 0.15;
-        c.glowMat.opacity = pulse * (d < NEAR_CHIME ? 0.85 : 0.55);
-        // discovery chime as a creature enters range
+        if (d > 58) { spawnCollectible(c, false); continue; }
+        const y = c.baseY + Math.sin(timeMs * 0.0018 + c.phase) * c.floatAmp;
+        c.group.position.set(c.x, y, c.z);
+        const near = d < FIND_GLOW ? (FIND_GLOW - d) / FIND_GLOW : 0;
+        const pulse = 0.7 + Math.sin(timeMs * 0.005 + c.phase) * 0.3;
+        c.glowMat.opacity = near * 0.5 * pulse;
+        c.sparkMat.opacity = near * 0.85 * (0.5 + 0.5 * Math.sin(timeMs * 0.012 + c.phase));
+        const orb = 0.4 + 0.15 * Math.sin(timeMs * 0.003 + c.phase);
+        c.spark.position.set(
+          Math.cos(timeMs * 0.004 + c.phase) * orb,
+          0.35 + Math.sin(timeMs * 0.006 + c.phase) * 0.15,
+          Math.sin(timeMs * 0.004 + c.phase) * orb
+        );
         if (started && !c.near && d < NEAR_CHIME) {
           c.near = true;
           if (!factOpen) { sfxNear(); ctx.platform.haptic && ctx.platform.haptic("light"); }
