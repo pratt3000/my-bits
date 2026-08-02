@@ -28,13 +28,49 @@ mic *amplitude peaks* and maps them to drum hits recorded into the loop as
 events (timing only, never raw audio) — contract-compliant, but gated on the
 in-development mic API.
 
-## Uploading (manual)
+## Uploading
 
-This bit was built to the Plethora agent contract but **not** uploaded from here —
-the build environment's network policy blocks `plethora.studio`, so agent
-pairing and draft upload can't run. To publish:
+The build environment's network policy blocks `plethora.studio`, so pairing and
+draft upload can't run from the agent side. Everything you need to upload from
+your own machine is in this folder:
 
-- Pair a coding agent / use the dashboard at https://create.plethora.studio/agent-pair
-- Upload `main.js` as `source` and `plethora.json` as `manifest` via
-  `POST /v1/agent/bits/drafts`, or paste them into the creator web app.
-- Publish stays manual by design.
+- `main.js` — the `source`
+- `plethora.json` — the `manifest`
+- `draft-payload.json` — the exact JSON body for `POST /v1/agent/bits/drafts`
+  (source + manifest + title/description/tags, `generated: true`)
+- `upload.sh` — posts `draft-payload.json` with a `Plethora-Agent` token
+
+### Option A — creator web app (simplest)
+
+Open https://create.plethora.studio, create a new bit, and paste the contents of
+`main.js` as the source and `plethora.json` as the manifest.
+
+### Option B — pair an agent + POST the draft
+
+1. Create a pairing session:
+   ```bash
+   curl -sS -X POST https://create.plethora.studio/v1/agent/pair/sessions
+   ```
+   Show the returned `pairingCode` / `pairingUrl` and approve it at
+   https://create.plethora.studio/agent-pair. Keep the `sessionId` and
+   `sessionSecret`.
+2. Poll the exchange until `status` is `approved`, then read `data.accessToken`
+   **once**:
+   ```bash
+   curl -sS -X POST \
+     https://create.plethora.studio/v1/agent/pair/sessions/<sessionId>/exchange \
+     -H "Content-Type: application/json" \
+     -d '{"sessionSecret":"<sessionSecret>"}'
+   ```
+3. Upload the draft:
+   ```bash
+   ./upload.sh <accessToken>
+   ```
+
+Publish stays manual by design — review it in the app/dashboard, then publish.
+
+> `draft-payload.json` is generated from `main.js` + `plethora.json`. If you edit
+> either, regenerate it:
+> ```bash
+> node -e 'const fs=require("fs");const s=fs.readFileSync("main.js","utf8");const m=JSON.parse(fs.readFileSync("plethora.json","utf8"));fs.writeFileSync("draft-payload.json",JSON.stringify({title:m.title,description:m.description,tags:m.tags,source:s,manifest:m,generated:true},null,2))'
+> ```
