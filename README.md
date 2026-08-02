@@ -12,6 +12,7 @@ entry source, so it can be validated and uploaded independently.
 | Bit                                | What it is                                              |
 | ---------------------------------- | ------------------------------------------------------ |
 | [`kaleido-bloom`](./kaleido-bloom) | Kaleidoscope fidget/art toy — drag to paint glowing symmetric mandalas. |
+| [`spot-pip`](./spot-pip)           | Hidden-object search game — pinch/zoom a crowd to find Pip across three levels, timed. |
 
 ## Contract
 
