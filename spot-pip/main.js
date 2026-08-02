@@ -514,15 +514,29 @@ window.plethoraBit = {
       "background:rgba(30,26,44,0.62);backdrop-filter:blur(9px);" +
       "-webkit-backdrop-filter:blur(9px);border-radius:16px;color:#f4f1ff;" +
       "font:700 14px/1.1 -apple-system,system-ui,sans-serif;box-shadow:0 3px 12px rgba(0,0,0,0.4);";
-    const icon = document.createElement("canvas");
-    const isz = 46, dpr = ctx.nativeDpr || 1;
-    icon.width = isz * dpr; icon.height = isz * dpr;
-    icon.style.cssText = "width:" + isz + "px;height:" + isz + "px;border-radius:12px;background:#f0dcb4;";
-    const ig = icon.getContext("2d");
-    ig.scale(dpr, dpr);
-    drawChar(ig, { x: isz / 2, y: isz * 0.62, r: isz * 0.32, isWaldo: true,
-      skin: PIP.skin, hair: PIP.hair, stripes: true, shirtA: PIP.stripeA,
-      shirtB: PIP.stripeB, hasHat: true, hatColor: PIP.hat, hasPom: true, hasGlasses: true }, true);
+    // Mini Pip preview, drawn as inline SVG (no aux canvas needed).
+    const PIP_SVG =
+      '<svg viewBox="0 0 46 46" width="46" height="46" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect x="17" y="41" width="4" height="5" fill="#2b3a67"/>' +
+      '<rect x="25" y="41" width="4" height="5" fill="#2b3a67"/>' +
+      '<rect x="9" y="30" width="4.5" height="10" rx="2.2" fill="#e8352e"/>' +
+      '<rect x="32" y="30" width="4.5" height="10" rx="2.2" fill="#e8352e"/>' +
+      '<clipPath id="pipbod"><rect x="13.5" y="28.5" width="19" height="15" rx="4"/></clipPath>' +
+      '<g clip-path="url(#pipbod)">' +
+      '<rect x="13" y="28" width="20" height="16" fill="#e8352e"/>' +
+      '<rect x="13" y="30.4" width="20" height="2.9" fill="#f7f7f7"/>' +
+      '<rect x="13" y="36" width="20" height="2.9" fill="#f7f7f7"/>' +
+      '<rect x="13" y="41.6" width="20" height="2.9" fill="#f7f7f7"/></g>' +
+      '<circle cx="23" cy="19" r="7.5" fill="#f2c9a0"/>' +
+      '<circle cx="19.4" cy="20" r="2.5" fill="none" stroke="#111" stroke-width="1.1"/>' +
+      '<circle cx="26.6" cy="20" r="2.5" fill="none" stroke="#111" stroke-width="1.1"/>' +
+      '<line x1="21.9" y1="20" x2="24.1" y2="20" stroke="#111" stroke-width="1.1"/>' +
+      '<path d="M14.5 19 Q23 5 31.5 19 Z" fill="#e8352e"/>' +
+      '<rect x="14" y="16.4" width="18" height="3" fill="#f7f7f7"/>' +
+      '<circle cx="23" cy="7" r="2.4" fill="#f7f7f7"/></svg>';
+    const icon = document.createElement("div");
+    icon.style.cssText = "width:46px;height:46px;flex:0 0 auto;border-radius:12px;overflow:hidden;background:#f0dcb4;";
+    icon.innerHTML = PIP_SVG;
     const cardLabel = document.createElement("div");
     cardLabel.innerHTML = "Find<br>Pip";
     card.append(icon, cardLabel);
