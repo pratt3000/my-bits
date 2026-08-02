@@ -1072,30 +1072,99 @@ window.plethoraBit = {
       [392.0, 523.25, 659.25].forEach((f, i) => tone(f, i * 0.07, 0.5, "triangle", 0.16));
     }
 
+    // --- ambient forest bed: soft breeze + warm drone + distant birdsong ---
+    let ambient = null, birdStop = false;
+    function startAmbient() {
+      if (!AC || ambient) return;
+      const bed = AC.createGain();
+      bed.gain.setValueAtTime(0.0001, AC.currentTime);
+      bed.gain.linearRampToValueAtTime(muted ? 0 : 0.16, AC.currentTime + 4);
+      bed.connect(master);
+
+      // breeze: looping brown-ish noise through a slowly breathing lowpass
+      const secs = 4, n = Math.floor(AC.sampleRate * secs);
+      const buf = AC.createBuffer(1, n, AC.sampleRate);
+      const d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < n; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
+      const wind = AC.createBufferSource(); wind.buffer = buf; wind.loop = true;
+      const wf = AC.createBiquadFilter(); wf.type = "lowpass"; wf.frequency.value = 560; wf.Q.value = 0.6;
+      const wg = AC.createGain(); wg.gain.value = 0.55;
+      wind.connect(wf); wf.connect(wg); wg.connect(bed); wind.start();
+      const lfo = AC.createOscillator(); lfo.frequency.value = 0.05;
+      const lfoG = AC.createGain(); lfoG.gain.value = 240;
+      lfo.connect(lfoG); lfoG.connect(wf.frequency); lfo.start();
+      const lfo2 = AC.createOscillator(); lfo2.frequency.value = 0.08;
+      const lfo2G = AC.createGain(); lfo2G.gain.value = 0.22;
+      lfo2.connect(lfo2G); lfo2G.connect(wg.gain); lfo2.start();
+
+      // warm low drone (kept dim + low-passed so it reads as atmosphere)
+      const padF = AC.createBiquadFilter(); padF.type = "lowpass"; padF.frequency.value = 820;
+      const padG = AC.createGain(); padG.gain.value = 0.038;
+      padF.connect(padG); padG.connect(bed);
+      const chord = [110.0, 164.81, 220.0]; // A2 · E3 · A4-ish warmth
+      const oscs = [lfo, lfo2];
+      chord.forEach((f) => {
+        const o = AC.createOscillator(); o.type = "triangle"; o.frequency.value = f;
+        const o2 = AC.createOscillator(); o2.type = "sine"; o2.frequency.value = f * 1.004;
+        o.connect(padF); o2.connect(padF); o.start(); o2.start(); oscs.push(o, o2);
+      });
+      const plfo = AC.createOscillator(); plfo.frequency.value = 0.07;
+      const plfoG = AC.createGain(); plfoG.gain.value = 0.02;
+      plfo.connect(plfoG); plfoG.connect(padG.gain); plfo.start(); oscs.push(plfo);
+
+      ambient = { bed, wind, oscs };
+      scheduleBird();
+    }
+    function scheduleBird() {
+      if (!AC || birdStop) return;
+      ctx.timeout(() => { if (ambient && !muted && AC.state === "running") chirp(); scheduleBird(); }, 3500 + Math.random() * 9000);
+    }
+    function chirp() {
+      if (!AC || !ambient) return;
+      const base = 1900 + Math.random() * 1500;
+      const notes = 2 + ((Math.random() * 3) | 0);
+      for (let i = 0; i < notes; i++) {
+        const t = AC.currentTime + i * 0.09;
+        const f = base * (1 + (Math.random() - 0.5) * 0.28);
+        const o = AC.createOscillator(); o.type = "sine";
+        o.frequency.setValueAtTime(f, t);
+        o.frequency.exponentialRampToValueAtTime(f * 1.35, t + 0.05);
+        const eg = AC.createGain();
+        eg.gain.setValueAtTime(0.0001, t);
+        eg.gain.linearRampToValueAtTime(0.032, t + 0.012);
+        eg.gain.exponentialRampToValueAtTime(0.0004, t + 0.09);
+        o.connect(eg); eg.connect(ambient.bed); o.start(t); o.stop(t + 0.11);
+      }
+    }
+    function stopAmbient() {
+      birdStop = true;
+      if (!ambient) return;
+      try { ambient.wind.stop(); } catch (_) {}
+      for (const o of ambient.oscs) { try { o.stop(); } catch (_) {} }
+      ambient = null;
+    }
+
     async function startAudio() {
       if (audioReady) return;
       audioReady = true;
       ensureAC();
       resumeAC();
       sfxStart();
-      if (canMusic && ctx.music) {
-        try {
-          await ctx.music.unlock();
-          musicHandle = await ctx.music.play({
-            preset: "drift", scale: "minorPentatonic", volume: muted ? 0 : 0.34,
-            intensity: 0.32, tempo: 72, fadeInMs: 2500
-          });
-        } catch (_) { /* ambient bed is optional */ }
-      }
+      startAmbient();
     }
     ctx.listen(el.mute, "click", () => {
       muted = !muted;
       el.mute.textContent = muted ? "🔇" : "🔊";
-      if (master) { try { master.gain.value = muted ? 0 : 0.9; } catch (_) {} }
-      try {
-        if (musicHandle && musicHandle.setVolume) musicHandle.setVolume(muted ? 0 : 0.34, { fadeMs: 400 });
-        else if (ctx.music && ctx.music.setVolume) ctx.music.setVolume(muted ? 0 : 0.34);
-      } catch (_) {}
+      if (master && AC) {
+        try { master.gain.setTargetAtTime(muted ? 0 : 0.9, AC.currentTime, 0.05); }
+        catch (_) { try { master.gain.value = muted ? 0 : 0.9; } catch (__) {} }
+      }
+    });
+    ctx.listen(document, "visibilitychange", () => {
+      if (!AC) return;
+      if (document.hidden) { try { AC.suspend(); } catch (_) {} }
+      else if (started && audioReady) { try { AC.resume(); } catch (_) {} }
     });
 
     // ---------------------------------------------------------------------
@@ -1298,7 +1367,9 @@ window.plethoraBit = {
     booted = true;
 
     ctx.onDestroy(() => {
+      try { stopAmbient(); } catch (_) {}
       try { if (musicHandle && musicHandle.stop) musicHandle.stop({ fadeOutMs: 300 }); } catch (_) {}
+      try { if (AC && AC.close) AC.close(); } catch (_) {}
       try { renderer.dispose(); } catch (_) {}
     });
     } catch (e) {
