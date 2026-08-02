@@ -8,9 +8,10 @@ Plethora Bits — tiny mobile-first interactive objects built to the
 A live looping station, the way a loop pedal works: **record a layer while it
 loops, then overdub more layers to build a whole song** — all on-screen.
 
-- **Instruments** (all procedurally synthesized with the Web Audio API, no
-  packaged assets): a drum kit, bass, keys, a strings pad, plucks, and a
-  **Vox** vowel-formant synth.
+- **12 instruments** (all procedurally synthesized with the Web Audio API, no
+  packaged assets), on a swipeable selector: a drum kit, bass, keys, a one-tap
+  **Chord** pad, strings, plucks, a bright **Lead**, FM **Bells**, **Marimba**,
+  **Organ**, **Brass**, and a **Vox** vowel-formant synth.
 - **Workflow:** pick an instrument → tap **● REC** → after a 1-bar count-in,
   play the pads for one loop → the layer loops forever → hit **● REC** again to
   overdub the next instrument on top.

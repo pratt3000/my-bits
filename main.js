@@ -27,11 +27,18 @@ window.plethoraBit = {
       kit:     { name: "Drums",   color: "#ff5470", type: "drum" },
       bass:    { name: "Bass",    color: "#37d67a", type: "melodic", octave: 0, gain: 0.9 },
       keys:    { name: "Keys",    color: "#5b8cff", type: "melodic", octave: 2, gain: 0.7 },
+      chord:   { name: "Chord",   color: "#9d7bff", type: "melodic", octave: 2, gain: 0.4 },
       strings: { name: "Strings", color: "#c07cff", type: "melodic", octave: 2, gain: 0.55 },
       pluck:   { name: "Pluck",   color: "#ffb037", type: "melodic", octave: 3, gain: 0.7 },
+      lead:    { name: "Lead",    color: "#ffd23f", type: "melodic", octave: 3, gain: 0.6 },
+      bells:   { name: "Bells",   color: "#4cd7e0", type: "melodic", octave: 3, gain: 0.7 },
+      marimba: { name: "Marimba", color: "#e08e45", type: "melodic", octave: 2, gain: 0.85 },
+      organ:   { name: "Organ",   color: "#7bd88f", type: "melodic", octave: 2, gain: 0.5 },
+      brass:   { name: "Brass",   color: "#ff7a45", type: "melodic", octave: 2, gain: 0.5 },
       vox:     { name: "Vox",     color: "#ff8fab", type: "melodic", octave: 2, gain: 0.6 }
     };
-    const ORDER = ["kit", "bass", "keys", "strings", "pluck", "vox"];
+    const ORDER = ["kit", "bass", "keys", "chord", "strings", "pluck",
+                   "lead", "bells", "marimba", "organ", "brass", "vox"];
 
     const DRUMS = [
       { id: "kick", label: "Kick" }, { id: "snare", label: "Snare" },
@@ -198,7 +205,76 @@ window.plethoraBit = {
         f.frequency.exponentialRampToValueAtTime(700, t + 0.22); f.Q.value = 2;
         g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
         o.connect(f); f.connect(g); g.connect(master); o.start(t); o.stop(t + 0.32);
-      } else { // vox — vowel-ish formant pad, a nod to voice
+      } else if (inst === "lead") {
+        const f = ac.createBiquadFilter(), g = ac.createGain();
+        f.type = "lowpass"; f.frequency.value = 3600; f.Q.value = 3;
+        env(g, t, 0.005, 0.08, v, 0.5, v * 0.5);
+        [1, 1.006].forEach((mul) => {
+          const o = ac.createOscillator();
+          o.type = "sawtooth"; o.frequency.value = freq * mul;
+          o.connect(f); o.start(t); o.stop(t + 0.55);
+        });
+        f.connect(g); g.connect(master);
+      } else if (inst === "bells") {
+        const car = ac.createOscillator(), mod = ac.createOscillator();
+        const mg = ac.createGain(), g = ac.createGain();
+        car.type = "sine"; car.frequency.value = freq;
+        mod.type = "sine"; mod.frequency.value = freq * 2;
+        mg.gain.setValueAtTime(freq * 3, t); mg.gain.exponentialRampToValueAtTime(0.5, t + 0.6);
+        mod.connect(mg); mg.connect(car.frequency);
+        g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+        car.connect(g); g.connect(master);
+        car.start(t); mod.start(t); car.stop(t + 1.25); mod.stop(t + 1.25);
+      } else if (inst === "marimba") {
+        const o1 = ac.createOscillator(), o2 = ac.createOscillator();
+        const g1 = ac.createGain(), g2 = ac.createGain();
+        o1.type = "sine"; o1.frequency.value = freq;
+        o2.type = "sine"; o2.frequency.value = freq * 4.01;
+        g1.gain.setValueAtTime(v, t); g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+        g2.gain.setValueAtTime(v * 0.28, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+        o1.connect(g1); o2.connect(g2); g1.connect(master); g2.connect(master);
+        o1.start(t); o2.start(t); o1.stop(t + 0.42); o2.stop(t + 0.16);
+      } else if (inst === "organ") {
+        const g = ac.createGain();
+        env(g, t, 0.01, 0.05, v, 0.8, v * 0.85);
+        const vib = ac.createOscillator(), vg = ac.createGain();
+        vib.type = "sine"; vib.frequency.value = 6; vg.gain.value = freq * 0.004;
+        vib.connect(vg);
+        [[1, 1], [2, 0.5], [3, 0.32], [4, 0.2]].forEach(([m, a]) => {
+          const o = ac.createOscillator(), pg = ac.createGain();
+          o.type = "sine"; o.frequency.value = freq * m; pg.gain.value = a;
+          vg.connect(o.frequency); o.connect(pg); pg.connect(g);
+          o.start(t); o.stop(t + 0.85);
+        });
+        g.connect(master); vib.start(t); vib.stop(t + 0.85);
+      } else if (inst === "brass") {
+        const f = ac.createBiquadFilter(), g = ac.createGain();
+        f.type = "lowpass"; f.Q.value = 2;
+        f.frequency.setValueAtTime(400, t);
+        f.frequency.linearRampToValueAtTime(3000, t + 0.08);
+        f.frequency.linearRampToValueAtTime(1500, t + 0.5);
+        env(g, t, 0.03, 0.1, v, 0.6, v * 0.6);
+        [1, 1.007, 0.993].forEach((mul) => {
+          const o = ac.createOscillator();
+          o.type = "sawtooth"; o.frequency.value = freq * mul;
+          o.connect(f); o.start(t); o.stop(t + 0.65);
+        });
+        f.connect(g); g.connect(master);
+      } else if (inst === "chord") {
+        // one tap = a warm minor triad pad (root, minor 3rd, 5th)
+        [0, 3, 7].forEach((semi) => {
+          const nf = freq * Math.pow(2, semi / 12);
+          const f = ac.createBiquadFilter(), g = ac.createGain();
+          f.type = "lowpass"; f.frequency.value = 2200; f.Q.value = 0.6;
+          env(g, t, 0.03, 0.16, v, 0.95, v * 0.7);
+          [1, 1.005].forEach((mul) => {
+            const o = ac.createOscillator();
+            o.type = "sawtooth"; o.frequency.value = nf * mul;
+            o.connect(f); o.start(t); o.stop(t + 1.0);
+          });
+          f.connect(g); g.connect(master);
+        });
+      } else { // vox — vowel-ish formant pad
         const src = ac.createOscillator(), g = ac.createGain();
         src.type = "sawtooth"; src.frequency.value = freq;
         const lfo = ac.createOscillator(), lg = ac.createGain();
@@ -427,9 +503,11 @@ window.plethoraBit = {
         .trk.muted { opacity:.45; }
         .trk .x { color:#8a8ca6; font-weight:800; padding:0 2px; }
 
-        .insts { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; }
-        .inst { padding:8px 2px; border-radius:10px; background:#15162a; border:1px solid #262845;
-          font-size:11.5px; font-weight:700; text-align:center; cursor:pointer; color:#cdd; }
+        .insts { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch;
+          scrollbar-width:none; }
+        .insts::-webkit-scrollbar { display:none; }
+        .inst { flex:0 0 auto; min-width:62px; padding:8px 12px; border-radius:10px; background:#15162a;
+          border:1px solid #262845; font-size:12px; font-weight:700; text-align:center; cursor:pointer; color:#cdd; }
         .inst.on { color:#fff; }
         .inst.dim { opacity:.4; pointer-events:none; }
 
@@ -500,7 +578,7 @@ window.plethoraBit = {
           <div class="card">
             <h2>Loop Lab — live looper</h2>
             <ol>
-              <li>Pick an instrument (Drums, Bass, Keys, Strings, Pluck, Vox).</li>
+              <li>Pick an instrument — swipe the row for more (Drums, Bass, Keys, Chord, Strings, Pluck, Lead, Bells, Marimba, Organ, Brass, Vox).</li>
               <li>Tap <b>● REC</b>. After a 1-bar count-in, play the pads for one loop.</li>
               <li>Your layer now loops. Tap <b>● REC</b> again to overdub another instrument on top.</li>
               <li>Stack layers to build a whole song. Mute or ✕ any track in the list.</li>
