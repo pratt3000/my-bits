@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Snack Shot",
+  "description": "A back-camera AR shooting gallery. Fruit targets pop into the room around you — turn your body (or swipe) to find them, line one up in the crosshair, and tap SHOOT to blast it. Chain hits for combo multipliers, grab the golden fruit for 3x, and race a global high-score leaderboard. Works with a demo backdrop if the camera is off.",
+  "tags": [
+    "ar",
+    "camera",
+    "shooter",
+    "game",
+    "arcade",
+    "motion"
+  ],
+  "permissions": [
+    "camera",
+    "motion",
+    "haptics",
+    "backgroundMusic",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "Top Blaster",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
