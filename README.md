@@ -11,6 +11,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`spot-pip/`](spot-pip)                 | Hidden-object search game: find Pip in the crowd, race a global best time.  |
 | [`kaleido-bloom/`](kaleido-bloom)       | Kaleidoscope fidget — drag to paint glowing symmetric mandalas.             |
 | [`whispering-grove/`](whispering-grove) | A calm, endless 3D forest to wander and collect from.                       |
+| [`snack-shot/`](snack-shot)             | Back-camera AR shooter — turn to find fruit in the room and blast them.      |
 
 ## Layout convention
 
