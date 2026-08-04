@@ -15,6 +15,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`tiny-reef/`](tiny-reef)               | Shared aquarium — design a fish, release it into a reef everyone shares.    |
 | [`ones-and-zeros/`](ones-and-zeros)     | Conway's Game of Life in colour — cells born as 1s, fading to 0s when they die. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
+| [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
 
 ## Layout convention
 
