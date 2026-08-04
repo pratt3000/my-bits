@@ -13,6 +13,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`whispering-grove/`](whispering-grove) | A calm, endless 3D forest to wander and collect from.                       |
 | [`snack-shot/`](snack-shot)             | Back-camera AR shooter — turn to find fruit in the room and blast them.      |
 | [`tiny-reef/`](tiny-reef)               | Shared aquarium — design a fish, release it into a reef everyone shares.    |
+| [`ones-and-zeros/`](ones-and-zeros)     | Conway's Game of Life in colour — cells born as 1s, fading to 0s when they die. |
 
 ## Layout convention
 
