@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Ones & Zeros",
+  "description": "Conway's Game of Life, alive in colour. Every new cell blinks in as a 1 and inherits a blend of the three colours that made it, then softens into a glowing dot as it survives — and flashes 0 the moment it dies. Draw with your finger, drop gliders, pulsars and a glider gun, and watch rainbow colonies spread, collide and burn out.",
+  "tags": [
+    "game-of-life",
+    "cellular-automata",
+    "generative",
+    "simulation",
+    "art",
+    "sandbox",
+    "relaxing",
+    "toy"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic",
+    "storage"
+  ],
+  "dependencies": []
+}
