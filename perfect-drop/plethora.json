@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Perfect Drop",
+  "description": "Hold to swell a drop of water, let go the instant it fills the ring. Release it perfectly and it falls into the dark pool with the purest plink you've ever heard. Every perfect drop in a row climbs one more note.",
+  "tags": [
+    "asmr",
+    "sensory",
+    "sound",
+    "relaxing",
+    "timing",
+    "fidget",
+    "satisfying",
+    "water"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "streak": {
+        "label": "Perfect Streak",
+        "valueType": "streak",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
