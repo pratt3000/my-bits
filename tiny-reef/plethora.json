@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Tiny Reef",
+  "description": "One reef, shared by everyone. Design a little fish — body, colour, pattern, tail — give it a name, and release it into a living aquarium that other people's fish are already swimming in. Tap the water to sprinkle food and watch the shoal chase it, tap a fish to learn who made it. Come back any time to redesign yours.",
+  "tags": [
+    "shared",
+    "co-creation",
+    "aquarium",
+    "art",
+    "creative",
+    "relaxing",
+    "fidget",
+    "sensory"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "worlds": {
+      "reef": {
+        "label": "The shared reef",
+        "type": "objects",
+        "rules": [
+          {
+            "type": "rate_limit",
+            "max": 24,
+            "per": "day",
+            "by": "user"
+          }
+        ],
+        "attribution": true
+      }
+    }
+  }
+}
