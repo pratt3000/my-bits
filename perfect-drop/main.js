@@ -739,33 +739,48 @@ window.plethoraBit = {
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     const FONT = "-apple-system,system-ui,'Segoe UI',sans-serif";
 
-    const hud = document.createElement("div");
-    hud.style.cssText =
-      "position:absolute;left:14px;top:" + (ctx.safeArea.top + 12) + "px;pointer-events:none;" +
-      "font-family:" + FONT + ";color:#cfe8fb;text-shadow:0 1px 6px rgba(0,0,0,0.7);";
-    ui.appendChild(hud);
+    // The whole overlay is declared as markup on the runtime-owned root and
+    // then queried back out. Bits may not reach into the host DOM directly, so
+    // this is the sanctioned way to build controls over the canvas.
+    const BTN =
+      "pointer-events:auto;width:38px;height:38px;border-radius:12px;border:none;cursor:pointer;" +
+      "background:rgba(20,38,54,0.66);color:#dcf0ff;font-size:16px;line-height:1;" +
+      "backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);" +
+      "box-shadow:0 2px 10px rgba(0,0,0,0.4);font-family:" + FONT + ";";
 
-    const btnRow = document.createElement("div");
-    btnRow.style.cssText =
-      "position:absolute;right:12px;top:" + (ctx.safeArea.top + 10) + "px;" +
-      "display:flex;gap:8px;pointer-events:none;";
-    ui.appendChild(btnRow);
+    ui.innerHTML =
+      '<div data-el="hud" style="position:absolute;left:14px;top:' + (ctx.safeArea.top + 12) +
+        'px;pointer-events:none;font-family:' + FONT + ';color:#cfe8fb;' +
+        'text-shadow:0 1px 6px rgba(0,0,0,0.7);"></div>' +
+      '<div style="position:absolute;right:12px;top:' + (ctx.safeArea.top + 10) +
+        'px;display:flex;gap:8px;pointer-events:none;">' +
+        '<button data-el="mute" aria-label="Mute" style="' + BTN + '">🔊</button>' +
+        '<button data-el="board" aria-label="Leaderboard" style="' + BTN + '">🏆</button>' +
+        '<button data-el="help" aria-label="Instructions" style="' + BTN + '">?</button>' +
+      '</div>' +
+      '<div data-el="hint" style="position:absolute;left:0;right:0;bottom:' + (ctx.safeArea.bottom + 34) +
+        'px;text-align:center;padding:0 20px;pointer-events:none;font-family:' + FONT + ';' +
+        'color:rgba(205,232,250,0.82);font-size:13px;letter-spacing:0.2px;' +
+        'text-shadow:0 1px 8px rgba(0,0,0,0.8);transition:opacity 0.7s;">' +
+        'hold — let go when the drop fills the ring</div>' +
+      '<div data-el="toast" style="position:absolute;left:50%;transform:translateX(-50%);top:' +
+        (ctx.safeArea.top + 62) + 'px;pointer-events:none;font-family:' + FONT + ';font-size:13px;' +
+        'color:#eaf6ff;opacity:0;background:rgba(14,28,40,0.85);padding:8px 14px;' +
+        'border-radius:999px;transition:opacity 0.35s;"></div>' +
+      '<div data-el="panel" style="position:absolute;inset:0;display:none;align-items:center;' +
+        'justify-content:center;padding:22px;pointer-events:auto;background:rgba(3,8,14,0.78);' +
+        'backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);"></div>';
 
-    function mkBtn(label, onTap) {
-      const b = document.createElement("button");
-      b.textContent = label;
-      b.style.cssText =
-        "pointer-events:auto;width:38px;height:38px;border-radius:12px;border:none;cursor:pointer;" +
-        "background:rgba(20,38,54,0.66);color:#dcf0ff;font-size:16px;line-height:1;" +
-        "backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);" +
-        "box-shadow:0 2px 10px rgba(0,0,0,0.4);font-family:" + FONT + ";";
-      ctx.listen(b, "pointerdown", (e) => { e.stopPropagation(); });
-      ctx.listen(b, "click", (e) => { e.stopPropagation(); onTap(b); });
-      btnRow.appendChild(b);
-      return b;
+    const el = (name) => ui.querySelector('[data-el="' + name + '"]');
+    const hud = el("hud"), hint = el("hint"), toastEl = el("toast"), panel = el("panel");
+
+    function onTap(node, fn) {
+      ctx.listen(node, "pointerdown", (e) => { e.stopPropagation(); });
+      ctx.listen(node, "click", (e) => { e.stopPropagation(); fn(node); });
     }
 
-    const muteBtn = mkBtn("🔊", (b) => {
+    const muteBtn = el("mute");
+    onTap(muteBtn, (b) => {
       muted = !muted;
       b.textContent = muted ? "🔇" : "🔊";
       if (roomNode && ac) {
@@ -773,8 +788,8 @@ window.plethoraBit = {
       }
       if (!muted) unlockAudio();
     });
-    mkBtn("🏆", () => openBoard());
-    mkBtn("?", () => openHelp());
+    onTap(el("board"), () => openBoard());
+    onTap(el("help"), () => openHelp());
 
     function updateHud() {
       hud.innerHTML =
@@ -783,24 +798,10 @@ window.plethoraBit = {
         '<div style="font-size:12px;opacity:0.55;margin-top:5px;letter-spacing:0.4px;">best ' + best + "</div>";
     }
 
-    // Hint that fades once they get it
-    const hint = document.createElement("div");
-    hint.style.cssText =
-      "position:absolute;left:0;right:0;bottom:" + (ctx.safeArea.bottom + 34) + "px;text-align:center;" +
-      "padding:0 20px;pointer-events:none;font-family:" + FONT + ";color:rgba(205,232,250,0.82);" +
-      "font-size:13px;letter-spacing:0.2px;text-shadow:0 1px 8px rgba(0,0,0,0.8);transition:opacity 0.7s;";
-    hint.textContent = "hold — let go when the drop fills the ring";
-    ui.appendChild(hint);
     function hideHint() {
       ctx.timeout(() => { hint.style.opacity = "0"; }, 2600);
     }
 
-    const toastEl = document.createElement("div");
-    toastEl.style.cssText =
-      "position:absolute;left:50%;transform:translateX(-50%);top:" + (ctx.safeArea.top + 62) + "px;" +
-      "pointer-events:none;font-family:" + FONT + ";font-size:13px;color:#eaf6ff;opacity:0;" +
-      "background:rgba(14,28,40,0.85);padding:8px 14px;border-radius:999px;transition:opacity 0.35s;";
-    ui.appendChild(toastEl);
     function toast(msg) {
       toastEl.textContent = msg;
       toastEl.style.opacity = "1";
@@ -808,29 +809,22 @@ window.plethoraBit = {
     }
 
     // ---- panels -----------------------------------------------------------
-    const panel = document.createElement("div");
-    panel.style.cssText =
-      "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
-      "padding:22px;pointer-events:auto;background:rgba(3,8,14,0.78);" +
-      "backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);";
-    ui.appendChild(panel);
     ctx.listen(panel, "pointerdown", (e) => { e.stopPropagation(); });
     ctx.listen(panel, "click", (e) => { if (e.target === panel) closePanel(); });
     const panelOpen = () => panel.style.display !== "none";
     function closePanel() { panel.style.display = "none"; panel.innerHTML = ""; }
 
+    const BOX =
+      "width:100%;max-width:330px;max-height:78%;overflow:auto;padding:22px;border-radius:20px;" +
+      "background:rgba(16,32,46,0.97);color:#e6f4ff;box-shadow:0 14px 44px rgba(0,0,0,0.6);" +
+      "font-family:" + FONT + ";font-size:15px;line-height:1.6;";
+    const CLOSE_NOTE =
+      '<div style="text-align:center;margin-top:18px;opacity:0.5;font-size:12.5px;">Tap outside to close</div>';
+
     function panelBox(html) {
-      panel.innerHTML = "";
-      const box = document.createElement("div");
-      box.style.cssText =
-        "width:100%;max-width:330px;max-height:78%;overflow:auto;padding:22px;border-radius:20px;" +
-        "background:rgba(16,32,46,0.97);color:#e6f4ff;box-shadow:0 14px 44px rgba(0,0,0,0.6);" +
-        "font-family:" + FONT + ";font-size:15px;line-height:1.6;";
-      box.innerHTML = html +
-        '<div style="text-align:center;margin-top:18px;opacity:0.5;font-size:12.5px;">Tap outside to close</div>';
-      panel.appendChild(box);
+      panel.innerHTML = '<div data-el="box" style="' + BOX + '">' + html + CLOSE_NOTE + "</div>";
       panel.style.display = "flex";
-      return box;
+      return panel.querySelector('[data-el="box"]');
     }
 
     function openHelp() {
@@ -896,8 +890,7 @@ window.plethoraBit = {
         inner = '<div style="opacity:0.8;text-align:center;padding:12px 0;">Leaderboard isn\'t available right now.</div>';
       }
       if (!panelOpen()) return;
-      box.innerHTML = head + inner +
-        '<div style="text-align:center;margin-top:18px;opacity:0.5;font-size:12.5px;">Tap outside to close</div>';
+      box.innerHTML = head + inner + CLOSE_NOTE;
     }
 
     // ======================================================================
