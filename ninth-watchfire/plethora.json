@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "The Ninth Watchfire",
+  "description": "A five-minute animated story from the top of the world. Nine towers stand on a wall of ice; light one fire and the next must answer, all the way south to the green country. The fire at Ashen Reach has not burned in three hundred years, and Wren Coldhalt has tended it since she was eleven without once seeing it lit. Twelve hand-drawn chapters of aurora, blizzard, ravens and firelight — with one decision that is yours to make, and a note of what everyone else chose.",
+  "tags": [
+    "story",
+    "animation",
+    "cinematic",
+    "fantasy",
+    "narrative",
+    "atmospheric",
+    "winter",
+    "art",
+    "relaxing"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "tallies": {
+      "council": {
+        "label": "What would you have done?",
+        "type": "single_choice",
+        "options": [
+          "light",
+          "wait",
+          "ride"
+        ],
+        "visibility": "after_vote",
+        "rules": [
+          {
+            "type": "replace_previous",
+            "by": "user"
+          }
+        ]
+      }
+    }
+  }
+}
