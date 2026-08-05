@@ -69,8 +69,17 @@ Twelve chapters, roughly 300 seconds of narration:
   arrays, so they cost nothing to maintain and survive a resize unchanged. All
   wrapping uses a positive modulo — plain `%` goes negative and flings particles
   off-frame the moment anything drifts leftward.
+- **No global-DOM access.** The host validator rejects `document.*` outright
+  (`Direct document/body access is not allowed`), so offscreen buffers use
+  `OffscreenCanvas` and the UI is built with `innerHTML` on the runtime-owned
+  root plus `querySelector`, which is the pattern the contract's own examples
+  use. Note that font stacks are re-quoted with `'` for the markup — `UIFONT`
+  and `BODY` carry double quotes that would close a style attribute early.
 - Static layers (starfield, ice wall, vignette, grain tile) are painted once per
-  size into offscreen buffers and blitted.
+  size into offscreen buffers and blitted. Each painter takes its destination
+  context, so where `OffscreenCanvas` is missing the same code runs straight
+  onto the main context each frame; only the grain pass is dropped. Both paths
+  are verified to render identically.
 - A rolling frame-time average trims particle counts and drops the grain pass on
   slower hardware instead of dropping frames.
 - Narration shows three line-groups at a time. Four filled nearly half the

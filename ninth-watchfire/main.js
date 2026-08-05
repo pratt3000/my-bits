@@ -79,17 +79,94 @@ window.plethoraBit = {
     const safeTop = () => (ctx.safeArea && ctx.safeArea.top) || 0;
     const safeBot = () => (ctx.safeArea && ctx.safeArea.bottom) || 0;
 
-    // ---- offscreen buffers ------------------------------------------------
-    // Static layers (stars, wall striations, vignette, grain) are painted once
-    // per size and blitted, which is what keeps this cheap on a phone.
+    // ---- static layers ----------------------------------------------------
+    // The starfield, ice wall and vignette never change within a given size, so
+    // they are painted once into offscreen buffers and blitted. Each painter
+    // takes its destination context, so where OffscreenCanvas is unavailable
+    // the very same code runs straight onto the main context every frame.
     function makeBuf(bw, bh) {
-      const c = document.createElement("canvas");
+      if (typeof OffscreenCanvas === "undefined") return null;
       const s = clamp(ctx.dpr || 1, 1, 2);
-      c.width = Math.max(1, Math.round(bw * s));
-      c.height = Math.max(1, Math.round(bh * s));
-      const b = c.getContext("2d");
+      let c = null;
+      try {
+        c = new OffscreenCanvas(
+          Math.max(1, Math.round(bw * s)),
+          Math.max(1, Math.round(bh * s))
+        );
+      } catch (e) { return null; }
+      const b = c && c.getContext("2d");
+      if (!b) return null;
       b.scale(s, s);
       return { canvas: c, g: b, w: bw, h: bh };
+    }
+
+    function paintStars(d, dw, dh) {
+      const sr = rng(97);
+      d.save();
+      for (let i = 0; i < 220; i++) {
+        const x = sr() * dw;
+        const y = sr() * dh * 0.78;
+        const r = 0.35 + sr() * sr() * 1.5;
+        const a = 0.18 + sr() * 0.7 * (1 - y / (dh * 0.9));
+        d.globalAlpha = clamp(a, 0.05, 0.9);
+        d.fillStyle = sr() > 0.86 ? "#cfe0ff" : "#ffffff";
+        d.beginPath();
+        d.arc(x, y, r, 0, TAU);
+        d.fill();
+      }
+      d.restore();
+    }
+
+    function paintVignette(d, dw, dh) {
+      const vg = d.createRadialGradient(
+        dw / 2, dh * 0.48, Math.min(dw, dh) * 0.24,
+        dw / 2, dh * 0.5, Math.max(dw, dh) * 0.78
+      );
+      vg.addColorStop(0, "rgba(0,0,0,0)");
+      vg.addColorStop(0.62, "rgba(0,0,0,0.16)");
+      vg.addColorStop(1, "rgba(0,0,0,0.62)");
+      d.fillStyle = vg;
+      d.fillRect(0, 0, dw, dh);
+    }
+
+    // The great ice wall, shared by several chapters.
+    const wallTopY = () => h * 0.4;
+    const wallFaceH = () => h - wallTopY() + 2;
+
+    function paintWall(d, dw, wh) {
+      // Night ice: dark enough that the fire is the brightest thing on screen,
+      // with striations kept faint — legible as texture, not as stripes.
+      d.save();
+      const wgrad = d.createLinearGradient(0, 0, 0, wh);
+      wgrad.addColorStop(0, "#2e5175");
+      wgrad.addColorStop(0.25, "#1c3855");
+      wgrad.addColorStop(0.7, "#0f2039");
+      wgrad.addColorStop(1, "#070d19");
+      d.fillStyle = wgrad;
+      d.fillRect(0, 0, dw, wh);
+      const wr = rng(1204);
+      for (let i = 0; i < 58; i++) {
+        const x = wr() * dw;
+        const bw2 = 3 + wr() * 30;
+        d.globalAlpha = 0.016 + wr() * 0.04;
+        d.fillStyle = wr() > 0.5 ? "#a8cde6" : "#040a14";
+        d.fillRect(x, 0, bw2, wh);
+      }
+      // horizontal seams where centuries of snow packed down
+      for (let i = 0; i < 22; i++) {
+        const y = wr() * wh;
+        d.globalAlpha = 0.03 + wr() * 0.045;
+        d.fillStyle = "#dff0fb";
+        d.fillRect(0, y, dw, 0.6 + wr() * 1.4);
+      }
+      // the face darkens toward the foot so narration always has a floor
+      d.globalAlpha = 1;
+      const fade = d.createLinearGradient(0, wh * 0.35, 0, wh);
+      fade.addColorStop(0, "rgba(4,7,14,0)");
+      fade.addColorStop(1, "rgba(4,7,14,0.75)");
+      d.fillStyle = fade;
+      d.fillRect(0, wh * 0.35, dw, wh * 0.65);
+      d.restore();
     }
 
     let layers = null;
@@ -100,83 +177,49 @@ window.plethoraBit = {
       if (key === layerKey && layers) return;
       layerKey = key;
 
-      // --- starfield ---
-      const stars = makeBuf(w, h);
-      const sr = rng(97);
-      for (let i = 0; i < 220; i++) {
-        const x = sr() * w;
-        const y = sr() * h * 0.78;
-        const r = 0.35 + sr() * sr() * 1.5;
-        const a = 0.18 + sr() * 0.7 * (1 - y / (h * 0.9));
-        stars.g.globalAlpha = clamp(a, 0.05, 0.9);
-        stars.g.fillStyle = sr() > 0.86 ? "#cfe0ff" : "#ffffff";
-        stars.g.beginPath();
-        stars.g.arc(x, y, r, 0, TAU);
-        stars.g.fill();
-      }
-      stars.g.globalAlpha = 1;
+      const starsBuf = makeBuf(w, h);
+      if (starsBuf) paintStars(starsBuf.g, w, h);
 
-      // --- vignette ---
-      const vig = makeBuf(w, h);
-      const vg = vig.g.createRadialGradient(
-        w / 2, h * 0.48, Math.min(w, h) * 0.24,
-        w / 2, h * 0.5, Math.max(w, h) * 0.78
-      );
-      vg.addColorStop(0, "rgba(0,0,0,0)");
-      vg.addColorStop(0.62, "rgba(0,0,0,0.16)");
-      vg.addColorStop(1, "rgba(0,0,0,0.62)");
-      vig.g.fillStyle = vg;
-      vig.g.fillRect(0, 0, w, h);
+      const vigBuf = makeBuf(w, h);
+      if (vigBuf) paintVignette(vigBuf.g, w, h);
 
-      // --- film grain tile ---
-      const grain = makeBuf(72, 72);
-      const gr = rng(451);
-      const img = grain.g.createImageData(grain.canvas.width, grain.canvas.height);
-      for (let i = 0; i < img.data.length; i += 4) {
-        const v = 128 + (gr() - 0.5) * 190;
-        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
-        img.data[i + 3] = 255;
-      }
-      grain.g.putImageData(img, 0, 0);
+      const wallBuf = makeBuf(w, wallFaceH());
+      if (wallBuf) paintWall(wallBuf.g, w, wallFaceH());
 
-      // --- the great ice wall (used by several chapters) ---
-      const wallTop = h * 0.4;
-      const wall = makeBuf(w, h - wallTop + 2);
-      const wh = wall.h;
-      // Night ice: dark enough that the fire is the brightest thing on screen,
-      // with striations kept faint — legible as texture, not as stripes.
-      const wgrad = wall.g.createLinearGradient(0, 0, 0, wh);
-      wgrad.addColorStop(0, "#2e5175");
-      wgrad.addColorStop(0.25, "#1c3855");
-      wgrad.addColorStop(0.7, "#0f2039");
-      wgrad.addColorStop(1, "#070d19");
-      wall.g.fillStyle = wgrad;
-      wall.g.fillRect(0, 0, w, wh);
-      const wr = rng(1204);
-      for (let i = 0; i < 58; i++) {
-        const x = wr() * w;
-        const bw2 = 3 + wr() * 30;
-        wall.g.globalAlpha = 0.016 + wr() * 0.04;
-        wall.g.fillStyle = wr() > 0.5 ? "#a8cde6" : "#040a14";
-        wall.g.fillRect(x, 0, bw2, wh);
+      // Film grain needs a tile to pattern from; without a buffer it is simply
+      // skipped, which costs atmosphere and nothing else.
+      let grainPattern = null;
+      const grainBuf = makeBuf(72, 72);
+      if (grainBuf) {
+        const gr = rng(451);
+        const img = grainBuf.g.createImageData(grainBuf.canvas.width, grainBuf.canvas.height);
+        for (let i = 0; i < img.data.length; i += 4) {
+          const v = 128 + (gr() - 0.5) * 190;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+          img.data[i + 3] = 255;
+        }
+        grainBuf.g.putImageData(img, 0, 0);
+        try { grainPattern = g.createPattern(grainBuf.canvas, "repeat"); } catch (e) { grainPattern = null; }
       }
-      // horizontal seams where centuries of snow packed down
-      for (let i = 0; i < 22; i++) {
-        const y = wr() * wh;
-        wall.g.globalAlpha = 0.03 + wr() * 0.045;
-        wall.g.fillStyle = "#dff0fb";
-        wall.g.fillRect(0, y, w, 0.6 + wr() * 1.4);
-      }
-      // the face darkens toward the foot so narration always has a floor
-      wall.g.globalAlpha = 1;
-      const fade = wall.g.createLinearGradient(0, wh * 0.35, 0, wh);
-      fade.addColorStop(0, "rgba(4,7,14,0)");
-      fade.addColorStop(1, "rgba(4,7,14,0.75)");
-      wall.g.fillStyle = fade;
-      wall.g.fillRect(0, wh * 0.35, w, wh * 0.65);
 
-      layers = { stars, vig, grain, wall, wallTop, grainPattern: null };
-      layers.grainPattern = g.createPattern(grain.canvas, "repeat");
+      layers = { stars: starsBuf, vig: vigBuf, wall: wallBuf, grainPattern: grainPattern };
+    }
+
+    // Blit the ice wall into a destination rect, or paint it there directly.
+    function drawWallFace(dy, dh) {
+      if (layers && layers.wall) {
+        g.drawImage(layers.wall.canvas, 0, dy, w, dh);
+        return;
+      }
+      const src = wallFaceH();
+      g.save();
+      g.beginPath();
+      g.rect(0, dy, w, dh);
+      g.clip();
+      g.translate(0, dy);
+      g.scale(1, dh / src);
+      paintWall(g, w, src);
+      g.restore();
     }
 
     // ---- reusable painting ------------------------------------------------
@@ -197,10 +240,11 @@ window.plethoraBit = {
     }
 
     function stars(alpha) {
-      if (!layers) return;
+      g.save();
       g.globalAlpha = alpha;
-      g.drawImage(layers.stars.canvas, 0, 0, w, h);
-      g.globalAlpha = 1;
+      if (layers && layers.stars) g.drawImage(layers.stars.canvas, 0, 0, w, h);
+      else paintStars(g, w, h);
+      g.restore();
     }
 
     // A few live twinklers on top of the cached field.
@@ -555,10 +599,11 @@ window.plethoraBit = {
     }
 
     function vignette(a) {
-      if (!layers) return;
+      g.save();
       g.globalAlpha = a != null ? a : 1;
-      g.drawImage(layers.vig.canvas, 0, 0, w, h);
-      g.globalAlpha = 1;
+      if (layers && layers.vig) g.drawImage(layers.vig.canvas, 0, 0, w, h);
+      else paintVignette(g, w, h);
+      g.restore();
     }
 
     function grain(t, a) {
@@ -962,7 +1007,7 @@ window.plethoraBit = {
       twinkle(t, 0.55);
       aurora(t, { y: 0.14, bands: 2, alpha: 0.17, colors: [[70, 190, 200], [60, 130, 200]] });
 
-      const top = layers.wallTop;
+      const top = wallTopY();
       // wavy crest of the wall
       g.save();
       g.beginPath();
@@ -975,7 +1020,7 @@ window.plethoraBit = {
       g.lineTo(w, h);
       g.closePath();
       g.clip();
-      g.drawImage(layers.wall.canvas, 0, top - 2, w, layers.wall.h);
+      drawWallFace(top - 2, wallFaceH());
 
       // light living inside old ice
       g.globalCompositeOperation = "lighter";
@@ -1566,7 +1611,7 @@ window.plethoraBit = {
 
       // the wall below, catching the new light
       const top = h * 0.56;
-      g.drawImage(layers.wall.canvas, 0, top, w, h - top);
+      drawWallFace(top, h - top);
       g.save();
       g.globalCompositeOperation = "lighter";
       const ig = g.createLinearGradient(0, top, 0, h);
@@ -1828,34 +1873,41 @@ window.plethoraBit = {
       grain(t, 0.05);
     }
 
-    // ---- DOM ui -----------------------------------------------------------
-    function el(tag, style, text) {
-      const n = document.createElement(tag);
-      if (style) Object.assign(n.style, style);
-      if (text != null) n.textContent = text;
-      return n;
-    }
+    // ---- ui ---------------------------------------------------------------
+    // Markup goes in through innerHTML on the runtime-owned root and comes back
+    // out through querySelector. That is the sanctioned pattern — the host
+    // rejects direct global-DOM access outright.
+    //
+    // Font stacks are quoted with ' here: UIFONT and BODY carry double quotes,
+    // which would close a double-quoted style attribute early.
+    const UIFONT_H = UIFONT.replace(/"/g, "'");
+    const BODY_H = BODY.replace(/"/g, "'");
 
-    const BTN = {
-      pointerEvents: "auto",
-      display: "block",
-      width: "100%",
-      boxSizing: "border-box",
-      margin: "0 0 10px 0",
-      padding: "13px 16px",
-      border: "1px solid rgba(180,215,238,0.28)",
-      borderRadius: "13px",
-      background: "linear-gradient(180deg,rgba(22,38,58,0.86),rgba(10,18,30,0.9))",
-      color: "#e9f0f6",
-      font: "600 15px " + UIFONT,
-      letterSpacing: "0.2px",
-      textAlign: "left",
-      cursor: "pointer",
-      WebkitTapHighlightColor: "transparent",
-      transition: "transform .12s ease, border-color .18s ease, opacity .18s ease",
-      backdropFilter: "blur(6px)",
-      WebkitBackdropFilter: "blur(6px)"
-    };
+    const BTN =
+      "pointer-events:auto;display:block;width:100%;box-sizing:border-box;" +
+      "margin:0 0 10px 0;padding:13px 16px;border:1px solid rgba(180,215,238,0.28);" +
+      "border-radius:13px;color:#e9f0f6;letter-spacing:0.2px;text-align:left;" +
+      "background:linear-gradient(180deg,rgba(22,38,58,0.86),rgba(10,18,30,0.9));" +
+      "font:600 15px " + UIFONT_H + ";cursor:pointer;" +
+      "-webkit-tap-highlight-color:transparent;" +
+      "transition:transform .12s ease,border-color .18s ease,opacity .18s ease;" +
+      "backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);";
+
+    const BTN_WARM = BTN +
+      "text-align:center;font:600 16px " + UIFONT_H + ";" +
+      "border:1px solid rgba(255,186,110,0.5);" +
+      "background:linear-gradient(180deg,rgba(58,36,20,0.9),rgba(24,15,10,0.92));";
+
+    const PANEL =
+      "position:absolute;left:0;right:0;bottom:0;flex-direction:column;" +
+      "align-items:center;pointer-events:none;box-sizing:border-box;";
+
+    const ROUND =
+      "pointer-events:auto;width:38px;height:38px;padding:0;border-radius:50%;" +
+      "border:1px solid rgba(180,215,238,0.22);background:rgba(8,14,24,0.55);" +
+      "color:#dbe7f0;font:15px " + UIFONT_H + ";cursor:pointer;display:block;" +
+      "-webkit-tap-highlight-color:transparent;backdrop-filter:blur(6px);" +
+      "-webkit-backdrop-filter:blur(6px);transition:transform .12s ease;";
 
     function press(node, fn) {
       ctx.listen(node, "pointerdown", (e) => {
@@ -1873,88 +1925,51 @@ window.plethoraBit = {
       ctx.listen(node, "pointercancel", () => { node.style.transform = "scale(1)"; });
     }
 
-    // title screen
-    const titleWrap = el("div", {
-      position: "absolute", left: "0", right: "0", bottom: "0", top: "0",
-      display: "flex", flexDirection: "column", alignItems: "center",
-      justifyContent: "flex-end", pointerEvents: "none", boxSizing: "border-box"
-    });
-    const titleBtns = el("div", { width: "100%", maxWidth: "340px", pointerEvents: "none" });
-    const beginBtn = el("button", Object.assign({}, BTN, {
-      textAlign: "center",
-      font: "600 16px " + UIFONT,
-      border: "1px solid rgba(255,186,110,0.5)",
-      background: "linear-gradient(180deg,rgba(58,36,20,0.9),rgba(24,15,10,0.92))"
-    }), "Begin the story");
-    const resumeBtn = el("button", Object.assign({}, BTN, { textAlign: "center", opacity: "0.9" }), "Resume");
-    titleBtns.appendChild(beginBtn);
-    titleBtns.appendChild(resumeBtn);
-    resumeBtn.style.display = "none";
-    titleWrap.appendChild(titleBtns);
-    ui.appendChild(titleWrap);
-
-    // council choice
-    const choiceWrap = el("div", {
-      position: "absolute", left: "0", right: "0", bottom: "0",
-      display: "none", flexDirection: "column", alignItems: "center",
-      pointerEvents: "none", boxSizing: "border-box"
-    });
-    const choiceInner = el("div", { width: "100%", maxWidth: "360px", pointerEvents: "none" });
-    const choiceQ = el("div", {
-      font: "400 19px " + BODY, color: "#f0e2c8", textAlign: "center",
-      margin: "0 0 14px 0", letterSpacing: "0.3px"
-    }, "What would you have done?");
-    choiceInner.appendChild(choiceQ);
-    const choiceBtns = [];
+    let choiceMarkup = "";
     for (let i = 0; i < CHOICES.length; i++) {
       const c = CHOICES[i];
-      const b = el("button", Object.assign({}, BTN), "");
-      const l1 = el("div", { font: "600 15px " + UIFONT }, c.label);
-      const l2 = el("div", {
-        font: "400 12.5px " + UIFONT, opacity: "0.62", marginTop: "3px"
-      }, c.sub);
-      b.appendChild(l1);
-      b.appendChild(l2);
-      choiceBtns.push(b);
-      choiceInner.appendChild(b);
+      choiceMarkup +=
+        '<button data-choice="' + c.key + '" style="' + BTN + '">' +
+          '<div style="font:600 15px ' + UIFONT_H + '">' + c.label + '</div>' +
+          '<div style="font:400 12.5px ' + UIFONT_H + ';opacity:0.62;margin-top:3px">' + c.sub + '</div>' +
+        '</button>';
     }
-    choiceWrap.appendChild(choiceInner);
-    ui.appendChild(choiceWrap);
 
-    // end card
-    const endWrap = el("div", {
-      position: "absolute", left: "0", right: "0", bottom: "0",
-      display: "none", flexDirection: "column", alignItems: "center",
-      pointerEvents: "none", boxSizing: "border-box"
-    });
-    const endInner = el("div", { width: "100%", maxWidth: "340px", pointerEvents: "none" });
-    const againBtn = el("button", Object.assign({}, BTN, {
-      textAlign: "center", font: "600 16px " + UIFONT,
-      border: "1px solid rgba(255,186,110,0.45)",
-      background: "linear-gradient(180deg,rgba(58,36,20,0.86),rgba(24,15,10,0.9))"
-    }), "Watch again");
-    endInner.appendChild(againBtn);
-    endWrap.appendChild(endInner);
-    ui.appendChild(endWrap);
+    ui.innerHTML =
+      '<div data-ui="title" style="' + PANEL + 'top:0;display:flex;justify-content:flex-end">' +
+        '<div style="width:100%;max-width:340px;pointer-events:none">' +
+          '<button data-ui="begin" style="' + BTN_WARM + '">Begin the story</button>' +
+          '<button data-ui="resume" style="' + BTN + 'text-align:center;opacity:0.9;display:none">Resume</button>' +
+        '</div>' +
+      '</div>' +
+      '<div data-ui="choice" style="' + PANEL + 'display:none">' +
+        '<div style="width:100%;max-width:360px;pointer-events:none">' +
+          '<div style="font:400 19px ' + BODY_H + ';color:#f0e2c8;text-align:center;' +
+            'margin:0 0 14px 0;letter-spacing:0.3px">What would you have done?</div>' +
+          choiceMarkup +
+        '</div>' +
+      '</div>' +
+      '<div data-ui="end" style="' + PANEL + 'display:none">' +
+        '<div style="width:100%;max-width:340px;pointer-events:none">' +
+          '<button data-ui="again" style="' + BTN_WARM + '">Watch again</button>' +
+        '</div>' +
+      '</div>' +
+      '<div data-ui="tools" style="position:absolute;right:12px;display:none;pointer-events:none">' +
+        '<button data-ui="sound" style="' + ROUND + 'margin-bottom:8px">&#9834;</button>' +
+        '<button data-ui="pause" style="' + ROUND + '">&#10074;&#10074;</button>' +
+      '</div>';
 
-    // top-right controls
-    const tools = el("div", {
-      position: "absolute", right: "12px", display: "none", pointerEvents: "none"
-    });
-    const ROUND = {
-      pointerEvents: "auto", width: "38px", height: "38px", padding: "0",
-      borderRadius: "50%", border: "1px solid rgba(180,215,238,0.22)",
-      background: "rgba(8,14,24,0.55)", color: "#dbe7f0",
-      font: "15px " + UIFONT, cursor: "pointer", display: "block",
-      WebkitTapHighlightColor: "transparent",
-      backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
-      transition: "transform .12s ease"
-    };
-    const soundBtn = el("button", Object.assign({}, ROUND, { marginBottom: "8px" }), "♪");
-    const pauseBtn = el("button", Object.assign({}, ROUND), "❚❚");
-    tools.appendChild(soundBtn);
-    tools.appendChild(pauseBtn);
-    ui.appendChild(tools);
+    const pick = (sel) => ui.querySelector(sel);
+    const titleWrap = pick('[data-ui="title"]');
+    const beginBtn = pick('[data-ui="begin"]');
+    const resumeBtn = pick('[data-ui="resume"]');
+    const choiceWrap = pick('[data-ui="choice"]');
+    const endWrap = pick('[data-ui="end"]');
+    const againBtn = pick('[data-ui="again"]');
+    const tools = pick('[data-ui="tools"]');
+    const soundBtn = pick('[data-ui="sound"]');
+    const pauseBtn = pick('[data-ui="pause"]');
+    const choiceBtns = CHOICES.map((c) => pick('[data-choice="' + c.key + '"]'));
 
     // Safe-area padding lives here so a rotation or a host inset change moves
     // every panel at once, and nothing ends up under the home indicator.
