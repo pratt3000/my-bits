@@ -93,6 +93,14 @@ cairn/
   one leaderboard per mode, submitted once at the end of a run.
 - No dependencies, no packaged assets: shapes, textures, scenery and audio are
   all generated at runtime.
-- Stone textures and their blurred contact shadows are baked to offscreen
-  canvases once at creation, and the sky is baked per mode, so a frame is
-  drawImage calls rather than gradient fills.
+- Stone textures and their blurred contact shadows are baked once at creation,
+  and the sky is baked per mode, so a frame is drawImage calls rather than
+  gradient fills. Bakes go to an **`OffscreenCanvas`** — the runtime owns every
+  canvas in the DOM (`ctx.createCanvas` is for display surfaces) and the upload
+  validator rejects `document.createElement("canvas")`. If a WebView has no
+  `OffscreenCanvas`, `makeSurface()` returns null and every bake site falls back
+  to drawing live: flat-shaded polygons, no contact shadows, sky painted per
+  frame. Plainer, fully playable, never blank.
+- `document.createElement` is only ever called with a **literal** tag. A
+  computed tag can't be statically shown not to be a canvas or script, and the
+  validator rejects it.
