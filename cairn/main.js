@@ -689,6 +689,19 @@ window.plethoraBit = {
     const REF_PPM = 300;
     const TEX_PAD = 10;
 
+    /**
+     * An offscreen drawing surface. The runtime owns every canvas in the DOM
+     * (ctx.createCanvas is for display surfaces), so bakes go to an
+     * OffscreenCanvas. If the WebView has no OffscreenCanvas we return null and
+     * every bake site falls back to drawing live — plainer, but never blank.
+     */
+    const CAN_BAKE = typeof OffscreenCanvas === "function";
+    function makeSurface(w, h) {
+      if (!CAN_BAKE) return null;
+      try { return new OffscreenCanvas(Math.max(1, w | 0), Math.max(1, h | 0)); }
+      catch (_) { return null; }
+    }
+
     function bakeStone(rock) {
       const t = rock.type, verts = rock.body.local;
       let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
@@ -701,8 +714,8 @@ window.plethoraBit = {
       const ox = -minx * REF_PPM + TEX_PAD;
       const oy = maxy * REF_PPM + TEX_PAD;
 
-      const cv = document.createElement("canvas");
-      cv.width = W; cv.height = H;
+      const cv = makeSurface(W, H);
+      if (!cv) { rock.tex = null; rock.shadow = null; return; }   // live-draw fallback
       const g = cv.getContext("2d");
       const px = (v) => ({ x: ox + v.x * REF_PPM, y: oy - v.y * REF_PPM });
       const poly = verts.map(px);
@@ -780,8 +793,8 @@ window.plethoraBit = {
 
       // soft contact shadow, baked once
       const sp = 16;
-      const sv = document.createElement("canvas");
-      sv.width = W + sp * 2; sv.height = H + sp * 2;
+      const sv = makeSurface(W + sp * 2, H + sp * 2);
+      if (!sv) { rock.shadow = null; return; }
       const sg = sv.getContext("2d");
       sg.translate(sp, sp);
       try { sg.filter = "blur(7px)"; } catch (_) { /* older WebViews: hard shadow */ }
@@ -1311,20 +1324,11 @@ window.plethoraBit = {
     const splashes = [];   // transient water rings
     const pops = [];       // floating score text
 
-    // The sky is three full-screen gradient fills. Baking it once per mode/size
-    // turns that into a single drawImage per frame.
+    // The sky is three full-screen gradient fills, so it is baked once per
+    // mode/size and blitted. Without an offscreen surface it is painted live.
     let backdrop = null, backdropKey = "";
 
-    function bakeBackdrop(mode) {
-      const key = mode.id + ":" + W + "x" + H;
-      if (backdropKey === key && backdrop) return;
-      backdropKey = key;
-      const s = 1.5;                          // supersample so the sun stays crisp
-      const cv = backdrop && backdrop.width === Math.ceil(W * s) ? backdrop : document.createElement("canvas");
-      cv.width = Math.ceil(W * s); cv.height = Math.ceil(H * s);
-      const b = cv.getContext("2d");
-      const BW = cv.width, BH = cv.height;
-
+    function paintSky(b, mode, BW, BH) {
       const grd = b.createLinearGradient(0, 0, 0, BH);
       const c = mode.sky;
       for (let i = 0; i < c.length; i++) grd.addColorStop(i / (c.length - 1), c[i]);
@@ -1352,12 +1356,23 @@ window.plethoraBit = {
         b.fillStyle = vg;
         b.fillRect(0, 0, BW, BH);
       }
-      backdrop = cv;
     }
 
     function drawSky(mode) {
-      bakeBackdrop(mode);
-      g.drawImage(backdrop, 0, 0, W, H);
+      const key = mode.id + ":" + W + "x" + H;
+      if (backdropKey !== key || !backdrop) {
+        const sc = 1.5;                       // supersample so the sun stays crisp
+        const cv = makeSurface(Math.ceil(W * sc), Math.ceil(H * sc));
+        if (cv) {
+          paintSky(cv.getContext("2d"), mode, cv.width, cv.height);
+          backdrop = cv;
+          backdropKey = key;
+        } else {
+          backdrop = null;
+        }
+      }
+      if (backdrop) g.drawImage(backdrop, 0, 0, W, H);
+      else paintSky(g, mode, W, H);
     }
 
     function drawRidges(mode, t) {
@@ -1486,13 +1501,39 @@ window.plethoraBit = {
     // Stone rendering                                                        //
     // ====================================================================== //
 
-    function drawStone(rock, alpha, flipY) {
+    function stonePath(b) {
+      g.beginPath();
+      g.moveTo(sx(b.world[0].x), sy(b.world[0].y));
+      for (let i = 1; i < b.n; i++) g.lineTo(sx(b.world[i].x), sy(b.world[i].y));
+      g.closePath();
+    }
+
+    /** Plain shaded polygon, used when the stone has no baked sprite. */
+    function drawStoneLive(rock, alpha) {
+      const b = rock.body, p = rock.type.pal;
+      g.save();
+      g.globalAlpha = alpha;
+      stonePath(b);
+      const lg = g.createLinearGradient(sx(b.minx), sy(b.maxy), sx(b.maxx), sy(b.miny));
+      lg.addColorStop(0, p.light);
+      lg.addColorStop(0.32, p.base);
+      lg.addColorStop(0.76, p.base);
+      lg.addColorStop(1, p.dark);
+      g.fillStyle = lg;
+      g.fill();
+      g.lineWidth = 1.6;
+      g.strokeStyle = "rgba(0,0,0,0.34)";
+      g.stroke();
+      g.restore();
+    }
+
+    function drawStone(rock, alpha) {
+      if (!rock.tex) { drawStoneLive(rock, alpha); return; }
       const b = rock.body;
       const s = ppm / REF_PPM;
       g.save();
       g.globalAlpha = alpha;
       g.translate(sx(b.pos.x), sy(b.pos.y));
-      if (flipY) g.scale(1, -1);
       g.rotate(-b.angle);
       g.scale(s, s);
       g.drawImage(rock.tex, -rock.texOx, -rock.texOy);
@@ -1500,6 +1541,7 @@ window.plethoraBit = {
     }
 
     function drawStoneShadow(rock) {
+      if (!rock.shadow) return;
       const b = rock.body;
       const s = ppm / REF_PPM;
       g.save();
@@ -1954,8 +1996,8 @@ window.plethoraBit = {
         g.translate(0, waterTop);
         g.scale(1, -0.45);
         g.translate(0, -waterTop);
-        for (const r of towerRocks) drawStone(r, 0.34, false);
-        if (plinthRock) drawStone(plinthRock, 0.34, false);
+        for (const r of towerRocks) drawStone(r, 0.34);
+        if (plinthRock) drawStone(plinthRock, 0.34);
         g.restore();
       }
 
@@ -1964,10 +2006,10 @@ window.plethoraBit = {
       // plinth + stones
       if (plinthRock) {
         drawStoneShadow(plinthRock);
-        drawStone(plinthRock, 1, false);
+        drawStone(plinthRock, 1);
       }
       for (const r of towerRocks) drawStoneShadow(r);
-      for (const r of towerRocks) drawStone(r, 1, false);
+      for (const r of towerRocks) drawStone(r, 1);
 
       // the waiting stone, breathing
       if (state.pending) {
@@ -1982,7 +2024,7 @@ window.plethoraBit = {
         g.beginPath();
         g.arc(sx(b.pos.x), sy(b.pos.y), rr, 0, TAU);
         g.fill();
-        drawStone(state.pending, 1, false);
+        drawStone(state.pending, 1);
       }
 
       if (state.screen === "play") drawGuides(t);
@@ -2208,7 +2250,7 @@ window.plethoraBit = {
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
     function el(tag, css, html) {
-      const n = document.createElement(tag);
+      const n = tag === "button" ? document.createElement("button") : document.createElement("div");
       if (css) n.style.cssText = css;
       if (html != null) n.innerHTML = html;
       return n;
