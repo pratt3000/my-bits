@@ -52,9 +52,8 @@ Twelve chapters, roughly 300 seconds of narration:
 - Runtime `plethora-bit@2`, schema version 1, entry `main.js`.
 - Permissions: `backgroundMusic` (the score), `haptics` (chapter beats),
   `storage` (resume point and your council answer).
-- No dependencies and no packaged assets — every frame is generated in code.
-  Two approved registry fonts (DM Serif Display, Cormorant Garamond) load after
-  the first frame; the system serif carries the opening and covers a failure.
+- No dependencies, no packaged assets and no registry fonts — every frame is
+  generated in code and typeset in the system serif stack.
 - One memory channel: a `single_choice` tally `council`, `replace_previous` by
   user, visible after voting. Results parsing is deliberately tolerant of shape.
 
@@ -70,16 +69,22 @@ Twelve chapters, roughly 300 seconds of narration:
   wrapping uses a positive modulo — plain `%` goes negative and flings particles
   off-frame the moment anything drifts leftward.
 - **No global-DOM access.** The host validator rejects `document.*` outright
-  (`Direct document/body access is not allowed`), so offscreen buffers use
-  `OffscreenCanvas` and the UI is built with `innerHTML` on the runtime-owned
-  root plus `querySelector`, which is the pattern the contract's own examples
-  use. Note that font stacks are re-quoted with `'` for the markup — `UIFONT`
-  and `BODY` carry double quotes that would close a style attribute early.
-- Static layers (starfield, ice wall, vignette, grain tile) are painted once per
-  size into offscreen buffers and blitted. Each painter takes its destination
-  context, so where `OffscreenCanvas` is missing the same code runs straight
-  onto the main context each frame; only the grain pass is dropped. Both paths
-  are verified to render identically.
+  (`Direct document/body access is not allowed`), so the UI is built with
+  `innerHTML` on the runtime-owned root plus `querySelector`, which is the
+  pattern the contract's own examples use. Note that font stacks are re-quoted
+  with `'` for the markup — `UIFONT` and `BODY` carry double quotes that would
+  close a style attribute early.
+- **Colours interpolate as numeric `[r,g,b]` triples, never as hex strings.**
+  This one is worth knowing about, because the error it produces names nothing
+  useful. A helper that sliced a hex string, `parseInt`ed it and reassembled the
+  result by concatenation got the whole bit rejected with *"unsupported remote
+  resources"* — that sequence is the shape of dynamically constructed URL
+  obfuscation, and the validator matches on the shape, not on any banned API.
+  Nothing here is remote. Keep colour maths off strings entirely.
+- Static layers (starfield, ice wall, vignette) are painted straight onto the
+  main context each frame. They were cached into offscreen buffers at one point,
+  but that whole API family is unavailable, and at roughly three hundred cheap
+  fills a frame the caching was never buying much.
 - A rolling frame-time average trims particle counts and drops the grain pass on
   slower hardware instead of dropping frames.
 - Narration shows three line-groups at a time. Four filled nearly half the
