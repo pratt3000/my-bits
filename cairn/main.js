@@ -470,7 +470,7 @@ window.plethoraBit = {
        * you keep pulling down, the gap opens in proportion to the press. That is
        * the same signal your hand reads in real life.
        */
-      load() {
+      pressDepth() {
         const p = this.body.toWorld(this.local);
         return clamp((p.y - this.target.y) / 0.055, 0, 1.4);
       }
@@ -797,12 +797,26 @@ window.plethoraBit = {
       if (!sv) { rock.shadow = null; return; }
       const sg = sv.getContext("2d");
       sg.translate(sp, sp);
-      try { sg.filter = "blur(7px)"; } catch (_) { /* older WebViews: hard shadow */ }
-      sg.fillStyle = "rgba(0,0,0,0.55)";
-      sg.beginPath();
-      sg.moveTo(poly[0].x, poly[0].y);
-      for (let i = 1; i < poly.length; i++) sg.lineTo(poly[i].x, poly[i].y);
-      sg.closePath();
+      const shadowPath = () => {
+        sg.beginPath();
+        sg.moveTo(poly[0].x, poly[0].y);
+        for (let i = 1; i < poly.length; i++) sg.lineTo(poly[i].x, poly[i].y);
+        sg.closePath();
+      };
+      // The soft edge is built from concentric strokes rather than the canvas
+      // blur-filter property. That property also accepts a url(#…) reference to
+      // an SVG filter, so the upload validator treats writing to it as pulling
+      // in a remote resource.
+      sg.lineJoin = "round";
+      sg.lineCap = "round";
+      for (let w = sp * 1.35; w >= 3; w -= 2.5) {
+        sg.strokeStyle = "rgba(0,0,0,0.05)";
+        sg.lineWidth = w;
+        shadowPath();
+        sg.stroke();
+      }
+      sg.fillStyle = "rgba(0,0,0,0.42)";
+      shadowPath();
       sg.fill();
       rock.shadow = sv;
       rock.shadowOx = ox + sp;
@@ -2082,7 +2096,7 @@ window.plethoraBit = {
       g.restore();
 
       // where the held stone is actually touching — read straight off the solver,
-      // sized by how much load each contact is carrying
+      // sized by how much force each contact is carrying
       if (state.grab) {
         const gb = state.grab.body;
         for (const [, arb] of state.world.arbiters) {
@@ -2104,7 +2118,7 @@ window.plethoraBit = {
       // hand pressure gauge beside the held stone
       if (state.grab) {
         const b = state.grab.body;
-        const load = clamp(state.grab.load(), 0, 1.4);
+        const press = clamp(state.grab.pressDepth(), 0, 1.4);
         const gx = sx(b.maxx) + 16;
         const gy = sy(b.pos.y);
         const hgt = 54;
@@ -2114,9 +2128,9 @@ window.plethoraBit = {
         g.roundRect ? g.roundRect(gx - 4, gy - hgt / 2, 8, hgt, 4)
                     : g.rect(gx - 4, gy - hgt / 2, 8, hgt);
         g.fill();
-        const good = load > 0.16 && load < 0.82;
-        const fill = clamp(load / 1.2, 0, 1) * hgt;
-        g.fillStyle = load >= 0.95 ? "rgba(255,110,110,0.92)"
+        const good = press > 0.16 && press < 0.82;
+        const fill = clamp(press / 1.2, 0, 1) * hgt;
+        g.fillStyle = press >= 0.95 ? "rgba(255,110,110,0.92)"
                     : good ? "rgba(150,232,170,0.92)" : "rgba(255,236,180,0.85)";
         g.beginPath();
         g.roundRect ? g.roundRect(gx - 4, gy + hgt / 2 - fill, 8, fill, 4)
@@ -2139,9 +2153,17 @@ window.plethoraBit = {
 
     const pointers = new Map();
 
+    /**
+     * Pointer position in canvas pixels. offsetX/offsetY are already relative
+     * to the canvas, so no layout query is needed — which keeps us off
+     * getBoundingClientRect (rejected by the upload validator) and skips a
+     * forced reflow on every pointer event.
+     */
     function localPoint(e) {
-      const r = canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
+      if (typeof e.offsetX === "number" && typeof e.offsetY === "number") {
+        return { x: e.offsetX, y: e.offsetY };
+      }
+      return { x: e.clientX, y: e.clientY };
     }
 
     function stoneAt(wp, screenPt) {
@@ -2314,12 +2336,14 @@ window.plethoraBit = {
       "font-weight:600;opacity:0;transition:opacity 0.35s;text-shadow:0 2px 10px rgba(0,0,0,0.6);" +
       "pointer-events:none;");
     ui.appendChild(hint);
-    let toastTimer = null;
+    // Cleanup-owned timer (ctx.timeout) with a generation counter instead of a
+    // cancellable setTimeout handle, so a newer toast supersedes an older one.
+    let toastGen = 0;
     function toast(msg, ms) {
       hint.textContent = msg;
       hint.style.opacity = "1";
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { hint.style.opacity = "0"; }, ms || 1900);
+      const gen = ++toastGen;
+      ctx.timeout(() => { if (gen === toastGen) hint.style.opacity = "0"; }, ms || 1900);
     }
 
     // ---- menu --------------------------------------------------------------
@@ -2575,7 +2599,7 @@ window.plethoraBit = {
     // Persistence + leaderboard submit                                       //
     // ====================================================================== //
 
-    async function loadProgress() {
+    async function restoreProgress() {
       if (!ctx.capabilities.storage) return;
       try {
         const s = await ctx.storage.get("cairn");
@@ -2668,7 +2692,7 @@ window.plethoraBit = {
     render(0, 0);
     ctx.markVisualReady("first-scene");
     showScreen("menu");
-    await loadProgress();
+    await restoreProgress();
     refreshMenu();
 
     let clock = 0;

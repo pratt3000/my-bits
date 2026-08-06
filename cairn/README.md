@@ -93,14 +93,30 @@ cairn/
   one leaderboard per mode, submitted once at the end of a run.
 - No dependencies, no packaged assets: shapes, textures, scenery and audio are
   all generated at runtime.
-- Stone textures and their blurred contact shadows are baked once at creation,
-  and the sky is baked per mode, so a frame is drawImage calls rather than
-  gradient fills. Bakes go to an **`OffscreenCanvas`** — the runtime owns every
-  canvas in the DOM (`ctx.createCanvas` is for display surfaces) and the upload
-  validator rejects `document.createElement("canvas")`. If a WebView has no
-  `OffscreenCanvas`, `makeSurface()` returns null and every bake site falls back
-  to drawing live: flat-shaded polygons, no contact shadows, sky painted per
-  frame. Plainer, fully playable, never blank.
-- `document.createElement` is only ever called with a **literal** tag. A
-  computed tag can't be statically shown not to be a canvas or script, and the
-  validator rejects it.
+- Stone textures and their soft contact shadows are baked once at creation, and
+  the sky is baked per mode, so a frame is drawImage calls rather than gradient
+  fills. Bakes go to an `OffscreenCanvas` via `makeSurface()`. If a WebView has
+  no `OffscreenCanvas` that returns null and every bake site falls back to
+  drawing live: flat-shaded polygons, no contact shadows, sky painted per frame.
+  Plainer, fully playable, never blank.
+
+### What the upload validator rejects
+
+Two constraints cost several upload rounds to find, and neither is in
+`sdk.md`. Both were confirmed by bisecting real uploads:
+
+- **`document.createElement("canvas")`** → *"Direct document/body access is not
+  allowed. Use ctx.createCanvas()."* `ctx.createCanvas()` is not actually the
+  fix for offscreen work — it mints a display surface the runtime mounts in the
+  container. `OffscreenCanvas` is accepted and is what this bit uses.
+  `document.createElement` with a **literal** `"div"`/`"button"` is fine.
+- **`canvas.getBoundingClientRect()`** → *"This bit uses unsupported remote
+  resources…"*, a message that names the loader APIs and gives no hint that
+  layout access is the cause. Use `event.offsetX` / `offsetY`, which are already
+  canvas-relative and skip a forced reflow per pointer event anyway.
+
+Changed in passing while hunting the above, and worth keeping regardless
+though neither was independently confirmed as a trigger: timers go through
+`ctx.timeout` rather than bare `setTimeout`, and the contact shadow's soft edge
+is built from concentric strokes rather than the canvas blur-filter property
+(which also accepts `url(#…)`).
