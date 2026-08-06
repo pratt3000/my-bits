@@ -10,10 +10,14 @@ one at a time, for as long as your patience holds.
 
 The feel is the point:
 
-- **The stone hangs from wherever you grabbed it.** A soft point constraint ties
-  your finger to that spot on the stone and nothing constrains its rotation, so
-  it swings under gravity exactly like a real one. Grab it high and it steadies
-  itself; grab it off-centre and it tilts.
+- **The stone rides above your finger.** Tap *beside* a stone and you carry it
+  from its centre, keeping the offset you grabbed at, so your fingertip is never
+  covering the thing you are trying to balance. It eases up far enough to clear
+  your finger and no further.
+- **Tap the stone itself and you grip it there.** A soft point constraint ties
+  your finger to that exact spot with rotation left free, so it swings under
+  gravity like a real one — grab it high and it steadies itself, grab it
+  off-centre and it tilts on purpose.
 - **Press down to seat it.** The hand has a *bounded* force, so leaning on a
   stone pushes load all the way down the cairn to the plinth: press gently and
   the stack takes it, press too hard and you shove the whole thing over. A gauge
@@ -49,13 +53,32 @@ run.
 
 ### Sound
 
-Everything is synthesized; there are no packaged assets. A stone strike is a
-bandpassed noise burst plus two or three inharmonic body modes and a low thump,
-pitched by the stone's size and material, so a big sandstone lands with a dull
-*tok* and a small quartz with a bright *tick*. Dragging a stone across another
+Everything is synthesized; there are no packaged assets.
+
+Stone is heavily damped and almost unpitched, so a strike is **entirely filtered
+noise** — no oscillators, which are exactly what make a synthesised knock sound
+like a woodblock. Each hit is a two-millisecond contact tick, two or three short
+inharmonic resonances, and a dull lowpassed body, all scaled by the stone's size
+and material: a big sandstone thuds, a small quartz pings.
+
+Measured by rendering each material through an `OfflineAudioContext` (decay from
+peak, spectral centroid, and tonality as the strongest bin's share of total
+energy):
+
+| | old | new |
+| --- | --- | --- |
+| decay to −40 dB | 48–128 ms | 7–21 ms |
+| spectral centroid | 229–662 Hz | 543–2645 Hz |
+| tonality | 0.17–0.45 | 0.08–0.23 |
+
+The old version's centroid sat below 700 Hz — under a phone speaker's useful
+range — and granite scored 0.45 tonality, which is the "bong" you could hear.
+
+Placing a stone rings a **struck singing bowl** (inharmonic partials, two
+detuned voices each so it beats), pitched up the pentatonic scale as the cairn
+grows, with a deeper bowl every fifth stone. Dragging a stone across another
 runs a grinding bed driven by the solver's tangential contact speed. Falling
-stones splash and a collapse rumbles. A host `ctx.music` bed sits underneath,
-per mode.
+stones splash and a collapse rumbles, over a `ctx.music` bed per mode.
 
 ## Physics
 

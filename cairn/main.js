@@ -417,6 +417,13 @@ window.plethoraBit = {
         this.target = body.toWorld(localAnchor);
         this.P = { x: 0, y: 0 };
         this.angTarget = null;      // set while two fingers are twisting
+        // The stone is held at an offset from the finger and eased upward, so
+        // your fingertip never covers the thing you are trying to balance.
+        this.finger = this.target;
+        this.offset = { x: 0, y: 0 };
+        this.liftT = 0;
+        this.lift = 0;
+        this.carry = false;         // taken from beside the stone, not on it
       }
 
       preStep(invDt) {
@@ -460,6 +467,10 @@ window.plethoraBit = {
         if (this.angTarget != null) {
           const d = angDiff(this.angTarget, b.angle);
           b.angVel += clamp(d * 26 - b.angVel * 5.5, -34, 34) * dt;
+        } else if (this.carry) {
+          // taken from beside the stone: that is a carry, not a grip, so damp
+          // the swing rather than letting it hang like a pendulum off a rod
+          b.angVel -= b.angVel * Math.min(1, 7 * dt);
         }
       }
 
@@ -592,55 +603,55 @@ window.plethoraBit = {
         id: "river", name: "River Stone", friction: 0.86, density: 2.6, value: 1.0,
         pts: [11, 14], wide: 1.22, tall: 0.70, jitter: 0.06, texture: "mottle",
         pal: { base: "#9aa4b1", light: "#dbe2ea", dark: "#616a78", accent: "#818b99" },
-        snd: { f: 300, q: 3.2, decay: 0.11, gain: 0.8 }
+        snd: { f: 950,  q: 9,  decay: 0.083, gain: 0.85, body: 0.50 }
       },
       {
         id: "slate", name: "Slate", friction: 0.93, density: 2.85, value: 0.85,
         pts: [7, 9], wide: 1.62, tall: 0.32, jitter: 0.05, texture: "strata",
         pal: { base: "#6f7684", light: "#aab3c1", dark: "#414753", accent: "#8a92a1" },
-        snd: { f: 520, q: 5.5, decay: 0.16, gain: 0.9 }
+        snd: { f: 1450, q: 13, decay: 0.143, gain: 0.95, body: 0.55 }
       },
       {
         id: "granite", name: "Granite", friction: 0.80, density: 2.72, value: 1.2,
         pts: [8, 11], wide: 1.0, tall: 0.88, jitter: 0.12, texture: "speckle",
         pal: { base: "#b0a79c", light: "#eae1d5", dark: "#726960", accent: "#c9b7a4" },
-        snd: { f: 420, q: 4, decay: 0.13, gain: 0.85 }
+        snd: { f: 1150, q: 10, decay: 0.090, gain: 0.90, body: 0.50 }
       },
       {
         id: "basalt", name: "Basalt", friction: 0.71, density: 3.0, value: 1.55,
         pts: [5, 7], wide: 0.88, tall: 1.06, jitter: 0.19, texture: "facet",
         pal: { base: "#535865", light: "#8f96a5", dark: "#31353d", accent: "#6b7180" },
-        snd: { f: 640, q: 6, decay: 0.1, gain: 0.9 }
+        snd: { f: 1850, q: 12, decay: 0.072, gain: 0.95, body: 0.40 }
       },
       {
         id: "sand", name: "Sandstone", friction: 0.89, density: 2.25, value: 1.0,
         pts: [9, 11], wide: 1.12, tall: 0.64, jitter: 0.09, texture: "band",
         pal: { base: "#d3af80", light: "#f6e2be", dark: "#a37c4d", accent: "#e5c396" },
-        snd: { f: 235, q: 2.4, decay: 0.09, gain: 0.7 }
+        snd: { f: 600,  q: 5,  decay: 0.051, gain: 0.70, body: 0.85 }
       },
       {
         id: "quartz", name: "Quartz", friction: 0.55, density: 2.65, value: 1.9,
         pts: [6, 8], wide: 0.94, tall: 0.84, jitter: 0.15, texture: "crystal",
         pal: { base: "#e4dfef", light: "#ffffff", dark: "#b3aac8", accent: "#f6eefa" },
-        snd: { f: 910, q: 8, decay: 0.22, gain: 0.75 }
+        snd: { f: 2500, q: 16, decay: 0.128, gain: 0.80, body: 0.22 }
       },
       {
         id: "obsidian", name: "Obsidian", friction: 0.43, density: 2.5, value: 2.2,
         pts: [6, 8], wide: 0.98, tall: 0.92, jitter: 0.17, texture: "gloss",
         pal: { base: "#2e2c39", light: "#787292", dark: "#16151c", accent: "#9d92bd" },
-        snd: { f: 790, q: 7, decay: 0.19, gain: 0.8 }
+        snd: { f: 2200, q: 15, decay: 0.105, gain: 0.85, body: 0.28 }
       },
       {
         id: "moss", name: "Moss Stone", friction: 0.99, density: 2.6, value: 1.3,
         pts: [11, 14], wide: 1.16, tall: 0.74, jitter: 0.07, texture: "moss",
         pal: { base: "#8e988a", light: "#c2ccba", dark: "#5b6459", accent: "#84a259" },
-        snd: { f: 255, q: 2.2, decay: 0.085, gain: 0.65 }
+        snd: { f: 500,  q: 4,  decay: 0.045, gain: 0.65, body: 0.90 }
       },
       {
         id: "plinth", name: "Plinth", friction: 0.95, density: 3.0, value: 0,
         pts: [4, 4], wide: 1, tall: 1, jitter: 0, texture: "strata",
         pal: { base: "#4a5361", light: "#77839a", dark: "#242a35", accent: "#5f6b7e" },
-        snd: { f: 340, q: 4, decay: 0.14, gain: 0.9 }
+        snd: { f: 1100, q: 11, decay: 0.120, gain: 0.95, body: 0.70 }
       }
     ];
     const TYPE_BY_ID = {};
@@ -1085,52 +1096,86 @@ window.plethoraBit = {
       node.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
     }
 
-    /** Stone-on-stone strike. `speed` in m/s, `size` the stone's bounding radius. */
+    /**
+     * Stone-on-stone strike. `speed` in m/s, `size` the stone's bounding radius.
+     *
+     * Stone is heavily damped and almost unpitched: what you hear is a dry
+     * broadband click plus two or three very short inharmonic resonances. So
+     * this is entirely filtered noise — no oscillators, which are what make a
+     * synthesised knock sound like a woodblock or a xylophone — with decays in
+     * the tens of milliseconds. Small hard stones ring higher and longer,
+     * big porous ones just thud.
+     */
     function playClack(type, speed, size, hard) {
       if (!ac || ac.state !== "running" || voices > 16) return;
       const amp = clamp(speed / 1.5, 0.06, 1) * type.snd.gain * (hard ? 1 : 0.72);
       if (amp < 0.035) return;
       const t = ac.currentTime;
-      // bigger stone ⇒ lower body frequency
-      const f = type.snd.f * Math.pow(0.16 / clamp(size, 0.05, 0.4), 0.55) * rnd(0.92, 1.09);
-      const dec = type.snd.decay * rnd(0.85, 1.2);
+      // bigger stone ⇒ lower, duller
+      const f = type.snd.f * Math.pow(0.16 / clamp(size, 0.05, 0.4), 0.45) * rnd(0.93, 1.08);
+      const dec = type.snd.decay * rnd(0.82, 1.22);
       voices++;
 
       const src = ac.createBufferSource();
-      src.buffer = noiseBuf; src.loop = true;
-      src.playbackRate.value = rnd(0.85, 1.15);
-      const bp = ac.createBiquadFilter();
-      bp.type = "bandpass";
-      bp.frequency.setValueAtTime(f * 1.9, t);
-      bp.frequency.exponentialRampToValueAtTime(Math.max(80, f * 0.85), t + dec);
-      bp.Q.value = type.snd.q;
-      const g = ac.createGain();
-      env(g, t, amp * 0.55, 0.0015, dec);
-      src.connect(bp); bp.connect(g); g.connect(master);
-      src.start(t); src.stop(t + dec + 0.06);
-      src.onended = () => { voices--; };
+      src.buffer = noiseBuf;
+      src.loop = true;
+      src.loopStart = Math.random() * 1.5;      // a different grain every hit
+      src.loopEnd = src.loopStart + 0.4;
+      src.playbackRate.value = rnd(0.85, 1.18);
 
-      // inharmonic body modes
-      const ratios = [1, 1.62, 2.39];
-      for (let i = 0; i < ratios.length; i++) {
-        const o = ac.createOscillator();
-        o.type = i === 0 ? "triangle" : "sine";
-        o.frequency.value = f * ratios[i] * rnd(0.985, 1.015);
-        const og = ac.createGain();
-        env(og, t, amp * (0.34 / (i + 1)), 0.001, dec * (1.5 - i * 0.32));
-        o.connect(og); og.connect(master);
-        o.start(t); o.stop(t + dec * 1.6 + 0.05);
+      const out = ac.createGain();
+      out.gain.value = amp;
+      out.connect(master);
+      src.start(t);
+
+      // inharmonic resonant modes, each dying faster than the last
+      const modes = [
+        { m: 1.00, q: type.snd.q,       d: dec,        g: 1.30 },
+        { m: 1.93, q: type.snd.q * 1.4, d: dec * 0.58, g: 0.60 },
+        { m: 3.37, q: type.snd.q * 1.8, d: dec * 0.34, g: 0.28 }
+      ];
+      let last = 0;
+      for (const md of modes) {
+        const bp = ac.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = clamp(f * md.m * rnd(0.97, 1.03), 60, 13000);
+        bp.Q.value = md.q;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(md.g, t + 0.0009);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + md.d);
+        src.connect(bp); bp.connect(g); g.connect(out);
+        last = Math.max(last, md.d);
       }
 
-      // low thump so heavy stones land with weight
-      const lo = ac.createOscillator();
-      lo.type = "sine";
-      lo.frequency.setValueAtTime(rnd(105, 145), t);
-      lo.frequency.exponentialRampToValueAtTime(52, t + 0.09);
-      const lg = ac.createGain();
-      env(lg, t, amp * 0.4, 0.002, 0.085);
-      lo.connect(lg); lg.connect(master);
-      lo.start(t); lo.stop(t + 0.16);
+      // the contact tick itself: a couple of milliseconds of bright noise
+      const hp = ac.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 2100;
+      const hg = ac.createGain();
+      hg.gain.setValueAtTime(0.0001, t);
+      hg.gain.linearRampToValueAtTime(0.34, t + 0.0006);
+      hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.014);
+      src.connect(hp); hp.connect(hg); hg.connect(out);
+
+      // dull low body — noise through a lowpass, not a sine, so heavy stones
+      // land with weight instead of sounding like a kick drum
+      const bodyAmt = type.snd.body != null ? type.snd.body : 0.5;
+      if (bodyAmt > 0.05) {
+        const lp = ac.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.value = 240 * rnd(0.9, 1.15);
+        lp.Q.value = 1.1;
+        const lg = ac.createGain();
+        lg.gain.setValueAtTime(0.0001, t);
+        lg.gain.linearRampToValueAtTime(bodyAmt * 0.85, t + 0.0016);
+        lg.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+        src.connect(lp); lp.connect(lg); lg.connect(out);
+        last = Math.max(last, 0.045);
+      }
+
+      src.stop(t + last + 0.05);
+      src.onended = () => { voices--; };
     }
 
     function playSplash(vol) {
@@ -1156,20 +1201,51 @@ window.plethoraBit = {
       o.start(t); o.stop(t + 0.4);
     }
 
-    function playBell(base, gain, decay) {
+    // Pentatonic on G, so consecutive placements always sound consonant.
+    const PENT = [0, 3, 5, 7, 10];
+    function bowlPitch(i) {
+      i = ((i % 10) + 10) % 10;                 // wrap after two octaves
+      const semi = PENT[i % PENT.length] + 12 * Math.floor(i / PENT.length);
+      return 196 * Math.pow(2, semi / 12);
+    }
+
+    /**
+     * Struck singing bowl. Inharmonic partials, soft attack, long decay, each
+     * partial dying faster than the one below it, and two slightly detuned
+     * voices per partial so it beats gently instead of sitting dead still.
+     */
+    function playBowl(freq, gain, decay) {
       if (!ac || ac.state !== "running") return;
       const t = ac.currentTime;
-      const parts = [1, 2.02, 2.98, 5.42];
-      const amps = [1, 0.42, 0.26, 0.12];
+      const parts = [1, 2.32, 3.86, 5.61];
+      const amps = [1, 0.34, 0.16, 0.07];
       for (let i = 0; i < parts.length; i++) {
-        const o = ac.createOscillator();
-        o.type = "sine";
-        o.frequency.value = base * parts[i] * rnd(0.998, 1.004);
-        const g = ac.createGain();
-        env(g, t, gain * amps[i], 0.006, decay * (1 - i * 0.16));
-        o.connect(g); g.connect(master);
-        o.start(t); o.stop(t + decay + 0.2);
+        const d = decay * Math.pow(0.6, i);
+        for (let v = 0; v < 2; v++) {
+          const o = ac.createOscillator();
+          o.type = "sine";
+          o.frequency.value = freq * parts[i] * (v ? 1.0032 : 0.9971);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(gain * amps[i] * 0.5, t + 0.012 + i * 0.005);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+          o.connect(g); g.connect(master);
+          o.start(t); o.stop(t + d + 0.1);
+        }
       }
+      // mallet contact
+      const src = ac.createBufferSource();
+      src.buffer = noiseBuf; src.loop = true;
+      const bp = ac.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = clamp(freq * 4.2, 100, 12000);
+      bp.Q.value = 1.5;
+      const mg = ac.createGain();
+      mg.gain.setValueAtTime(0.0001, t);
+      mg.gain.linearRampToValueAtTime(gain * 0.3, t + 0.001);
+      mg.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      src.connect(bp); bp.connect(mg); mg.connect(master);
+      src.start(t); src.stop(t + 0.09);
     }
 
     function playRumble(vol) {
@@ -1683,11 +1759,23 @@ window.plethoraBit = {
         b.vel = { x: 0, y: 0 };
         b.angVel = 0;
       }
-      // grip where the finger actually landed — that is what makes it hang right
-      let local = b.toLocal(worldPt);
-      if (!b.containsPoint(worldPt)) local = vmul(local, 0.55);
+      // Touch the stone and you grip it there, so it hangs from that point.
+      // Touch beside it and you carry it from its centre, keeping whatever
+      // offset you grabbed at — that is how you hold it without covering it.
+      const inside = b.containsPoint(worldPt);
+      const local = inside ? b.toLocal(worldPt) : { x: 0, y: 0 };
+      const anchor = b.toWorld(local);
       const grab = new Grab(b, local, Math.max(12, b.mass * 105));
-      grab.target = worldPt;
+      grab.carry = !inside;
+      grab.finger = worldPt;
+      grab.offset = vsub(anchor, worldPt);
+      // Lift only as far as it takes to clear the fingertip. If you already
+      // grabbed from well below the stone, it barely moves; if you grabbed on
+      // top of it, it rises clear.
+      const gapNow = b.miny - worldPt.y;
+      grab.lift = Math.max(0, 70 / ppm + b.radius * 0.15 - gapNow);
+      grab.liftT = 0;
+      grab.target = anchor;
       grab.pointerId = pointerId;
       state.world.grabs.push(grab);
       state.phase = "held";
@@ -1696,6 +1784,21 @@ window.plethoraBit = {
       ctx.platform.start();
       haptic("light");
       return grab;
+    }
+
+    /**
+     * Place the held stone relative to the finger: keep the offset it was
+     * grabbed at, then ease it upward clear of the fingertip. The lift is a
+     * fixed number of screen pixels, so it stays the same apparent distance as
+     * the camera zooms out.
+     */
+    function updateGrabTarget(dtSec) {
+      const gr = state.grab;
+      if (!gr) return;
+      gr.liftT = Math.min(1, gr.liftT + (dtSec || 0) / 0.18);
+      const e = gr.liftT * gr.liftT * (3 - 2 * gr.liftT);     // smoothstep
+      gr.target = { x: gr.finger.x + gr.offset.x,
+                    y: gr.finger.y + gr.offset.y + gr.lift * e };
     }
 
     function releaseStone() {
@@ -1765,11 +1868,11 @@ window.plethoraBit = {
       pops.push({ wx: b.pos.x, wy: b.maxy, rise: 0, text: "+" + pts, sub: label, life: 1 });
       ctx.platform.setScore(state.score);
       ctx.platform.interact({ type: "stone_placed", stones: state.stones.length, points: pts });
-      playBell(rnd(760, 900), 0.075, 0.85);
+      playBowl(bowlPitch(state.stones.length - 1), 0.05, 1.7);
       haptic(poiseQ > 0.68 ? "success" : "light");
 
       if (state.stones.length % 5 === 0) {
-        playBell(392, 0.16, 3.2);
+        playBowl(196, 0.13, 4.5);
         haptic("success");
         ctx.platform.milestone("stones_" + state.stones.length, { stones: state.stones.length });
       }
@@ -1871,6 +1974,8 @@ window.plethoraBit = {
       }
 
       // --- fixed-step integration -----------------------------------------
+      updateGrabTarget(dtSec);
+
       accum += Math.min(dtSec, 0.06);
       let steps = 0;
       while (accum >= SUBSTEP && steps < MAX_SUBSTEPS) {
@@ -2115,6 +2220,33 @@ window.plethoraBit = {
         }
       }
 
+      // the link from finger to stone: outline what you are holding, and show
+      // where your hand actually is relative to it
+      if (state.grab) {
+        const gb = state.grab.body;
+        const fx = sx(state.grab.finger.x), fy = sy(state.grab.finger.y);
+        const a = gb.toWorld(state.grab.local);
+        g.save();
+        g.setLineDash([3, 5]);
+        g.strokeStyle = "rgba(255,246,214,0.34)";
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(fx, fy);
+        g.lineTo(sx(a.x), sy(a.y));
+        g.stroke();
+        g.setLineDash([]);
+        g.beginPath();
+        g.arc(fx, fy, 10, 0, TAU);
+        g.strokeStyle = "rgba(255,246,214,0.4)";
+        g.lineWidth = 1.6;
+        g.stroke();
+        stonePath(gb);
+        g.strokeStyle = "rgba(255,246,214,0.5)";
+        g.lineWidth = 2;
+        g.stroke();
+        g.restore();
+      }
+
       // hand pressure gauge beside the held stone
       if (state.grab) {
         const b = state.grab.body;
@@ -2167,7 +2299,9 @@ window.plethoraBit = {
     }
 
     function stoneAt(wp, screenPt) {
-      const tol = 26 / ppm;
+      // Generous on purpose: tapping beside the stone must pick it up, so your
+      // finger never has to sit on top of what you are trying to place.
+      const tol = 80 / ppm;
       const check = (r) => r && r.body.distanceTo(wp) <= tol;
       if (check(state.pending)) return state.pending;
       if (check(state.current)) return state.current;
@@ -2175,7 +2309,8 @@ window.plethoraBit = {
     }
 
     function settledStoneAt(wp) {
-      const tol = 12 / ppm;
+      // roughly a fingertip: steadying should not demand pixel accuracy
+      const tol = 26 / ppm;
       for (let i = state.stones.length - 1; i >= 0; i--) {
         if (state.stones[i].body.distanceTo(wp) <= tol) return state.stones[i];
       }
@@ -2233,7 +2368,8 @@ window.plethoraBit = {
       p.sp = sp;
       p.wp = toWorldPt(sp.x, sp.y);
       if (p.role === "grab" && state.grab) {
-        state.grab.target = p.wp;
+        state.grab.finger = p.wp;
+        updateGrabTarget(0);
       } else if (p.role === "twist" && state.grab && state.twist && state.twist.id === e.pointerId) {
         const gp = pointers.get(state.grab.pointerId);
         if (gp) {
@@ -2426,8 +2562,8 @@ window.plethoraBit = {
     howBox.innerHTML =
       '<div style="font-size:19px;font-weight:800;margin-bottom:11px;">How to balance</div>' +
       '<ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px;">' +
-      "<li>👆 <b>Drag the glowing stone</b> onto the plinth, then onto the cairn.</li>" +
-      "<li>✊ <b>Where you grab matters</b> — the stone hangs from your finger like a real one.</li>" +
+      "<li>👆 <b>Tap beside the stone and drag.</b> It rides above your finger, so you can always see what you are placing.</li>" +
+      "<li>✊ <b>Grab the stone itself</b> and it hangs from that exact point, like a real one — use that to tilt it on purpose.</li>" +
       "<li>⬇️ <b>Press down gently to seat it.</b> Stay in the green on the bar; past the white line you'll shove the cairn over.</li>" +
       "<li>🤏 <b>Two fingers twist</b> the stone you're holding.</li>" +
       "<li>🖐 <b>A second finger steadies a lower stone</b> — your other hand. Priceless in a gust.</li>" +
@@ -2708,7 +2844,7 @@ window.plethoraBit = {
         windAmt = updatePhysics(dt, timeMs) || 0;
         if (state.hintTimer > 0) {
           state.hintTimer -= dt;
-          if (state.hintTimer <= 0) toast("Drag the glowing stone down", 2600);
+          if (state.hintTimer <= 0) toast("Tap beside the stone and drag — it rides above your finger", 3400);
         }
       } else if (state.screen === "over") {
         // let the wreckage keep tumbling behind the card
