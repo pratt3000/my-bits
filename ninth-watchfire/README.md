@@ -39,7 +39,16 @@ Twelve chapters, roughly 300 seconds of narration:
 
 ## Interaction
 
+- **Drag to look around.** Every chapter is built from depth planes rather than
+  one flat picture, so dragging slides them against each other: the horizon
+  barely stirs, mid-ground drifts, and whatever is nearest swings hardest. Let
+  go and the view eases back toward centre on its own.
+- **Tilt** does the same thing hands-free — opt in with the ◉ button, since it
+  is lovely held up and unusable lying down. Drag always works regardless, and
+  a denied motion prompt costs nothing.
 - **Tap** to reveal the rest of a chapter's lines, then again to skip ahead.
+  Taps and looks are told apart by distance travelled, so a look never skips a
+  chapter by accident.
 - **Chapter VI holds** until you choose what you would have done. Your answer
   goes to the `council` tally and comes back as a global split; chapter VII's
   opening line changes to match. Not answering within 40 seconds moves on with
@@ -85,6 +94,15 @@ Twelve chapters, roughly 300 seconds of narration:
   main context each frame. They were cached into offscreen buffers at one point,
   but that whole API family is unavailable, and at roughly three hundred cheap
   fills a frame the caching was never buying much.
+- **Perspective drawings take one plane, not one plane per object.** The chain
+  of watchfires recedes to a horizon, and giving each tower a depth matched to
+  its distance sheared the towers off the crest they stand on and slid every
+  firelight reflection sideways off its own tower. Perspective and per-object
+  parallax are two different projections; mixing them pulls geometry apart.
+  `drawWallRun` moves as a single body.
+- Anything that moves under the camera is painted wider than the frame —
+  starfields, ridges, ground fills. A layer that stopped at the frame edge slid
+  a bald strip into view the moment it was dragged.
 - A rolling frame-time average trims particle counts and drops the grain pass on
   slower hardware instead of dropping frames.
 - Narration shows three line-groups at a time. Four filled nearly half the

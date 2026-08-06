@@ -68,6 +68,43 @@ window.plethoraBit = {
     let avgDt = 16;
     let quality = 1;
 
+    // ---- look-around camera -----------------------------------------------
+    // Every chapter is built out of depth planes rather than one flat picture.
+    // Dragging — or tilting the phone — slides those planes against each other,
+    // so the world has somewhere to be behind and in front of itself.
+    //
+    // `look` is the raw target in [-1,1] on each axis; `lookS` is the smoothed
+    // value actually drawn with, so the scene eases after your thumb instead of
+    // snapping to it. Let go and it drifts most of the way back to centre.
+    const look = { x: 0, y: 0 };
+    const lookS = { x: 0, y: 0 };
+    const LOOK_X = 0.17;        // how far a d=1 plane swings horizontally, in w
+    const LOOK_Y = 0.10;        // and vertically, in h
+    let dragging = false;
+    let dragId = null;
+    let dragFromX = 0, dragFromY = 0;
+    let dragBaseX = 0, dragBaseY = 0;
+    let dragMoved = 0;
+    let tiltOn = false;
+    let tiltZero = null;
+    let hasLooked = false;      // suppresses the hint once you have moved
+
+    // Depth plane. d = 0 sits at the horizon and does not move at all; d = 1 is
+    // right in front of you and swings the most. Near planes also scale up a
+    // touch, which reads as perspective rather than a flat slide.
+    function withDepth(d, fn) {
+      if (d <= 0.0001 && lookS.x === 0 && lookS.y === 0) { fn(); return; }
+      g.save();
+      const px = -lookS.x * d * w * LOOK_X;
+      const py = -lookS.y * d * h * LOOK_Y;
+      const s = 1 + d * 0.035;
+      g.translate(w / 2 + px, h / 2 + py);
+      g.scale(s, s);
+      g.translate(-w / 2, -h / 2);
+      fn();
+      g.restore();
+    }
+
     // ---- surfaces ---------------------------------------------------------
     const canvas = ctx.createCanvas2D({ touchAction: "manipulation" });
     const g = canvas.getContext("2d");
@@ -89,12 +126,15 @@ window.plethoraBit = {
     // point, but the host validator rejects that whole family of APIs, and at
     // roughly three hundred cheap fills a frame the caching was never buying
     // much. Each painter takes its destination context so it stays testable.
+    // Painted wider than the frame on every side: these planes move under the
+    // look-around camera, and a field that stopped at the frame edge would slide
+    // a bald strip into view the moment you dragged.
     function paintStars(d, dw, dh) {
       const sr = rng(97);
       d.save();
-      for (let i = 0; i < 220; i++) {
-        const x = sr() * dw;
-        const y = sr() * dh * 0.78;
+      for (let i = 0; i < 260; i++) {
+        const x = -dw * 0.25 + sr() * dw * 1.5;
+        const y = -dh * 0.15 + sr() * dh * 0.95;
         const r = 0.35 + sr() * sr() * 1.5;
         const a = 0.18 + sr() * 0.7 * (1 - y / (dh * 0.9));
         d.globalAlpha = clamp(a, 0.05, 0.9);
@@ -307,9 +347,11 @@ window.plethoraBit = {
 
     // A snow ridge: layered sine harmonics, filled to the bottom of frame.
     function ridge(baseY, amp, freq, phase, color) {
+      const x0 = -w * 0.3;
+      const x1 = w * 1.3;
       g.beginPath();
-      g.moveTo(-20, h + 20);
-      for (let x = -20; x <= w + 20; x += 8) {
+      g.moveTo(x0, h * 1.4);
+      for (let x = x0; x <= x1; x += 8) {
         const u = x / w;
         const y =
           baseY +
@@ -318,7 +360,7 @@ window.plethoraBit = {
           Math.sin(u * freq * 0.6 - phase * 0.5) * amp * 0.6;
         g.lineTo(x, y);
       }
-      g.lineTo(w + 20, h + 20);
+      g.lineTo(x1, h * 1.4);
       g.closePath();
       g.fillStyle = color;
       g.fill();
@@ -872,47 +914,34 @@ window.plethoraBit = {
     // I — three lanterns crossing the waste, and the thing behind them.
     function drawWaste(p, t) {
       skyGrad("#03050c", "#071021", "#0c1a2c");
-      stars(0.85);
-      twinkle(t, 0.7);
-      aurora(t, { y: 0.24, bands: 3, alpha: 0.3, colors: [[64, 220, 172], [56, 150, 210], [96, 200, 190]] });
+      withDepth(0.06, () => { stars(0.85); twinkle(t, 0.7); });
+      withDepth(0.13, () => {
+        aurora(t, { y: 0.24, bands: 3, alpha: 0.3, colors: [[64, 220, 172], [56, 150, 210], [96, 200, 190]] });
+      });
 
-      ridge(h * 0.4, h * 0.028, 5.2, 0.4, "#0a1425");
-      ridge(h * 0.48, h * 0.034, 3.4, 2.1, "#0e1b2e");
+      withDepth(0.22, () => {
+        ridge(h * 0.4, h * 0.028, 5.2, 0.4, "#0a1425");
+        ridge(h * 0.48, h * 0.034, 3.4, 2.1, "#0e1b2e");
+      });
 
       // The pale ground catches the aurora a little.
-      const gg = g.createLinearGradient(0, h * 0.5, 0, h);
-      gg.addColorStop(0, "#16273d");
-      gg.addColorStop(1, "#0a1526");
-      g.fillStyle = gg;
-      g.fillRect(0, h * 0.53, w, h * 0.5);
-      ridge(h * 0.62, h * 0.022, 7.1, 5.0, "#1b3049");
+      withDepth(0.34, () => {
+        const gg = g.createLinearGradient(0, h * 0.5, 0, h);
+        gg.addColorStop(0, "#16273d");
+        gg.addColorStop(1, "#0a1526");
+        g.fillStyle = gg;
+        g.fillRect(-w * 0.3, h * 0.53, w * 1.6, h * 0.7);
+        ridge(h * 0.62, h * 0.022, 7.1, 5.0, "#1b3049");
+      });
 
-      // Three rangers, walking right, tiny against all of it.
       const walkP = ramp(p, 0.05, 0.95);
       const baseX = lerp(-w * 0.12, w * 0.95, walkP);
       const groundY = h * 0.575;
-      const lost = ramp(p, 0.78, 0.9);            // the third lantern goes out
-      for (let i = 0; i < 3; i++) {
-        const x = baseX - i * w * 0.075;
-        const bob = Math.sin(t * 3.4 + i * 1.7) * 1.4;
-        const ht = h * 0.062;
-        const alive = i === 2 ? 1 - lost : 1;
-        // lantern first so the body reads against it
-        const lx = x + ht * 0.3;
-        const ly = groundY - ht * 0.42 + bob;
-        if (alive > 0.01) {
-          g.save();
-          g.globalCompositeOperation = "lighter";
-          glow(lx, ly, ht * 1.5, "255,186,96", 0.5 * alive);
-          glow(lx, ly, ht * 0.34, "255,232,190", 0.75 * alive);
-          g.restore();
-        }
-        figure(x, groundY + bob, ht, { bob: 0, color: "#04070d" });
-      }
 
-      // Something rises out of the drift behind them.
+      // The thing sits behind the rangers, so it gets the shallower plane —
+      // drag left and it slides out from behind them.
       const rise = ramp(p, 0.5, 0.86);
-      if (rise > 0.01) {
+      if (rise > 0.01) withDepth(0.5, () => {
         const sx = baseX - w * 0.28;
         const sh = h * 0.16 * rise;
         g.save();
@@ -931,19 +960,49 @@ window.plethoraBit = {
         glow(sx - h * 0.008, groundY - sh * 0.86, h * 0.02, "180,238,255", 0.65 * eyes);
         glow(sx + h * 0.008, groundY - sh * 0.86, h * 0.02, "180,238,255", 0.65 * eyes);
         g.restore();
-      }
+      });
 
-      snow(t, 90, { speed: 0.75, wind: 0.6, alpha: 0.5, seed: 3 });
+      // Three rangers, walking right, tiny against all of it.
+      const lost = ramp(p, 0.78, 0.9);            // the third lantern goes out
+      withDepth(0.68, () => {
+        for (let i = 0; i < 3; i++) {
+          const x = baseX - i * w * 0.075;
+          const bob = Math.sin(t * 3.4 + i * 1.7) * 1.4;
+          const ht = h * 0.062;
+          const alive = i === 2 ? 1 - lost : 1;
+          // lantern first so the body reads against it
+          const lx = x + ht * 0.3;
+          const ly = groundY - ht * 0.42 + bob;
+          if (alive > 0.01) {
+            g.save();
+            g.globalCompositeOperation = "lighter";
+            glow(lx, ly, ht * 1.5, "255,186,96", 0.5 * alive);
+            glow(lx, ly, ht * 0.34, "255,232,190", 0.75 * alive);
+            g.restore();
+          }
+          figure(x, groundY + bob, ht, { bob: 0, color: "#04070d" });
+        }
+      });
+
+      withDepth(1, () => snow(t, 90, { speed: 0.75, wind: 0.6, alpha: 0.5, seed: 3 }));
     }
 
     // II — the wall, the tower, one lit window.
     function drawReach(p, t) {
       skyGrad("#04070f", "#0a1426", "#12213a");
-      stars(0.9);
-      twinkle(t, 0.55);
-      aurora(t, { y: 0.14, bands: 2, alpha: 0.17, colors: [[70, 190, 200], [60, 130, 200]] });
+      withDepth(0.06, () => { stars(0.9); twinkle(t, 0.55); });
+      withDepth(0.13, () => {
+        aurora(t, { y: 0.14, bands: 2, alpha: 0.17, colors: [[70, 190, 200], [60, 130, 200]] });
+      });
 
       const top = wallTopY();
+      // The wall and its tower ride one mid plane together, so the crest keeps
+      // its horizon and the tower stays planted on it.
+      withDepth(0.3, () => drawReachWall(p, t, top));
+      withDepth(1, () => snow(t, 110, { speed: 0.55, wind: 0.25, alpha: 0.6, seed: 12 }));
+    }
+
+    function drawReachWall(p, t, top) {
       // wavy crest of the wall
       g.save();
       g.beginPath();
@@ -996,8 +1055,6 @@ window.plethoraBit = {
         figure(tx + h * 0.032, ty - th - h * 0.02, h * 0.032, { color: "#04070d" });
         g.globalAlpha = 1;
       }
-
-      snow(t, 110, { speed: 0.55, wind: 0.25, alpha: 0.6, seed: 12 });
     }
 
     // III — a ranger comes home wrong.
@@ -1021,7 +1078,9 @@ window.plethoraBit = {
       ag.addColorStop(1, "#0b1728");
       g.fillStyle = ag;
       g.fillRect(gx - gw, gy - gw * 1.4, gw * 2, gw * 1.5);
-      snow(t, 46, { speed: 1.5, wind: 1.5, alpha: 0.5, seed: 21 });
+      // The night beyond the gate sits deepest, so it shifts inside the arch
+      // like a real view through an opening.
+      withDepth(0.12, () => snow(t, 46, { speed: 1.5, wind: 1.5, alpha: 0.5, seed: 21 }));
       g.restore();
 
       // two torches, warm, one each side
@@ -1033,39 +1092,44 @@ window.plethoraBit = {
       glow(w * 0.14, tly, Math.max(w, h) * 0.4, "255,142,54", 0.2 * flick);
       glow(w * 0.88, try_, Math.max(w, h) * 0.28, "255,132,48", 0.12 * flick);
       g.restore();
-      flame(w * 0.14, tly, h * 0.045, t, {});
-      flame(w * 0.88, try_, h * 0.036, t + 3, {});
 
       // Hessk, kneeling, lit orange on one side and ice-blue on the other.
       const kh = h * 0.19;
-      kneeler(gx + kh * 0.1, gy, kh, { face: -1, color: "#04070d" });
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      g.strokeStyle = "rgba(150,214,244,0.42)";
-      g.lineWidth = 2;
-      g.beginPath();
-      g.moveTo(gx + kh * 0.44, gy - kh * 0.5);
-      g.quadraticCurveTo(gx + kh * 0.4, gy - kh * 0.74, gx + kh * 0.18, gy - kh * 0.8);
-      g.stroke();
-      g.restore();
+      withDepth(0.4, () => {
+        kneeler(gx + kh * 0.1, gy, kh, { face: -1, color: "#04070d" });
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.strokeStyle = "rgba(150,214,244,0.42)";
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(gx + kh * 0.44, gy - kh * 0.5);
+        g.quadraticCurveTo(gx + kh * 0.4, gy - kh * 0.74, gx + kh * 0.18, gy - kh * 0.8);
+        g.stroke();
+        g.restore();
 
-      // breath — the one warm thing still working
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      for (let i = 0; i < 4; i++) {
-        const k = (t * 0.42 + i * 0.25) % 1;
-        const bx = gx - kh * 0.16 - k * kh * 0.42;
-        const by = gy - kh * 0.56 - k * kh * 0.4;
-        glow(bx, by, kh * (0.07 + k * 0.18), "200,226,245", (1 - k) * 0.18);
-      }
-      g.restore();
+        // breath — the one warm thing still working
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        for (let i = 0; i < 4; i++) {
+          const k = (t * 0.42 + i * 0.25) % 1;
+          const bx = gx - kh * 0.16 - k * kh * 0.42;
+          const by = gy - kh * 0.56 - k * kh * 0.4;
+          glow(bx, by, kh * (0.07 + k * 0.18), "200,226,245", (1 - k) * 0.18);
+        }
+        g.restore();
+      });
 
-      // watchers at the edges
+      // The torches and watchers are nearest — they swing across the kneeling
+      // figure as you look about the gateyard.
       const seen = ramp(p, 0.3, 0.6);
-      g.globalAlpha = seen * 0.9;
-      figure(w * 0.17, gy + h * 0.02, h * 0.21, { color: "#03060b", rim: "#ff9a44", rimAlpha: 0.3 });
-      figure(w * 0.84, gy + h * 0.035, h * 0.195, { color: "#03060b", rim: "#ff9a44", rimAlpha: 0.2 });
-      g.globalAlpha = 1;
+      withDepth(0.85, () => {
+        flame(w * 0.14, tly, h * 0.045, t, {});
+        flame(w * 0.88, try_, h * 0.036, t + 3, {});
+        g.globalAlpha = seen * 0.9;
+        figure(w * 0.17, gy + h * 0.02, h * 0.21, { color: "#03060b", rim: "#ff9a44", rimAlpha: 0.3 });
+        figure(w * 0.84, gy + h * 0.035, h * 0.195, { color: "#03060b", rim: "#ff9a44", rimAlpha: 0.2 });
+        g.globalAlpha = 1;
+      });
 
       embers(w * 0.14, tly, t, 16, w * 0.1, h * 0.34, { seed: 5, alpha: 0.7 });
       embers(w * 0.88, try_, t + 2, 10, w * 0.08, h * 0.26, { seed: 9, alpha: 0.5 });
@@ -1075,41 +1139,45 @@ window.plethoraBit = {
     function drawSky(p, t) {
       const red = ramp(p, 0.16, 0.46);
       skyGrad("#04060e", lerpRgb([10, 20, 38], [23, 11, 18], red), lerpRgb([14, 28, 48], [34, 16, 26], red));
-      stars(0.95);
-      twinkle(t, 0.6);
+      withDepth(0.06, () => { stars(0.95); twinkle(t, 0.6); });
 
-      aurora(t, {
-        y: 0.2, bands: 3, alpha: 0.34,
-        colors: [
-          mixCol([70, 220, 176], [226, 66, 52], red),
-          mixCol([60, 150, 210], [180, 40, 60], red),
-          mixCol([100, 200, 190], [255, 110, 74], red)
-        ]
+      withDepth(0.14, () => {
+        aurora(t, {
+          y: 0.2, bands: 3, alpha: 0.34,
+          colors: [
+            mixCol([70, 220, 176], [226, 66, 52], red),
+            mixCol([60, 150, 210], [180, 40, 60], red),
+            mixCol([100, 200, 190], [255, 110, 74], red)
+          ]
+        });
+        if (red > 0.2) {
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          glow(w * 0.5, h * 0.24, Math.max(w, h) * 0.5, "200,50,44", 0.075 * red);
+          g.restore();
+        }
       });
-      if (red > 0.2) {
-        g.save();
-        g.globalCompositeOperation = "lighter";
-        glow(w * 0.5, h * 0.24, Math.max(w, h) * 0.5, "200,50,44", 0.075 * red);
-        g.restore();
-      }
 
       // the wall, low and dark, so the sky owns the frame
       const top = h * 0.6;
-      g.fillStyle = "#080f1c";
-      g.fillRect(0, top, w, h - top);
-      g.strokeStyle = "rgba(150,190,220," + (0.3 + 0.3 * red) + ")";
-      g.lineWidth = 1.4;
-      g.beginPath();
-      g.moveTo(0, top);
-      g.lineTo(w, top);
-      g.stroke();
-      tower(w * 0.2, top + 1, h * 0.09, h * 0.035, { color: "#060a14" });
-      tower(w * 0.74, top + 1, h * 0.07, h * 0.028, { color: "#060a14" });
+      withDepth(0.26, () => {
+        g.fillStyle = "#080f1c";
+        g.fillRect(-w * 0.3, top, w * 1.6, h * 0.8);
+        g.strokeStyle = "rgba(150,190,220," + (0.3 + 0.3 * red) + ")";
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(-w * 0.3, top);
+        g.lineTo(w * 1.3, top);
+        g.stroke();
+        tower(w * 0.2, top + 1, h * 0.09, h * 0.035, { color: "#060a14" });
+        tower(w * 0.74, top + 1, h * 0.07, h * 0.028, { color: "#060a14" });
+      });
 
-      // Every raven at once, south, no circling.
+      // Every raven at once, south, no circling. The flock already carries its
+      // own per-bird depth, so each bird rides a plane matched to its size —
+      // look around and the near birds sweep past the far ones.
       const fly = ramp(p, 0.34, 1.0);
       const br = rng(66);
-      g.strokeStyle = "rgba(6,9,16,0.92)";
       g.lineCap = "round";
       const n = 46;
       for (let i = 0; i < n; i++) {
@@ -1123,17 +1191,20 @@ window.plethoraBit = {
         if (x < -w * 0.1) continue;
         const y = h * (0.12 + lane * 0.5) + Math.sin(t * 1.1 + ph) * h * 0.02;
         const s = (3 + depth * 9) * (h / 720 + 0.55);
-        g.lineWidth = Math.max(1, s * 0.19);
-        g.globalAlpha = clamp(depth * 1.2, 0.3, 1) * clamp(fly * 2, 0, 1);
         const tip = Math.sin(t * (6 + speed * 20) + ph) * s * 0.75;
-        g.beginPath();
-        g.moveTo(x - s, y - tip);
-        g.quadraticCurveTo(x - s * 0.45, y + s * 0.18, x, y);
-        g.quadraticCurveTo(x + s * 0.45, y + s * 0.18, x + s, y - tip);
-        g.stroke();
+        withDepth(0.3 + depth * 0.6, () => {
+          g.strokeStyle = "rgba(6,9,16,0.92)";
+          g.lineWidth = Math.max(1, s * 0.19);
+          g.globalAlpha = clamp(depth * 1.2, 0.3, 1) * clamp(fly * 2, 0, 1);
+          g.beginPath();
+          g.moveTo(x - s, y - tip);
+          g.quadraticCurveTo(x - s * 0.45, y + s * 0.18, x, y);
+          g.quadraticCurveTo(x + s * 0.45, y + s * 0.18, x + s, y - tip);
+          g.stroke();
+          g.globalAlpha = 1;
+        });
       }
-      g.globalAlpha = 1;
-      snow(t, 40, { speed: 0.5, wind: -0.8, alpha: 0.3, seed: 44 });
+      withDepth(1, () => snow(t, 40, { speed: 0.5, wind: -0.8, alpha: 0.3, seed: 44 }));
     }
 
     // V — a dead white hound, and one thing still breathing.
@@ -1145,26 +1216,29 @@ window.plethoraBit = {
       hg.addColorStop(1, "rgba(242,172,136,0.46)");
       g.fillStyle = hg;
       g.fillRect(0, h * 0.12, w, h * 0.3);
-      stars(0.22 * (1 - p * 0.6));
+      withDepth(0.05, () => stars(0.22 * (1 - p * 0.6)));
 
       // The wall above, in shadow, its crest catching the sun first.
       const wallBase = h * 0.2;
-      const wg = g.createLinearGradient(0, 0, 0, wallBase);
-      wg.addColorStop(0, "#33486d");
-      wg.addColorStop(1, "#1e2c46");
-      g.fillStyle = wg;
-      g.fillRect(0, 0, w, wallBase);
-      const blend = g.createLinearGradient(0, wallBase - h * 0.05, 0, wallBase + h * 0.02);
-      blend.addColorStop(0, "rgba(30,44,70,0)");
-      blend.addColorStop(0.7, "rgba(255,190,158,0.16)");
-      blend.addColorStop(1, "rgba(70,58,90,0)");
-      g.fillStyle = blend;
-      g.fillRect(0, wallBase - h * 0.05, w, h * 0.07);
+      withDepth(0.16, () => {
+        const wg = g.createLinearGradient(0, 0, 0, wallBase);
+        wg.addColorStop(0, "#33486d");
+        wg.addColorStop(1, "#1e2c46");
+        g.fillStyle = wg;
+        g.fillRect(-w * 0.3, -h * 0.2, w * 1.6, wallBase + h * 0.2);
+        const blend = g.createLinearGradient(0, wallBase - h * 0.05, 0, wallBase + h * 0.02);
+        blend.addColorStop(0, "rgba(30,44,70,0)");
+        blend.addColorStop(0.7, "rgba(255,190,158,0.16)");
+        blend.addColorStop(1, "rgba(70,58,90,0)");
+        g.fillStyle = blend;
+        g.fillRect(-w * 0.3, wallBase - h * 0.05, w * 1.6, h * 0.07);
+      });
 
-      // Drifts, stacked toward the viewer.
-      ridge(h * 0.36, h * 0.022, 4.1, 1.2, "#9db0c9");
-      ridge(h * 0.46, h * 0.026, 2.8, 3.4, "#c3d2e2");
-      ridge(h * 0.68, h * 0.03, 5.6, 0.6, "#e4edf5");
+      // Drifts, stacked toward the viewer — each one a plane further forward,
+      // so looking about opens real space between them.
+      withDepth(0.24, () => ridge(h * 0.36, h * 0.022, 4.1, 1.2, "#9db0c9"));
+      withDepth(0.36, () => ridge(h * 0.46, h * 0.026, 2.8, 3.4, "#c3d2e2"));
+      withDepth(0.78, () => ridge(h * 0.68, h * 0.03, 5.6, 0.6, "#e4edf5"));
 
       // The mother. Most of her is under the drift — what shows is the long
       // head laid flat, one ear, and the foreleg curled around a hollow. Half
@@ -1172,6 +1246,34 @@ window.plethoraBit = {
       const cx = w * 0.44;
       const cy = h * 0.56;
       const ms = Math.min(w, h) * 0.15;
+      const wx = cx - ms * 0.1;
+      const wy = cy + ms * 0.34;
+      const found = ramp(p, 0.2, 0.48);
+
+      withDepth(0.55, () => paintMother(cx, cy, ms));
+      withDepth(0.6, () => {
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        glow(wx, wy - ms * 0.16, ms * 0.7, "255,196,150", 0.3 * found);
+        g.restore();
+        hound(wx, wy, ms * 0.19, { t: t, color: "#616b7a", face: -1 });
+      });
+
+      // Wren, kneeling in from the right — small, so the hound stays the shot.
+      const kneel = ramp(p, 0.36, 0.68);
+      if (kneel > 0.01) withDepth(0.74, () => {
+        const fx = lerp(w * 1.06, w * 0.83, kneel);
+        g.globalAlpha = kneel;
+        kneeler(fx, cy + ms * 0.44, h * 0.115, {
+          face: 1, color: "#2c3550", rim: "#ffcaa2", rimAlpha: 0.45
+        });
+        g.globalAlpha = 1;
+      });
+
+      withDepth(1, () => snow(t, 46, { speed: 0.32, wind: 0.12, alpha: 0.6, size: 1.15, seed: 71 }));
+    }
+
+    function paintMother(cx, cy, ms) {
       g.save();
       g.translate(cx, cy);
       g.rotate(-0.05);
@@ -1230,29 +1332,6 @@ window.plethoraBit = {
       g.closePath();
       g.fill();
       g.restore();
-
-      // The whelp, in the hollow of that foreleg, breathing.
-      const wx = cx - ms * 0.1;
-      const wy = cy + ms * 0.34;
-      const found = ramp(p, 0.2, 0.48);
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      glow(wx, wy - ms * 0.16, ms * 0.7, "255,196,150", 0.3 * found);
-      g.restore();
-      hound(wx, wy, ms * 0.19, { t: t, color: "#616b7a", face: -1 });
-
-      // Wren, kneeling in from the right — small, so the hound stays the shot.
-      const kneel = ramp(p, 0.36, 0.68);
-      if (kneel > 0.01) {
-        const fx = lerp(w * 1.06, w * 0.83, kneel);
-        g.globalAlpha = kneel;
-        kneeler(fx, cy + ms * 0.44, h * 0.115, {
-          face: 1, color: "#2c3550", rim: "#ffcaa2", rimAlpha: 0.45
-        });
-        g.globalAlpha = 1;
-      }
-
-      snow(t, 46, { speed: 0.32, wind: 0.12, alpha: 0.6, size: 1.15, seed: 71 });
     }
 
     // VI — nine people and one decision.
@@ -1263,20 +1342,24 @@ window.plethoraBit = {
       // stone hall: three arches receding into dark
       const flick = 0.8 + 0.2 * Math.sin(t * 6.7) * Math.sin(t * 2.9) + 0.06 * Math.sin(t * 11.3);
       // Nested arch openings, widest first and each one darker, so the hall
-      // recedes instead of stacking into one pale dome.
+      // recedes instead of stacking into one pale dome. Each arch also gets its
+      // own plane: the near opening swings most and the far one barely moves,
+      // which is what makes looking about feel like standing in a corridor.
       for (let i = 0; i <= 2; i++) {
         const k = i / 2;
-        const aw = lerp(w * 0.95, w * 0.32, k);
-        const ah = lerp(h * 0.5, h * 0.24, k);
-        const ay = h * 0.6 - k * h * 0.05;
-        g.fillStyle = "rgb(" + Math.round(lerp(34, 7, k)) + "," + Math.round(lerp(41, 11, k)) + "," + Math.round(lerp(55, 19, k)) + ")";
-        g.beginPath();
-        g.moveTo(w / 2 - aw / 2, ay);
-        g.lineTo(w / 2 - aw / 2, ay - ah * 0.55);
-        g.quadraticCurveTo(w / 2, ay - ah * 1.15, w / 2 + aw / 2, ay - ah * 0.55);
-        g.lineTo(w / 2 + aw / 2, ay);
-        g.closePath();
-        g.fill();
+        withDepth(0.3 - k * 0.2, () => {
+          const aw = lerp(w * 0.95, w * 0.32, k);
+          const ah = lerp(h * 0.5, h * 0.24, k);
+          const ay = h * 0.6 - k * h * 0.05;
+          g.fillStyle = "rgb(" + Math.round(lerp(34, 7, k)) + "," + Math.round(lerp(41, 11, k)) + "," + Math.round(lerp(55, 19, k)) + ")";
+          g.beginPath();
+          g.moveTo(w / 2 - aw / 2, ay);
+          g.lineTo(w / 2 - aw / 2, ay - ah * 0.55);
+          g.quadraticCurveTo(w / 2, ay - ah * 1.15, w / 2 + aw / 2, ay - ah * 0.55);
+          g.lineTo(w / 2 + aw / 2, ay);
+          g.closePath();
+          g.fill();
+        });
       }
 
       // hearth on the left throwing the only light in the room
@@ -1286,37 +1369,45 @@ window.plethoraBit = {
       g.globalCompositeOperation = "lighter";
       glow(fx, fy - h * 0.04, Math.max(w, h) * 0.58, "255,146,58", 0.17 * flick);
       g.restore();
-      g.fillStyle = "#05080e";
-      g.fillRect(fx - w * 0.09, fy, w * 0.18, h * 0.05);
-      flame(fx, fy, h * 0.065, t, {});
-      embers(fx, fy - h * 0.02, t, 20, w * 0.09, h * 0.36, { seed: 15, alpha: 0.65 });
 
-      // the table, and what is left of the watch
       const ty = h * 0.615;
-      g.fillStyle = "#04070c";
-      g.beginPath();
-      g.moveTo(w * 0.04, ty + h * 0.055);
-      g.lineTo(w * 0.16, ty);
-      g.lineTo(w * 0.86, ty);
-      g.lineTo(w * 0.98, ty + h * 0.055);
-      g.closePath();
-      g.fill();
-      g.fillStyle = "rgba(255,168,84,0.1)";
-      g.fillRect(w * 0.16, ty, w * 0.7, 1.5);
+      withDepth(0.55, () => {
+        g.fillStyle = "#05080e";
+        g.fillRect(fx - w * 0.09, fy, w * 0.18, h * 0.05);
+        flame(fx, fy, h * 0.065, t, {});
+        embers(fx, fy - h * 0.02, t, 20, w * 0.09, h * 0.36, { seed: 15, alpha: 0.65 });
+
+        // the table, and what is left of the watch
+        g.fillStyle = "#04070c";
+        g.beginPath();
+        g.moveTo(w * 0.04, ty + h * 0.055);
+        g.lineTo(w * 0.16, ty);
+        g.lineTo(w * 0.86, ty);
+        g.lineTo(w * 0.98, ty + h * 0.055);
+        g.closePath();
+        g.fill();
+        g.fillStyle = "rgba(255,168,84,0.1)";
+        g.fillRect(w * 0.16, ty, w * 0.7, 1.5);
+      });
 
       const seats = [0.26, 0.37, 0.48, 0.59, 0.7, 0.8];
       for (let i = 0; i < seats.length; i++) {
         const x = w * seats[i];
         const shift = Math.sin(t * 0.5 + i * 2.1) * 1.2;
         const ht = h * (0.13 + (i % 2) * 0.011);
-        figure(x + shift, ty + h * 0.006, ht, {
-          color: "#03060b",
-          rim: "#ff9a44",
-          rimAlpha: 0.2 * flick * (1 - i / (seats.length + 2))
+        // Seats further along the table sit a little deeper into the room.
+        withDepth(0.78 - (i / seats.length) * 0.16, () => {
+          figure(x + shift, ty + h * 0.006, ht, {
+            color: "#03060b",
+            rim: "#ff9a44",
+            rimAlpha: 0.2 * flick * (1 - i / (seats.length + 2))
+          });
         });
       }
       // Calder at the head, nearest the fire, largest
-      figure(w * 0.14, ty + h * 0.026, h * 0.17, { color: "#02050a", rim: "#ffab55", rimAlpha: 0.42 * flick });
+      withDepth(0.92, () => {
+        figure(w * 0.14, ty + h * 0.026, h * 0.17, { color: "#02050a", rim: "#ffab55", rimAlpha: 0.42 * flick });
+      });
 
       // warm wash over everything
       g.save();
@@ -1338,26 +1429,30 @@ window.plethoraBit = {
         lerpRgb([12, 22, 38], [185, 203, 216], white)
       );
 
-      // fog banks rolling through
-      g.save();
+      // Fog banks rolling through, each on its own plane — this is the chapter
+      // where depth does the most work, because the whole threat is a question
+      // of how far away something is.
       for (let i = 0; i < 5; i++) {
-        const ph = i * 1.37;
-        const y = h * (0.2 + i * 0.16) + Math.sin(t * 0.4 + ph) * h * 0.03;
-        const x = ((t * (26 + i * 12) + i * w * 0.4) % (w * 1.8)) - w * 0.4;
-        const rw = w * (0.5 + i * 0.12);
-        const fg = g.createLinearGradient(x - rw / 2, 0, x + rw / 2, 0);
-        fg.addColorStop(0, "rgba(226,238,246,0)");
-        fg.addColorStop(0.5, "rgba(226,238,246," + (0.1 + 0.14 * white) + ")");
-        fg.addColorStop(1, "rgba(226,238,246,0)");
-        g.fillStyle = fg;
-        g.fillRect(x - rw / 2, y - h * 0.14, rw, h * 0.28);
+        withDepth(0.1 + i * 0.14, () => {
+          const ph = i * 1.37;
+          const y = h * (0.2 + i * 0.16) + Math.sin(t * 0.4 + ph) * h * 0.03;
+          const x = mod(t * (26 + i * 12) + i * w * 0.4, w * 1.8) - w * 0.4;
+          const rw = w * (0.5 + i * 0.12);
+          const fg = g.createLinearGradient(x - rw / 2, 0, x + rw / 2, 0);
+          fg.addColorStop(0, "rgba(226,238,246,0)");
+          fg.addColorStop(0.5, "rgba(226,238,246," + (0.1 + 0.14 * white) + ")");
+          fg.addColorStop(1, "rgba(226,238,246,0)");
+          g.fillStyle = fg;
+          g.fillRect(x - rw / 2, y - h * 0.14, rw, h * 0.28);
+        });
       }
-      g.restore();
 
       // ground
-      g.fillStyle = lerpRgb([22, 38, 60], [215, 228, 236], white * 0.9);
-      g.fillRect(0, h * 0.56, w, h * 0.44);
-      ridge(h * 0.6, h * 0.014, 6.3, 2.2, lerpRgb([29, 48, 73], [234, 242, 248], white * 0.9));
+      withDepth(0.3, () => {
+        g.fillStyle = lerpRgb([22, 38, 60], [215, 228, 236], white * 0.9);
+        g.fillRect(-w * 0.3, h * 0.56, w * 1.6, h * 0.7);
+        ridge(h * 0.6, h * 0.014, 6.3, 2.2, lerpRgb([29, 48, 73], [234, 242, 248], white * 0.9));
+      });
 
       // They come out of the white — barely there, which is the point.
       const come = ramp(p, 0.3, 0.86);
@@ -1371,42 +1466,46 @@ window.plethoraBit = {
         const y = h * (0.55 + depth * 0.1);
         const app = clamp((come - i * 0.09) * 2.2, 0, 1);
         if (app <= 0.01) continue;
-        // Darker than the whiteout, not paler — a pale figure on a pale field
-        // is simply invisible. They fade off at head and hem into the fog.
-        g.save();
-        g.globalAlpha = app * (0.22 + depth * 0.5);
-        const fgr = g.createLinearGradient(x, y - ht, x, y);
-        fgr.addColorStop(0, "rgba(72,98,124,0)");
-        fgr.addColorStop(0.3, "rgba(44,66,92,0.86)");
-        fgr.addColorStop(0.8, "rgba(38,58,82,0.7)");
-        fgr.addColorStop(1, "rgba(60,86,112,0.12)");
-        g.fillStyle = fgr;
-        g.beginPath();
-        g.moveTo(x - ht * 0.11, y);
-        g.quadraticCurveTo(x - ht * 0.13, y - ht * 0.6, x - ht * 0.06, y - ht * 0.88);
-        g.quadraticCurveTo(x, y - ht * 1.02, x + ht * 0.06, y - ht * 0.88);
-        g.quadraticCurveTo(x + ht * 0.13, y - ht * 0.6, x + ht * 0.11, y);
-        g.closePath();
-        g.fill();
-        g.restore();
-        // eyes: the only saturated thing in a white frame, kept small so they
-        // read as eyes rather than as headlights
-        g.save();
-        g.globalCompositeOperation = "lighter";
-        const ea = app * (0.4 + depth * 0.5);
-        glow(x - ht * 0.032, y - ht * 0.87, ht * 0.045, "150,240,255", ea * 0.8);
-        glow(x + ht * 0.032, y - ht * 0.87, ht * 0.045, "150,240,255", ea * 0.8);
-        g.fillStyle = "rgba(226,250,255," + clamp(ea, 0, 1) + ")";
-        g.beginPath();
-        g.arc(x - ht * 0.032, y - ht * 0.87, Math.max(0.7, ht * 0.011), 0, TAU);
-        g.arc(x + ht * 0.032, y - ht * 0.87, Math.max(0.7, ht * 0.011), 0, TAU);
-        g.fill();
-        g.restore();
+        // Each one stands at its own distance, so looking about walks them past
+        // each other instead of sliding a flat sheet of ghosts.
+        withDepth(0.28 + depth * 0.62, () => {
+          // Darker than the whiteout, not paler — a pale figure on a pale field
+          // is simply invisible. They fade off at head and hem into the fog.
+          g.save();
+          g.globalAlpha = app * (0.22 + depth * 0.5);
+          const fgr = g.createLinearGradient(x, y - ht, x, y);
+          fgr.addColorStop(0, "rgba(72,98,124,0)");
+          fgr.addColorStop(0.3, "rgba(44,66,92,0.86)");
+          fgr.addColorStop(0.8, "rgba(38,58,82,0.7)");
+          fgr.addColorStop(1, "rgba(60,86,112,0.12)");
+          g.fillStyle = fgr;
+          g.beginPath();
+          g.moveTo(x - ht * 0.11, y);
+          g.quadraticCurveTo(x - ht * 0.13, y - ht * 0.6, x - ht * 0.06, y - ht * 0.88);
+          g.quadraticCurveTo(x, y - ht * 1.02, x + ht * 0.06, y - ht * 0.88);
+          g.quadraticCurveTo(x + ht * 0.13, y - ht * 0.6, x + ht * 0.11, y);
+          g.closePath();
+          g.fill();
+          g.restore();
+          // eyes: the only saturated thing in a white frame, kept small so they
+          // read as eyes rather than as headlights
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          const ea = app * (0.4 + depth * 0.5);
+          glow(x - ht * 0.032, y - ht * 0.87, ht * 0.045, "150,240,255", ea * 0.8);
+          glow(x + ht * 0.032, y - ht * 0.87, ht * 0.045, "150,240,255", ea * 0.8);
+          g.fillStyle = "rgba(226,250,255," + clamp(ea, 0, 1) + ")";
+          g.beginPath();
+          g.arc(x - ht * 0.032, y - ht * 0.87, Math.max(0.7, ht * 0.011), 0, TAU);
+          g.arc(x + ht * 0.032, y - ht * 0.87, Math.max(0.7, ht * 0.011), 0, TAU);
+          g.fill();
+          g.restore();
+        });
       }
 
       // ice cracking under all of it
       const cr = ramp(p, 0.62, 1.0);
-      if (cr > 0.01) {
+      if (cr > 0.01) withDepth(0.55, () => {
         g.save();
         g.strokeStyle = "rgba(20,40,64," + 0.5 * cr + ")";
         g.lineWidth = 1.4;
@@ -1427,10 +1526,10 @@ window.plethoraBit = {
           g.stroke();
         }
         g.restore();
-      }
+      });
 
-      snow(t, 150, { speed: 2.6, wind: 3.4, alpha: 0.7, seed: 55 });
-      snow(t * 1.4, 70, { speed: 3.4, wind: 4.6, alpha: 0.5, size: 1.5, seed: 56 });
+      withDepth(0.85, () => snow(t, 150, { speed: 2.6, wind: 3.4, alpha: 0.7, seed: 55 }));
+      withDepth(1, () => snow(t * 1.4, 70, { speed: 3.4, wind: 4.6, alpha: 0.5, size: 1.5, seed: 56 }));
     }
 
     // VIII — two hundred and six steps.
@@ -1442,37 +1541,42 @@ window.plethoraBit = {
       const off = (t * speed) % (h * 0.09);
 
       // wall courses scrolling down past her
-      for (let i = -1; i < 14; i++) {
-        const y = i * h * 0.09 + off;
-        const shade = 16 + ((i % 3) + 3) % 3 * 5;
-        g.fillStyle = "rgb(" + shade + "," + (shade + 5) + "," + (shade + 12) + ")";
-        g.fillRect(0, y, w, h * 0.09 + 1);
-        g.fillStyle = "rgba(0,0,0,0.28)";
-        g.fillRect(0, y, w, 2);
-      }
+      withDepth(0.18, () => {
+        for (let i = -1; i < 14; i++) {
+          const y = i * h * 0.09 + off;
+          const shade = 16 + ((i % 3) + 3) % 3 * 5;
+          g.fillStyle = "rgb(" + shade + "," + (shade + 5) + "," + (shade + 12) + ")";
+          g.fillRect(-w * 0.3, y, w * 1.6, h * 0.09 + 1);
+          g.fillStyle = "rgba(0,0,0,0.28)";
+          g.fillRect(-w * 0.3, y, w * 1.6, 2);
+        }
+      });
 
-      // window slits, with night and snow beyond
+      // Window slits, with night and snow beyond. These sit deeper than the
+      // wall face, so looking about lets you see along the embrasure.
       for (let i = -1; i < 5; i++) {
-        const y = i * h * 0.31 + ((t * speed) % (h * 0.31));
-        const x = i % 2 === 0 ? w * 0.15 : w * 0.83;
-        const sw = w * 0.055;
-        const sh = h * 0.16;
-        g.save();
-        g.beginPath();
-        g.moveTo(x - sw / 2, y + sh);
-        g.lineTo(x - sw / 2, y + sh * 0.35);
-        g.quadraticCurveTo(x, y - sh * 0.1, x + sw / 2, y + sh * 0.35);
-        g.lineTo(x + sw / 2, y + sh);
-        g.closePath();
-        g.clip();
-        g.fillStyle = "#16304f";
-        g.fillRect(x - sw, y - sh, sw * 2, sh * 2.4);
-        snow(t * 2.2, 26, { speed: 2.2, wind: 4, alpha: 0.85, seed: 90 + i });
-        g.restore();
-        g.save();
-        g.globalCompositeOperation = "lighter";
-        glow(x, y + sh * 0.45, sw * 2.6, "110,170,225", 0.16);
-        g.restore();
+        withDepth(0.1, () => {
+          const y = i * h * 0.31 + ((t * speed) % (h * 0.31));
+          const x = i % 2 === 0 ? w * 0.15 : w * 0.83;
+          const sw = w * 0.055;
+          const sh = h * 0.16;
+          g.save();
+          g.beginPath();
+          g.moveTo(x - sw / 2, y + sh);
+          g.lineTo(x - sw / 2, y + sh * 0.35);
+          g.quadraticCurveTo(x, y - sh * 0.1, x + sw / 2, y + sh * 0.35);
+          g.lineTo(x + sw / 2, y + sh);
+          g.closePath();
+          g.clip();
+          g.fillStyle = "#16304f";
+          g.fillRect(x - sw, y - sh, sw * 2, sh * 2.4);
+          snow(t * 2.2, 26, { speed: 2.2, wind: 4, alpha: 0.85, seed: 90 + i });
+          g.restore();
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          glow(x, y + sh * 0.45, sw * 2.6, "110,170,225", 0.16);
+          g.restore();
+        });
       }
 
       // Treads. Narrow, strongly raked and with a dark riser under each one —
@@ -1515,25 +1619,29 @@ window.plethoraBit = {
       g.globalCompositeOperation = "lighter";
       glow(lx, cy - h * 0.06, Math.max(w, h) * 0.32, "255,168,80", 0.22);
       g.restore();
-      figure(cx, cy, h * 0.17, { color: "#03060c", rim: "#ffb668", rimAlpha: 0.5 });
-      // the lantern itself, held out clear of her body
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      glow(lx, cy - h * 0.062, h * 0.026, "255,232,180", 0.9);
-      g.restore();
-      g.strokeStyle = "rgba(255,196,120,0.5)";
-      g.lineWidth = 1.2;
-      g.beginPath();
-      g.moveTo(cx + h * 0.03, cy - h * 0.1);
-      g.lineTo(lx, cy - h * 0.072);
-      g.stroke();
+      withDepth(0.62, () => {
+        figure(cx, cy, h * 0.17, { color: "#03060c", rim: "#ffb668", rimAlpha: 0.5 });
+        // the lantern itself, held out clear of her body
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        glow(lx, cy - h * 0.062, h * 0.026, "255,232,180", 0.9);
+        g.restore();
+        g.strokeStyle = "rgba(255,196,120,0.5)";
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.moveTo(cx + h * 0.03, cy - h * 0.1);
+        g.lineTo(lx, cy - h * 0.072);
+        g.stroke();
+      });
 
-      // Ember, coming up behind
+      // Ember, coming up behind — a few steps nearer than Wren.
       const dogStep = Math.abs(Math.sin(t * 4.6 + 1.1));
-      hound(cx - w * 0.2, h * 0.6 - dogStep * h * 0.01, Math.min(w, h) * 0.05, { t: t * 2, color: "#0b1119" });
+      withDepth(0.86, () => {
+        hound(cx - w * 0.2, h * 0.6 - dogStep * h * 0.01, Math.min(w, h) * 0.05, { t: t * 2, color: "#0b1119" });
+      });
 
       // wind through the stair
-      snow(t, 60, { speed: 2.2, wind: 5.5, alpha: 0.35, seed: 77 });
+      withDepth(1, () => snow(t, 60, { speed: 2.2, wind: 5.5, alpha: 0.35, seed: 77 }));
       vignette(0.6);
     }
 
@@ -1543,66 +1651,77 @@ window.plethoraBit = {
       const wash = ramp(p, 0.08, 0.62);
 
       skyGrad(lerpRgb([4, 7, 15], [24, 13, 12], wash * 0.7), lerpRgb([10, 20, 38], [42, 20, 16], wash * 0.7), "#120b12");
-      stars(0.6 * (1 - wash * 0.5));
+      withDepth(0.06, () => stars(0.6 * (1 - wash * 0.5)));
 
       // the wall below, catching the new light
       const top = h * 0.56;
-      drawWallFace(top, h - top);
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      const ig = g.createLinearGradient(0, top, 0, h);
-      ig.addColorStop(0, "rgba(255,146,52," + 0.4 * wash + ")");
-      ig.addColorStop(1, "rgba(255,90,30," + 0.06 * wash + ")");
-      g.fillStyle = ig;
-      g.fillRect(0, top, w, h - top);
-      g.restore();
-      g.strokeStyle = "rgba(255,196,140," + (0.4 + 0.5 * wash) + ")";
-      g.lineWidth = 1.8;
-      g.beginPath();
-      g.moveTo(0, top);
-      g.lineTo(w, top);
-      g.stroke();
+      withDepth(0.28, () => {
+        drawWallFace(top, h - top);
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        const ig = g.createLinearGradient(0, top, 0, h);
+        ig.addColorStop(0, "rgba(255,146,52," + 0.4 * wash + ")");
+        ig.addColorStop(1, "rgba(255,90,30," + 0.06 * wash + ")");
+        g.fillStyle = ig;
+        g.fillRect(-w * 0.3, top, w * 1.6, h - top);
+        g.restore();
+        g.strokeStyle = "rgba(255,196,140," + (0.4 + 0.5 * wash) + ")";
+        g.lineWidth = 1.8;
+        g.beginPath();
+        g.moveTo(-w * 0.3, top);
+        g.lineTo(w * 1.3, top);
+        g.stroke();
+      });
 
       // brazier and the fire itself
       const bx = w * 0.5;
       const by = top + h * 0.005;
-      g.fillStyle = "#0a0d14";
-      g.fillRect(bx - w * 0.085, by, w * 0.17, h * 0.045);
-      g.beginPath();
-      g.moveTo(bx - w * 0.085, by);
-      g.lineTo(bx - w * 0.055, by - h * 0.03);
-      g.lineTo(bx + w * 0.055, by - h * 0.03);
-      g.lineTo(bx + w * 0.085, by);
-      g.closePath();
-      g.fill();
-
       const size = h * (0.04 + grow * 0.3);
       g.save();
       g.globalCompositeOperation = "lighter";
       glow(bx, by - size * 0.5, Math.max(w, h) * (0.2 + grow * 0.85), "255,140,50", 0.3 * grow);
-      glow(bx, by - size * 0.4, size * 2.2, "255,190,110", 0.32 * grow);
       g.restore();
-      flame(bx, by - h * 0.02, size, t, { tongues: 7 });
-      embers(bx, by - size * 0.4, t, 60, w * 0.2, h * 0.8, { seed: 4, alpha: grow });
 
-      // Wren at the foot of it
-      figure(bx - w * 0.15, by + h * 0.02, h * 0.11, { color: "#0b0703", rim: "#ffcf90", rimAlpha: 0.75 * grow });
-      hound(bx - w * 0.22, by + h * 0.02, Math.min(w, h) * 0.032, { t: t, color: "#120a06" });
+      withDepth(0.6, () => {
+        g.fillStyle = "#0a0d14";
+        g.fillRect(bx - w * 0.085, by, w * 0.17, h * 0.045);
+        g.beginPath();
+        g.moveTo(bx - w * 0.085, by);
+        g.lineTo(bx - w * 0.055, by - h * 0.03);
+        g.lineTo(bx + w * 0.055, by - h * 0.03);
+        g.lineTo(bx + w * 0.085, by);
+        g.closePath();
+        g.fill();
+
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        glow(bx, by - size * 0.4, size * 2.2, "255,190,110", 0.32 * grow);
+        g.restore();
+        flame(bx, by - h * 0.02, size, t, { tongues: 7 });
+        embers(bx, by - size * 0.4, t, 60, w * 0.2, h * 0.8, { seed: 4, alpha: grow });
+      });
+
+      // Wren at the foot of it, nearest of all
+      withDepth(0.88, () => {
+        figure(bx - w * 0.15, by + h * 0.02, h * 0.11, { color: "#0b0703", rim: "#ffcf90", rimAlpha: 0.75 * grow });
+        hound(bx - w * 0.22, by + h * 0.02, Math.min(w, h) * 0.032, { t: t, color: "#120a06" });
+      });
     }
 
     // X — nothing answers.
     function drawSilence(p, t) {
       skyGrad("#03050b", "#060c18", "#080f1c");
-      stars(1);
-      twinkle(t, 0.9);
+      withDepth(0.05, () => { stars(1); twinkle(t, 0.9); });
 
       drawWallRun(t, -1, 0);
 
       // Wren and Ember, very small, at the near end of the wall.
-      figure(w * 0.13, h * 0.66, h * 0.09, { color: "#03060c", rim: "#ff9a44", rimAlpha: 0.3 });
-      hound(w * 0.185, h * 0.665, Math.min(w, h) * 0.026, { t: t * 0.6, color: "#050a11" });
+      withDepth(0.9, () => {
+        figure(w * 0.13, h * 0.66, h * 0.09, { color: "#03060c", rim: "#ff9a44", rimAlpha: 0.3 });
+        hound(w * 0.185, h * 0.665, Math.min(w, h) * 0.026, { t: t * 0.6, color: "#050a11" });
+      });
 
-      snow(t, 45, { speed: 0.4, wind: 0.2, alpha: 0.35, seed: 121 });
+      withDepth(1, () => snow(t, 45, { speed: 0.4, wind: 0.2, alpha: 0.35, seed: 121 }));
     }
 
     // XI — one by one, all the way to the sea.
@@ -1613,7 +1732,7 @@ window.plethoraBit = {
         lerpRgb([6, 12, 24], [38, 48, 79], dawn),
         lerpRgb([8, 15, 28], [60, 53, 80], dawn)
       );
-      stars(1 - dawn * 0.7);
+      withDepth(0.05, () => stars(1 - dawn * 0.7));
 
       // Ignition marches outward from the second tower to the horizon.
       const lit = ramp(p, 0.06, 0.72);
@@ -1621,12 +1740,12 @@ window.plethoraBit = {
 
       // and behind, in the green country, hearth after hearth
       const valley = ramp(p, 0.5, 1);
-      if (valley > 0.01) {
+      if (valley > 0.01) withDepth(0.72, () => {
         const vr = rng(2024);
         g.save();
         g.globalCompositeOperation = "lighter";
         for (let i = 0; i < 60; i++) {
-          const vx = vr() * w;
+          const vx = -w * 0.2 + vr() * w * 1.4;
           const vy = h * (0.9 + vr() * 0.1);
           const when = vr();
           const a = clamp((valley - when) * 3, 0, 1);
@@ -1635,18 +1754,29 @@ window.plethoraBit = {
           glow(vx, vy, h * 0.018 * (0.6 + a), "255,180,90", a * 0.5 * tw);
         }
         g.restore();
-      }
+      });
 
-      figure(w * 0.13, h * 0.66, h * 0.09, { color: "#04070d", rim: "#ffb066", rimAlpha: 0.55 });
-      hound(w * 0.185, h * 0.665, Math.min(w, h) * 0.026, { t: t * 0.6, color: "#060b12" });
-      snow(t, 40, { speed: 0.35, wind: 0.2, alpha: 0.3, seed: 121 });
+      withDepth(0.9, () => {
+        figure(w * 0.13, h * 0.66, h * 0.09, { color: "#04070d", rim: "#ffb066", rimAlpha: 0.55 });
+        hound(w * 0.185, h * 0.665, Math.min(w, h) * 0.026, { t: t * 0.6, color: "#060b12" });
+      });
+      withDepth(1, () => snow(t, 40, { speed: 0.35, wind: 0.2, alpha: 0.3, seed: 121 }));
     }
 
     // Shared money shot: the Rime running away to the horizon, towers on it.
     // `lit` is how far the chain has answered: -1 nothing, 0..1 outward.
     const TOWERS = [0.12, 0.3, 0.45, 0.575, 0.675, 0.755, 0.82, 0.874, 0.917, 0.95];
 
+    // The run is one perspective drawing, so it gets one plane. Giving each
+    // tower its own depth sheared the towers off the crest they stand on and
+    // slid every firelight reflection sideways off its own tower — perspective
+    // and per-object parallax are two different projections, and mixing them
+    // pulls the geometry apart.
     function drawWallRun(t, lit, dawn) {
+      withDepth(0.34, () => paintWallRun(t, lit, dawn));
+    }
+
+    function paintWallRun(t, lit, dawn) {
       const nearTop = h * 0.5;
       const farTop = h * 0.435;
       const nearBot = h * 0.96;
@@ -1688,7 +1818,7 @@ window.plethoraBit = {
       g.closePath();
       g.fill();
 
-      // towers, near to far
+      // towers, near to far, all on the run's own plane
       for (let i = 0; i < TOWERS.length; i++) {
         const u = TOWERS[i];
         const y = topAt(u) + 1;
@@ -1717,16 +1847,16 @@ window.plethoraBit = {
           flame(fx, fy + fs * 0.6, fs * 1.5, t + i, { alpha: a, tongues: 4 });
           embers(fx, fy, t + i, Math.round(10 * scale * quality), fs * 3, h * 0.2 * scale, { seed: 30 + i, alpha: a });
         }
-        // A short bleed of firelight down the ice face — any longer and it
-        // washes the whole lower frame out.
+        // A short bleed of firelight down the ice face. Drawn as a squashed
+        // radial rather than a rect — a vertical gradient in a fillRect still
+        // has hard left and right edges, which read as pasted-on bands.
         g.save();
         g.globalCompositeOperation = "lighter";
         const fall = (botAt(u) - y) * 0.34;
-        const rg = g.createLinearGradient(fx, y, fx, y + fall);
-        rg.addColorStop(0, "rgba(255,150,60," + 0.11 * a + ")");
-        rg.addColorStop(1, "rgba(255,110,40,0)");
-        g.fillStyle = rg;
-        g.fillRect(fx - tw * 1.5, y, tw * 3, fall);
+        const rw2 = Math.max(2, tw * 1.6);
+        g.translate(fx, y);
+        g.scale(1, Math.max(0.2, fall / rw2));
+        glow(0, 0, rw2, "255,150,60", 0.16 * a);
         g.restore();
       }
     }
@@ -1744,21 +1874,24 @@ window.plethoraBit = {
       hg.addColorStop(1, "rgba(246,182,140," + (0.16 + 0.28 * lift) + ")");
       g.fillStyle = hg;
       g.fillRect(0, h * 0.3, w, h * 0.3);
-      stars(0.35 * (1 - lift));
+      withDepth(0.05, () => stars(0.35 * (1 - lift)));
 
       drawWallRun(t, 1, 0.55 + lift * 0.45);
 
       // Wren and Ember in the foreground, backlit, watching it all light up.
+      // They are the nearest thing in the story's last shot, so they carry the
+      // strongest swing — the whole lit Rime slides behind them as you look.
       const fx = w * 0.24;
       const fy = h * 0.74;
       g.save();
       g.globalCompositeOperation = "lighter";
       glow(fx + h * 0.05, fy - h * 0.16, h * 0.26, "255,168,90", 0.16);
       g.restore();
-      figure(fx, fy, h * 0.28, { color: "#04060c", rim: "#ffc48a", rimAlpha: 0.6 });
-      hound(fx + h * 0.1, fy, Math.min(w, h) * 0.058, { t: t * 0.7, color: "#05080e" });
-
-      snow(t, 55, { speed: 0.3, wind: 0.15, alpha: 0.45, size: 1.2, seed: 200 });
+      withDepth(1, () => {
+        figure(fx, fy, h * 0.28, { color: "#04060c", rim: "#ffc48a", rimAlpha: 0.6 });
+        hound(fx + h * 0.1, fy, Math.min(w, h) * 0.058, { t: t * 0.7, color: "#05080e" });
+        snow(t, 55, { speed: 0.3, wind: 0.15, alpha: 0.45, size: 1.2, seed: 200 });
+      });
     }
 
     // ---- colour helpers ---------------------------------------------------
@@ -1888,6 +2021,7 @@ window.plethoraBit = {
       '</div>' +
       '<div data-ui="tools" style="position:absolute;right:12px;display:none;pointer-events:none">' +
         '<button data-ui="sound" style="' + ROUND + 'margin-bottom:8px">&#9834;</button>' +
+        '<button data-ui="tilt" style="' + ROUND + 'margin-bottom:8px;opacity:0.55">&#9673;</button>' +
         '<button data-ui="pause" style="' + ROUND + '">&#10074;&#10074;</button>' +
       '</div>';
 
@@ -1900,6 +2034,7 @@ window.plethoraBit = {
     const againBtn = pick('[data-ui="again"]');
     const tools = pick('[data-ui="tools"]');
     const soundBtn = pick('[data-ui="sound"]');
+    const tiltBtn = pick('[data-ui="tilt"]');
     const pauseBtn = pick('[data-ui="pause"]');
     const choiceBtns = CHOICES.map((c) => pick('[data-choice="' + c.key + '"]'));
 
@@ -2161,6 +2296,31 @@ window.plethoraBit = {
       applyAudio();
     });
 
+    // Tilt is opt-in and off by default: it is lovely held up, and unusable
+    // lying down or on a moving bus. Drag always works regardless.
+    press(tiltBtn, async () => {
+      if (tiltOn) {
+        tiltOn = false;
+        tiltZero = null;
+        tiltBtn.style.opacity = "0.55";
+        return;
+      }
+      if (!ctx.capabilities || !ctx.capabilities.motion) {
+        tiltBtn.style.opacity = "0.25";
+        return;
+      }
+      let granted = false;
+      try { granted = await ctx.motion.start(); } catch (e) { granted = false; }
+      if (granted) {
+        tiltOn = true;
+        tiltZero = null;                 // recentre on whatever pose you hold now
+        tiltBtn.style.opacity = "1";
+        haptic("light");
+      } else {
+        tiltBtn.style.opacity = "0.25";  // denied; drag still covers everything
+      }
+    });
+
     // Mute and pause both silence the bed; unmuting while paused keeps it quiet.
     function applyAudio() {
       try {
@@ -2169,16 +2329,46 @@ window.plethoraBit = {
       } catch (e) {}
     }
 
-    // Tapping the canvas skips ahead: first reveal the rest of the chapter's
-    // lines, then jump to the next chapter.
-    let lastTap = 0;
+    // The canvas carries two gestures at once: drag to look around, tap to move
+    // the story on. They are told apart by distance travelled, so a look never
+    // skips a chapter by accident and a tap still lands instantly.
+    const TAP_SLOP = 12;        // px of travel still counted as a tap
+
     ctx.listen(canvas, "pointerdown", (e) => {
-      const now = clock;
-      if (now - lastTap < 0.22) return;
-      lastTap = now;
+      dragging = true;
+      dragId = e.pointerId;
+      dragFromX = e.clientX;
+      dragFromY = e.clientY;
+      dragBaseX = look.x;
+      dragBaseY = look.y;
+      dragMoved = 0;
+      if (canvas.setPointerCapture) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+    });
+
+    ctx.listen(canvas, "pointermove", (e) => {
+      if (!dragging || e.pointerId !== dragId) return;
+      const dx = e.clientX - dragFromX;
+      const dy = e.clientY - dragFromY;
+      dragMoved = Math.max(dragMoved, Math.abs(dx) + Math.abs(dy));
+      if (dragMoved > TAP_SLOP) {
+        hasLooked = true;
+        // A full frame-width drag sweeps the whole look range.
+        look.x = clamp(dragBaseX - dx / (w * 0.55), -1, 1);
+        look.y = clamp(dragBaseY - dy / (h * 0.55), -1, 1);
+      }
+    });
+
+    const endDrag = (e) => {
+      if (!dragging || (e.pointerId != null && e.pointerId !== dragId)) return;
+      dragging = false;
+      dragId = null;
+      if (dragMoved > TAP_SLOP) return;        // that was a look, not a tap
+
       if (mode === MODE.TITLE) { beginStory(0); return; }
       if (mode === MODE.END) return;
-      if (held) return;                       // the council is waiting on you
+      if (held) return;                        // the council is waiting on you
       const s = SCENES[scene];
       const last = s.lines[s.lines.length - 1][0];
       if (st < last) {
@@ -2188,8 +2378,10 @@ window.plethoraBit = {
         haptic("light");
         gotoScene(scene + 1);
       }
-      try { ctx.platform.interact({ type: "skip", chapter: SCENES[scene].id }); } catch (e) {}
-    });
+      try { ctx.platform.interact({ type: "skip", chapter: SCENES[scene].id }); } catch (e2) {}
+    };
+    ctx.listen(canvas, "pointerup", endDrag);
+    ctx.listen(canvas, "pointercancel", endDrag);
 
     // ---- frame ------------------------------------------------------------
     let progressAt = 0;
@@ -2201,6 +2393,27 @@ window.plethoraBit = {
       // Trim detail rather than drop frames on slower hardware.
       avgDt = avgDt * 0.94 + (dtMs || 16) * 0.06;
       quality = avgDt > 34 ? 0.35 : avgDt > 25 ? 0.62 : 1;
+
+      // Camera. While a finger is down it leads; otherwise tilt takes over if
+      // it was granted, and failing that the view drifts back toward centre so
+      // the composition always recovers on its own.
+      if (!dragging) {
+        if (tiltOn && ctx.motion && ctx.motion.active) {
+          const tl = ctx.motion.tilt || {};
+          const tx = tl.x || 0;
+          const ty = tl.y || 0;
+          if (!tiltZero) tiltZero = { x: tx, y: ty };
+          look.x = clamp((ty - tiltZero.y) / 24, -1, 1);
+          look.y = clamp((tx - tiltZero.x) / 24, -1, 1);
+        } else {
+          look.x *= 0.96;
+          look.y *= 0.96;
+        }
+      }
+      // Frame-rate independent easing, so the drift feels the same at 30 or 60.
+      const ease2 = 1 - Math.pow(0.0015, dt);
+      lookS.x += (look.x - lookS.x) * ease2;
+      lookS.y += (look.y - lookS.y) * ease2;
 
       if (w !== ctx.width || h !== ctx.height) {
         w = ctx.width;
@@ -2237,7 +2450,7 @@ window.plethoraBit = {
         tracked("A STORY OF THE RIME", w / 2, h * 0.34 + ts * 1.9, clamp(w / 180, 1.6, 3.4), "center");
         g.globalAlpha = a * 0.4;
         g.font = "300 " + clamp(Math.round(w / 26), 13, 18) + "px " + BODY;
-        g.fillText("five minutes · tap to move ahead", w / 2, h * 0.34 + ts * 2.6);
+        g.fillText("five minutes · drag to look · tap to go on", w / 2, h * 0.34 + ts * 2.6);
         g.globalAlpha = 1;
         return;
       }
@@ -2303,6 +2516,37 @@ window.plethoraBit = {
       vignette(0.85);
 
       drawChapterCard(s);
+
+      // A one-time nudge that you can move the world, shown only in the first
+      // chapter and only until you actually do it.
+      if (!hasLooked && scene === 0) {
+        const ha = ramp(st, 3.2, 4.4) * (1 - ramp(st, 11, 13));
+        if (ha > 0.01) {
+          const hs = clamp(Math.round(w / 28), 12, 17);
+          g.save();
+          g.globalAlpha = ha * 0.62;
+          g.textAlign = "center";
+          g.fillStyle = C.pale;
+          g.font = "300 " + hs + "px " + BODY;
+          const hy = h * 0.5 + Math.sin(clock * 1.6) * 3;
+          g.fillText("drag to look around", w / 2, hy);
+          // a pair of chevrons either side, breathing outward
+          const sw = Math.sin(clock * 1.6) * 3;
+          g.strokeStyle = C.pale;
+          g.lineWidth = 1.3;
+          g.globalAlpha = ha * 0.4;
+          for (const dir of [-1, 1]) {
+            const bx = w / 2 + dir * (g.measureText("drag to look around").width / 2 + 16 + sw);
+            g.beginPath();
+            g.moveTo(bx - dir * 4, hy - 9);
+            g.lineTo(bx + dir * 4, hy - 4.5);
+            g.lineTo(bx - dir * 4, hy);
+            g.stroke();
+          }
+          g.restore();
+        }
+      }
+
       const fade = 1 - ramp(st, s.dur - 1.3, s.dur);
       if (!held) drawNarration(s, fade);
       if (s.id === "council" && resultsAt >= 0) {

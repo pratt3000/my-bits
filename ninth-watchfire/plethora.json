@@ -18,6 +18,7 @@
   "permissions": [
     "backgroundMusic",
     "haptics",
+    "motion",
     "storage"
   ],
   "dependencies": [],
