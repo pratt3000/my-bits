@@ -92,8 +92,11 @@ window.plethoraBit = {
     // Depth plane. d = 0 sits at the horizon and does not move at all; d = 1 is
     // right in front of you and swings the most. Near planes also scale up a
     // touch, which reads as perspective rather than a flat slide.
+    let curDepth = 0;           // plane currently being painted, for `disturb`
     function withDepth(d, fn) {
-      if (d <= 0.0001 && lookS.x === 0 && lookS.y === 0) { fn(); return; }
+      const prev = curDepth;
+      curDepth = d;
+      if (d <= 0.0001 && lookS.x === 0 && lookS.y === 0) { fn(); curDepth = prev; return; }
       g.save();
       const px = -lookS.x * d * w * LOOK_X;
       const py = -lookS.y * d * h * LOOK_Y;
@@ -102,6 +105,76 @@ window.plethoraBit = {
       g.scale(s, s);
       g.translate(-w / 2, -h / 2);
       fn();
+      g.restore();
+      curDepth = prev;
+    }
+
+    // ---- the wake ----------------------------------------------------------
+    // Dragging leaves a trail of short-lived gusts. Everything loose in the
+    // world — snow, embers, birds, flame — samples the same field, so one
+    // gesture stirs all of it together instead of each thing inventing its own
+    // idea of what your finger did.
+    //
+    // No particle stores state. A gust is a point, a velocity and an age, and
+    // displacement is computed fresh each frame from whichever gusts are still
+    // alive. That keeps the analytic snow analytic.
+    const gusts = [];
+    const GUST_LIFE = 1.8;      // seconds
+    const GUST_MAX = 10;
+
+    function addGust(x, y, vx, vy, strength) {
+      if (gusts.length >= GUST_MAX) gusts.shift();
+      gusts.push({ x: x, y: y, vx: vx, vy: vy, s: strength, born: clock });
+    }
+
+    // Displacement for a point on the plane currently being painted. Gusts live
+    // in screen space, so each is pulled back through that plane's transform
+    // first — otherwise the wake drifts away from your finger as you look about.
+    function disturb(x, y, scale) {
+      if (!gusts.length) return null;
+      const d = curDepth;
+      const inv = 1 / (1 + d * 0.035);
+      const cx = w / 2;
+      const cy = h / 2;
+      const reach = Math.min(w, h) * 0.3;
+      const k = scale == null ? 1 : scale;
+      let dx = 0;
+      let dy = 0;
+      let hit = false;
+      for (let i = 0; i < gusts.length; i++) {
+        const gu = gusts[i];
+        const age = (clock - gu.born) / GUST_LIFE;
+        if (age >= 1) continue;
+        const px = (gu.x - cx + lookS.x * d * w * LOOK_X) * inv + cx;
+        const py = (gu.y - cy + lookS.y * d * h * LOOK_Y) * inv + cy;
+        const ox = x - px;
+        const oy = y - py;
+        if (ox > reach || ox < -reach || oy > reach || oy < -reach) continue;
+        const r2 = ox * ox + oy * oy;
+        if (r2 > reach * reach) continue;
+        const r = Math.sqrt(r2) + 0.001;
+        const fall = (1 - r / reach) * (1 - r / reach) * (1 - age);
+        const push = fall * gu.s * k;
+        dx += (ox / r) * push + gu.vx * fall * 0.5 * k;
+        dy += (oy / r) * push + gu.vy * fall * 0.5 * k;
+        hit = true;
+      }
+      return hit ? [dx, dy] : null;
+    }
+
+    // A faint ring where the wake was made, so it is obvious the world is
+    // listening rather than merely coincidentally moving.
+    function drawWake() {
+      if (!gusts.length) return;
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      for (let i = 0; i < gusts.length; i++) {
+        const gu = gusts[i];
+        const age = (clock - gu.born) / GUST_LIFE;
+        if (age >= 1) continue;
+        const r = Math.min(w, h) * (0.02 + age * 0.1);
+        glow(gu.x, gu.y, r, "190,226,248", (1 - age) * (1 - age) * 0.12 * gu.s);
+      }
       g.restore();
     }
 
@@ -286,11 +359,15 @@ window.plethoraBit = {
         for (let i = 0; i <= steps; i++) {
           const x = -w * 0.1 + (w * 1.2 * i) / steps;
           const u = x / w;
-          const y =
+          let y =
             yy +
             Math.sin(u * 3.1 + t * sp + b) * amp +
             Math.sin(u * 7.3 - t * sp * 1.7 + b * 2) * amp * 0.42 +
             Math.sin(u * 1.4 + t * 0.09) * amp * 0.7;
+          // The curtain bows where you touch it. Vertical only — pushing the
+          // band sideways just smears it, but a dent reads as cloth.
+          const dsp = disturb(x, y, 0.35);
+          if (dsp) y += dsp[1];
           g.lineTo(x, y);
         }
         for (let i = steps; i >= 0; i--) {
@@ -333,9 +410,12 @@ window.plethoraBit = {
         const ph = sr() * TAU;
         const depth = 0.35 + sr() * 0.65;
         const fall = (h * 0.075 * speed) * depth;
-        const y = mod(sr() * h + t * fall, h + 40) - 20;
-        const x =
+        let y = mod(sr() * h + t * fall, h + 40) - 20;
+        let x =
           mod(sx + t * w * wind * depth * 0.16 + Math.sin(t * 0.7 * depth + ph) * 22 * depth, w + 60) - 30;
+        // Lighter flakes are thrown further by the same gust.
+        const dsp = disturb(x, y, 0.5 + (1 - depth) * 0.8);
+        if (dsp) { x += dsp[0]; y += dsp[1]; }
         const r = (0.7 + depth * 1.9) * size;
         g.globalAlpha = alpha * (0.28 + depth * 0.72);
         g.beginPath();
@@ -443,6 +523,10 @@ window.plethoraBit = {
     function hound(x, y, s, o) {
       const op = o || {};
       const breathe = 1 + Math.sin((op.t || 0) * 2.1) * 0.025;
+      // She notices a hand near her: head comes up, tail goes faster. This is
+      // the one thing in the story that looks back at you.
+      const gd = disturb(x, y - s, 0.1);
+      const perk = gd ? clamp((Math.abs(gd[0]) + Math.abs(gd[1])) / (s * 0.9), 0, 1) : 0;
       g.save();
       g.translate(x, y);
       g.scale(s * (op.face === -1 ? -1 : 1), s * breathe);
@@ -472,7 +556,11 @@ window.plethoraBit = {
       g.closePath();
       g.fill();
 
-      // neck, skull and muzzle
+      // neck, skull and muzzle — lifted when she has noticed something
+      g.save();
+      g.translate(0.62, -1.0);
+      g.rotate(-perk * 0.3);
+      g.translate(-0.62, 1.0);
       g.beginPath();
       g.moveTo(0.62, -1.0);
       g.bezierCurveTo(0.8, -1.22, 0.94, -1.36, 1.08, -1.48);
@@ -483,15 +571,21 @@ window.plethoraBit = {
       g.closePath();
       g.fill();
 
-      // pricked ear
+      // pricked ear — rides with the head, and pricks further when alert
       g.beginPath();
       g.moveTo(1.2, -1.52);
-      g.lineTo(1.15, -1.82);
+      g.lineTo(1.15, -1.82 - perk * 0.16);
       g.lineTo(1.4, -1.58);
       g.closePath();
       g.fill();
+      g.restore();
 
-      // tail, carried up
+      // tail, carried up — wags faster once she has noticed you
+      const wag = Math.sin((op.t || 0) * (3 + perk * 14)) * (0.05 + perk * 0.22);
+      g.save();
+      g.translate(-1.02, -0.9);
+      g.rotate(wag);
+      g.translate(1.02, 0.9);
       g.beginPath();
       g.moveTo(-1.08, -0.94);
       g.bezierCurveTo(-1.5, -1.04, -1.68, -1.38, -1.56, -1.62);
@@ -499,6 +593,7 @@ window.plethoraBit = {
       g.bezierCurveTo(-1.46, -1.32, -1.3, -1.06, -0.98, -0.84);
       g.closePath();
       g.fill();
+      g.restore();
 
       g.restore();
     }
@@ -507,12 +602,19 @@ window.plethoraBit = {
     function flame(x, y, s, t, o) {
       const op = o || {};
       const n = op.tongues || 5;
+      // A gust across a fire bends it and makes it gutter — fan the brazier
+      // with your finger and the flame leans away and flares.
+      // Kept deliberately small: a draught bends a fire, it does not detonate
+      // one. A wider clamp splayed the tongues into flat translucent triangles.
+      const gd = disturb(x, y - s * 0.4, 0.12);
+      const lean = gd ? clamp(gd[0], -s * 0.3, s * 0.3) : 0;
+      const gutter = gd ? 1 + clamp(Math.abs(gd[0]) / (s + 1), 0, 1) * 0.14 : 1;
       g.save();
       g.globalCompositeOperation = "lighter";
       for (let i = 0; i < n; i++) {
         const ph = i * 1.9;
-        const sway = Math.sin(t * 3.1 + ph) * s * 0.16;
-        const hgt = s * (0.72 + 0.5 * (0.5 + 0.5 * Math.sin(t * 4.3 + ph * 1.7)));
+        const sway = Math.sin(t * 3.1 + ph) * s * 0.16 + lean * (0.5 + i * 0.12);
+        const hgt = s * (0.72 + 0.5 * (0.5 + 0.5 * Math.sin(t * 4.3 + ph * 1.7))) * gutter;
         const wid = s * (0.34 - i * 0.03) * (0.85 + 0.3 * Math.sin(t * 2.3 + ph));
         const a = (0.2 + 0.16 * Math.sin(t * 5 + ph)) * (op.alpha != null ? op.alpha : 1);
         const fg = g.createLinearGradient(x, y - hgt, x, y);
@@ -543,8 +645,11 @@ window.plethoraBit = {
         const ph = er() * TAU;
         const life = 1.6 + er() * 2.6;
         const k = ((t + ph) % life) / life;
-        const ex = x + (er() - 0.5) * spread + Math.sin(t * 1.6 + ph) * spread * 0.24 * k;
-        const ey = y - k * rise;
+        let ex = x + (er() - 0.5) * spread + Math.sin(t * 1.6 + ph) * spread * 0.24 * k;
+        let ey = y - k * rise;
+        // Embers are the lightest thing in the story and scatter the furthest.
+        const dsp = disturb(ex, ey, 1.5);
+        if (dsp) { ex += dsp[0]; ey += dsp[1]; }
         const a = (1 - k) * (0.5 + er() * 0.5) * (op.alpha != null ? op.alpha : 1);
         const r = (0.9 + er() * 1.5) * (1 - k * 0.4);
         g.fillStyle = "rgba(255," + Math.round(150 + er() * 80) + ",70," + a + ")";
@@ -1187,12 +1292,22 @@ window.plethoraBit = {
         const speed = (0.16 + br() * 0.1) * depth;
         const travel = (fly * 1.5 + br() * 0.5) % 1.6;
         if (travel <= 0.02) continue;
-        const x = w * 1.15 - travel * w * 1.5 * (0.7 + depth * 0.5);
-        if (x < -w * 0.1) continue;
-        const y = h * (0.12 + lane * 0.5) + Math.sin(t * 1.1 + ph) * h * 0.02;
+        const x0 = w * 1.15 - travel * w * 1.5 * (0.7 + depth * 0.5);
+        if (x0 < -w * 0.1) continue;
+        const y0 = h * (0.12 + lane * 0.5) + Math.sin(t * 1.1 + ph) * h * 0.02;
         const s = (3 + depth * 9) * (h / 720 + 0.55);
-        const tip = Math.sin(t * (6 + speed * 20) + ph) * s * 0.75;
         withDepth(0.3 + depth * 0.6, () => {
+          // Startled birds break formation and beat harder for a moment.
+          const dsp = disturb(x0, y0, 1.1);
+          const x = x0 + (dsp ? dsp[0] : 0);
+          const y = y0 + (dsp ? dsp[1] : 0);
+          const panic = dsp ? clamp((Math.abs(dsp[0]) + Math.abs(dsp[1])) / (s * 4), 0, 1) : 0;
+          const tip = Math.sin(t * (6 + speed * 20 + panic * 26) + ph) * s * (0.75 + panic * 0.5);
+          g.save();
+          // and bank into the turn
+          g.translate(x, y);
+          g.rotate(clamp((dsp ? dsp[1] : 0) / (s * 8), -0.5, 0.5));
+          g.translate(-x, -y);
           g.strokeStyle = "rgba(6,9,16,0.92)";
           g.lineWidth = Math.max(1, s * 0.19);
           g.globalAlpha = clamp(depth * 1.2, 0.3, 1) * clamp(fly * 2, 0, 1);
@@ -1201,6 +1316,7 @@ window.plethoraBit = {
           g.quadraticCurveTo(x - s * 0.45, y + s * 0.18, x, y);
           g.quadraticCurveTo(x + s * 0.45, y + s * 0.18, x + s, y - tip);
           g.stroke();
+          g.restore();
           g.globalAlpha = 1;
         });
       }
@@ -2334,6 +2450,16 @@ window.plethoraBit = {
     // skips a chapter by accident and a tap still lands instantly.
     const TAP_SLOP = 12;        // px of travel still counted as a tap
 
+    // Where the pointer was last frame, for the wake's direction.
+    let lastPX = 0;
+    let lastPY = 0;
+    let lastGustAt = -1;
+
+    const localXY = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+
     ctx.listen(canvas, "pointerdown", (e) => {
       dragging = true;
       dragId = e.pointerId;
@@ -2342,12 +2468,30 @@ window.plethoraBit = {
       dragBaseX = look.x;
       dragBaseY = look.y;
       dragMoved = 0;
+      const lp = localXY(e);
+      lastPX = lp[0];
+      lastPY = lp[1];
+      addGust(lp[0], lp[1], 0, 0, 0.9);
+      lastGustAt = clock;
       if (canvas.setPointerCapture) {
         try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
       }
     });
 
     ctx.listen(canvas, "pointermove", (e) => {
+      const lp = localXY(e);
+      // Stir the world whether or not a look is in progress, and whether or not
+      // the pointer is down — a passing cursor should disturb the snow too.
+      if (clock - lastGustAt > 0.045) {
+        const vx = lp[0] - lastPX;
+        const vy = lp[1] - lastPY;
+        const sp = Math.min(1, Math.sqrt(vx * vx + vy * vy) / 26);
+        if (sp > 0.05 || dragging) addGust(lp[0], lp[1], vx, vy, 0.5 + sp * 1.3);
+        lastGustAt = clock;
+      }
+      lastPX = lp[0];
+      lastPY = lp[1];
+
       if (!dragging || e.pointerId !== dragId) return;
       const dx = e.clientX - dragFromX;
       const dy = e.clientY - dragFromY;
@@ -2414,6 +2558,11 @@ window.plethoraBit = {
       const ease2 = 1 - Math.pow(0.0015, dt);
       lookS.x += (look.x - lookS.x) * ease2;
       lookS.y += (look.y - lookS.y) * ease2;
+
+      // Retire spent gusts.
+      for (let i = gusts.length - 1; i >= 0; i--) {
+        if (clock - gusts[i].born > GUST_LIFE) gusts.splice(i, 1);
+      }
 
       if (w !== ctx.width || h !== ctx.height) {
         w = ctx.width;
@@ -2513,6 +2662,7 @@ window.plethoraBit = {
       s.draw(p, clock);
       g.restore();
 
+      drawWake();
       vignette(0.85);
 
       drawChapterCard(s);

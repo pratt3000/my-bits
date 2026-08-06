@@ -46,6 +46,11 @@ Twelve chapters, roughly 300 seconds of narration:
 - **Tilt** does the same thing hands-free — opt in with the ◉ button, since it
   is lovely held up and unusable lying down. Drag always works regardless, and
   a denied motion prompt costs nothing.
+- **Stir the world with your finger.** Dragging leaves a wake, and everything
+  loose samples it: snow scatters, embers fly, the aurora bows like cloth,
+  ravens break formation and beat harder, and a fire leans and gutters when you
+  fan it. Ember the hound lifts her head and wags faster when your hand comes
+  near her — the one thing in the story that looks back at you.
 - **Tap** to reveal the rest of a chapter's lines, then again to skip ahead.
   Taps and looks are told apart by distance travelled, so a look never skips a
   chapter by accident.
@@ -103,6 +108,14 @@ Twelve chapters, roughly 300 seconds of narration:
 - Anything that moves under the camera is painted wider than the frame —
   starfields, ridges, ground fills. A layer that stopped at the frame edge slid
   a bald strip into view the moment it was dragged.
+- **The wake keeps the particles stateless.** A gust is a point, a velocity and
+  an age; `disturb()` sums whichever are still alive and returns a displacement.
+  Nothing is stored per flake, so the analytic snow stays analytic and a resize
+  still changes nothing. Gusts live in screen space and are pulled back through
+  each plane's transform, or the wake drifts off your finger as you look about.
+- Reaction strengths want to be far smaller than they first seem. A draught
+  bends a fire; it does not detonate one. The first pass clamped flame lean to
+  ±1.2× the flame size and splayed the tongues into flat translucent triangles.
 - A rolling frame-time average trims particle counts and drops the grain pass on
   slower hardware instead of dropping frames.
 - Narration shows three line-groups at a time. Four filled nearly half the
