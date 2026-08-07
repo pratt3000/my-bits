@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Backseat Rain",
-  "description": "The back seat window on a wet drive home. Beads gather on the glass, slant in the wind, and the moment one gets heavy enough it breaks loose and runs — swallowing every drop in its path. Three drops get rings: back one, drag the glass to feed it, and watch it race the others down to the sill.",
+  "description": "The back seat window on a wet drive home, built as a car you can look around. Condensation gathers on the glass, beads pool and lean in the wind, and when one gets heavy enough it breaks loose and runs — swallowing every drop in its path and tearing a clear track through the mist. Three drops get rings: back one, sweep loose beads into its path, and watch it race the others down to the sill.",
   "tags": [
     "rain",
     "relaxing",
@@ -14,7 +14,7 @@
     "water",
     "racing",
     "cozy",
-    "fidget"
+    "3d"
   ],
   "permissions": [
     "audio",
@@ -23,7 +23,9 @@
     "motion",
     "storage"
   ],
-  "dependencies": [],
+  "dependencies": [
+    "three@0.164.1"
+  ],
   "memory": {
     "local": {
       "window_stats": {

@@ -6,8 +6,8 @@
  * beads, beads find each other and pool, they lean sideways because of the air
  * sliding over the glass, and then one gets heavy enough that surface tension
  * gives up and it *runs* — eating every bead in its path on the way down,
- * getting faster the fatter it gets, and leaving a clear track through the mist
- * behind it.
+ * getting faster the fatter it gets, and tearing a clear channel through the
+ * mist behind it.
  *
  * That release is the whole feeling this bit is built around. Everything else
  * is in service of it:
@@ -15,43 +15,58 @@
  *  - Drops are simulated, never scripted. A bead holds until its weight beats
  *    the pin force of its own contact patch, so the moment it breaks loose is
  *    emergent and different every single run.
- *  - Runners cut a real channel through the condensation layer and shed mass
- *    as they go. The channel heals slowly, and the shed beads re-pool, so a
- *    later runner can inherit a lane the first one cleared. That is where the
- *    rivalry between paths comes from.
+ *  - Runners cut a real channel through the condensation and shed mass as they
+ *    go. The channel heals slowly and the shed beads re-pool, so a later runner
+ *    can inherit a lane the first one cleared. That is where the rivalry
+ *    between paths comes from.
  *  - Small drops slant more than big ones. Wind acts on frontal area (~r^2),
  *    gravity acts on mass (~r^3), so sideways push per unit mass falls off as
  *    1/r. Fat drops plummet; little ones drift off toward the back of the car.
  *  - Every drop above a size threshold is a real lens: the world outside is
  *    sampled, flipped through the focal point, and magnified inside its body.
- *    That inversion is the detail that makes rain-on-glass read as *glass*.
+ *    That inversion is what makes rain-on-glass read as *glass*.
  *
  * The game on top is the bet you already make without meaning to. Three drops
  * get rings; you back one; first to the sill wins. Drag the glass to sweep
- * loose beads into your drop and fatten it — pulling two drops into one and
- * shoving it downhill is both the toy and the strategy.
+ * loose beads into one heavy drop and drop it in your racer's path.
+ *
+ * ── Two views, one simulation ────────────────────────────────────────────
+ *
+ * The glass is simulated into its own offscreen surface in its own coordinate
+ * space, which means it can be presented two ways from the same pixels:
+ *
+ *  - **Cabin** (the real thing): three@0.164.1 builds the back of the car
+ *    around you — door card, seat, headrests, pillars, roof lining — and hangs
+ *    the glass surface in the window aperture as a texture. Drag the interior
+ *    to look around; drag the glass to touch it. Streetlights sliding past
+ *    outside are the *same* lamps that light the cabin, so a lamp passing the
+ *    window sweeps warm light across the seat beside you.
+ *  - **Flat** (the fallback): the glass drawn straight to a 2D canvas with a
+ *    painted frame around it. This is what renders on the very first frame,
+ *    before three has finished loading, and it is where the bit stays for good
+ *    if three fails, if there is no WebGL, or if there is no OffscreenCanvas.
+ *    Fully playable either way — the cabin is presentation, not mechanics.
  *
  * Contract notes (plethora-bit@2):
- *  - No dependencies and no packaged assets (maxAssets is 0). Scenery, drops,
- *    sprites and every sound are generated at runtime.
- *  - Offscreen bakes go to `OffscreenCanvas`. Minting a canvas element by
- *    hand is rejected by the upload validator, and `ctx.createCanvas()` is a
- *    display surface the runtime mounts, which is not what a bake wants. No
- *    OffscreenCanvas in the WebView means `makeSurface()` returns null and
- *    every bake site falls back to drawing live.
+ *  - One registry dependency, three@0.164.1, declared in the manifest and
+ *    loaded through ctx.importModule. No packaged assets (maxAssets is 0):
+ *    scenery, cabin geometry, drops and every sound are generated at runtime.
+ *  - Offscreen bakes go to `OffscreenCanvas`. Minting a canvas element by hand
+ *    is rejected by the upload validator, and `ctx.createCanvas()` is a display
+ *    surface the runtime mounts, which is not what a bake wants. Without
+ *    OffscreenCanvas `makeSurface()` returns null and every bake site falls
+ *    back to drawing live.
  *  - `document.createElement` is only ever called with a literal tag. A
  *    computed tag cannot be statically shown not to be a canvas or a script,
  *    and the validator rejects it.
  *  - Pointer position comes from `event.offsetX/offsetY`. Querying layout
- *    rectangles is rejected by the validator, and offsets are canvas-relative
- *    already, so this also skips a forced reflow per pointer event.
+ *    rectangles is rejected by the validator, and offsets are already
+ *    canvas-relative, which also skips a forced reflow per pointer event.
  *  - Those two rules are why this header describes the banned calls rather
  *    than spelling them out: the validator reads the source as text, and a
  *    comment quoting them verbatim is enough to trip it.
  *  - Timers go through `ctx.timeout`, listeners through `ctx.listen`, and no
- *    blur filter is used anywhere — not the canvas `filter` property and not
- *    CSS. Softness comes from bouncing a bake through a tiny canvas and
- *    letting the smoothed upscale do the work.
+ *    blur filter is used anywhere, canvas or CSS.
  */
 window.plethoraBit = {
   meta: {
@@ -67,7 +82,7 @@ window.plethoraBit = {
       "water",
       "racing",
       "cozy",
-      "fidget"
+      "3d"
     ],
     permissions: ["audio", "backgroundMusic", "haptics", "motion", "storage"]
   },
@@ -78,19 +93,18 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------- *
      * Tuning
      *
-     * Lengths here are in reference pixels on a 390-wide phone. `sizes()`
-     * scales them so a drop is the same *apparent* size on a tablet.
+     * Lengths are in reference pixels of glass at a 380-wide pane. `sizes()`
+     * scales them so a drop keeps the same apparent size whether the pane is
+     * a phone-width rectangle or a texture on a car window.
      * ---------------------------------------------------------------- */
 
     const TUNE = {
-      // "Just the perfect amount of rain": enough that a lane is always
-      // forming somewhere, sparse enough that you can follow one drop.
       mistPerSec: 26,
       beadR: [2.0, 5.0],
       releaseR: 9.2,
       pinJitter: [0.8, 1.32],
-      beadCoverage: 0.105,        // fraction of the glass held by resting mist
-      accrete: 0.5,               // vapour picked up per unit bead area
+      beadCoverage: 0.105,
+      accrete: 0.5,
       growJitter: [0.35, 1.5],
 
       gravity: 190,
@@ -121,14 +135,17 @@ window.plethoraBit = {
       { key: "rose", name: "Rose", rgb: [255, 159, 184] }
     ];
 
+    // Pane size used when the glass is a texture in the cabin. Wider than tall
+    // like a real rear side window, and sized so one texel lands near one
+    // device pixel once it is on screen.
+    const PANE_3D = { w: 690, h: 732 };
+
     /* ---------------------------------------------------------------- *
      * Random. Reseeded per run so it is never the same window twice.
      * ---------------------------------------------------------------- */
 
     let seed = (Math.random() * 0xffffffff) >>> 0 || 1;
     function rnd() {
-      // xorshift32 — cheap, and good enough that drop lanes do not visibly
-      // repeat over a session.
       seed ^= seed << 13; seed >>>= 0;
       seed ^= seed >>> 17;
       seed ^= seed << 5; seed >>>= 0;
@@ -138,13 +155,6 @@ window.plethoraBit = {
     const ri = (a, b) => Math.floor(rr(a, b + 1));
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
     const lerp = (a, b, t) => a + (b - a) * t;
-
-    /* ---------------------------------------------------------------- *
-     * Surfaces
-     * ---------------------------------------------------------------- */
-
-    const canvas = ctx.createCanvas2D({ touchAction: "none" });
-    const g = canvas.getContext("2d");
 
     const CAN_BAKE = typeof OffscreenCanvas === "function";
     function makeSurface(w, h) {
@@ -157,17 +167,30 @@ window.plethoraBit = {
     }
 
     /* ---------------------------------------------------------------- *
+     * Surfaces
+     *
+     * Both display surfaces are minted up front, before the UI root, so the
+     * UI always stacks on top of whichever one is showing. The WebGL one
+     * starts hidden and is revealed only if the cabin actually builds.
+     * ---------------------------------------------------------------- */
+
+    const view2d = ctx.createCanvas2D({ touchAction: "none" });
+    const g = view2d.getContext("2d");
+    const view3d = ctx.createCanvas({ touchAction: "none" });
+    view3d.style.display = "none";
+
+    let mode = "flat";                    // "flat" | "cabin"
+
+    /* ---------------------------------------------------------------- *
      * Layout
      *
-     * The glass is inset on every side and the car interior frames it. That
-     * is both truer to a back-side window and the reason the finish line can
-     * sit clear of the bottom unsafe area: the sill is where the race ends,
-     * and everything below it is door card the player never has to reach.
+     * In flat mode the glass is inset on every side and a painted interior
+     * frames it. That is both truer to a back-side window and the reason the
+     * finish line clears the bottom unsafe area: the sill is where the race
+     * ends, and everything below it is door card nobody has to reach.
      * ---------------------------------------------------------------- */
 
     const L = {};
-    const SZ = {};
-
     function layout() {
       // Keep the raw measurement too: L.W/L.H are clamped to a usable
       // minimum, so comparing those against ctx.width to detect a resize
@@ -186,9 +209,9 @@ window.plethoraBit = {
         h: 0,
         r: 0
       };
-      // The door card only has to be deep enough to read as a door and to
-      // keep the finish line out of the bottom unsafe area. Letting it scale
-      // without a ceiling is what squeezes the glass flat in landscape.
+      // The door card only has to read as a door and keep the finish line out
+      // of the bottom unsafe area. Letting it scale without a ceiling is what
+      // squeezes the glass flat in landscape.
       L.glass.h = Math.max(
         120, H - (sa.bottom || 0) - clamp(H * 0.145, 54, 132) - L.glass.y
       );
@@ -199,15 +222,27 @@ window.plethoraBit = {
       // On a short window there is no room for a caption over the glass
       // without burying the drops, and the door card below is dead space.
       L.short = L.glass.h < 330;
-      L.bannerTop = L.short
-        ? Math.min(H - 42, L.sillY + 5)
-        : L.uiTop + 50;
+      L.bannerTop = L.short ? Math.min(H - 42, L.sillY + 5) : L.uiTop + 50;
       L.replayTop = L.short ? L.uiTop + 42 : L.uiTop + 126;
-      sizes();
     }
+    layout();
+
+    /* ---------------------------------------------------------------- *
+     * Glass space
+     *
+     * The simulation lives in its own coordinate space, origin at the top-left
+     * of the pane, so nothing in it knows or cares whether it is being blitted
+     * into a rounded rectangle or uploaded as a texture.
+     * ---------------------------------------------------------------- */
+
+    const G = { w: 0, h: 0, dpr: 1 };
+    const SZ = {};
+    let glassCv = null, gg = null;
 
     function sizes() {
-      const s = clamp(Math.min(L.W, L.H) / 390, 0.82, 1.9);
+      // The pane maps to roughly the full screen width in both views, so
+      // scaling drops by pane width keeps their apparent size constant.
+      const s = clamp(G.w / 380, 0.8, 2.8);
       SZ.s = s;
       SZ.beadMin = TUNE.beadR[0] * s;
       SZ.beadMax = TUNE.beadR[1] * s;
@@ -223,7 +258,7 @@ window.plethoraBit = {
       SZ.windGust = TUNE.windGust * s;
       // Terminal speed is gravity*r^2/friction. Gravity carries one factor of
       // s and r^2 carries two, so friction needs s^2 for speeds to stay
-      // screen-relative instead of exploding on a tablet.
+      // pane-relative instead of exploding on a bigger pane.
       SZ.friction = TUNE.friction * s * s;
       // Vapour lands on beads in proportion to the area they present, so
       // dm/dt = k*r^2 with m = r^3 makes dr/dt constant: a bead takes
@@ -231,30 +266,58 @@ window.plethoraBit = {
       // started. Per-drop `grow` jitter spreads those releases out.
       SZ.accrete = TUNE.accrete * s;
 
-      // Hold the resting mist at a roughly constant fraction of the glass so
-      // a big screen looks as wet as a small one rather than emptier. The
-      // spawn radius is cubic-biased toward the minimum (see mistR), whose
-      // mean sits a quarter of the way up the range.
+      // Hold the resting mist at a roughly constant fraction of the pane so a
+      // big pane looks as wet as a small one rather than emptier. The spawn
+      // radius is cubic-biased toward the minimum (see mistR), whose mean sits
+      // a quarter of the way up the range.
       const meanArea = Math.PI * Math.pow(SZ.beadMin + (SZ.beadMax - SZ.beadMin) * 0.25, 2);
-      SZ.maxBeads = clamp(
-        Math.round((L.glass.w * L.glass.h * TUNE.beadCoverage) / meanArea),
-        120, 620
-      );
+      SZ.maxBeads = clamp(Math.round((G.w * G.h * TUNE.beadCoverage) / meanArea), 120, 620);
     }
-    layout();
+
+    // (Re)build the pane at a given size and repopulate it. Called once for
+    // the flat view and again if and when the cabin takes over at its own
+    // aspect ratio.
+    //
+    // `offscreen` is only ever true for the cabin, which needs the pane as a
+    // texture. The flat view deliberately paints straight into the display
+    // canvas: Chromium accelerates a canvas that is on screen but rasterises
+    // an offscreen 2D context in software, and routing the flat view through
+    // one costs an order of magnitude for nothing.
+    function setupGlass(w, h, dpr, offscreen) {
+      G.w = Math.max(80, Math.round(w));
+      G.h = Math.max(80, Math.round(h));
+      G.dpr = dpr;
+      sizes();
+
+      glassCv = offscreen ? makeSurface(G.w * G.dpr, G.h * G.dpr) : null;
+      if (glassCv) {
+        gg = glassCv.getContext("2d");
+        gg.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
+      } else {
+        gg = null;
+      }
+
+      bakeWorld();
+      bakeBeads();
+      bakeMist();
+      drops.length = 0;
+      held = null;
+      dragging = false;
+      seedGlass(Math.round(SZ.maxBeads * 0.8));
+    }
 
     /* ---------------------------------------------------------------- *
      * The world outside
      *
      * Baked once as two horizontally tileable strips (far and near) whose
-     * period is exactly the glass width, so scrolling is a pair of drawImage
+     * period is exactly the pane width, so scrolling is a pair of drawImage
      * calls with an offset and never a reseam. Every element is drawn at
      * ox = -w, 0 and +w so shapes straddling a period edge wrap cleanly.
      *
-     * The content is deliberately shapeless: your eye is focused on the
-     * glass, so everything past it is bokeh — soft masses and blown-out
-     * points of light, no legible edges. The blurred copies are those bakes
-     * bounced through a tiny canvas, since no blur filter is available here.
+     * The content is deliberately shapeless: your eye is focused on the glass,
+     * so everything past it is bokeh — soft masses and blown-out points of
+     * light, no legible edges. The blurred copies are those bakes bounced
+     * through a tiny canvas, since no blur filter is available here.
      *
      * The sharp strips are kept because a droplet lens needs something
      * *sharper* than the background to magnify. That contrast — soft world,
@@ -264,11 +327,14 @@ window.plethoraBit = {
     const SKY = ["#060a13", "#0c1424", "#152036", "#241f31"];
     let stripFar = null, stripNear = null, blurFar = null, blurNear = null;
     let stripW = 0, stripH = 0;
+    // Where the near-strip lamps sit, kept so the cabin can be lit by the
+    // same lamps that are sliding past the window.
+    let nearLamps = [];
 
     function bakeWorld() {
       stripFar = stripNear = blurFar = blurNear = null;
-      stripW = Math.max(64, Math.round(L.glass.w * 0.62));
-      stripH = Math.max(64, Math.round(L.glass.h * 0.62));
+      stripW = Math.max(64, Math.round(G.w * 0.62));
+      stripH = Math.max(64, Math.round(G.h * 0.62));
 
       const far = makeSurface(stripW * 2, stripH);
       const near = makeSurface(stripW * 2, stripH);
@@ -310,8 +376,8 @@ window.plethoraBit = {
       c.fill();
     }
 
-    // A soft, low, undulating dark mass. Used for the far treeline and the
-    // near verge — no hard silhouettes anywhere out there.
+    // A soft, low, undulating dark mass — the far treeline and the near verge.
+    // No hard silhouettes anywhere out there.
     function darkMass(c, w, h, topY, amp, fill, ox) {
       c.fillStyle = fill;
       c.beginPath();
@@ -348,7 +414,6 @@ window.plethoraBit = {
       c.fillStyle = glow;
       c.fillRect(0, 0, w * 2, h);
 
-      // Bokeh. Generated once and stamped at every period so the strip tiles.
       const lamps = [];
       const n = clamp(Math.round(w / 42), 5, 18);
       for (let i = 0; i < n; i++) {
@@ -360,10 +425,12 @@ window.plethoraBit = {
           a: rr(0.34, 0.74)
         });
       }
-      // A few pin-bright cores so it is not all mush.
       const cores = [];
       for (let i = 0; i < Math.round(n * 0.6); i++) {
-        cores.push({ x: rr(0, w), y: hy + rr(-h * 0.26, h * 0.16), r: rr(1.5, 3.4), warm: rnd() < 0.8 });
+        cores.push({
+          x: rr(0, w), y: hy + rr(-h * 0.26, h * 0.16),
+          r: rr(1.5, 3.4), warm: rnd() < 0.8
+        });
       }
 
       for (let p = 0; p < PERIODS.length; p++) {
@@ -371,8 +438,7 @@ window.plethoraBit = {
         darkMass(c, w, h, h * 0.74, h * 0.028, "rgba(5,8,14,0.62)", ox);
         for (let i = 0; i < lamps.length; i++) {
           const lp = lamps[i];
-          lamp(c, ox + lp.x, lp.y, lp.r,
-               lp.warm ? [255, 184, 108] : [136, 196, 255], lp.a);
+          lamp(c, ox + lp.x, lp.y, lp.r, lp.warm ? [255, 184, 108] : [136, 196, 255], lp.a);
         }
         for (let i = 0; i < cores.length; i++) {
           const cr = cores[i];
@@ -405,6 +471,7 @@ window.plethoraBit = {
           a: rr(0.42, 0.78)
         });
       }
+      nearLamps = blobs.map((b) => ({ u: b.x / w, a: b.a }));
 
       for (let p = 0; p < PERIODS.length; p++) {
         const ox = PERIODS[p] * w;
@@ -419,20 +486,20 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------- *
      * Condensation
      *
-     * A static layer of fine mist baked over the whole glass. Runners cut
-     * through it with destination-out, which is what makes a trail read as a
-     * cleared channel rather than a line drawn on top. It heals by fading the
-     * pristine copy back in, slowly, so old lanes linger exactly as long as
-     * they should.
+     * A static layer of fine mist over the whole pane. Runners cut through it
+     * with destination-out, which is what makes a trail read as a cleared
+     * channel rather than a line drawn on top. It heals by fading the pristine
+     * copy back in slowly, so old lanes linger exactly as long as they should.
      * ---------------------------------------------------------------- */
 
-    let mistBase = null, mistTex = null, mistCtx = null, mistScale = 0.7;
+    let mistBase = null, mistTex = null, mistCtx = null;
+    const MIST_SCALE = 0.7;
     let healAcc = 0;
 
     function bakeMist() {
       mistBase = mistTex = mistCtx = null;
-      const w = Math.max(32, Math.round(L.glass.w * mistScale));
-      const h = Math.max(32, Math.round(L.glass.h * mistScale));
+      const w = Math.max(32, Math.round(G.w * MIST_SCALE));
+      const h = Math.max(32, Math.round(G.h * MIST_SCALE));
       const base = makeSurface(w, h);
       const tex = makeSurface(w, h);
       if (!base || !tex) return;
@@ -443,7 +510,7 @@ window.plethoraBit = {
       // cut through specks reads as missing dots rather than as clear glass.
       const blobs = Math.round((w * h) / 900);
       for (let i = 0; i < blobs; i++) {
-        const x = rr(0, w), y = rr(0, h), r = rr(3, 11) * SZ.s * mistScale;
+        const x = rr(0, w), y = rr(0, h), r = rr(3, 11) * SZ.s * MIST_SCALE;
         const gr = c.createRadialGradient(x, y, 0, x, y, r);
         gr.addColorStop(0, "rgba(198,220,250," + rr(0.05, 0.13) + ")");
         gr.addColorStop(1, "rgba(198,220,250,0)");
@@ -453,17 +520,17 @@ window.plethoraBit = {
         c.fill();
       }
 
-      // Then the grain on top. Fine and faint — any individual speck you can
-      // pick out reads as dirt or as a starfield, not as breath on cold glass.
+      // Then the grain on top. Fine and faint — any speck you can pick out
+      // reads as dirt or a starfield, not as breath on cold glass.
       const n = Math.round((w * h) / 20);
       for (let i = 0; i < n; i++) {
-        const r = rr(0.28, 0.95) * SZ.s * mistScale;
-        const a = rr(0.04, 0.16);
-        c.fillStyle = "rgba(202,222,250," + a + ")";
+        const r = rr(0.28, 0.95) * SZ.s * MIST_SCALE;
+        c.fillStyle = "rgba(202,222,250," + rr(0.04, 0.16) + ")";
         c.beginPath();
         c.arc(rr(0, w), rr(0, h), r, 0, Math.PI * 2);
         c.fill();
       }
+
       mistBase = base;
       mistTex = tex;
       mistCtx = tex.getContext("2d");
@@ -472,11 +539,9 @@ window.plethoraBit = {
 
     function clearMist(x, y, r) {
       if (!mistCtx) return;
-      const sx = (x - L.glass.x) * mistScale;
-      const sy = (y - L.glass.y) * mistScale;
       mistCtx.globalCompositeOperation = "destination-out";
       mistCtx.beginPath();
-      mistCtx.arc(sx, sy, r * mistScale, 0, Math.PI * 2);
+      mistCtx.arc(x * MIST_SCALE, y * MIST_SCALE, r * MIST_SCALE, 0, Math.PI * 2);
       mistCtx.fill();
       mistCtx.globalCompositeOperation = "source-over";
     }
@@ -493,10 +558,6 @@ window.plethoraBit = {
 
     /* ---------------------------------------------------------------- *
      * Bead sprite atlas
-     *
-     * Small beads outnumber everything else and none of them deserves a live
-     * gradient. They get baked once per step of radius and drawn as plain
-     * images. Backing store is DPR-scaled; the draw is in CSS pixels.
      * ---------------------------------------------------------------- */
 
     const BEAD_STEPS = 16;
@@ -542,7 +603,6 @@ window.plethoraBit = {
         c.arc(half, half, r, 0, Math.PI * 2);
         c.fill();
 
-        // Specular pin-prick. This is what actually makes a bead read as wet.
         c.fillStyle = "rgba(255,255,255,0.72)";
         c.beginPath();
         c.arc(half - r * 0.32, half - r * 0.36, Math.max(0.4, r * 0.16), 0, Math.PI * 2);
@@ -560,15 +620,14 @@ window.plethoraBit = {
     }
 
     /* ---------------------------------------------------------------- *
-     * Drops
+     * Drops — all coordinates are pane-space, origin top-left of the glass
      * ---------------------------------------------------------------- */
 
-    let drops = [];
-    let held = null;                // the drop currently under the finger
+    const drops = [];
+    let held = null;
     let scrollFar = 0, scrollNear = 0;
     let wind = 0;
     let windPhase = rr(0, 100);
-    let tiltX = 0, tiltY = 0;       // smoothed parallax offset, px
     let worldOffX = 0, worldOffY = 0;
     let nowMs = 0;
 
@@ -594,33 +653,26 @@ window.plethoraBit = {
       return d;
     }
 
-    // Condensation is mostly very fine with a few standouts, so bias the
-    // spawn size hard toward the bottom of the range. A flat distribution
-    // gives every bead the same apparent size and the glass looks printed.
+    // Condensation is mostly very fine with a few standouts, so bias the spawn
+    // size hard toward the bottom of the range. A flat distribution gives every
+    // bead the same apparent size and the glass looks printed.
     function mistR() {
       const t = rnd();
       return SZ.beadMin + (SZ.beadMax - SZ.beadMin) * t * t * t;
     }
 
     function seedGlass(n) {
-      for (let i = 0; i < n; i++) {
-        makeDrop(
-          rr(L.glass.x, L.glass.x + L.glass.w),
-          rr(L.glass.y, L.sillY),
-          mistR()
-        );
-      }
+      for (let i = 0; i < n; i++) makeDrop(rr(0, G.w), rr(0, G.h), mistR());
     }
 
-    // Spatial hash over the resting beads. Rebuilt each frame — a few hundred
-    // inserts is nothing next to what it saves on merge queries.
+    // Spatial hash over the resting beads, rebuilt each frame.
     const grid = new Map();
     function rebuildGrid() {
       grid.clear();
       const cell = SZ.cell;
       for (let i = 0; i < drops.length; i++) {
         const d = drops[i];
-        if (d.run || d.life <= 0) continue;   // runners query, they are not queried
+        if (d.run || d.life <= 0) continue;   // runners query, are not queried
         const k = ((d.x / cell) | 0) + "," + ((d.y / cell) | 0);
         let bucket = grid.get(k);
         if (!bucket) grid.set(k, (bucket = []));
@@ -654,7 +706,7 @@ window.plethoraBit = {
       a.r = radOf(m);
 
       // A racer swallowed by a bigger drop does not simply die — the merged
-      // drop carries its colours on, and inherits its start-line pin so a
+      // drop carries its colours on and inherits its start-line pin, so a
       // pooling bead cannot flag it away early. Two racers meeting is a
       // knockout for the smaller one.
       if (b.racer !== null) {
@@ -672,8 +724,6 @@ window.plethoraBit = {
     }
 
     function stepDrops(dt) {
-      const gl = L.glass;
-
       // Wind wanders. Gusts are what put two identical drops in different
       // lanes, so a race is never decided at the start line.
       windPhase += dt * TUNE.windRate;
@@ -714,9 +764,9 @@ window.plethoraBit = {
         // that keeps eating therefore curves from slanted to vertical as it
         // grows, which is exactly what happens on a real window.
         //
-        // Both axes relax toward their terminal speed exponentially, which is
-        // exact rather than merely stable — a drop that sheds down to a
-        // sliver would blow up an explicit step at this friction.
+        // Both axes relax toward terminal exponentially, which is exact rather
+        // than merely stable — a drop that sheds down to a sliver would blow
+        // up an explicit step at this friction.
         const fr = Math.max(0.05, SZ.friction / (d.r * d.r));
         const k = Math.exp(-fr * dt);
         const tvy = SZ.gravity / fr;
@@ -728,7 +778,6 @@ window.plethoraBit = {
         d.x += d.vx * dt;
         d.y += d.vy * dt;
 
-        // Cut a channel through the condensation.
         clearMist(d.x, d.y, d.r * 1.15);
 
         // Eat everything on the way through.
@@ -738,9 +787,7 @@ window.plethoraBit = {
           if (b === d || b.life <= 0 || b.run) continue;
           const dx = b.x - d.x, dy = b.y - d.y;
           const reach = d.r + b.r * 0.7;
-          if (dx * dx + dy * dy < reach * reach) {
-            onMerge(d, absorb(d, b));
-          }
+          if (dx * dx + dy * dy < reach * reach) onMerge(d, absorb(d, b));
         }
 
         // Shed a wet track. It re-beads, and a later runner inherits the lane.
@@ -766,23 +813,20 @@ window.plethoraBit = {
         // A drop blown into the edge of the pane does not disappear — it
         // catches the seal and runs down it. Losing racers off the side would
         // also decide races by gust rather than by weight.
-        if (d.x < gl.x + d.r) { d.x = gl.x + d.r; if (d.vx < 0) d.vx *= -0.15; }
-        else if (d.x > gl.x + gl.w - d.r) {
-          d.x = gl.x + gl.w - d.r;
-          if (d.vx > 0) d.vx *= -0.15;
-        }
+        if (d.x < d.r) { d.x = d.r; if (d.vx < 0) d.vx *= -0.15; }
+        else if (d.x > G.w - d.r) { d.x = G.w - d.r; if (d.vx > 0) d.vx *= -0.15; }
 
-        if (d.y - d.r > L.sillY) {
+        if (d.y - d.r > G.h) {
           d.life = 0;
           onArrive(d);
         }
       }
 
       // Runners catch each other too: a heavy drop overhauling a lighter one
-      // takes it, and the survivor keeps whichever racer colours were in
-      // play. Without this a drop you built could never reach your racer once
-      // the racer was already moving, and "feed it" would be a lie. There are
-      // only ever a handful of runners, so the pairwise sweep is free.
+      // takes it, and the survivor keeps whichever racer colours were in play.
+      // Without this a drop you built could never reach your racer once the
+      // racer was already moving, and "feed it" would be a lie. There are only
+      // ever a handful of runners, so the pairwise sweep is free.
       const runners = [];
       for (let i = 0; i < drops.length; i++) {
         const d = drops[i];
@@ -819,8 +863,7 @@ window.plethoraBit = {
       drops.length = w;
     }
 
-    // Resting beads find each other and pool. This is the engine of the whole
-    // thing: without it nothing ever grows heavy enough to break loose.
+    // Resting beads find each other and pool.
     let coalCursor = 0;
     function coalesce() {
       const n = drops.length;
@@ -846,17 +889,13 @@ window.plethoraBit = {
     }
 
     function rain(dt) {
-      // New mist. The rate eases off during a race so the lanes stay legible
-      // exactly when the player is trying to follow one drop.
+      // The rate eases off during a race so the lanes stay legible exactly
+      // when the player is trying to follow one drop.
       const busy = race.state === "running" ? 0.62 : 1;
       let n = TUNE.mistPerSec * dt * busy;
       while (n > 0) {
         if (rnd() < n && drops.length < SZ.maxBeads) {
-          makeDrop(
-            rr(L.glass.x, L.glass.x + L.glass.w),
-            rr(L.glass.y, L.sillY - 4),
-            mistR()
-          );
+          makeDrop(rr(0, G.w), rr(0, G.h - 4), mistR());
           if (rnd() < 0.34) tickImpact();
         }
         n -= 1;
@@ -864,11 +903,11 @@ window.plethoraBit = {
     }
 
     /* ---------------------------------------------------------------- *
-     * Rendering
+     * Painting the glass — pane space, origin (0,0), size G.w x G.h
      * ---------------------------------------------------------------- */
 
     let lensBudget = TUNE.maxLens;
-    let smears = [];
+    const smears = [];
     let feedFlash = 0;
 
     function dropPath(c, d) {
@@ -885,8 +924,8 @@ window.plethoraBit = {
       const ca = Math.cos(a), sa = Math.sin(a);
       const px = -sa, py = ca;              // perpendicular to travel
       const tipX = d.x - ca * (d.r + tail), tipY = d.y - sa * (d.r + tail);
-      // The arc must sweep the *leading* half, from -90 through the heading
-      // to +90. Sweeping the other way puts the round end at the back and the
+      // The arc must sweep the *leading* half, from -90 through the heading to
+      // +90. Sweeping the other way puts the round end at the back and the
       // drop reads as a hood rather than a teardrop. The control points sit
       // level with the flanks so the body holds its width and then tapers,
       // instead of pinching straight out of the bulb.
@@ -904,16 +943,14 @@ window.plethoraBit = {
     // caller has already clipped to the drop's outline.
     function drawLensInto(c, d) {
       if (!stripFar) return false;
-      const gl = L.glass;
-      const qx = stripW / gl.w, qy = stripH / gl.h;
+      const qx = stripW / G.w, qy = stripH / G.h;
       const sw = Math.max(2, (d.r * 2) / 2.4);
       const swx = sw * qx, swy = sw * qy;
 
-      const fx = (((d.x - gl.x - worldOffX + scrollFar) % gl.w) + gl.w) % gl.w;
-      const nx = (((d.x - gl.x - worldOffX * 1.35 + scrollNear) % gl.w) + gl.w) % gl.w;
+      const fx = (((d.x - worldOffX + scrollFar) % G.w) + G.w) % G.w;
+      const nx = (((d.x - worldOffX * 1.35 + scrollNear) % G.w) + G.w) % G.w;
       const sy = clamp(
-        (clamp(d.y - gl.y - worldOffY, 0, gl.h) * qy) - swy / 2,
-        0, Math.max(0, stripH - swy)
+        clamp(d.y - worldOffY, 0, G.h) * qy - swy / 2, 0, Math.max(0, stripH - swy)
       );
 
       c.save();
@@ -921,14 +958,12 @@ window.plethoraBit = {
       c.scale(-1, -1);                      // a lens flips the image
       c.globalAlpha = 0.95;
       c.drawImage(
-        stripFar,
-        clamp(fx * qx - swx / 2, 0, stripW * 2 - swx), sy, swx, swy,
+        stripFar, clamp(fx * qx - swx / 2, 0, stripW * 2 - swx), sy, swx, swy,
         -d.r, -d.r, d.r * 2, d.r * 2
       );
       c.globalAlpha = 0.78;
       c.drawImage(
-        stripNear,
-        clamp(nx * qx - swx / 2, 0, stripW * 2 - swx), sy, swx, swy,
+        stripNear, clamp(nx * qx - swx / 2, 0, stripW * 2 - swx), sy, swx, swy,
         -d.r, -d.r, d.r * 2, d.r * 2
       );
       c.restore();
@@ -951,8 +986,7 @@ window.plethoraBit = {
       // gradient inside the clip, rather than as a stroked arc, is the
       // difference between a wet bead and a smiley face.
       const rim = c.createRadialGradient(
-        d.x - d.r * 0.24, d.y - d.r * 0.28, d.r * 0.12,
-        d.x, d.y, d.r * 1.06
+        d.x - d.r * 0.24, d.y - d.r * 0.28, d.r * 0.12, d.x, d.y, d.r * 1.06
       );
       rim.addColorStop(0, "rgba(206,230,255,0)");
       rim.addColorStop(0.66, "rgba(206,230,255,0.03)");
@@ -1004,69 +1038,48 @@ window.plethoraBit = {
       }
     }
 
-    // The window frame stays put and the world behind it slides. That is what
-    // parallax through a window actually looks like, and it keeps the glass
-    // clip aligned with the drops sitting on it.
-    function drawWorld(c) {
-      const gl = L.glass;
-      c.save();
-      roundRect(c, gl.x, gl.y, gl.w, gl.h, gl.r);
-      c.clip();
-
-      const sky = c.createLinearGradient(0, gl.y, 0, gl.y + gl.h);
+    // Everything the pane contains: the world beyond it, the condensation on
+    // it, and the drops sitting on top. No frame, no cabin — whoever is
+    // presenting this decides how it is mounted.
+    function renderGlass(c) {
+      const sky = c.createLinearGradient(0, 0, 0, G.h);
       sky.addColorStop(0, SKY[0]);
       sky.addColorStop(0.5, SKY[1]);
       sky.addColorStop(1, SKY[3]);
       c.fillStyle = sky;
-      c.fillRect(gl.x, gl.y, gl.w, gl.h);
+      c.fillRect(0, 0, G.w, G.h);
 
       if (blurFar && blurNear) {
-        const over = gl.h * 0.05;
+        const over = G.h * 0.05;
         c.imageSmoothingEnabled = true;
-        c.drawImage(
-          blurFar,
-          gl.x - scrollFar + worldOffX, gl.y - over + worldOffY,
-          gl.w * 2, gl.h + over * 2
-        );
+        c.drawImage(blurFar, -scrollFar + worldOffX, -over + worldOffY, G.w * 2, G.h + over * 2);
         c.globalAlpha = 0.95;
         c.drawImage(
-          blurNear,
-          gl.x - scrollNear + worldOffX * 1.35, gl.y - over + worldOffY,
-          gl.w * 2, gl.h + over * 2
+          blurNear, -scrollNear + worldOffX * 1.35, -over + worldOffY, G.w * 2, G.h + over * 2
         );
         c.globalAlpha = 1;
       }
 
       // The glass itself: cold cast, so the drops sitting on it read as the
-      // brightest thing on screen.
+      // brightest thing in the pane.
       c.fillStyle = "rgba(8,14,26,0.42)";
-      c.fillRect(gl.x, gl.y, gl.w, gl.h);
+      c.fillRect(0, 0, G.w, G.h);
 
-      // Condensation, with whatever channels the runners have cut through it.
       if (mistTex) {
         c.globalAlpha = 0.8;
-        c.drawImage(mistTex, gl.x, gl.y, gl.w, gl.h);
+        c.drawImage(mistTex, 0, 0, G.w, G.h);
         c.globalAlpha = 1;
       }
 
       const fog = c.createRadialGradient(
-        gl.x + gl.w * 0.5, gl.y + gl.h * 0.46, Math.min(gl.w, gl.h) * 0.15,
-        gl.x + gl.w * 0.5, gl.y + gl.h * 0.46, Math.max(gl.w, gl.h) * 0.72
+        G.w * 0.5, G.h * 0.46, Math.min(G.w, G.h) * 0.15,
+        G.w * 0.5, G.h * 0.46, Math.max(G.w, G.h) * 0.72
       );
       fog.addColorStop(0, "rgba(188,208,235,0)");
       fog.addColorStop(0.72, "rgba(188,208,235,0.05)");
       fog.addColorStop(1, "rgba(198,216,240,0.17)");
       c.fillStyle = fog;
-      c.fillRect(gl.x, gl.y, gl.w, gl.h);
-
-      c.restore();
-    }
-
-    function drawDrops(c) {
-      const gl = L.glass;
-      c.save();
-      roundRect(c, gl.x, gl.y, gl.w, gl.h, gl.r);
-      c.clip();
+      c.fillRect(0, 0, G.w, G.h);
 
       // The warm patch your fingertip leaves on the cold glass, under the
       // drops so it reads as being on the far side of them.
@@ -1096,85 +1109,11 @@ window.plethoraBit = {
       }
       big.sort((a, b) => b.r - a.r);
       for (let i = 0; i < big.length; i++) drawDrop(c, big[i], i < lensBudget);
-
-      c.restore();
     }
 
-    function drawInterior(c) {
-      const gl = L.glass;
-      const W = L.W, H = L.H;
-      const sillTop = gl.y + gl.h;
-
-      // Everything outside the glass is car. Punch the window out of one dark
-      // fill rather than drawing four separate panels around it.
-      const cabin = c.createLinearGradient(0, 0, 0, H);
-      cabin.addColorStop(0, "#0a0d14");
-      cabin.addColorStop(0.5, "#070a10");
-      cabin.addColorStop(1, "#04060a");
-      c.beginPath();
-      c.rect(0, 0, W, H);
-      roundRect(c, gl.x, gl.y, gl.w, gl.h, gl.r, true);
-      c.fillStyle = cabin;
-      c.fill("evenodd");
-
-      // Roof lining overhead.
-      const roof = c.createLinearGradient(0, 0, 0, gl.y);
-      roof.addColorStop(0, "#10151e");
-      roof.addColorStop(1, "#06080d");
-      c.fillStyle = roof;
-      c.fillRect(0, 0, W, gl.y);
-
-      // Door card below the sill, with the armrest ridge catching the light.
-      const door = c.createLinearGradient(0, sillTop, 0, H);
-      door.addColorStop(0, "#131822");
-      door.addColorStop(0.16, "#0c1017");
-      door.addColorStop(1, "#05070b");
-      c.fillStyle = door;
-      c.fillRect(0, sillTop, W, H - sillTop);
-
-      const armY = sillTop + (H - sillTop) * 0.42;
-      const arm = c.createLinearGradient(0, armY - 10, 0, armY + 16);
-      arm.addColorStop(0, "rgba(150,172,204,0.11)");
-      arm.addColorStop(0.4, "rgba(120,140,175,0.05)");
-      arm.addColorStop(1, "rgba(0,0,0,0.28)");
-      c.fillStyle = arm;
-      c.fillRect(0, armY - 10, W, 26);
-
-      // Rubber seal catching a thin line of light all the way round, plus the
-      // bright sill lip the drops arrive at.
-      roundRect(c, gl.x - 1.5, gl.y - 1.5, gl.w + 3, gl.h + 3, gl.r + 1.5);
-      c.strokeStyle = "rgba(150,172,204,0.16)";
-      c.lineWidth = 2.4;
-      c.stroke();
-      roundRect(c, gl.x - 0.5, gl.y - 0.5, gl.w + 1, gl.h + 1, gl.r);
-      c.strokeStyle = "rgba(8,11,18,0.9)";
-      c.lineWidth = 1.4;
-      c.stroke();
-
-      c.strokeStyle = "rgba(168,190,220,0.24)";
-      c.lineWidth = 1.2;
-      c.beginPath();
-      c.moveTo(gl.x + gl.r * 0.4, sillTop + 1.8);
-      c.lineTo(gl.x + gl.w - gl.r * 0.4, sillTop + 1.8);
-      c.stroke();
-
-      // Seat belt running down past the edge of the frame. It sells the seat
-      // you are sitting in far more cheaply than any geometry would, so it
-      // stays thin and well out of the way of the glass.
-      c.strokeStyle = "rgba(22,27,38,0.9)";
-      c.lineWidth = Math.max(7, W * 0.023);
-      c.lineCap = "round";
-      c.beginPath();
-      c.moveTo(W + 8, gl.y - 26 - tiltX * 0.6);
-      c.quadraticCurveTo(W * 0.965, H * 0.55, W * 0.9, H + 20);
-      c.stroke();
-      c.strokeStyle = "rgba(126,144,176,0.09)";
-      c.lineWidth = 1.4;
-      c.beginPath();
-      c.moveTo(W + 8, gl.y - 30 - tiltX * 0.6);
-      c.quadraticCurveTo(W * 0.958, H * 0.55, W * 0.893, H + 20);
-      c.stroke();
-    }
+    /* ---------------------------------------------------------------- *
+     * Flat view — the glass in a painted frame
+     * ---------------------------------------------------------------- */
 
     function roundRect(c, x, y, w, h, r, keepPath) {
       r = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -1191,20 +1130,414 @@ window.plethoraBit = {
       c.closePath();
     }
 
-    function render() {
+    function drawFlatInterior(c) {
+      const gl = L.glass;
+      const W = L.W, H = L.H;
+      const sillTop = gl.y + gl.h;
+
+      // Everything outside the glass is car. Punch the window out of one dark
+      // fill rather than drawing four separate panels around it.
+      const cabin = c.createLinearGradient(0, 0, 0, H);
+      cabin.addColorStop(0, "#0a0d14");
+      cabin.addColorStop(0.5, "#070a10");
+      cabin.addColorStop(1, "#04060a");
+      c.beginPath();
+      c.rect(0, 0, W, H);
+      roundRect(c, gl.x, gl.y, gl.w, gl.h, gl.r, true);
+      c.fillStyle = cabin;
+      c.fill("evenodd");
+
+      const roof = c.createLinearGradient(0, 0, 0, gl.y);
+      roof.addColorStop(0, "#10151e");
+      roof.addColorStop(1, "#06080d");
+      c.fillStyle = roof;
+      c.fillRect(0, 0, W, gl.y);
+
+      const door = c.createLinearGradient(0, sillTop, 0, H);
+      door.addColorStop(0, "#131822");
+      door.addColorStop(0.16, "#0c1017");
+      door.addColorStop(1, "#05070b");
+      c.fillStyle = door;
+      c.fillRect(0, sillTop, W, H - sillTop);
+
+      const armY = sillTop + (H - sillTop) * 0.42;
+      const arm = c.createLinearGradient(0, armY - 10, 0, armY + 16);
+      arm.addColorStop(0, "rgba(150,172,204,0.11)");
+      arm.addColorStop(0.4, "rgba(120,140,175,0.05)");
+      arm.addColorStop(1, "rgba(0,0,0,0.28)");
+      c.fillStyle = arm;
+      c.fillRect(0, armY - 10, W, 26);
+
+      roundRect(c, gl.x - 1.5, gl.y - 1.5, gl.w + 3, gl.h + 3, gl.r + 1.5);
+      c.strokeStyle = "rgba(150,172,204,0.16)";
+      c.lineWidth = 2.4;
+      c.stroke();
+      roundRect(c, gl.x - 0.5, gl.y - 0.5, gl.w + 1, gl.h + 1, gl.r);
+      c.strokeStyle = "rgba(8,11,18,0.9)";
+      c.lineWidth = 1.4;
+      c.stroke();
+
+      c.strokeStyle = "rgba(168,190,220,0.24)";
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.moveTo(gl.x + gl.r * 0.4, sillTop + 1.6);
+      c.lineTo(gl.x + gl.w - gl.r * 0.4, sillTop + 1.6);
+      c.stroke();
+
+      c.strokeStyle = "rgba(22,27,38,0.9)";
+      c.lineWidth = Math.max(7, W * 0.023);
+      c.lineCap = "round";
+      c.beginPath();
+      c.moveTo(W + 8, gl.y - 26);
+      c.quadraticCurveTo(W * 0.965, H * 0.55, W * 0.9, H + 20);
+      c.stroke();
+      c.strokeStyle = "rgba(126,144,176,0.09)";
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.moveTo(W + 8, gl.y - 30);
+      c.quadraticCurveTo(W * 0.958, H * 0.55, W * 0.893, H + 20);
+      c.stroke();
+    }
+
+    function renderFlat() {
       g.clearRect(0, 0, L.W, L.H);
-      drawWorld(g);
-      drawDrops(g);
-      drawInterior(g);
+      const gl = L.glass;
+      g.save();
+      roundRect(g, gl.x, gl.y, gl.w, gl.h, gl.r);
+      g.clip();
+      g.translate(gl.x, gl.y);
+      renderGlass(g);
+      g.restore();
+      drawFlatInterior(g);
+    }
+
+    /* ---------------------------------------------------------------- *
+     * Cabin view
+     *
+     * The back of the car, built from boxes and lit almost entirely by what
+     * is happening outside the window. Night interiors are forgiving: what
+     * you read is silhouette and rim light, so plain geometry in the right
+     * darkness sells it far better than detail would.
+     *
+     * Metres, eye at the origin. Car forward is -Z, the window is on -X.
+     * ---------------------------------------------------------------- */
+
+    // Real proportions matter more than they look like they should. Eye height
+    // above the cushion is what tells you whether you are sitting in a car or
+    // kneeling on the floor of one, and the sill has to sit about a forearm
+    // above the seat or the whole cabin reads as a toy.
+    const CAB = {
+      glassX: -0.75,                 // window plane
+      winZ: 0.33, winTop: 0.45, winBot: -0.25,
+      wallX: 0.78, floorY: -0.98, roofY: 0.56,
+      seatY: -0.62,                  // top of the cushion you are sitting on
+      frontZ: -1.05, backZ: 0.88,
+      // Far enough back that the pane's full width fits the narrow horizontal
+      // field a portrait screen gives you, and high enough above the cushion
+      // to be a person rather than a camera on a tripod.
+      eye: [0.31, 0.08, 0]
+    };
+
+    let THREE = null, renderer = null, scene = null, camera = null;
+    let glassTex = null, glassMesh = null, raycaster = null, ndc = null;
+    let sweepLight = null;
+    // Three's camera looks down -Z; the window is on -X. Turning +90 degrees
+    // about Y maps forward onto -X, so that is where a head starts.
+    const YAW0 = Math.PI / 2;
+    const YAW_RANGE = 1.78;
+    let yaw = YAW0, pitch = 0, yawTarget = YAW0, pitchTarget = 0;
+    let texClock = 0;
+
+    async function loadThree() {
+      const NAME = "three", VER = "0.164.1";
+      const URL = "https://libs.plethora.studio/three/0.164.1/three.module.js";
+      let m = null;
+      try {
+        m = await ctx.importModule(NAME, VER);
+      } catch (_) {
+        try { m = await ctx.importModule(URL); } catch (_2) { return null; }
+      }
+      if (m && !m.WebGLRenderer && m.default) m = m.default;
+      return m && m.WebGLRenderer ? m : null;
+    }
+
+    // Big untextured slabs are what make procedural interiors read as a
+    // mockup. One tileable grain, reused at different repeats, is enough to
+    // break that up — at this light level nobody is reading the pattern, only
+    // noticing that the surface is not perfectly flat.
+    let grainTex = null;
+    function grainTexture() {
+      if (grainTex) return grainTex;
+      const n = 128;
+      const cv = makeSurface(n, n);
+      if (!cv) return null;
+      const c = cv.getContext("2d");
+      c.fillStyle = "#969696";
+      c.fillRect(0, 0, n, n);
+      for (let i = 0; i < 5200; i++) {
+        const v = 150 + (rnd() * 2 - 1) * 30;
+        c.fillStyle = "rgb(" + (v | 0) + "," + (v | 0) + "," + (v | 0) + ")";
+        c.fillRect(rr(0, n), rr(0, n), rr(0.6, 2.2), rr(0.6, 2.2));
+      }
+      // A faint weave so fabric does not look like sandpaper.
+      c.globalAlpha = 0.16;
+      for (let y = 0; y < n; y += 3) {
+        c.fillStyle = y % 6 ? "#7c7c7c" : "#b0b0b0";
+        c.fillRect(0, y, n, 1.4);
+      }
+      c.globalAlpha = 1;
+      grainTex = new THREE.CanvasTexture(cv);
+      grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping;
+      return grainTex;
+    }
+
+    function mat(color, rough, grain, rx, ry) {
+      const o = {
+        color: new THREE.Color(color),
+        roughness: rough === undefined ? 0.92 : rough,
+        metalness: 0
+      };
+      const m = new THREE.MeshStandardMaterial(o);
+      if (grain) {
+        // Clone so each surface can carry its own repeat without disturbing
+        // the shared bake.
+        const t = grain.clone();
+        t.needsUpdate = true;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(rx || 3, ry || 3);
+        // As a colour map as well as a bump map: at this light level a bump
+        // map alone is invisible, and the big door and seat panels read as
+        // flat voids without something varying across them.
+        m.map = t;
+        m.bumpMap = t;
+        m.bumpScale = 0.006;
+      }
+      return m;
+    }
+
+    // Axis-aligned slab from two corners. Everything in the cabin is a slab.
+    function slab(x0, y0, z0, x1, y1, z1, material) {
+      const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0), d = Math.abs(z1 - z0);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      scene.add(mesh);
+      return mesh;
+    }
+
+    function buildCabin() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x03050a);
+
+      const grain = grainTexture();
+      const trim = mat("#2a3140", 0.95, grain, 3, 3);
+      const card = mat("#333b4c", 0.92, grain, 4, 2);
+      const fabric = mat("#3b4356", 1, grain, 5, 3);
+      const dark = mat("#161b25", 0.98, grain, 6, 6);
+      const lining = mat("#2c3341", 1, grain, 4, 4);
+
+      const C = CAB;
+
+      // Left door: the window aperture is the gap between these four slabs.
+      slab(C.glassX - 0.06, C.floorY, C.frontZ, C.glassX + 0.03, C.winBot, C.backZ, card);
+      slab(C.glassX - 0.06, C.winTop, C.frontZ, C.glassX + 0.03, C.roofY, C.backZ, lining);
+      slab(C.glassX - 0.06, C.winBot, C.frontZ, C.glassX + 0.03, C.winTop, -C.winZ, trim);
+      slab(C.glassX - 0.06, C.winBot, C.winZ, C.glassX + 0.03, C.winTop, C.backZ, trim);
+
+      // Armrest and the sill lip the drops arrive at.
+      slab(C.glassX + 0.02, C.winBot - 0.16, -0.16, C.glassX + 0.13, C.winBot - 0.07, 0.3, trim);
+      slab(C.glassX + 0.02, C.winBot - 0.02, -C.winZ, C.glassX + 0.07, C.winBot, C.winZ,
+           mat("#1c222c", 0.72));
+      // A brighter lip along the top of the aperture, so the frame above the
+      // pane reads as a shape instead of a void.
+      slab(C.glassX + 0.015, C.winTop, -C.winZ, C.glassX + 0.06, C.winTop + 0.022, C.winZ,
+           mat("#232a36", 0.66));
+
+      // The pane itself. Unlit: the texture already contains a lit world.
+      glassTex = new THREE.CanvasTexture(glassCv);
+      glassTex.colorSpace = THREE.SRGBColorSpace;
+      glassTex.minFilter = THREE.LinearFilter;
+      glassTex.generateMipmaps = false;
+      glassMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(C.winZ * 2, C.winTop - C.winBot),
+        new THREE.MeshBasicMaterial({ map: glassTex })
+      );
+      glassMesh.position.set(C.glassX, (C.winTop + C.winBot) / 2, 0);
+      glassMesh.rotation.y = Math.PI / 2;   // faces +X, into the cabin
+      scene.add(glassMesh);
+
+      // Right door, with its own window onto the same weather.
+      slab(C.wallX - 0.03, C.floorY, C.frontZ, C.wallX + 0.06, C.winBot, C.backZ, card);
+      slab(C.wallX - 0.03, C.winTop, C.frontZ, C.wallX + 0.06, C.roofY, C.backZ, lining);
+      slab(C.wallX - 0.03, C.winBot, C.frontZ, C.wallX + 0.06, C.winTop, -C.winZ, trim);
+      slab(C.wallX - 0.03, C.winBot, C.winZ, C.wallX + 0.06, C.winTop, C.backZ, trim);
+      const far = new THREE.Mesh(
+        new THREE.PlaneGeometry(C.winZ * 2, C.winTop - C.winBot),
+        new THREE.MeshBasicMaterial({ map: glassTex, opacity: 0.42, transparent: true })
+      );
+      far.position.set(C.wallX - 0.04, (C.winTop + C.winBot) / 2, 0);
+      far.rotation.y = -Math.PI / 2;
+      scene.add(far);
+
+      // Shell.
+      slab(C.glassX, C.floorY - 0.05, C.frontZ, C.wallX, C.floorY, C.backZ, dark);
+      slab(C.glassX, C.roofY, C.frontZ, C.wallX, C.roofY + 0.06, C.backZ, lining);
+
+      // Rear bench. You are sitting on it with your back against it, so the
+      // backrest is right behind your shoulder, not across the cabin — and it
+      // is two seats with a gap rather than one slab, because a single flat
+      // panel is what you see when you turn round otherwise.
+      const backZ0 = 0.3, backZ1 = 0.46;
+      slab(C.glassX + 0.05, C.seatY - 0.18, -0.32, C.wallX - 0.05, C.seatY, backZ0 + 0.02, fabric);
+      slab(C.glassX + 0.05, C.seatY - 0.16, backZ0, -0.005, -0.02, backZ1, fabric);
+      slab(0.035, C.seatY - 0.16, backZ0, C.wallX - 0.05, -0.02, backZ1, fabric);
+      slab(-0.52, -0.02, backZ0 + 0.02, -0.16, 0.24, backZ1 - 0.02, fabric);
+      slab(0.2, -0.02, backZ0 + 0.02, 0.56, 0.24, backZ1 - 0.02, fabric);
+
+      // Parcel shelf behind the seat, with the rear screen above it.
+      slab(C.glassX + 0.05, -0.04, backZ1, C.wallX - 0.05, 0.01, C.backZ - 0.04, card);
+
+      // Front seats ahead of you, and the glow of the windscreen past them.
+      slab(-0.64, C.seatY - 0.2, C.frontZ + 0.16, -0.12, 0.2, C.frontZ + 0.32, fabric);
+      slab(0.18, C.seatY - 0.2, C.frontZ + 0.16, 0.7, 0.2, C.frontZ + 0.32, fabric);
+      slab(-0.56, 0.2, C.frontZ + 0.18, -0.2, 0.42, C.frontZ + 0.3, fabric);
+      slab(0.26, 0.2, C.frontZ + 0.18, 0.62, 0.42, C.frontZ + 0.3, fabric);
+
+      const screen = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.5, 0.5),
+        new THREE.MeshBasicMaterial({ map: glassTex, opacity: 0.26, transparent: true })
+      );
+      screen.position.set(0, 0.3, C.frontZ + 0.02);
+      scene.add(screen);
+
+      // Rear window behind your shoulder.
+      const rear = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.3, 0.4),
+        new THREE.MeshBasicMaterial({ map: glassTex, opacity: 0.32, transparent: true })
+      );
+      rear.position.set(0, 0.22, C.backZ - 0.02);
+      rear.rotation.y = Math.PI;
+      scene.add(rear);
+
+      // Seat belt off the pillar behind the window.
+      const belt = new THREE.Mesh(
+        new THREE.BoxGeometry(0.012, 1.0, 0.05),
+        mat("#12151c", 1)
+      );
+      belt.position.set(C.glassX + 0.12, 0.0, C.winZ + 0.1);
+      belt.rotation.x = 0.24;
+      belt.rotation.z = -0.12;
+      scene.add(belt);
+
+      // Light. Almost all of it comes through the window, and the sweep light
+      // is driven by the same lamps that are sliding past outside — so a lamp
+      // crossing the pane washes warm light across the seat beside you.
+      // Light in here is entirely borrowed: sky through the glass above,
+      // black carpet below, and a soft source at each window. Turning away
+      // from the pane has to leave you with something to look at.
+      scene.add(new THREE.HemisphereLight(0x3b5178, 0x0d1220, 1.2));
+      // The pane is the only real source in here, so a directional light
+      // stands in for it and rakes across everything it can see.
+      const paneLight = new THREE.DirectionalLight(0x8fb0dd, 0.75);
+      paneLight.position.set(C.glassX - 1.4, 0.5, 0.2);
+      paneLight.target.position.set(C.wallX, -0.2, 0);
+      scene.add(paneLight);
+      scene.add(paneLight.target);
+      sweepLight = new THREE.PointLight(0xffb478, 0, 9, 2.1);
+      sweepLight.position.set(C.glassX - 1.35, 0.36, 0);
+      scene.add(sweepLight);
+      const fill = new THREE.PointLight(0x5f83bd, 0.55, 5.5, 1.8);
+      fill.position.set(C.glassX + 0.25, 0.05, -0.2);
+      scene.add(fill);
+      const rightPane = new THREE.PointLight(0x7f9ecb, 0.7, 4.6, 1.9);
+      rightPane.position.set(C.wallX - 0.28, 0.02, 0);
+      scene.add(rightPane);
+      const rearGlow = new THREE.PointLight(0x9ab6e0, 0.8, 4.2, 1.8);
+      rearGlow.position.set(0, 0.22, C.backZ - 0.16);
+      scene.add(rearGlow);
+      // Footwell strip. Cars really do have this, and without it the whole
+      // lower half of the cabin is an unreadable black field once you turn
+      // away from the window.
+      const footwell = new THREE.PointLight(0xffab68, 0.55, 1.9, 2);
+      footwell.position.set(0.18, C.floorY + 0.28, -0.34);
+      scene.add(footwell);
+
+      camera = new THREE.PerspectiveCamera(68, ctx.width / ctx.height, 0.02, 40);
+      camera.position.set(C.eye[0], C.eye[1], C.eye[2]);
+      camera.rotation.order = "YXZ";
+      camera.rotation.y = YAW0;
+
+      raycaster = new THREE.Raycaster();
+      ndc = new THREE.Vector2();
+    }
+
+    async function tryCabin() {
+      if (!CAN_BAKE) return false;        // the pane has to become a texture
+      const T = await loadThree();
+      if (!T) return false;
+      THREE = T;
+      try {
+        renderer = new THREE.WebGLRenderer({ canvas: view3d, antialias: true, alpha: false });
+      } catch (_) {
+        return false;
+      }
+      renderer.setPixelRatio(Math.min(ctx.nativeDpr || window.devicePixelRatio || 1, 2));
+      renderer.setSize(ctx.width, ctx.height, false);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.12;
+
+      // Rebuild the pane at the window's aspect before anything references it.
+      setupGlass(PANE_3D.w, PANE_3D.h, 1, true);
+      buildCabin();
+
+      ctx.onDestroy(() => {
+        try { renderer.dispose(); } catch (_) {}
+      });
+      return true;
+    }
+
+    // Where the visible lamps are, in cabin Z, so the interior light matches
+    // what is sliding past the pane.
+    function stepCabinLight() {
+      if (!sweepLight) return;
+      let best = 0, bestZ = 0;
+      for (let i = 0; i < nearLamps.length; i++) {
+        // Lamp u drifts with the near strip; 0..1 across the pane.
+        let u = nearLamps[i].u - scrollNear / G.w;
+        u = ((u % 1) + 1) % 1;
+        // Brightest when the lamp is square-on to the window.
+        const w = Math.max(0, 1 - Math.abs(u - 0.5) * 2.4) * nearLamps[i].a;
+        if (w > best) { best = w; bestZ = (u - 0.5) * 3.2; }
+      }
+      sweepLight.intensity = best * 3.4;
+      sweepLight.position.z = bestZ;
+    }
+
+    function renderCabin(dt) {
+      // Only pay for a texture upload when the pane is actually in view, and
+      // never more than ~40 times a second — the drops do not move fast enough
+      // to need more, and this is the single most expensive thing per frame.
+      texClock += dt;
+      const facing = Math.sin(yaw) > 0.42;   // heading is (-sin yaw, ., -cos yaw)
+      const every = avgDt > 26 ? 0.05 : 0.025;
+      if (glassTex && texClock > every && (facing || texClock > 0.2)) {
+        texClock = 0;
+        renderGlass(gg);
+        glassTex.needsUpdate = true;
+      }
+      stepCabinLight();
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+      renderer.render(scene, camera);
     }
 
     /* ---------------------------------------------------------------- *
      * Audio
      *
      * Rain on a car window is three things at once: a wide hiss, a lower body
-     * of wind over the shell, and individual impacts on the pane right next
-     * to your ear. The impacts are what make it read as *this* window rather
-     * than generic rain, so they are synthesised one at a time.
+     * of wind over the shell, and individual impacts on the pane right next to
+     * your ear. The impacts are what make it read as *this* window rather than
+     * generic rain, so they are synthesised one at a time.
      * ---------------------------------------------------------------- */
 
     let ac = null, master = null, noiseBuf = null, audioDead = false;
@@ -1231,7 +1564,6 @@ window.plethoraBit = {
       const nd = noiseBuf.getChannelData(0);
       for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
-      // Wide hiss: the sheet of rain out there in the dark.
       const hiss = ac.createBiquadFilter();
       hiss.type = "bandpass";
       hiss.frequency.value = 2600;
@@ -1243,8 +1575,6 @@ window.plethoraBit = {
       rainSrc.connect(hiss); hiss.connect(rainGain); rainGain.connect(master);
       try { rainSrc.start(0); } catch (_) {}
 
-      // Wind over the car shell: lower, slower, and it moves with the gusts
-      // that are pushing the drops sideways on screen.
       windFilter = ac.createBiquadFilter();
       windFilter.type = "bandpass";
       windFilter.frequency.value = 330;
@@ -1385,30 +1715,23 @@ window.plethoraBit = {
     }
 
     /* ---------------------------------------------------------------- *
-     * The race
-     *
-     * ambient -> betting -> running -> settled -> ambient
+     * The race: ambient -> betting -> running -> settled -> ambient
      * ---------------------------------------------------------------- */
 
-    const race = {
-      state: "ambient",
-      until: null,
-      pick: null,
-      racers: [null, null, null]
-    };
+    const race = { state: "ambient", until: null, pick: null, racers: [null, null, null] };
+    let raceArmed = false;
     const stats = { races: 0, wins: 0, streak: 0, best: 0, biggest: 0 };
     let finished = [];
 
     function formRace() {
       clearRacers();
       finished = [];
-      const gl = L.glass;
-      const lanes = [0.22, 0.5, 0.78];
+      const lanes = [0.27, 0.5, 0.73];
       for (let i = 0; i < 3; i++) {
         // Lanes are nudged so the start line is never identical twice.
         race.racers[i] = makeDrop(
-          gl.x + gl.w * (lanes[i] + rr(-0.06, 0.06)),
-          gl.y + gl.h * rr(0.15, 0.23),
+          G.w * (lanes[i] + rr(-0.05, 0.05)),
+          G.h * rr(0.15, 0.23),
           SZ.release * rr(0.72, 0.82),
           { racer: i, pin: 2.4, grow: 0 }   // pinned hard until the flag drops
         );
@@ -1489,15 +1812,13 @@ window.plethoraBit = {
       return "Won " + stats.wins + " of " + stats.races;
     }
 
-    // A little burst at the sill where the winning drop landed.
     function splash(winner) {
       const d = race.racers[winner];
-      const x = d ? clamp(d.x, L.glass.x + 8, L.glass.x + L.glass.w - 8)
-                  : L.glass.x + L.glass.w / 2;
+      const x = d ? clamp(d.x, 8, G.w - 8) : G.w / 2;
       for (let i = 0; i < 14; i++) {
         makeDrop(
           x + rr(-18, 18) * SZ.s,
-          L.sillY - rr(2, 18) * SZ.s,
+          G.h - rr(2, 18) * SZ.s,
           rr(SZ.beadMin * 0.7, SZ.beadMax * 0.8)
         );
       }
@@ -1515,7 +1836,7 @@ window.plethoraBit = {
     function stepRace() {
       if (race.until === null) return;
       if (race.state === "betting") {
-        if (nowMs > race.until) beginRunning();   // no bet placed; it still rains
+        if (nowMs > race.until) beginRunning();
       } else if (race.state === "running") {
         let anyAlive = false;
         for (let i = 0; i < 3; i++) {
@@ -1523,7 +1844,6 @@ window.plethoraBit = {
           if (d && d.life > 0) anyAlive = true;
         }
         if (nowMs > race.until || !anyAlive) {
-          // Timed out, or every racer blew off the glass. Lowest one takes it.
           let best = null, bestY = -Infinity;
           for (let i = 0; i < 3; i++) {
             const d = race.racers[i];
@@ -1567,9 +1887,7 @@ window.plethoraBit = {
       saving = true;
       try {
         await ctx.memory.local("window_stats").set({
-          races: stats.races,
-          wins: stats.wins,
-          best: stats.best,
+          races: stats.races, wins: stats.wins, best: stats.best,
           biggest: Math.round(stats.biggest * 10) / 10
         });
       } catch (_) {}
@@ -1645,7 +1963,7 @@ window.plethoraBit = {
       "font-size:18px;font-weight:600;letter-spacing:.01em;text-shadow:0 2px 12px rgba(0,0,0,.95);"
     );
     const bSub = divEl(
-      "margin-top:3px;font-size:12.5px;color:rgba(202,218,242,.78);text-shadow:0 1px 6px rgba(0,0,0,.85);"
+      "margin-top:3px;font-size:12.5px;color:rgba(202,218,242,.78);text-shadow:0 1px 6px rgba(0,0,0,.95);"
     );
     banner.appendChild(bTitle);
     banner.appendChild(bSub);
@@ -1686,8 +2004,9 @@ window.plethoraBit = {
       "Mist gathers on the glass. When a bead gets heavy enough it breaks loose and runs.",
       "A running drop swallows every bead it touches — the fatter it gets, the faster it goes.",
       "Three drops get coloured rings. Tap one to back it.",
-      "Drag anywhere to sweep loose beads into one heavy drop, then let go.",
+      "Drag the glass to sweep loose beads into one heavy drop, then let go.",
       "Drop it in your racer's path and your racer swallows it and speeds up.",
+      "Drag the seat or the door to look around the car.",
       "First drop down to the sill wins. Win in a row to build a streak."
     ];
     for (let i = 0; i < STEPS.length; i++) {
@@ -1742,10 +2061,10 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------- *
      * Input
      *
-     * One gesture does everything. Press near a racer while betting and you
-     * have backed it. Press anywhere else and your fingertip becomes a warm
-     * patch that sweeps loose beads into a single drop; let go and whatever
-     * you built is released to run.
+     * One gesture does everything, and what it does depends on what is under
+     * it. On the glass you touch the water; anywhere else in the cabin you
+     * turn your head. In the flat view there is no cabin, so everything
+     * outside the pane simply does nothing.
      * ---------------------------------------------------------------- */
 
     let started = false;
@@ -1758,36 +2077,57 @@ window.plethoraBit = {
       startMotion();
     }
 
-    function pos(e) {
-      if (typeof e.offsetX === "number" && typeof e.offsetY === "number") {
-        return { x: e.offsetX, y: e.offsetY };
+    // Screen point -> pane point, or null if the touch missed the glass.
+    function toGlass(e) {
+      const sx = typeof e.offsetX === "number" ? e.offsetX : L.W / 2;
+      const sy = typeof e.offsetY === "number" ? e.offsetY : L.H / 2;
+      if (mode === "cabin") {
+        if (!raycaster || !glassMesh) return null;
+        ndc.set((sx / L.W) * 2 - 1, -((sy / L.H) * 2 - 1));
+        raycaster.setFromCamera(ndc, camera);
+        const hit = raycaster.intersectObject(glassMesh, false)[0];
+        if (!hit || !hit.uv) return null;
+        return { x: hit.uv.x * G.w, y: (1 - hit.uv.y) * G.h };
       }
-      return { x: L.W / 2, y: L.H / 2 };
+      const gl = L.glass;
+      if (sx < gl.x || sx > gl.x + gl.w || sy < gl.y || sy > gl.y + gl.h) return null;
+      return { x: ((sx - gl.x) / gl.w) * G.w, y: ((sy - gl.y) / gl.h) * G.h };
     }
 
-    let dragging = false;
+    let dragging = false;         // dragging water
+    let looking = false;          // dragging the view
+    let lookX = 0, lookY = 0;
 
-    ctx.listen(canvas, "pointerdown", (e) => {
+    function onDown(e) {
       e.preventDefault();
       firstGesture();
-      const p = pos(e);
+      const p = toGlass(e);
 
-      if (race.state === "betting") {
+      if (p && race.state === "betting") {
         let hit = -1, bd = Infinity;
         for (let i = 0; i < 3; i++) {
           const d = race.racers[i];
           if (!d || d.life <= 0) continue;
           const dist = Math.hypot(d.x - p.x, d.y - p.y);
-          if (dist < Math.max(48, d.r + 30 * SZ.s) && dist < bd) { bd = dist; hit = i; }
+          if (dist < Math.max(48 * SZ.s, d.r + 30 * SZ.s) && dist < bd) { bd = dist; hit = i; }
         }
         if (hit >= 0) { pickRacer(hit); return; }
       }
 
-      if (p.y < L.glass.y - 6 || p.y > L.sillY + 6) return;
+      const target = mode === "cabin" ? view3d : view2d;
+      try { target.setPointerCapture(e.pointerId); } catch (_) {}
 
-      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      if (!p) {
+        // Not on the glass. In the cabin that means you are turning your head.
+        if (mode === "cabin") {
+          looking = true;
+          lookX = typeof e.offsetX === "number" ? e.offsetX : 0;
+          lookY = typeof e.offsetY === "number" ? e.offsetY : 0;
+        }
+        return;
+      }
+
       dragging = true;
-
       // Grab the nearest real drop if there is one, otherwise start a fresh
       // bead under the finger and let it grow as you sweep. Drops in the race
       // are off limits — being able to carry your own runner down to the sill
@@ -1803,15 +2143,26 @@ window.plethoraBit = {
       held.run = false;
       held.vx = held.vy = 0;
       ctx.platform.interact({ type: "grab" });
-    }, { passive: false });
+    }
 
-    ctx.listen(canvas, "pointermove", (e) => {
+    function onMove(e) {
+      if (looking) {
+        e.preventDefault();
+        const sx = typeof e.offsetX === "number" ? e.offsetX : lookX;
+        const sy = typeof e.offsetY === "number" ? e.offsetY : lookY;
+        yawTarget = clamp(yawTarget - (sx - lookX) * 0.004, YAW0 - YAW_RANGE, YAW0 + YAW_RANGE);
+        pitchTarget = clamp(pitchTarget - (sy - lookY) * 0.0035, -0.62, 0.5);
+        lookX = sx; lookY = sy;
+        return;
+      }
       if (!dragging || !held || held.life <= 0) return;
       e.preventDefault();
-      const p = pos(e);
+      const p = toGlass(e);
+      if (!p) return;                    // finger slid off the pane; hold still
+
       const px = held.x, py = held.y;
-      held.x = clamp(p.x, L.glass.x + held.r, L.glass.x + L.glass.w - held.r);
-      held.y = clamp(p.y, L.glass.y + held.r, L.sillY - held.r);
+      held.x = clamp(p.x, held.r, G.w - held.r);
+      held.y = clamp(p.y, held.r, G.h - held.r);
       held.vx = (held.x - px) * 12;
       held.vy = (held.y - py) * 12;
 
@@ -1826,8 +2177,8 @@ window.plethoraBit = {
         const dist = Math.hypot(dx, dy) || 1;
         if (dist < held.r + b.r + 2) {
           onMerge(held, absorb(held, b));
-          held.x = clamp(held.x, L.glass.x + held.r, L.glass.x + L.glass.w - held.r);
-          held.y = clamp(held.y, L.glass.y + held.r, L.sillY - held.r);
+          held.x = clamp(held.x, held.r, G.w - held.r);
+          held.y = clamp(held.y, held.r, G.h - held.r);
         } else if (dist < SZ.gather) {
           // Pulled along, not teleported — you can watch them come to you.
           const k = (1 - dist / SZ.gather) * 2.6 * SZ.s;
@@ -1836,12 +2187,11 @@ window.plethoraBit = {
         }
       }
       if (held.r > stats.biggest) stats.biggest = held.r;
-    }, { passive: false });
+    }
 
-    function endDrag(e) {
-      if (!dragging) return;
-      dragging = false;
-      if (held && held.life > 0) {
+    function onUp(e) {
+      looking = false;
+      if (dragging && held && held.life > 0) {
         // Released. If you built something heavy, it goes straight away.
         if (held.r >= SZ.release * 0.76) {
           held.pin = 0.8;
@@ -1851,47 +2201,69 @@ window.plethoraBit = {
           ctx.platform.interact({ type: "release", size: Math.round(held.r) });
         }
       }
+      dragging = false;
       held = null;
       if (e && e.pointerId != null) {
-        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+        try { view2d.releasePointerCapture(e.pointerId); } catch (_) {}
+        try { view3d.releasePointerCapture(e.pointerId); } catch (_) {}
       }
     }
-    ctx.listen(canvas, "pointerup", endDrag);
-    ctx.listen(canvas, "pointercancel", endDrag);
+
+    // Only whichever surface is showing can receive events, so both are wired.
+    for (const surface of [view2d, view3d]) {
+      ctx.listen(surface, "pointerdown", onDown, { passive: false });
+      ctx.listen(surface, "pointermove", onMove, { passive: false });
+      ctx.listen(surface, "pointerup", onUp);
+      ctx.listen(surface, "pointercancel", onUp);
+    }
 
     /* ---------------------------------------------------------------- *
-     * Tilt parallax
+     * Head movement
      *
-     * Not a free-look camera — just enough that the world outside and the
-     * cabin around it disagree slightly when you move the phone, which is
-     * most of what sells sitting inside something. The frame stays put and
-     * the view through it shifts, exactly as a real window behaves.
+     * Device tilt leans your head. In the cabin that is a real look-around on
+     * top of whatever you have dragged to; in the flat view it shifts the
+     * world behind the pane, which is what parallax through a window actually
+     * looks like. Without a motion grant the car sways on its own.
      * ---------------------------------------------------------------- */
 
     let motionOn = false;
     let swayPhase = rr(0, 100);
+    let leanX = 0, leanY = 0;
+
     async function startMotion() {
       if (motionOn || !ctx.capabilities || !ctx.capabilities.motion) return;
       try { motionOn = !!(await ctx.motion.start()); } catch (_) { motionOn = false; }
     }
 
-    function stepTilt(dt) {
+    function stepHead(dt) {
       let tx, ty;
       if (motionOn && ctx.motion && ctx.motion.active) {
         const t = ctx.motion.tilt || {};
         tx = clamp((t.y || 0) / 26, -1, 1);
         ty = clamp(((t.x || 0) - 42) / 34, -1, 1);
       } else {
-        // No motion grant: the car sways on its own.
         swayPhase += dt * 0.28;
         tx = Math.sin(swayPhase) * 0.34 + Math.sin(swayPhase * 1.83) * 0.14;
         ty = Math.sin(swayPhase * 0.71 + 2) * 0.2;
       }
-      const maxT = Math.min(26, L.W * 0.06);
-      tiltX += (tx * maxT - tiltX) * Math.min(1, dt * 3.4);
-      tiltY += (ty * maxT * 0.4 - tiltY) * Math.min(1, dt * 3.4);
-      worldOffX = tiltX;
-      worldOffY = clamp(tiltY, -L.glass.h * 0.045, L.glass.h * 0.045);
+      const ease = Math.min(1, dt * 3.4);
+      leanX += (tx - leanX) * ease;
+      leanY += (ty - leanY) * ease;
+
+      if (mode === "cabin") {
+        // Enough that the car feels alive under you, far too little to
+        // walk the window off the middle of the screen.
+        yaw += (yawTarget + leanX * 0.055 - yaw) * ease;
+        pitch += (pitchTarget + leanY * 0.04 - pitch) * ease;
+        // The pane is flat, so the view through it should not shift when the
+        // head only rotates — only when it leans. Keep the offset small.
+        worldOffX = leanX * G.w * 0.012;
+        worldOffY = clamp(leanY * G.h * 0.01, -G.h * 0.045, G.h * 0.045);
+      } else {
+        const maxT = Math.min(26, L.W * 0.06);
+        worldOffX = leanX * maxT;
+        worldOffY = clamp(leanY * maxT * 0.4, -G.h * 0.045, G.h * 0.045);
+      }
     }
 
     /* ---------------------------------------------------------------- *
@@ -1903,7 +2275,10 @@ window.plethoraBit = {
     ctx.onFrame((dtMs, timeMs) => {
       nowMs = timeMs;
       if (ctx.width !== L.rawW || ctx.height !== L.rawH) queueRelayout();
-      if (race.until === null) race.until = nowMs + 2400;
+      // Armed only once boot has settled on a view, so the cabin cannot
+      // arrive in the middle of a race. nowMs is the frame clock, which is
+      // why the first deadline is set here rather than during init.
+      if (raceArmed && race.until === null) race.until = nowMs + 1800;
       const dt = Math.min(0.05, Math.max(0.001, dtMs / 1000));
       avgDt = avgDt * 0.94 + dtMs * 0.06;
 
@@ -1913,10 +2288,10 @@ window.plethoraBit = {
       else if (avgDt < 19 && lensBudget < TUNE.maxLens) lensBudget++;
 
       // The car is moving. Near things slide past faster than far things.
-      scrollFar = (scrollFar + dt * 17) % L.glass.w;
-      scrollNear = (scrollNear + dt * 56) % L.glass.w;
+      scrollFar = (scrollFar + dt * 17 * SZ.s) % G.w;
+      scrollNear = (scrollNear + dt * 56 * SZ.s) % G.w;
 
-      stepTilt(dt);
+      stepHead(dt);
       healMist(dt);
       rain(dt);
       stepDrops(dt);
@@ -1939,37 +2314,47 @@ window.plethoraBit = {
         } catch (_) {}
       }
 
-      render();
+      if (mode === "cabin") renderCabin(dt);
+      else renderFlat();
     });
 
     /* ---------------------------------------------------------------- *
      * Resize
+     *
+     * The runtime owns both canvases and keeps their backing stores matched to
+     * the container, so a resize only means re-deriving the layout and
+     * re-baking whatever was sized to it. Driven off the measured size rather
+     * than the window event, because the container can change without the
+     * window doing anything (host chrome, split view, keyboard).
      * ---------------------------------------------------------------- */
 
-    // The runtime owns the canvas and keeps its backing store matched to the
-    // container, so all a resize means here is re-deriving the layout and
-    // re-baking anything sized to the glass. Driven off the measured size
-    // rather than the window event, because the container can change without
-    // the window doing anything (host chrome, split view, keyboard).
     let resizeQueued = false;
     function queueRelayout() {
       if (resizeQueued) return;
       resizeQueued = true;
       ctx.timeout(() => {
         resizeQueued = false;
-        const o = { x: L.glass.x, y: L.glass.y, w: L.glass.w, h: L.glass.h };
         layout();
-        // Carry the weather across rather than wiping the glass clean.
-        const sx = L.glass.w / (o.w || 1), sy = L.glass.h / (o.h || 1);
-        for (let i = 0; i < drops.length; i++) {
-          const d = drops[i];
-          d.x = L.glass.x + (d.x - o.x) * sx;
-          d.y = L.glass.y + (d.y - o.y) * sy;
-        }
-        bakeWorld();
-        bakeBeads();
-        bakeMist();
         placeUI();
+        if (mode === "cabin") {
+          renderer.setSize(ctx.width, ctx.height, false);
+          camera.aspect = ctx.width / ctx.height;
+          camera.updateProjectionMatrix();
+        } else {
+          // Carry the weather across rather than wiping the glass clean.
+          const sx = L.glass.w / (G.w || 1), sy = L.glass.h / (G.h || 1);
+          const keep = drops.map((d) => ({ d, x: d.x * sx, y: d.y * sy }));
+          setupGlass(L.glass.w, L.glass.h, 1, false);
+          drops.length = 0;
+          for (const k of keep) {
+            if (k.d.life > 0 && k.x > 0 && k.x < G.w && k.y > 0 && k.y < G.h) {
+              k.d.x = k.x; k.d.y = k.y; drops.push(k.d);
+            }
+          }
+          clearRacers();
+          race.state = "ambient";
+          race.until = nowMs + 1600;
+        }
       }, 180);
     }
     ctx.listen(window, "resize", queueRelayout);
@@ -1977,12 +2362,14 @@ window.plethoraBit = {
 
     /* ---------------------------------------------------------------- *
      * Boot
+     *
+     * The flat view comes up immediately and is fully playable, so there is
+     * never a blank frame and never a wait. The cabin loads behind it and
+     * takes over when it is ready — or never, in which case nothing is
+     * missing except the walls.
      * ---------------------------------------------------------------- */
 
-    bakeWorld();
-    bakeBeads();
-    bakeMist();
-    seedGlass(Math.round(SZ.maxBeads * 0.8));
+    setupGlass(L.glass.w, L.glass.h, 1, false);
 
     try {
       const pref = await ctx.storage.get("sound");
@@ -1990,8 +2377,7 @@ window.plethoraBit = {
     } catch (_) {}
     btnSound.textContent = soundOn ? "♪" : "✕";
 
-    // Draw before anything else so the host never sees an empty frame.
-    render();
+    renderFlat();
     ctx.markVisualReady("first_glass");
 
     loadStats();
@@ -2001,5 +2387,20 @@ window.plethoraBit = {
     if (!seen) openSheet(true);
 
     ctx.platform.ready();
+
+    // Hold the race until the view has settled, so the cabin does not arrive
+    // in the middle of one.
+    let builtCabin = false;
+    try { builtCabin = await tryCabin(); } catch (_) { builtCabin = false; }
+    if (builtCabin) {
+      mode = "cabin";
+      view2d.style.display = "none";
+      view3d.style.display = "";
+      ctx.platform.emit("view_mode", { mode: "cabin" });
+    } else {
+      ctx.platform.emit("view_mode", { mode: "flat" });
+    }
+    race.until = null;
+    raceArmed = true;
   }
 };

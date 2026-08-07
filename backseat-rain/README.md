@@ -14,6 +14,11 @@ That release is the whole bit. The game on top is the bet you already make
 without meaning to: three drops get coloured rings, you back one, and the first
 one down to the sill wins.
 
+You are actually in the car. The back of it is built around you — door card,
+bench, headrests, the front seats ahead, the parcel shelf and rear screen
+behind — and the glass hangs in the window aperture. Drag the cabin and you
+turn your head; drag the glass and you touch the water.
+
 ## Files
 
 | File            | Purpose                                                          |
@@ -56,9 +61,16 @@ rivalry between paths comes from, and it is emergent, not authored.
 
 ## What you actually do
 
-Press anywhere and your fingertip becomes a warm patch that sweeps loose beads
-into a single heavy drop. Let go and, if you built something fat enough, it
-breaks loose immediately.
+One gesture does everything, and what it does depends on what is under it. On
+the glass you touch the water — your fingertip becomes a warm patch that sweeps
+loose beads into a single heavy drop, and letting go releases whatever you
+built. Anywhere else in the cabin you turn your head. In the cabin the touch is
+resolved by raycasting the pane and reading the hit UV, so the same code drives
+both views.
+
+Tilt leans your head on top of that: a real look-around in the cabin, and a
+shift of the world behind the pane in the flat view. Without a motion grant the
+car sways on its own.
 
 Drops that are *in* the race cannot be grabbed. Being able to carry your own
 runner down to the sill would settle every race before it started — so you feed
@@ -69,10 +81,37 @@ size and speed.
 If you never tap, the rings simply release on their own after a while and it
 goes back to being rain on a window. Nothing here demands to be played.
 
+## Two views, one simulation
+
+The glass is simulated into its own surface in its own coordinate space, which
+means the same pixels can be presented two ways:
+
+- **Cabin.** `three@0.164.1` builds the back of the car and hangs the glass in
+  the window aperture as a texture. The streetlights sliding past outside are
+  the *same* lamps that light the interior — `stepCabinLight` finds whichever
+  near-strip lamp is squarest to the window and puts the sweep light there — so
+  a lamp crossing the pane washes warm light across the seat beside you.
+- **Flat.** The glass drawn straight to a 2D canvas inside a painted frame.
+  This is what renders on the very first frame, before three has finished
+  loading, and it is where the bit stays for good if three fails, if there is
+  no WebGL, or if there is no `OffscreenCanvas`. Fully playable either way —
+  the cabin is presentation, not mechanics.
+
+Only the cabin gets an offscreen surface. The flat view paints straight into
+the display canvas, because Chromium accelerates a canvas that is on screen but
+rasterises an offscreen 2D context in software: routing the flat view through
+one measured **1.7 ms → 22.5 ms per frame** for no benefit at all.
+
+The cabin is lit almost entirely by what is happening outside. Night interiors
+are forgiving — what you read is silhouette and rim light — so plain slabs in
+the right darkness sell it better than detail would, with one tileable grain
+reused at different repeats so the big door and seat panels are not flat voids.
+
 ## Rendering notes
 
-No dependencies and no packaged assets (`maxAssets: 0`) — scenery, drops,
-condensation and every sound are generated at runtime.
+One registry dependency (`three@0.164.1`) and no packaged assets
+(`maxAssets: 0`) — scenery, cabin geometry, drops, condensation and every sound
+are generated at runtime.
 
 - **Every drop over a threshold is a real lens.** The world outside is sampled,
   flipped through the focal point, and magnified inside the drop's body. That
@@ -100,6 +139,8 @@ condensation and every sound are generated at runtime.
 - **Small beads are baked sprites**, sized per step of radius, so a frame is
   mostly `drawImage` calls. Lensing is the expensive part and is the first thing
   dropped when frame time slips, and the first thing restored when it recovers.
+  In the cabin the pane texture only re-uploads when the window is actually in
+  view, and backs off from 40 Hz to 20 Hz when frames get long.
 
 - **Sound is three layers**: a wide hiss for the sheet of rain, a lower body of
   wind over the car shell that rides the same gusts slanting the drops on
@@ -156,6 +197,15 @@ Driven in headless Chromium against a stub of the `ctx` surface, at
   area — the sill sits clear of it and everything below is door card.
 - Rotation to landscape and back, with the layout moving the caption down onto
   the door card when the window is too short to carry it over the glass.
-- No runtime errors in any configuration. Frame cost flat over two minutes
-  (p90 ≈ 2 ms), so the drop population and the condensation layer are not
+- The cabin taking over from the flat view, a bet placed by tapping a ring
+  *through* the 3D pane, and dragging the cabin turning the view.
+- No runtime errors in any configuration. Simulation cost flat over two minutes
+  (p90 ≈ 3 ms), so the drop population and the condensation layer are not
   leaking.
+
+One caveat on the cabin's numbers: headless Chromium rasterises WebGL in
+software (SwiftShader), so wall-clock frame rate there is not informative. A
+CPU profile is, and it puts **90 % of the time in `(program)`** — the software
+rasteriser itself — with 7.9 % in `texSubImage2D` and every one of this bit's
+own functions under 1 %. The cabin's cost is the software renderer, not the
+code driving it.
