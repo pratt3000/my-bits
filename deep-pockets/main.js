@@ -188,6 +188,15 @@ window.plethoraBit = {
       }
     ];
 
+    // Unlit rock is covered with the stratum's colour dimmed to 14%, baked to a
+    // flat opaque value so a screen of unexplored ground is a few solid fills
+    // rather than hundreds of alpha blends.
+    for (const z of ZONES) {
+      const n = parseInt(z.tint.slice(1), 16);
+      z.dim = "rgb(" + Math.round(((n >> 16) & 255) * 0.14) + "," +
+        Math.round(((n >> 8) & 255) * 0.14) + "," + Math.round((n & 255) * 0.14) + ")";
+    }
+
     function zoneAt(m) {
       for (let i = 0; i < ZONES.length; i++) if (m <= ZONES[i].to) return ZONES[i];
       return ZONES[ZONES.length - 1];
@@ -303,6 +312,13 @@ window.plethoraBit = {
     const idx = (x, y) => y * COLS + x;
     const inBounds = (x, y) => x >= 0 && x < COLS && y >= 0 && y < ROWS;
     const tileAt = (x, y) => (inBounds(x, y) ? grid[idx(x, y)] : M.CORESHELL);
+
+    // Render cache for the tile art, declared here because world generation
+    // invalidates it and runs before the drawing code is reached. See 11b.
+    const CH = 8;
+    const CHX = Math.ceil(COLS / CH);
+    const chunks = new Map();          // key -> { surf, seenAt }
+    let bakeBudget = 2, frameNo = 0;
 
     const S = {
       seed: 0,
@@ -483,6 +499,7 @@ window.plethoraBit = {
 
       // sky above the dirt
       for (let y = 0; y < GROUND; y++) for (let x = 0; x < COLS; x++) grid[idx(x, y)] = AIR;
+      dirtyAllChunks();
     }
 
     // ====================================================================
@@ -556,6 +573,7 @@ window.plethoraBit = {
         p += len;
         cur = cur ? 0 : 1;
       }
+      dirtyAllChunks();
     }
 
     function snapshot(withDug) {
@@ -874,7 +892,10 @@ window.plethoraBit = {
     // fills — plainer, never blank.
     const CAN_BAKE = typeof OffscreenCanvas === "function";
     const VARIANTS = 4;
-    let atlas = null, atlasTS = 0;
+    // Bakes are painted at device resolution and blitted back down into CSS
+    // pixels, otherwise every tile would be a 2x upscale on a phone.
+    const AS = Math.max(1, Math.min(2, Math.round(ctx.dpr || 1)));
+    let atlas = null, atlasTS = 0, atlasCell = 0;
 
     function makeSurface(w, h) {
       if (!CAN_BAKE) return null;
@@ -1010,15 +1031,108 @@ window.plethoraBit = {
 
     function bakeAtlas() {
       if (!CAN_BAKE || atlasTS === TS) return;
-      const cv = makeSurface(VARIANTS * TS, MAT.length * TS);
+      const cell = TS * AS;
+      const cv = makeSurface(VARIANTS * cell, MAT.length * cell);
       if (!cv) { atlas = null; return; }
       const c = cv.getContext("2d");
       for (let id = 1; id < MAT.length; id++) {
         const d = MAT[id];
         if (d.kind === "lava" || d.kind === "core") continue;   // animated, drawn live
-        for (let v = 0; v < VARIANTS; v++) paintTile(c, id, v * TS, id * TS, v, TS);
+        for (let v = 0; v < VARIANTS; v++) paintTile(c, id, v * cell, id * cell, v, cell);
       }
-      atlas = cv; atlasTS = TS;
+      atlas = cv; atlasTS = TS; atlasCell = cell;
+      dirtyAllChunks();
+    }
+
+    // ====================================================================
+    // 11b. CHUNK CACHE
+    // ====================================================================
+    // The viewport is painted as a handful of pre-baked CH x CH blocks rather
+    // than a few hundred single-tile blits. A block is rebaked only when a tile
+    // inside it changes, and at most a couple are baked per frame so scrolling
+    // into fresh ground never costs a hitch.
+    const chunkKey = (cx, cy) => cy * CHX + cx;
+
+    function dirtyChunkAt(x, y) {
+      chunks.delete(chunkKey(Math.floor(x / CH), Math.floor(y / CH)));
+      if (x % CH === 0) chunks.delete(chunkKey(Math.floor(x / CH) - 1, Math.floor(y / CH)));
+      if (y % CH === 0) chunks.delete(chunkKey(Math.floor(x / CH), Math.floor(y / CH) - 1));
+    }
+    function dirtyAllChunks() { chunks.clear(); }
+
+    // Every runtime write to the grid goes through here so a stale block can
+    // never be left on screen.
+    function setTile(x, y, id) {
+      if (!inBounds(x, y)) return;
+      grid[idx(x, y)] = id;
+      dirtyChunkAt(x, y);
+      if (y + 1 < ROWS) dirtyChunkAt(x, y + 1);   // the lip above a new tunnel
+    }
+
+    function paintChunkInto(c, cx, cy, cell) {
+      for (let ty = 0; ty < CH; ty++) {
+        const y = cy * CH + ty;
+        if (y < 0 || y >= ROWS) continue;
+        for (let tx = 0; tx < CH; tx++) {
+          const x = cx * CH + tx;
+          if (x < 0 || x >= COLS) continue;
+          const id = grid[idx(x, y)];
+          if (id === AIR) continue;
+          const d = MAT[id];
+          if (d.kind === "lava" || d.kind === "core") continue;      // animated
+          const ox = tx * cell, oy = ty * cell;
+          const v = (hash2(x, y) * VARIANTS) | 0;
+          if (atlas) c.drawImage(atlas, v * atlasCell, id * atlasCell, atlasCell, atlasCell, ox, oy, cell, cell);
+          else paintTile(c, id, ox, oy, v, cell);
+          if (y > GROUND && grid[idx(x, y - 1)] === AIR) {
+            c.fillStyle = "rgba(255,255,255,0.10)";
+            c.fillRect(ox, oy, cell, Math.max(1, cell * 0.09));
+          }
+        }
+      }
+    }
+
+    function getChunk(cx, cy) {
+      const key = chunkKey(cx, cy);
+      const hit = chunks.get(key);
+      if (hit) { hit.seenAt = frameNo; return hit.surf; }
+      if (bakeBudget <= 0) return null;
+      const cell = TS * AS;
+      const surf = makeSurface(CH * cell, CH * cell);
+      if (!surf) return null;
+      bakeBudget--;
+      const c = surf.getContext("2d");
+      c.clearRect(0, 0, CH * cell, CH * cell);
+      paintChunkInto(c, cx, cy, cell);
+      chunks.set(key, { surf, seenAt: frameNo });
+      if (chunks.size > 28) {
+        let oldest = null, oldestAt = Infinity;
+        for (const [k, v] of chunks) if (v.seenAt < oldestAt) { oldestAt = v.seenAt; oldest = k; }
+        if (oldest !== null) chunks.delete(oldest);
+      }
+      return surf;
+    }
+
+    // One frame's worth of fallback while a block waits its turn to bake.
+    function drawChunkLive(cx, cy) {
+      for (let ty = 0; ty < CH; ty++) {
+        const y = cy * CH + ty;
+        if (y < 0 || y >= ROWS) continue;
+        const py = Math.round((y - cam.y) * TS);
+        if (py > H || py + TS < 0) continue;
+        for (let tx = 0; tx < CH; tx++) {
+          const x = cx * CH + tx;
+          if (x < 0 || x >= COLS) continue;
+          const id = grid[idx(x, y)];
+          if (id === AIR) continue;
+          const d = MAT[id];
+          if (d.kind === "lava" || d.kind === "core") continue;
+          const px = Math.round((x - cam.x) * TS);
+          g.fillStyle = d.base;
+          g.fillRect(px, py, TS, TS);
+          if (d.kind === "ore") drawIcon(g, d.icon, px + TS / 2, py + TS / 2, TS * 0.26, d.spec);
+        }
+      }
     }
 
     // ====================================================================
@@ -1074,7 +1188,7 @@ window.plethoraBit = {
     function bakeSky() {
       const key = W + "x" + H;
       if (skyKey === key && sky) return;
-      const cv = makeSurface(Math.max(1, W), Math.max(1, Math.round(SKY * TS) + 40));
+      const cv = makeSurface(Math.max(1, W) * AS, (Math.max(1, Math.round(SKY * TS)) + 40) * AS);
       skyKey = key;
       if (!cv) { sky = null; return; }
       const c = cv.getContext("2d");
@@ -1287,7 +1401,7 @@ window.plethoraBit = {
       const key = x + "," + y;
       if (S.chests[key]) return;
       S.chests[key] = true;
-      grid[idx(x, y)] = AIR;
+      setTile(x, y, AIR);
       const m = depthOf(y);
       const z = zoneAt(m);
       const rnd = mulberry(S.seed + x * 7919 + y * 104729);
@@ -1316,7 +1430,7 @@ window.plethoraBit = {
       const id = grid[idx(x, y)];
       if (id === AIR) return;
       const d = MAT[id];
-      grid[idx(x, y)] = AIR;
+      setTile(x, y, AIR);
       seen[idx(x, y)] = 255;
       tilesDug++;
       const px = x + 0.5, py = y + 0.5;
@@ -1343,7 +1457,7 @@ window.plethoraBit = {
     }
     function startFall(x, y) {
       for (const f of falling) if (f.x === x && f.y === y) return;
-      grid[idx(x, y)] = AIR;
+      setTile(x, y, AIR);
       falling.push({ x, y, fy: y, vy: 0, wait: 0.16 });
     }
     function stepFalling(dt) {
@@ -1361,7 +1475,7 @@ window.plethoraBit = {
         if (!inBounds(f.x, below) || grid[idx(f.x, below)] !== AIR) {
           const rest = Math.max(GROUND, Math.min(ROWS - 1, Math.round(f.fy)));
           f.y = rest; f.fy = rest;
-          if (grid[idx(f.x, rest)] === AIR) grid[idx(f.x, rest)] = M.BOULDER;
+          if (grid[idx(f.x, rest)] === AIR) setTile(f.x, rest, M.BOULDER);
           spawnDebris(f.x + 0.5, rest + 0.5, "#585a63", 6, 1.1);
           if (Math.abs(rest - P.ty) < 6 && Math.abs(f.x - P.tx) < 6) { SFX.breakTile(5); kick(TS * 0.12, 180); }
           falling.splice(i, 1);
@@ -1494,7 +1608,7 @@ window.plethoraBit = {
       if (!t || depthOf(t[1]) < 4) { SFX.deny(); toast("Dig a proper hole first."); return; }
       let [x, y] = t;
       x = clamp(x | 0, 0, COLS - 1); y = clamp(y | 0, GROUND, ROWS - 2);
-      if (grid[idx(x, y)] !== AIR) grid[idx(x, y)] = AIR;   // the shaft shifted; make room
+      if (grid[idx(x, y)] !== AIR) setTile(x, y, AIR);      // the shaft shifted; make room
       SFX.drop();
       seen[idx(x, y)] = 255;
       placePlayer(x, y);
@@ -1628,7 +1742,7 @@ window.plethoraBit = {
         // shovel is up to it.
         const bx = nx + dx, by = ny + dy;
         if (dy === 0 && inBounds(bx, by) && grid[idx(bx, by)] === AIR && by >= GROUND) {
-          grid[idx(nx, ny)] = AIR; grid[idx(bx, by)] = M.BOULDER;
+          setTile(nx, ny, AIR); setTile(bx, by, M.BOULDER);
           SFX.breakTile(4); haptic("medium");
           settleAbove(nx, ny);
           spawnDebris(nx + 0.5, ny + 0.5, "#585a63", 4, 0.8);
@@ -1738,13 +1852,26 @@ window.plethoraBit = {
     // ====================================================================
     // 20. LIGHT
     // ====================================================================
+    // The darkness pass is the most expensive surface in the frame and it is
+    // nothing but smooth gradients, so it is rendered at half resolution and
+    // scaled up. At full res it costs about 8 ms a frame; at half, about 2.
+    const LQ = 0.5;
     let lightLayer = null, lightKey = "";
     function ensureLayer() {
       const key = W + "x" + H;
       if (lightKey === key && lightLayer) return lightLayer;
       lightKey = key;
-      lightLayer = makeSurface(Math.max(1, Math.round(W)), Math.max(1, Math.round(H)));
+      lightLayer = makeSurface(Math.max(1, Math.round(W * LQ)), Math.max(1, Math.round(H * LQ)));
       return lightLayer;
+    }
+
+    // A gradient's bounding box is often far bigger than the screen — a
+    // Sunbottle at 13 m is a 900 px square — so every fill is clipped to what
+    // is actually visible.
+    function fillBox(c, x, y, w, h, cw, ch) {
+      const ax = Math.max(0, x), ay = Math.max(0, y);
+      const bx = Math.min(cw, x + w), by = Math.min(ch, y + h);
+      if (bx > ax && by > ay) c.fillRect(ax, ay, bx - ax, by - ay);
     }
 
     const emitters = [];                 // visible glowing tiles, rebuilt per frame
@@ -1753,24 +1880,34 @@ window.plethoraBit = {
       return clamp((m - 2) / 30, 0, 1) * 0.84;
     }
 
+    // Runs every frame over a few hundred tiles, so it compares squared
+    // distances and stays inside a clamped box rather than calling hypot.
     function markSeen() {
-      const r = Math.ceil(lampR()) + 1;
+      const lr = lampR() + 0.6, lr2 = lr * lr;
+      const r = Math.ceil(lr);
       const cx = Math.round(P.x), cy = Math.round(P.y);
-      for (let y = cy - r; y <= cy + r; y++) {
-        for (let x = cx - r; x <= cx + r; x++) {
-          if (!inBounds(x, y)) continue;
-          const d = Math.hypot(x - P.x, y - P.y);
-          if (d <= lampR() + 0.6) seen[idx(x, y)] = 255;
+      let y0 = Math.max(0, cy - r), y1 = Math.min(ROWS - 1, cy + r);
+      let x0 = Math.max(0, cx - r), x1 = Math.min(COLS - 1, cx + r);
+      for (let y = y0; y <= y1; y++) {
+        const dy = y - P.y, dy2 = dy * dy;
+        const row = y * COLS;
+        for (let x = x0; x <= x1; x++) {
+          const dx = x - P.x;
+          if (dx * dx + dy2 <= lr2) seen[row + x] = 255;
         }
       }
       // daylight near the surface
-      for (let y = 0; y < GROUND + 3; y++) for (let x = 0; x < COLS; x++) seen[idx(x, y)] = 255;
+      seen.fill(255, 0, (GROUND + 3) * COLS);
       for (const e of emitters) {
-        const r2 = Math.ceil(e.r);
-        for (let y = e.y - r2; y <= e.y + r2; y++) {
-          for (let x = e.x - r2; x <= e.x + r2; x++) {
-            if (!inBounds(x, y)) continue;
-            if (Math.hypot(x - e.x, y - e.y) <= e.r) seen[idx(x, y)] = 255;
+        const er2 = e.r * e.r, r2 = Math.ceil(e.r);
+        y0 = Math.max(0, e.y - r2); y1 = Math.min(ROWS - 1, e.y + r2);
+        x0 = Math.max(0, e.x - r2); x1 = Math.min(COLS - 1, e.x + r2);
+        for (let y = y0; y <= y1; y++) {
+          const dy = y - e.y, dy2 = dy * dy;
+          const row = y * COLS;
+          for (let x = x0; x <= x1; x++) {
+            const dx = x - e.x;
+            if (dx * dx + dy2 <= er2) seen[row + x] = 255;
           }
         }
       }
@@ -1782,6 +1919,7 @@ window.plethoraBit = {
     function tileScreen(x, y) { return [(x - cam.x) * TS, (y - cam.y) * TS]; }
 
     function draw(dt) {
+      frameNo++;
       // camera chases the miner, then is nudged by any active screen shake
       const tgtX = clamp(P.x - VW / 2 + 1, 0, Math.max(0, COLS - (W / TS)));
       const tgtY = P.y - (H / TS) * 0.5 + 0.5;
@@ -1791,11 +1929,17 @@ window.plethoraBit = {
       cam.y = clamp(cam.y, -SKY * 0.4, ROWS - H / TS);
       let sx = 0, sy = 0;
       if (shake > 0 && shakeT > 0) {
-        sx = (Math.random() - 0.5) * shake; sy = (Math.random() - 0.5) * shake;
+        // whole pixels, so a shake does not knock every tile blit off its 1:1
+        // device alignment and into the filtered path
+        sx = Math.round((Math.random() - 0.5) * shake);
+        sy = Math.round((Math.random() - 0.5) * shake);
       }
-      g.setTransform(1, 0, 0, 1, sx, sy);
-
-      const zNow = zoneAt(Math.max(1, playerDepth()));
+      // Shake is a translate on top of whatever the runtime set up. Never
+      // setTransform here: ctx.createCanvas2D hands back a context already
+      // scaled to CSS pixels, and resetting it would halve the whole bit on
+      // any DPR-2 screen.
+      g.save();
+      g.translate(sx, sy);
       g.fillStyle = "#07060a";
       g.fillRect(-4, -4, W + 8, H + 8);
 
@@ -1821,52 +1965,66 @@ window.plethoraBit = {
       }
       markSeen();
 
-      // --- tiles ---------------------------------------------------------
-      const dowse = S.rod ? 7.5 : 0;
+      // --- tiles ------------------------------------------------------------
+      // Baked chunks, not one blit per tile. drawImage carries a fixed per-call
+      // cost that dwarfs its fill cost, so 325 tile blits measured at 4.1 ms
+      // while the fifteen chunk blits covering the same ground measure 0.02 ms.
+      bakeBudget = 2;
+      const cx0 = Math.floor(x0 / CH), cx1 = Math.floor(x1 / CH);
+      const cy0 = Math.floor(y0 / CH), cy1 = Math.floor(y1 / CH);
+      for (let cy = cy0; cy <= cy1; cy++) {
+        for (let cx = cx0; cx <= cx1; cx++) {
+          const px = Math.round((cx * CH - cam.x) * TS), py = Math.round((cy * CH - cam.y) * TS);
+          const surf = getChunk(cx, cy);
+          if (surf) g.drawImage(surf, 0, 0, surf.width, surf.height, px, py, CH * TS, CH * TS);
+          else drawChunkLive(cx, cy);          // not baked yet: this frame only
+        }
+      }
+
+      // animated tiles are left out of the bakes and painted live
       for (let y = y0; y <= y1; y++) {
-        const m = depthOf(y);
-        const zt = y >= GROUND ? zoneAt(Math.max(1, m)).tint : "#000";
         for (let x = x0; x <= x1; x++) {
-          const i = idx(x, y);
-          const id = grid[i];
+          const id = grid[idx(x, y)];
+          if (id !== M.LAVA && id !== M.CORESTONE) continue;
           const px = Math.round((x - cam.x) * TS), py = Math.round((y - cam.y) * TS);
-          if (id === AIR) {
-            if (y >= GROUND && seen[i]) {                    // a tunnel you have opened
-              g.fillStyle = "rgba(0,0,0,0.55)";
-              g.fillRect(px, py, TS + 1, TS + 1);
-            }
-            continue;
+          if (id === M.LAVA) drawLava(px, py, x, y, tt);
+          else drawCoreStone(px, py, tt);
+        }
+      }
+
+      // Rock you have never lit is covered by the stratum's colour. Runs of it
+      // merge into one fill, so an unexplored screen costs a handful of rects.
+      for (let y = Math.max(GROUND, y0); y <= y1; y++) {
+        const dim = zoneAt(Math.max(1, depthOf(y))).dim;
+        const py = Math.round((y - cam.y) * TS);
+        let run = -1;
+        for (let x = x0; x <= x1 + 1; x++) {
+          const hidden = x <= x1 && grid[idx(x, y)] !== AIR && !seen[idx(x, y)];
+          if (hidden && run < 0) run = x;
+          else if (!hidden && run >= 0) {
+            const px = Math.round((run - cam.x) * TS);
+            g.fillStyle = dim;
+            g.fillRect(px, py, Math.round((x - cam.x) * TS) - px, TS);
+            run = -1;
           }
-          if (!seen[i]) {
-            // unexcavated: only the colour of the stratum shows through
-            if (dowse && (MAT[id].kind === "ore" || MAT[id].kind === "bone") &&
-                Math.hypot(x - P.x, y - P.y) < dowse) {
-              g.fillStyle = MAT[id].spec;
-              g.globalAlpha = 0.20 + 0.14 * Math.sin(tt * 4 + x + y);
-              g.fillRect(px, py, TS + 1, TS + 1);
-              g.globalAlpha = 1;
-            } else {
-              g.fillStyle = zt;
-              g.globalAlpha = 0.11;
-              g.fillRect(px, py, TS + 1, TS + 1);
-              g.globalAlpha = 1;
-            }
-            continue;
-          }
-          const d = MAT[id];
-          if (d.kind === "lava") { drawLava(px, py, x, y, tt); continue; }
-          if (d.kind === "core") { drawCoreStone(px, py, tt); continue; }
-          if (atlas) {
-            const v = (hash2(x, y) * VARIANTS) | 0;
-            g.drawImage(atlas, v * TS, id * TS, TS, TS, px, py, TS + 1, TS + 1);
-          } else {
-            g.fillStyle = d.base; g.fillRect(px, py, TS + 1, TS + 1);
-            if (d.kind === "ore") drawIcon(g, d.icon, px + TS / 2, py + TS / 2, TS * 0.26, d.spec);
-          }
-          // tunnel lip: a highlight where rock meets open air above
-          if (y > GROUND && grid[idx(x, y - 1)] === AIR) {
-            g.fillStyle = "rgba(255,255,255,0.10)";
-            g.fillRect(px, py, TS + 1, Math.max(1, TS * 0.09));
+        }
+      }
+
+      // the dowsing rod, reading ore straight through the cover
+      if (S.rod) {
+        const R = 7.5, R2 = R * R;
+        for (let y = Math.max(GROUND, y0); y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
+            const i = idx(x, y);
+            if (seen[i]) continue;
+            const d = MAT[grid[i]];
+            if (!d || (d.kind !== "ore" && d.kind !== "bone")) continue;
+            const dx = x - P.x, dy = y - P.y;
+            if (dx * dx + dy * dy > R2) continue;
+            g.globalAlpha = 0.22 + 0.14 * Math.sin(tt * 4 + x + y);
+            g.fillStyle = d.spec;
+            g.fillRect(Math.round((x - cam.x) * TS), Math.round((y - cam.y) * TS), TS, TS);
+            g.globalAlpha = 1;
           }
         }
       }
@@ -1924,31 +2082,32 @@ window.plethoraBit = {
         const lay = ensureLayer();
         if (lay) {
           const lc = lay.getContext("2d");
-          lc.setTransform(1, 0, 0, 1, 0, 0);
+          const LW = lay.width, LH = lay.height;
           lc.globalCompositeOperation = "source-over";
           lc.fillStyle = "#000";
-          lc.fillRect(0, 0, W, H);
+          lc.fillRect(0, 0, LW, LH);
           lc.globalCompositeOperation = "destination-out";
-          const px = (P.x + 0.5 - cam.x) * TS, py = (P.y + 0.5 - cam.y) * TS;
-          const rr = lampR() * TS * (1 + 0.02 * Math.sin(tt * 3));
+          const px = (P.x + 0.5 - cam.x) * TS * LQ, py = (P.y + 0.5 - cam.y) * TS * LQ;
+          const rr = lampR() * TS * LQ * (1 + 0.02 * Math.sin(tt * 3));
           let grd = lc.createRadialGradient(px, py, rr * 0.12, px, py, rr);
           grd.addColorStop(0, "rgba(0,0,0,1)");
           grd.addColorStop(0.55, "rgba(0,0,0,0.86)");
           grd.addColorStop(1, "rgba(0,0,0,0)");
           lc.fillStyle = grd;
-          lc.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+          fillBox(lc, px - rr, py - rr, rr * 2, rr * 2, LW, LH);
           for (const e of emitters) {
-            const ex = (e.x + 0.5 - cam.x) * TS, ey = (e.y + 0.5 - cam.y) * TS;
-            const er = e.r * TS;
+            const ex = (e.x + 0.5 - cam.x) * TS * LQ, ey = (e.y + 0.5 - cam.y) * TS * LQ;
+            const er = e.r * TS * LQ;
+            if (ex + er < 0 || ex - er > LW || ey + er < 0 || ey - er > LH) continue;
             grd = lc.createRadialGradient(ex, ey, er * 0.1, ex, ey, er);
             grd.addColorStop(0, "rgba(0,0,0,0.95)");
             grd.addColorStop(1, "rgba(0,0,0,0)");
             lc.fillStyle = grd;
-            lc.fillRect(ex - er, ey - er, er * 2, er * 2);
+            fillBox(lc, ex - er, ey - er, er * 2, er * 2, LW, LH);
           }
           lc.globalCompositeOperation = "source-over";
           g.globalAlpha = dark;
-          g.drawImage(lay, 0, 0);
+          g.drawImage(lay, 0, 0, LW, LH, 0, 0, W, H);
           g.globalAlpha = 1;
         } else {
           g.fillStyle = "rgba(0,0,0," + (dark * 0.55).toFixed(3) + ")";
@@ -1961,16 +2120,17 @@ window.plethoraBit = {
         warm.addColorStop(0, "rgba(255,210,140,0.16)");
         warm.addColorStop(1, "rgba(255,180,90,0)");
         g.fillStyle = warm;
-        g.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+        fillBox(g, px - rr, py - rr, rr * 2, rr * 2, W, H);
       }
       for (const e of emitters) {
         const ex = (e.x + 0.5 - cam.x) * TS, ey = (e.y + 0.5 - cam.y) * TS;
         const er = e.r * TS * 0.8;
+        if (ex + er < 0 || ex - er > W || ey + er < 0 || ey - er > H) continue;
         const gl = g.createRadialGradient(ex, ey, 0, ex, ey, er);
         gl.addColorStop(0, "rgba(" + e.col + ",0.30)");
         gl.addColorStop(1, "rgba(" + e.col + ",0)");
         g.fillStyle = gl;
-        g.fillRect(ex - er, ey - er, er * 2, er * 2);
+        fillBox(g, ex - er, ey - er, er * 2, er * 2, W, H);
       }
 
       // --- floating labels --------------------------------------------------
@@ -1994,7 +2154,7 @@ window.plethoraBit = {
         hurtFlash = Math.max(0, hurtFlash - dt * 2.6);
       }
 
-      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.restore();
       drawCoreCompass(tt);
       drawDepthBar();
       drawStick();
@@ -2049,18 +2209,46 @@ window.plethoraBit = {
       g.fillRect(px, py, TS, TS);
     }
 
+    // Lava is generated as discs of tiles, so drawing it as flat squares makes
+    // a pool look like a pile of orange bricks. Each tile gets a dark crust, a
+    // molten body, drifting bubbles, and — where it meets open air above — a
+    // moving surface line, which is what sells it as one pool.
     function drawLava(px, py, x, y, t) {
       const w = Math.sin(t * 2.1 + x * 0.9 + y * 0.6) * 0.5 + 0.5;
-      g.fillStyle = "#8a1f06";
-      g.fillRect(px, py, TS + 1, TS + 1);
-      const grd = g.createLinearGradient(px, py, px, py + TS);
-      grd.addColorStop(0, "#ff9a2a");
-      grd.addColorStop(0.5 + w * 0.2, "#ff5c10");
-      grd.addColorStop(1, "#a52a06");
+      const s = TS + 1;
+      g.fillStyle = "#5e1604";
+      g.fillRect(px, py, s, s);
+
+      const grd = g.createLinearGradient(px, py, px + s * 0.4, py + s);
+      grd.addColorStop(0, "#ffb03a");
+      grd.addColorStop(0.35 + w * 0.18, "#ff6a12");
+      grd.addColorStop(1, "#b8330a");
       g.fillStyle = grd;
-      g.fillRect(px, py + TS * 0.08, TS + 1, TS * 0.92);
-      g.fillStyle = "rgba(255,230,150," + (0.3 + w * 0.4).toFixed(2) + ")";
-      g.fillRect(px + TS * 0.15, py + TS * (0.2 + w * 0.1), TS * 0.7, TS * 0.1);
+      g.fillRect(px + s * 0.06, py + s * 0.06, s * 0.88, s * 0.88);
+
+      // three bubbles, each on its own slow loop
+      for (let i = 0; i < 3; i++) {
+        const seed = hash2(x * 7 + i, y * 13 + i);
+        const rise = (t * (0.22 + seed * 0.3) + seed) % 1;
+        const bx = px + s * (0.18 + seed * 0.64);
+        const by = py + s * (0.92 - rise * 0.78);
+        const r = s * (0.045 + seed * 0.05) * (0.4 + rise);
+        g.fillStyle = "rgba(255,236,168," + (0.55 * (1 - rise)).toFixed(3) + ")";
+        g.beginPath(); g.arc(bx, by, r, 0, Math.PI * 2); g.fill();
+      }
+
+      if (grid[idx(x, y - 1)] === AIR) {
+        g.fillStyle = "rgba(255,244,196,0.85)";
+        g.beginPath();
+        g.moveTo(px, py + s * 0.14);
+        for (let i = 0; i <= 4; i++) {
+          const fx = px + (s * i) / 4;
+          g.lineTo(fx, py + s * (0.1 + 0.05 * Math.sin(t * 3 + x * 1.7 + i * 1.1)));
+        }
+        g.lineTo(px + s, py + s * 0.2);
+        g.lineTo(px, py + s * 0.2);
+        g.closePath(); g.fill();
+      }
     }
 
     function drawCoreStone(px, py, t) {

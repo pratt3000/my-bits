@@ -105,6 +105,24 @@ deep-pockets/
   fully dug thousand-metre plot comes to a few kilobytes. The full save with the
   mask goes to `ctx.storage`; the same save without it goes to `memory.local`,
   which is capped at 8 KB.
+- **Chunked tiles.** The viewport is painted as a handful of pre-baked 8×8
+  blocks rather than one blit per tile. `drawImage` carries a fixed per-call
+  cost that dwarfs its fill cost — measured in this environment, 325 tile blits
+  cost 4.1 ms while the fifteen chunk blits covering the same ground cost
+  0.02 ms. A block is rebaked only when a tile inside it changes (every runtime
+  write goes through `setTile`, which dirties the block and the one above it),
+  and at most two are baked per frame, so scrolling into fresh ground never
+  costs a hitch — an unbaked block falls back to flat fills for that one frame.
+  Unlit rock is covered afterwards with run-merged fills of the stratum's
+  colour, so an unexplored screen is a handful of rectangles.
+- **Device pixels.** `ctx.createCanvas2D` hands back a context already scaled
+  to CSS pixels, so `draw()` applies its screen shake as a `translate` inside a
+  `save`/`restore` and never calls `setTransform` — resetting that transform
+  renders the entire bit at half size on any DPR-2 phone. Offscreen bakes (the
+  tile atlas, the sky) are painted at device resolution and blitted back down,
+  so tiles are crisp rather than 2× upscales. The darkness layer stays at CSS
+  resolution on purpose: it is nothing but smooth gradients, and it is the most
+  expensive surface in the frame.
 - **Lighting.** Tiles you have never lit are drawn as a flat wash of the
   stratum's colour, so you can sense the bands ahead without seeing what's in
   them. Darkness is one black layer with the lamp punched out of it with
