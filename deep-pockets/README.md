@@ -58,7 +58,10 @@ rock.
   curator assembles Terrence, who is worth $150,000 and a permanent 15% on
   everything you sell after.
 - **Boulders** that fall the moment you dig out from under them, and land on
-  your head if you're slow. You can shove them sideways, or blast them.
+  your head if you're slow. Shove them sideways at any tier, blast them, or —
+  from the Tungsten Drill on — simply break them. They're deliberately
+  *breakable* rather than merely heavy: one that drops into a one-wide shaft
+  would otherwise wall you in permanently.
 - **Gas pockets** that detonate when broken, and **lava** that does not care.
 - **Flags at the core** left by everyone else who has made it that far.
 

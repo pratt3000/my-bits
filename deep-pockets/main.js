@@ -108,7 +108,10 @@ window.plethoraBit = {
     mat("VOID",     ORE("Void Crystal",   7, 68000, "#5c1f2e", "#c04cff", "gem"));
 
     // --- Special tiles ---------------------------------------------------
-    mat("BOULDER",  { name: "Boulder",   kind: "boulder", hard: 9, base: "#585a63", spec: "#787b86" });
+    // A boulder is heavy, not invincible: shove it sideways at any tier, and
+    // from the Tungsten Drill on you can simply break it. Anything less and one
+    // that falls into a one-wide shaft would wall you in for good.
+    mat("BOULDER",  { name: "Boulder",   kind: "boulder", hard: 4, base: "#585a63", spec: "#787b86" });
     mat("LAVA",     { name: "Lava",      kind: "lava",    hard: 9, base: "#ff6a12", spec: "#ffd45e" });
     mat("GAS",      { name: "Gas Pocket",kind: "gas",     hard: 1, base: "#3d5a3a", spec: "#7fd06a" });
     mat("CHEST",    { name: "Chest",     kind: "chest",   hard: 9, base: "#7a4a22", spec: "#e8b74a" });
@@ -1201,7 +1204,7 @@ window.plethoraBit = {
       anim: 0, swing: 0, bob: 0
     };
     const MOVE_MS = 168, DIG_MS = 380;
-    let heatBurn = 0, regen = 0, invuln = 0;
+    let invuln = 0, lavaCool = 0;
     let deaths = 0, tilesDug = 0, sessionStart = 0;
 
     function placePlayer(x, y) {
@@ -1607,23 +1610,35 @@ window.plethoraBit = {
       const d2 = MAT[id];
       if (d2.kind === "chest") { openChest(nx, ny); return; }
       if (d2.kind === "lava") {
-        if (invuln <= 0) { hurt(18, "Lava"); toast("Lava. Go around."); }
+        // Touching it hurts once, like a hot pan. Leaning on the direction
+        // afterwards is just blocked, so a held thumb cannot cook you alive.
+        if (lavaCool <= 0) {
+          lavaCool = 1.7;
+          hurt(18, "Lava");
+          toast("🌋 Lava. Go around it.");
+        }
         return;
       }
       if (d2.kind === "core") { reachCore(); return; }
       if (d2.kind === "boulder") {
-        // shove it sideways if there is somewhere for it to go
+        // A shove is instant, so try that first; otherwise break it if the
+        // shovel is up to it.
         const bx = nx + dx, by = ny + dy;
         if (dy === 0 && inBounds(bx, by) && grid[idx(bx, by)] === AIR && by >= GROUND) {
           grid[idx(nx, ny)] = AIR; grid[idx(bx, by)] = M.BOULDER;
           SFX.breakTile(4); haptic("medium");
           settleAbove(nx, ny);
           spawnDebris(nx + 0.5, ny + 0.5, "#585a63", 4, 0.8);
-        } else if (S.playMs - hardWarn > 3000) {
-          hardWarn = S.playMs; SFX.deny();
-          toast("That boulder is not moving. Try dynamite.");
+          return;
         }
-        return;
+        if (d2.hard > shovel().power) {
+          if (S.playMs - hardWarn > 3000) {
+            hardWarn = S.playMs; SFX.deny();
+            toast("That boulder will not budge. Dig around it, or use dynamite.");
+          }
+          return;
+        }
+        // falls through to the digging path below
       }
       if (d2.hard > shovel().power) {
         if (S.playMs - hardWarn > 3200) {
@@ -2614,8 +2629,9 @@ window.plethoraBit = {
         'Walk onto it and the OPEN SHOP button appears.</div>' +
         '<div style="margin-bottom:9px;"><b>4. Buy a better shovel.</b> Rock gets harder every stratum. ' +
         'If your shovel pings off, that is the game telling you to shop.</div>' +
-        '<div style="margin-bottom:9px;"><b>5. Mind the hazards.</b> Boulders fall when you dig underneath them, ' +
-        'green gas pockets go bang, and lava is exactly as friendly as it looks.</div>' +
+        '<div style="margin-bottom:9px;"><b>5. Mind the hazards.</b> Boulders fall when you dig underneath them — ' +
+        'shove them sideways, break them once you own a real drill, or take one on the head. ' +
+        'Green gas pockets go bang, and lava is exactly as friendly as it looks.</div>' +
         '<div style="margin-bottom:9px;"><b>6. 🧨 blasts a crater</b> and clears boulders. ' +
         '🪢 always gets you home — with a rope ladder you keep your haul, without one Pinch\'s lad keeps ' +
         'the bag as payment. The mine cart at the headframe drops you back to your deepest tunnel.</div>' +
@@ -2630,8 +2646,59 @@ window.plethoraBit = {
         'Your dig is saved automatically — the shaft, the money, the bones, all of it. Close the Bit and come back to ' +
         'the exact hole you left.</div>' +
         '<div style="text-align:center;margin-top:14px;">' + ROWBTN("BACK TO DIGGING", "close2", true) + '</div>' +
+        '<div style="text-align:center;margin-top:14px;">' +
+          '<button data-buy="fresh" style="pointer-events:auto;border:none;background:none;cursor:pointer;' +
+          'font-family:' + FONT + ';font-size:12px;color:rgba(242,230,210,0.45);text-decoration:underline;">' +
+          'Fill it in and start a fresh plot</button></div>' +
         '</div>');
       for (const b of panel.querySelectorAll('[data-buy="close2"]')) tap(b, closePanel);
+      for (const b of panel.querySelectorAll('[data-buy="fresh"]')) tap(b, askNewGame);
+    }
+
+    function askNewGame() {
+      showPanel("fresh",
+        '<div style="' + SHEET + 'display:flex;flex-direction:column;justify-content:center;min-height:100%;">' +
+        '<div style="' + CARD + 'padding:20px 17px;">' +
+        '<div style="font-size:18px;font-weight:800;">Fill in the hole?</div>' +
+        '<div style="font-size:13.5px;line-height:1.65;opacity:0.84;margin-top:9px;">' +
+        'A fresh plot means a brand new seam of rock, and everything you have goes with the old one — ' +
+        '<b>$' + fmt(S.money) + '</b>, every tool, ' + Object.keys(S.bones).length + ' of 8 fossils, and ' +
+        S.deepest + ' m of tunnel. Your leaderboard entries are safe.</div>' +
+        '<div style="display:flex;gap:9px;margin-top:16px;">' +
+          '<button data-buy="freshno" style="pointer-events:auto;flex:1;border:none;border-radius:12px;padding:12px;' +
+          'font-family:' + FONT + ';font-weight:800;font-size:13.5px;cursor:pointer;' +
+          'background:rgba(255,255,255,0.11);color:#f2e6d2;">Keep my hole</button>' +
+          '<button data-buy="freshyes" style="pointer-events:auto;flex:1;border:none;border-radius:12px;padding:12px;' +
+          'font-family:' + FONT + ';font-weight:800;font-size:13.5px;cursor:pointer;' +
+          'background:linear-gradient(180deg,#e0715a,#b8452f);color:#fff;">Fresh plot</button>' +
+        '</div></div></div>');
+      for (const b of panel.querySelectorAll('[data-buy="freshno"]')) tap(b, openHelp);
+      for (const b of panel.querySelectorAll('[data-buy="freshyes"]')) tap(b, newGame);
+    }
+
+    function newGame() {
+      S.seed = (Math.random() * 2147483647) | 0;
+      generate(S.seed);
+      seen.fill(0);
+      S.money = 0; S.lifetime = 0;
+      S.shovel = 0; S.pack = 0; S.lamp = 0; S.boots = 0; S.suit = 0;
+      S.cart = false; S.winch = false; S.rod = false;
+      S.dyn = 0; S.kit = 0; S.rope = 0;
+      S.inv = {}; S.bones = {}; S.trex = false; S.chests = {};
+      S.deepest = 0; S.deepTile = null; S.playMs = 0;
+      S.finished = false; S.firstCoreMs = 0;
+      S.hp = maxHp();
+      falling.length = 0; bombs.length = 0; bits.length = 0; pops.length = 0; flags.length = 0;
+      tilesDug = 0; deaths = 0; coreShown = false;
+      curZone = null;
+      placePlayer(START_X, GROUND - 1);
+      enterZone(zoneAt(1));
+      ctx.platform.setProgress(0);
+      ctx.platform.setScore(0, { unit: "m" });
+      closePanel();
+      SFX.lift(); haptic("medium");
+      toast("Fresh plot, fresh trowel. Off you go.");
+      save(true);
     }
 
     // ====================================================================
@@ -2921,6 +2988,7 @@ window.plethoraBit = {
     let heatTick = 0, healTick = 0;
     function upkeep(dt) {
       if (invuln > 0) invuln -= dt;
+      if (lavaCool > 0) lavaCool -= dt;
       const m = playerDepth();
       const z = zoneAt(Math.max(1, m));
 
