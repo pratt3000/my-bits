@@ -1216,7 +1216,10 @@ window.plethoraBit = {
     }
 
     const atSurface = () => P.ty <= GROUND - 1;
-    const playerDepth = () => Math.max(0, depthOf(P.ty));
+    // The core chamber is carved a couple of metres past the thousand, so depth
+    // is clamped there: the readout, the gauge and the leaderboard all agree
+    // that the bottom of the world is 1000 m.
+    const playerDepth = () => clamp(depthOf(P.ty), 0, CORE_M);
 
     function spotUnder() {
       if (!atSurface()) return null;
