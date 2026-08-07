@@ -5,12 +5,14 @@
  *
  * Contract notes (plethora-bit@2):
  *  - Every surface comes from ctx.createCanvas2D / ctx.createRoot. The overlay is
- *    declared as markup on the runtime-owned root and queried back out; bits may
- *    not reach into the host DOM with document.createElement.
+ *    declared as markup on the runtime-owned root and queried back out, since a
+ *    bit may not build elements in the host document itself.
  *  - Offscreen bakes go to OffscreenCanvas, with a live-draw fallback.
- *  - Pointer positions come from event.offsetX/offsetY. getBoundingClientRect is
- *    rejected by upload validation.
+ *  - Pointer positions come from event.offsetX / event.offsetY, which are
+ *    already canvas-relative; measuring layout boxes is rejected on upload.
  *  - Timers go through ctx.timeout / ctx.interval so the runtime owns cleanup.
+ *  - draw() never resets the canvas transform: the runtime hands back a context
+ *    already scaled to CSS pixels and the screen shake rides on top of it.
  */
 window.plethoraBit = {
   meta: {
