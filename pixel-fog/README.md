@@ -70,7 +70,8 @@ gold dot, and `platform.milestone` fires. Revealing all nine calls
   (capped at 1.6) — square tiles left a third of a tall phone empty.
 - Layout re-derives from `ctx.width`/`ctx.height` compared each frame rather
   than a resize listener, and re-bakes the thumbnails and the open picture when
-  they change.
+  they change. The mask is sized to the picture, so rotating the phone with a
+  view open restarts that view's reveal — the tile's revealed dot is kept.
 - Thumbnails bake one or two per frame instead of all nine up front, so the
   first frame is a backdrop plus placeholders rather than a stall, and the grid
   develops in front of you. `platform.ready()` fires on that first frame.
