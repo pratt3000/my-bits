@@ -13,8 +13,10 @@
 //     every offscreen surface is an OffscreenCanvas via makeSurface(). If the
 //     WebView has no OffscreenCanvas, makeSurface returns null and the bit
 //     falls back to an ImageData-backed path — plainer, fully playable.
-//   * canvas.getBoundingClientRect() is rejected too, so pointer positions come
-//     from event.offsetX/offsetY, which are already canvas-relative.
+//   * Querying the canvas for its layout box is rejected too, so pointer
+//     positions come from event.offsetX/offsetY, already canvas-relative.
+//     (The validator text-scans the source, so naming that rejected call here
+//     -- even inside a comment -- is itself enough to fail the upload.)
 
 window.plethoraBit = {
   meta: {
@@ -1754,9 +1756,9 @@ window.plethoraBit = {
     // Pointer handling                                                       //
     // ====================================================================== //
 
-    // offsetX/offsetY are already canvas-relative, which keeps us off
-    // getBoundingClientRect (rejected by the upload validator) and avoids a
-    // forced reflow on every pointer sample.
+    // offsetX/offsetY are already canvas-relative, which keeps us off the
+    // layout-box query the upload validator rejects and avoids a forced reflow
+    // on every pointer sample.
     function localPoint(e) {
       if (typeof e.offsetX === "number" && typeof e.offsetY === "number") {
         return { x: e.offsetX, y: e.offsetY };
@@ -1912,10 +1914,13 @@ window.plethoraBit = {
         g.drawImage(sf, rect.x, rect.y, rect.w, rect.h);
       } else {
         // Not baked yet — a soft placeholder so the grid is never empty.
-        const ph = g.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
-        ph.addColorStop(0, "#2a2740");
-        ph.addColorStop(1, "#171525");
-        g.fillStyle = ph;
+        // NB: this local must not be called `ph`. The upload validator's
+        // remote-resource heuristic false-positives on `const ph = <call>`,
+        // rejecting the whole bit with a message about registry loaders.
+        const placeholderGrad = g.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
+        placeholderGrad.addColorStop(0, "#2a2740");
+        placeholderGrad.addColorStop(1, "#171525");
+        g.fillStyle = placeholderGrad;
         g.fillRect(rect.x, rect.y, rect.w, rect.h);
       }
       // Label scrim.

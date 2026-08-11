@@ -78,17 +78,54 @@ gold dot, and `platform.milestone` fires. Revealing all nine calls
 
 ### Working within what the upload validator rejects
 
-Both constraints are inherited from `cairn/README.md`, and both are honoured
+Two constraints are inherited from `cairn/README.md`, and both are honoured
 here:
 
 - **`document.createElement("canvas")`** is rejected. Every offscreen surface
   goes through `makeSurface()`, which returns an `OffscreenCanvas` or `null`.
   `document.createElement` with a literal `"div"`/`"button"` is fine and is what
   the chrome uses.
-- **`canvas.getBoundingClientRect()`** is rejected. Pointer positions come from
-  `event.offsetX`/`offsetY`, which are already canvas-relative.
+- **Querying the canvas for its layout box** is rejected. Pointer positions come
+  from `event.offsetX`/`offsetY`, which are already canvas-relative. Note the
+  validator text-scans the source, so *naming* that rejected call in a comment
+  is itself enough to fail the upload — this file describes it instead.
 
 Timers go through `ctx.timeout`, and no canvas blur-filter property is used.
+
+#### A third one, found the hard way: `const ph = <call>`
+
+This bit cost a long bisection to upload, so it is worth writing down. This line
+
+```js
+const ph = g.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
+```
+
+fails the upload with *"This bit uses unsupported remote resources. Use
+ctx.loadScript(), ctx.importModule(), or ctx.loadFont() with declared Plethora
+registry dependencies."* — the same misleading message `cairn` documents for
+layout access, and equally unrelated to what is actually wrong.
+
+Renaming the local to anything else makes the identical code pass. What was
+established by bisecting real uploads:
+
+- It is the **declaration**, not the use. Deleting the `const ph = ...` line
+  while leaving `ph.addColorStop(...)` and `g.fillStyle = ph` in place passes.
+- It is the **name plus a call initialiser**. `const ph = cellPhase[i]` (a member
+  expression) passes, and so does `const ph = [rng() * TAU, ...]` — both are
+  still in this file. Only `const ph = <call expression>` trips it.
+- It is not the arguments: changing the gradient's x-args to `0` still fails.
+- `drawImage` was not involved. Plain identifiers, property access, and array
+  indexing with literal or variable subscripts all upload fine.
+
+So: **do not name a local `ph` when initialising it from a call.** The local
+here is `placeholderGrad`, with a comment at the site so nobody shortens it
+back.
+
+Method, for the next time a bit is rejected with an error that names the wrong
+thing: upload truncated-but-parseable prefixes of the source and binary-search
+for the line range that flips PASS → FAIL, then ablate single statements inside
+it. Uploading under the same `title` updates one draft instead of littering the
+account, and a paired token makes each probe a one-second round trip.
 
 ### Without `OffscreenCanvas`
 
