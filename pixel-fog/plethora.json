@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Pixel Fog",
+  "description": "Nine painted views of San Francisco — the Golden Gate at sunset, Karl the Fog on the hills, Sutro Tower above the cloud. Tap one, then rub it with your finger: a living mosaic of that same picture blooms wherever you touch, breathing and rippling in travelling bands. Rub most of it away and the whole view gives itself over to pixels.",
+  "tags": [
+    "art",
+    "photo",
+    "san-francisco",
+    "mosaic",
+    "pixel",
+    "touch",
+    "sensory",
+    "generative",
+    "relaxing",
+    "reveal"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": []
+}
