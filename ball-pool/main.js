@@ -1325,8 +1325,41 @@ window.plethoraBit = {
     }
 
     // ====================================================================== //
-    // Layout                                                                 //
+    // Projection and layout                                                  //
     // ====================================================================== //
+    // The cloth is a plane seen from above and a little in front of the near
+    // rail. Screen y is foreshortened by TILT, and anything standing above the
+    // cloth — a ball, the cue, the far cushion face — is lifted up-screen by
+    // its height times LIFT. Balls stay circles because a sphere projects to a
+    // circle from any angle; only the plane foreshortens.
+    //
+    // Nothing is drawn under a canvas transform. A non-uniform transform turns
+    // round strokes into elliptical ones and smears text, so every draw call
+    // converts through w2s() and works in screen pixels.
+
+    const TILT = 0.82;                            // cos of the viewing angle
+    const LIFT = Math.sqrt(1 - TILT * TILT);      // sin of it: height -> screen
+    const CUSH_W = 2.15;                          // cushion width, inches
+    const RAIL_H = 1.7;                           // cushion height above cloth
+
+    // Key light: high and to the upper left, in screen space.
+    const LX = -0.50, LY = -0.866;
+
+    const PAL = {
+      feltHi: "#2b8a5f",
+      feltMid: "#1d6d49",
+      feltLo: "#0e4630",
+      feltEdge: "#0a3624",
+      cushion: "#17603f",
+      cushionLit: "#2f9166",
+      woodHi: "#8a5a33",
+      woodMid: "#5e3a1f",
+      woodLo: "#2f1b0d",
+      woodEdge: "#1a0f07",
+      pocket: "#04060a",
+      brass: "#c9a44c"
+    };
+
     function layout() {
       const sa = ctx.safeArea || { top: 0, bottom: 0, left: 0, right: 0 };
       const W = ctx.width, H = ctx.height;
@@ -1334,17 +1367,18 @@ window.plethoraBit = {
       view.hudH = view.rot ? 46 : 58;
       view.ctlH = view.rot ? 80 : 104;
 
-      const padX = 8;
+      const padX = 10;
       const availW = Math.max(40, W - sa.left - sa.right - padX * 2);
-      const availH = Math.max(40, H - sa.top - sa.bottom - view.hudH - view.ctlH - 8);
+      const availH = Math.max(40, H - sa.top - sa.bottom - view.hudH - view.ctlH - 10);
       const tw = view.rot ? TOT_H : TOT_W;
       const th = view.rot ? TOT_W : TOT_H;
-      const s = Math.min(availW / tw, availH / th);
+      const s = Math.min(availW / tw, availH / (th * TILT));
       view.s = s;
-      const bx = sa.left + padX + (availW - tw * s) / 2;
-      const by = sa.top + view.hudH + (availH - th * s) / 2;
+      const boxW = tw * s, boxH = th * s * TILT;
+      const bx = sa.left + padX + (availW - boxW) / 2;
+      const by = sa.top + view.hudH + (availH - boxH) / 2;
       view.ox = bx + RAIL * s;
-      view.oy = by + RAIL * s;
+      view.oy = by + RAIL * s * TILT;
 
       hud.style.top = sa.top + "px";
       hud.style.left = sa.left + 8 + "px";
@@ -1359,32 +1393,32 @@ window.plethoraBit = {
       toastEl.style.top = sa.top + view.hudH + 6 + "px";
     }
 
+    /** Cloth-plane point -> screen pixels. */
     function w2s(x, y) {
-      if (view.rot) return { x: view.ox + (PLAY_H - y) * view.s, y: view.oy + x * view.s };
-      return { x: view.ox + x * view.s, y: view.oy + y * view.s };
+      if (view.rot) {
+        return { x: view.ox + (PLAY_H - y) * view.s, y: view.oy + x * view.s * TILT };
+      }
+      return { x: view.ox + x * view.s, y: view.oy + y * view.s * TILT };
     }
     function s2w(sx, sy) {
-      if (view.rot) return { x: (sy - view.oy) / view.s, y: PLAY_H - (sx - view.ox) / view.s };
-      return { x: (sx - view.ox) / view.s, y: (sy - view.oy) / view.s };
-    }
-    function applyWorld(g) {
-      g.save();
       if (view.rot) {
-        g.translate(view.ox + PLAY_H * view.s, view.oy);
-        g.rotate(Math.PI / 2);
-      } else {
-        g.translate(view.ox, view.oy);
+        return { x: (sy - view.oy) / (view.s * TILT), y: PLAY_H - (sx - view.ox) / view.s };
       }
-      g.scale(view.s, view.s);
+      return { x: (sx - view.ox) / view.s, y: (sy - view.oy) / (view.s * TILT) };
     }
-    /** Draw at world position but in screen pixels, upright in both rotations. */
-    function screenSpace(g, wx, wy, fn) {
-      g.save();
-      g.translate(wx, wy);
-      g.scale(1 / view.s, 1 / view.s);
-      if (view.rot) g.rotate(-Math.PI / 2);
-      fn();
-      g.restore();
+    /** Screen offset, in pixels, for something `h` inches above the cloth. */
+    const hLift = (h) => h * LIFT * view.s;
+    /** A world-space direction as a screen-space one (unit length, unscaled). */
+    function dirToScreen(nx, ny) {
+      return view.rot ? { x: -ny, y: nx } : { x: nx, y: ny };
+    }
+    /** Axis-aligned screen rect covering a world-space rect. */
+    function planeRect(x0, y0, x1, y1) {
+      const a = w2s(x0, y0), b = w2s(x1, y1);
+      return {
+        x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+        w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y)
+      };
     }
 
     // ====================================================================== //
@@ -1393,197 +1427,15 @@ window.plethoraBit = {
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
     const g = canvas.getContext("2d");
 
-    function drawTable() {
-      // wood
-      const woodGrad = g.createLinearGradient(-RAIL, -RAIL, PLAY_W + RAIL, PLAY_H + RAIL);
-      woodGrad.addColorStop(0, "#5a3722");
-      woodGrad.addColorStop(0.45, "#7a4c2e");
-      woodGrad.addColorStop(1, "#4a2c1a");
-      g.fillStyle = woodGrad;
-      roundRect(g, -RAIL, -RAIL, PLAY_W + RAIL * 2, PLAY_H + RAIL * 2, 3.2);
-      g.fill();
-
-      g.strokeStyle = "rgba(0,0,0,0.35)";
-      g.lineWidth = 0.35;
-      roundRect(g, -RAIL, -RAIL, PLAY_W + RAIL * 2, PLAY_H + RAIL * 2, 3.2);
-      g.stroke();
-
-      // cushion faces, a shade darker than the bed
-      g.fillStyle = "#125f38";
-      for (const c of CUSHIONS) {
-        const t = 2.0;
-        if (c.axis === "x") {
-          const x = c.dir > 0 ? c.at - t : c.at;
-          g.fillRect(x, c.a, t, c.b - c.a);
-        } else {
-          const y = c.dir > 0 ? c.at - t : c.at;
-          g.fillRect(c.a, y, c.b - c.a, t);
-        }
-      }
-
-      // bed
-      const felt = g.createRadialGradient(
-        PLAY_W * 0.5, PLAY_H * 0.42, PLAY_W * 0.1,
-        PLAY_W * 0.5, PLAY_H * 0.5, PLAY_H * 0.72
-      );
-      felt.addColorStop(0, "#1d8a52");
-      felt.addColorStop(0.6, "#177045");
-      felt.addColorStop(1, "#0e4f2f");
-      g.fillStyle = felt;
-      g.fillRect(0, 0, PLAY_W, PLAY_H);
-
-      // faint cloth nap
-      g.strokeStyle = "rgba(255,255,255,0.022)";
-      g.lineWidth = 0.12;
-      for (let y = 2; y < PLAY_H; y += 2.6) {
-        g.beginPath(); g.moveTo(0, y); g.lineTo(PLAY_W, y); g.stroke();
-      }
-
-      // foot spot
-      g.fillStyle = "rgba(255,255,255,0.16)";
-      g.beginPath(); g.arc(PLAY_W / 2, FOOT_Y, 0.28, 0, TAU); g.fill();
-
-      // head string, only while it matters
-      if (state.isBreak && state.screen === "play") {
-        g.strokeStyle = "rgba(255,255,255,0.18)";
-        g.lineWidth = 0.14;
-        g.setLineDash([1.2, 1.2]);
-        g.beginPath(); g.moveTo(0, HEAD_Y); g.lineTo(PLAY_W, HEAD_Y); g.stroke();
-        g.setLineDash([]);
-      }
-
-      // pockets
-      for (const p of POCKETS) {
-        const grad = g.createRadialGradient(p.x, p.y, 0.4, p.x, p.y, p.r * 1.25);
-        grad.addColorStop(0, "#000");
-        grad.addColorStop(0.72, "#05070a");
-        grad.addColorStop(1, "rgba(4,6,9,0)");
-        g.fillStyle = grad;
-        g.beginPath(); g.arc(p.x, p.y, p.r * 1.25, 0, TAU); g.fill();
-        g.fillStyle = "#04060a";
-        g.beginPath(); g.arc(p.x, p.y, p.r * 0.86, 0, TAU); g.fill();
-      }
-
-      // jaw tips
-      g.fillStyle = "#0f5231";
-      for (const jw of JAWS) {
-        g.beginPath(); g.arc(jw.x, jw.y, JAW_R, 0, TAU); g.fill();
-      }
-
-      // sights
-      g.fillStyle = "rgba(240,228,200,0.72)";
-      const dm = RAIL * 0.5;
-      for (let i = 1; i <= 7; i++) {
-        if (i === 4) continue;
-        const y = (PLAY_H / 8) * i;
-        diamond(g, -dm, y, 0.5);
-        diamond(g, PLAY_W + dm, y, 0.5);
-      }
-      for (let i = 1; i <= 3; i++) {
-        const x = (PLAY_W / 4) * i;
-        diamond(g, x, -dm, 0.5);
-        diamond(g, x, PLAY_H + dm, 0.5);
-      }
-    }
-
-    function diamond(g2, x, y, r) {
-      g2.beginPath();
-      g2.moveTo(x, y - r); g2.lineTo(x + r * 0.62, y);
-      g2.lineTo(x, y + r); g2.lineTo(x - r * 0.62, y);
-      g2.closePath(); g2.fill();
-    }
-
     function roundRect(g2, x, y, w, h, r) {
+      const rr = Math.min(r, w * 0.5, h * 0.5);
       g2.beginPath();
-      g2.moveTo(x + r, y);
-      g2.arcTo(x + w, y, x + w, y + h, r);
-      g2.arcTo(x + w, y + h, x, y + h, r);
-      g2.arcTo(x, y + h, x, y, r);
-      g2.arcTo(x, y, x + w, y, r);
+      g2.moveTo(x + rr, y);
+      g2.arcTo(x + w, y, x + w, y + h, rr);
+      g2.arcTo(x + w, y + h, x, y + h, rr);
+      g2.arcTo(x, y + h, x, y, rr);
+      g2.arcTo(x, y, x + w, y, rr);
       g2.closePath();
-    }
-
-    function drawBall(b) {
-      const R = BALL_R;
-      let x = b.x, y = b.y, scale = 1, alpha = 1;
-      if (b.drop > 0) {
-        const t = 1 - b.drop;
-        x = lerp(b.x, b.dropX, t * 0.85);
-        y = lerp(b.y, b.dropY, t * 0.85);
-        scale = lerp(1, 0.35, t);
-        alpha = lerp(1, 0, Math.max(0, t - 0.45) / 0.55);
-      }
-      if (alpha <= 0.02) return;
-
-      g.save();
-      g.globalAlpha = alpha;
-      g.translate(x, y);
-      g.scale(scale, scale);
-
-      const base = g.createRadialGradient(-R * 0.36, -R * 0.4, R * 0.08, 0, 0, R * 1.08);
-      if (b.kind === "cue" || b.kind === "stripe") {
-        base.addColorStop(0, "#ffffff");
-        base.addColorStop(0.55, "#f2eddd");
-        base.addColorStop(1, "#b6ae9b");
-      } else {
-        base.addColorStop(0, shade(b.color, 0.5));
-        base.addColorStop(0.5, b.color);
-        base.addColorStop(1, shade(b.color, -0.45));
-      }
-      g.fillStyle = base;
-      g.beginPath(); g.arc(0, 0, R, 0, TAU); g.fill();
-
-      if (b.kind === "stripe") {
-        // the stripe sweeps across the face as the ball rolls
-        g.save();
-        g.beginPath(); g.arc(0, 0, R, 0, TAU); g.clip();
-        g.rotate(b.ang);
-        const off = Math.sin(b.roll) * R * 0.92;
-        const band = g.createLinearGradient(off - R * 0.6, 0, off + R * 0.6, 0);
-        band.addColorStop(0, shade(b.color, -0.3));
-        band.addColorStop(0.4, b.color);
-        band.addColorStop(1, shade(b.color, -0.35));
-        g.fillStyle = band;
-        g.fillRect(off - R * 0.58, -R * 1.1, R * 1.16, R * 2.2);
-        g.restore();
-      }
-
-      // number patch, orbiting with the roll and squashing as it turns away
-      if (b.n > 0) {
-        const c = Math.cos(b.roll);
-        if (c > 0.06) {
-          const px = Math.sin(b.roll) * R * 0.5 * Math.cos(b.ang);
-          const py = Math.sin(b.roll) * R * 0.5 * Math.sin(b.ang);
-          g.save();
-          g.translate(px, py);
-          g.rotate(b.ang);
-          g.scale(Math.max(0.12, c), 1);
-          g.fillStyle = "#fbf7ec";
-          g.beginPath(); g.arc(0, 0, R * 0.40, 0, TAU); g.fill();
-          g.restore();
-
-          if (c > 0.5 && view.s > 4.2) {
-            screenSpace(g, px, py, () => {
-              g.fillStyle = "#20222a";
-              g.font = "700 " + Math.round(view.s * 0.62) + "px -apple-system,system-ui,sans-serif";
-              g.textAlign = "center";
-              g.textBaseline = "middle";
-              g.fillText(String(b.n), 0, 0.5);
-            });
-          }
-        }
-      }
-
-      // specular
-      g.fillStyle = "rgba(255,255,255,0.5)";
-      g.beginPath();
-      g.ellipse(-R * 0.34, -R * 0.4, R * 0.24, R * 0.16, -0.6, 0, TAU);
-      g.fill();
-
-      g.strokeStyle = "rgba(0,0,0,0.28)";
-      g.lineWidth = 0.09;
-      g.beginPath(); g.arc(0, 0, R, 0, TAU); g.stroke();
-      g.restore();
     }
 
     function shade(hex, amt) {
@@ -1601,168 +1453,742 @@ window.plethoraBit = {
       return "rgb(" + r + "," + gg + "," + b + ")";
     }
 
-    function drawShadows() {
-      g.fillStyle = "rgba(0,0,0,0.30)";
-      for (const b of state.balls) {
-        if (b.potted && b.drop <= 0) continue;
-        const a = b.drop > 0 ? b.drop : 1;
-        g.globalAlpha = 0.3 * a;
-        g.beginPath();
-        g.ellipse(b.x + 0.34, b.y + 0.46, BALL_R * 0.98, BALL_R * 0.82, 0, 0, TAU);
-        g.fill();
-      }
-      g.globalAlpha = 1;
+    function ellipse(cx, cy, rx, ry) {
+      g.beginPath();
+      g.ellipse(cx, cy, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, TAU);
     }
 
-    function drawAim() {
-      const cue = state.cue;
-      if (!cue || cue.potted) return;
-      const human = state.mode === "pass" || state.turn === 0;
-      if (!human || state.screen !== "play") return;
-      if (state.phase !== "aim") return;
+    // ---- room ---------------------------------------------------------------
+    function drawRoom() {
+      const bg = g.createLinearGradient(0, 0, 0, ctx.height);
+      bg.addColorStop(0, "#14161d");
+      bg.addColorStop(0.55, "#0d0f14");
+      bg.addColorStop(1, "#08090d");
+      g.fillStyle = bg;
+      g.fillRect(0, 0, ctx.width, ctx.height);
 
-      const hit = predict(cue.x, cue.y, state.aim);
-      const dx = Math.cos(state.aim), dy = Math.sin(state.aim);
+      // the lamp hanging over the table
+      const t = planeRect(-RAIL, -RAIL, PLAY_W + RAIL, PLAY_H + RAIL);
+      const glow = g.createRadialGradient(
+        t.x + t.w * 0.5, t.y + t.h * 0.34, t.w * 0.1,
+        t.x + t.w * 0.5, t.y + t.h * 0.45, t.h * 0.95
+      );
+      glow.addColorStop(0, "rgba(255,236,196,0.10)");
+      glow.addColorStop(0.5, "rgba(255,226,180,0.035)");
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = glow;
+      g.fillRect(0, 0, ctx.width, ctx.height);
+    }
 
-      g.strokeStyle = "rgba(255,255,255,0.62)";
-      g.lineWidth = 0.16;
-      g.setLineDash([1.5, 1.1]);
-      g.beginPath();
-      g.moveTo(cue.x + dx * BALL_R, cue.y + dy * BALL_R);
-      g.lineTo(hit.x, hit.y);
+    // ---- the table body -----------------------------------------------------
+    function drawTable(timeMs) {
+      const t = planeRect(-RAIL, -RAIL, PLAY_W + RAIL, PLAY_H + RAIL);
+      const bed = planeRect(0, 0, PLAY_W, PLAY_H);
+      const radius = RAIL * view.s * 0.72;
+      const skirt = hLift(RAIL_H + 2.6);
+
+      // cast shadow on the floor
+      g.save();
+      for (let i = 5; i >= 1; i--) {
+        g.fillStyle = "rgba(0,0,0," + (0.055 * i / 5) + ")";
+        roundRect(g, t.x - i * 1.6, t.y + skirt * 0.4 + i * 1.1,
+          t.w + i * 3.2, t.h + i * 2.2, radius + i);
+        g.fill();
+      }
+      g.restore();
+
+      // the outer side of the frame, extruded downward
+      const side = g.createLinearGradient(0, t.y + t.h, 0, t.y + t.h + skirt);
+      side.addColorStop(0, PAL.woodLo);
+      side.addColorStop(1, PAL.woodEdge);
+      g.fillStyle = side;
+      roundRect(g, t.x, t.y + skirt * 0.06, t.w, t.h + skirt, radius);
+      g.fill();
+
+      // rail top surface
+      const wood = g.createLinearGradient(t.x, t.y, t.x + t.w * 0.35, t.y + t.h);
+      wood.addColorStop(0, PAL.woodHi);
+      wood.addColorStop(0.35, PAL.woodMid);
+      wood.addColorStop(0.75, shade(PAL.woodMid, -0.22));
+      wood.addColorStop(1, PAL.woodLo);
+      g.fillStyle = wood;
+      roundRect(g, t.x, t.y, t.w, t.h, radius);
+      g.fill();
+
+      // grain
+      g.save();
+      roundRect(g, t.x, t.y, t.w, t.h, radius);
+      g.clip();
+      g.strokeStyle = "rgba(255,224,180,0.045)";
+      g.lineWidth = 1;
+      for (let i = 0; i < 46; i++) {
+        const gy = t.y + (i / 46) * t.h + Math.sin(i * 2.3) * 2;
+        g.beginPath();
+        g.moveTo(t.x, gy);
+        g.bezierCurveTo(t.x + t.w * 0.3, gy + 2.5, t.x + t.w * 0.7, gy - 2.5, t.x + t.w, gy);
+        g.stroke();
+      }
+      g.strokeStyle = "rgba(0,0,0,0.10)";
+      for (let i = 0; i < 24; i++) {
+        const gy = t.y + ((i + 0.5) / 24) * t.h;
+        g.beginPath();
+        g.moveTo(t.x, gy);
+        g.bezierCurveTo(t.x + t.w * 0.4, gy - 3, t.x + t.w * 0.6, gy + 3, t.x + t.w, gy);
+        g.stroke();
+      }
+      g.restore();
+
+      // lit top edge and dark bottom edge of the frame
+      g.strokeStyle = "rgba(255,226,180,0.30)";
+      g.lineWidth = 1.4;
+      roundRect(g, t.x + 0.7, t.y + 0.7, t.w - 1.4, t.h - 1.4, radius);
       g.stroke();
-      g.setLineDash([]);
+      g.strokeStyle = "rgba(0,0,0,0.55)";
+      g.lineWidth = 1.2;
+      roundRect(g, t.x, t.y, t.w, t.h, radius);
+      g.stroke();
 
-      // ghost ball
-      g.strokeStyle = "rgba(255,255,255,0.5)";
-      g.lineWidth = 0.13;
-      g.beginPath(); g.arc(hit.x, hit.y, BALL_R, 0, TAU); g.stroke();
+      drawSights(t, bed);
+      drawBed(bed);
+      drawPockets();
+      drawCushions(bed);
+      drawMarks(bed);
+    }
 
-      if (hit.ball) {
-        const ox = hit.ball.x - hit.x, oy = hit.ball.y - hit.y;
-        const ol = Math.hypot(ox, oy) || 1;
-        const ux = ox / ol, uy = oy / ol;
-        // object ball line
-        g.strokeStyle = "rgba(255,236,150,0.85)";
-        g.lineWidth = 0.2;
-        g.beginPath();
-        g.moveTo(hit.ball.x, hit.ball.y);
-        g.lineTo(hit.ball.x + ux * 11, hit.ball.y + uy * 11);
+    function drawSights(t, bed) {
+      const rIn = RAIL * view.s * 0.5;
+      const pts = [];
+      for (let i = 1; i <= 7; i++) {
+        if (i === 4) continue;
+        const y = (PLAY_H / 8) * i;
+        pts.push(w2s(-RAIL * 0.5, y));
+        pts.push(w2s(PLAY_W + RAIL * 0.5, y));
+      }
+      for (let i = 1; i <= 3; i++) {
+        const x = (PLAY_W / 4) * i;
+        pts.push(w2s(x, -RAIL * 0.5));
+        pts.push(w2s(x, PLAY_H + RAIL * 0.5));
+      }
+      const r = Math.max(1.6, view.s * 0.42);
+      for (const p of pts) {
+        g.fillStyle = "rgba(0,0,0,0.5)";
+        ellipse(p.x + 0.6, p.y + 0.8, r, r * TILT);
+        g.fill();
+        const grad = g.createLinearGradient(p.x - r, p.y - r, p.x + r, p.y + r);
+        grad.addColorStop(0, "#fdf6e4");
+        grad.addColorStop(0.5, "#e8dcc0");
+        grad.addColorStop(1, "#a98f63");
+        g.fillStyle = grad;
+        ellipse(p.x, p.y, r, r * TILT);
+        g.fill();
+      }
+    }
+
+    function drawBed(bed) {
+      // base cloth
+      const felt = g.createLinearGradient(bed.x, bed.y, bed.x + bed.w * 0.3, bed.y + bed.h);
+      felt.addColorStop(0, PAL.feltHi);
+      felt.addColorStop(0.3, PAL.feltMid);
+      felt.addColorStop(1, PAL.feltLo);
+      g.fillStyle = felt;
+      g.fillRect(bed.x, bed.y, bed.w, bed.h);
+
+      g.save();
+      g.beginPath();
+      g.rect(bed.x, bed.y, bed.w, bed.h);
+      g.clip();
+
+      // The pool of light under the lamp. Named distinctly from the shuffle
+      // array in rack(): the contract validator resolves constants without
+      // scope, so two same-named consts make this one unreadable to it.
+      const lampGlow = g.createRadialGradient(
+        bed.x + bed.w * 0.42, bed.y + bed.h * 0.36, bed.w * 0.06,
+        bed.x + bed.w * 0.5, bed.y + bed.h * 0.45, bed.h * 0.78
+      );
+      lampGlow.addColorStop(0, "rgba(255,247,214,0.15)");
+      lampGlow.addColorStop(0.45, "rgba(255,240,200,0.05)");
+      lampGlow.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = lampGlow;
+      g.fillRect(bed.x, bed.y, bed.w, bed.h);
+
+      // nap: fine directional weave
+      g.strokeStyle = "rgba(255,255,255,0.020)";
+      g.lineWidth = 1;
+      const step = Math.max(3, view.s * 0.62);
+      for (let y = bed.y; y < bed.y + bed.h; y += step) {
+        g.beginPath(); g.moveTo(bed.x, y); g.lineTo(bed.x + bed.w, y); g.stroke();
+      }
+      g.strokeStyle = "rgba(0,0,0,0.030)";
+      for (let x = bed.x; x < bed.x + bed.w; x += step) {
+        g.beginPath(); g.moveTo(x, bed.y); g.lineTo(x, bed.y + bed.h); g.stroke();
+      }
+
+      // vignette into the rails
+      const vig = g.createRadialGradient(
+        bed.x + bed.w * 0.5, bed.y + bed.h * 0.5, bed.w * 0.22,
+        bed.x + bed.w * 0.5, bed.y + bed.h * 0.5, bed.h * 0.72
+      );
+      vig.addColorStop(0, "rgba(0,0,0,0)");
+      vig.addColorStop(1, "rgba(2,20,12,0.42)");
+      g.fillStyle = vig;
+      g.fillRect(bed.x, bed.y, bed.w, bed.h);
+      g.restore();
+    }
+
+    /**
+     * Cushions sit RAIL_H above the cloth. The one facing the viewer shows its
+     * lit inner face; the others only cast a contact shadow onto the bed. Which
+     * one faces the viewer is worked out from the screen-space normal, so it
+     * stays right when the table rotates for landscape.
+     */
+    function drawCushions(bed) {
+      for (const c of CUSHIONS) {
+        const nx = c.axis === "x" ? c.dir : 0;
+        const ny = c.axis === "y" ? c.dir : 0;
+        const sn = dirToScreen(nx, ny);
+
+        const r = c.axis === "x"
+          ? planeRect(c.at, c.a, c.at - c.dir * CUSH_W, c.b)
+          : planeRect(c.a, c.at, c.b, c.at - c.dir * CUSH_W);
+
+        // contact shadow thrown onto the bed
+        g.save();
+        g.beginPath(); g.rect(bed.x, bed.y, bed.w, bed.h); g.clip();
+        const sh = hLift(RAIL_H) * 1.5;
+        const shx = r.x + sn.x * 2, shy = r.y + sn.y * 2;
+        const sg = sn.y !== 0
+          ? g.createLinearGradient(0, sn.y > 0 ? r.y + r.h : r.y,
+              0, sn.y > 0 ? r.y + r.h + sh : r.y - sh)
+          : g.createLinearGradient(sn.x > 0 ? r.x + r.w : r.x, 0,
+              sn.x > 0 ? r.x + r.w + sh : r.x - sh, 0);
+        sg.addColorStop(0, "rgba(0,0,0,0.34)");
+        sg.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = sg;
+        if (sn.y !== 0) {
+          g.fillRect(r.x, sn.y > 0 ? r.y + r.h : r.y - sh, r.w, sh);
+        } else {
+          g.fillRect(sn.x > 0 ? r.x + r.w : r.x - sh, r.y, sh, r.h);
+        }
+        g.restore();
+
+        // Which screen edge carries the nose comes from the normal, so this
+        // stays right when the table rotates for landscape.
+        const horiz = Math.abs(sn.x) > Math.abs(sn.y);
+        const facing = sn.y > 0.5;
+        const noseX = horiz ? (sn.x > 0 ? r.x + r.w : r.x) : r.x;
+        const noseY = horiz ? r.y : (sn.y > 0 ? r.y + r.h : r.y);
+        const outX = horiz ? (sn.x > 0 ? r.x : r.x + r.w) : r.x;
+        const outY = horiz ? r.y : (sn.y > 0 ? r.y : r.y + r.h);
+        const round = Math.min(r.w, r.h) * 0.42;
+
+        g.save();
+        roundRect(g, r.x, r.y, r.w, r.h, round);
+        g.clip();
+
+        // the crown of the cushion, rolling over from the outer edge
+        const top = g.createLinearGradient(outX, outY, noseX, noseY);
+        top.addColorStop(0, shade(PAL.cushion, -0.42));
+        top.addColorStop(0.28, shade(PAL.cushion, -0.08));
+        top.addColorStop(0.62, facing ? PAL.cushionLit : shade(PAL.cushion, 0.1));
+        top.addColorStop(1, shade(PAL.cushion, -0.2));
+        g.fillStyle = top;
+        g.fillRect(r.x, r.y, r.w, r.h);
+
+        // the face turned toward the viewer, standing RAIL_H off the cloth
+        if (facing) {
+          const fh = hLift(RAIL_H);
+          const fg = g.createLinearGradient(0, r.y + r.h - fh, 0, r.y + r.h);
+          fg.addColorStop(0, shade(PAL.cushionLit, 0.30));
+          fg.addColorStop(0.3, PAL.cushionLit);
+          fg.addColorStop(0.75, shade(PAL.cushion, -0.22));
+          fg.addColorStop(1, shade(PAL.cushion, -0.62));
+          g.fillStyle = fg;
+          g.fillRect(r.x, r.y + r.h - fh, r.w, fh);
+          g.fillStyle = "rgba(255,255,255,0.22)";
+          g.fillRect(r.x, r.y + r.h - fh, r.w, 1.2);
+        }
+        g.restore();
+
+        // seam against the wood, and a lit bead along the nose
+        g.strokeStyle = "rgba(0,0,0,0.5)";
+        g.lineWidth = 1;
+        roundRect(g, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, round);
         g.stroke();
-        arrowHead(hit.ball.x + ux * 11, hit.ball.y + uy * 11, Math.atan2(uy, ux),
-          "rgba(255,236,150,0.85)");
-        // cue ball tangent
-        const sgn = (dx * -uy + dy * ux) > 0 ? 1 : -1;
-        const tx = -uy * sgn, ty = ux * sgn;
-        g.strokeStyle = "rgba(190,225,255,0.45)";
-        g.lineWidth = 0.14;
-        g.setLineDash([0.9, 0.9]);
+
+        g.strokeStyle = facing ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.13)";
+        g.lineWidth = 1.2;
         g.beginPath();
-        g.moveTo(hit.x, hit.y);
-        g.lineTo(hit.x + tx * 6.5, hit.y + ty * 6.5);
+        g.moveTo(noseX, noseY);
+        if (horiz) g.lineTo(noseX, noseY + r.h); else g.lineTo(noseX + r.w, noseY);
         g.stroke();
+      }
+
+      // The jaw each cushion run ends in. Kept quiet — it is a real bumper a
+      // ball can rattle off, but it should read as the tip of the cushion
+      // rather than as an object sitting in the mouth.
+      for (const jw of JAWS) {
+        const p = w2s(jw.x, jw.y);
+        const rr = CUSH_W * view.s * 0.30;
+        const jg = g.createLinearGradient(p.x, p.y - rr, p.x, p.y + rr);
+        jg.addColorStop(0, shade(PAL.cushion, 0.06));
+        jg.addColorStop(1, shade(PAL.cushion, -0.42));
+        g.fillStyle = jg;
+        ellipse(p.x, p.y, rr, rr * TILT);
+        g.fill();
+      }
+    }
+
+    /**
+     * A pocket is a hole cut through the slate, not a black disc laid on top:
+     * a soft shadow bleeding onto the surrounding cloth, a throat that falls
+     * away from the light, a warm brass ring on the lip, and a bright arc on
+     * the far side where the lamp catches the rim.
+     */
+    function drawPockets() {
+      for (const p of POCKETS) {
+        const c = w2s(p.x, p.y);
+        const rx = p.r * view.s * 0.86;
+        const ry = rx * TILT;
+
+        // the cloth darkening as it dips into the mouth
+        const col = g.createRadialGradient(c.x, c.y, rx * 0.75, c.x, c.y, rx * 1.32);
+        col.addColorStop(0, "rgba(4,10,7,0.85)");
+        col.addColorStop(0.55, "rgba(4,12,8,0.36)");
+        col.addColorStop(1, "rgba(4,12,8,0)");
+        g.fillStyle = col;
+        ellipse(c.x, c.y, rx * 1.32, ry * 1.32);
+        g.fill();
+
+        // brass ring on the lip
+        const ring = g.createLinearGradient(c.x - rx, c.y - ry, c.x + rx, c.y + ry);
+        ring.addColorStop(0, shade(PAL.brass, 0.45));
+        ring.addColorStop(0.45, PAL.brass);
+        ring.addColorStop(1, shade(PAL.brass, -0.55));
+        g.fillStyle = ring;
+        ellipse(c.x, c.y, rx * 1.06, ry * 1.06);
+        g.fill();
+
+        // the throat, falling away from the light
+        const well = g.createRadialGradient(
+          c.x - rx * 0.3, c.y - ry * 0.42, rx * 0.05, c.x, c.y, rx);
+        well.addColorStop(0, "#151a20");
+        well.addColorStop(0.42, "#080b0f");
+        well.addColorStop(1, "#000");
+        g.fillStyle = well;
+        ellipse(c.x, c.y, rx, ry);
+        g.fill();
+
+        // lamp on the far rim, shadow on the near one
+        g.strokeStyle = "rgba(255,236,198,0.34)";
+        g.lineWidth = Math.max(1, view.s * 0.16);
+        g.beginPath();
+        g.ellipse(c.x, c.y, rx * 0.94, ry * 0.94, 0, Math.PI * 1.06, Math.PI * 1.94);
+        g.stroke();
+        g.strokeStyle = "rgba(0,0,0,0.55)";
+        g.lineWidth = Math.max(0.8, view.s * 0.12);
+        g.beginPath();
+        g.ellipse(c.x, c.y, rx * 0.96, ry * 0.96, 0, Math.PI * 0.08, Math.PI * 0.92);
+        g.stroke();
+      }
+    }
+
+    function drawMarks(bed) {
+      const foot = w2s(PLAY_W / 2, FOOT_Y);
+      g.fillStyle = "rgba(255,255,255,0.13)";
+      ellipse(foot.x, foot.y, view.s * 0.28, view.s * 0.28 * TILT);
+      g.fill();
+
+      if (state.isBreak && state.screen === "play") {
+        const a = w2s(0, HEAD_Y), b = w2s(PLAY_W, HEAD_Y);
+        g.strokeStyle = "rgba(255,255,255,0.16)";
+        g.lineWidth = 1;
+        g.setLineDash([5, 5]);
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
         g.setLineDash([]);
       }
     }
 
-    function arrowHead(x, y, ang, color) {
+    // ---- balls --------------------------------------------------------------
+    /** Where a ball's centre lands on screen, including its lift off the cloth. */
+    function ballScreen(b) {
+      let wx = b.x, wy = b.y, k = 1;
+      if (b.drop > 0) {
+        const t = 1 - b.drop;
+        wx = lerp(b.x, b.dropX, t * 0.9);
+        wy = lerp(b.y, b.dropY, t * 0.9);
+        k = lerp(1, 0.3, t);
+      }
+      const p = w2s(wx, wy);
+      return { x: p.x, y: p.y - hLift(BALL_R) * k, px: p.x, py: p.y, k };
+    }
+
+    function drawBallShadow(b) {
+      const sp = ballScreen(b);
+      const R = BALL_R * view.s * sp.k;
+      const a = b.drop > 0 ? b.drop * 0.9 : 1;
+      if (a <= 0.02) return;
+      g.save();
+      g.globalAlpha = a;
+      g.translate(sp.px - LX * R * 0.5, sp.py - LY * R * 0.5 * TILT);
+      g.scale(1, TILT);
+      const grad = g.createRadialGradient(0, 0, R * 0.15, 0, 0, R * 1.45);
+      grad.addColorStop(0, "rgba(0,0,0,0.46)");
+      grad.addColorStop(0.45, "rgba(0,0,0,0.26)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grad;
+      g.beginPath(); g.arc(0, 0, R * 1.45, 0, TAU); g.fill();
+      g.restore();
+    }
+
+    /**
+     * A phenolic sphere: key light from the upper left, a broad terminator, a
+     * cloth-green bounce along the shaded edge — which is the thing that
+     * actually reads as roundness — then the number, then two speculars.
+     */
+    function drawBall(b, timeMs) {
+      const sp = ballScreen(b);
+      const R = BALL_R * view.s * sp.k;
+      if (R < 0.6) return;
+      const alpha = b.drop > 0 ? Math.max(0, 1 - Math.max(0, (1 - b.drop) - 0.4) / 0.6) : 1;
+      if (alpha <= 0.02) return;
+
+      g.save();
+      g.globalAlpha = alpha;
+
+      const light = b.kind === "cue" || b.kind === "stripe";
+      const body = g.createRadialGradient(
+        sp.x + LX * R * 0.40, sp.y + LY * R * 0.40, R * 0.05,
+        sp.x, sp.y, R * 1.06
+      );
+      if (light) {
+        body.addColorStop(0, "#ffffff");
+        body.addColorStop(0.42, "#f6f1e2");
+        body.addColorStop(0.78, "#cdc5b2");
+        body.addColorStop(1, "#7d7767");
+      } else {
+        body.addColorStop(0, shade(b.color, 0.58));
+        body.addColorStop(0.38, shade(b.color, 0.12));
+        body.addColorStop(0.74, shade(b.color, -0.25));
+        body.addColorStop(1, shade(b.color, -0.62));
+      }
+      g.fillStyle = body;
+      g.beginPath(); g.arc(sp.x, sp.y, R, 0, TAU); g.fill();
+
+      g.save();
+      g.beginPath(); g.arc(sp.x, sp.y, R, 0, TAU); g.clip();
+
+      // stripe sweeping across the face as the ball rolls
+      if (b.kind === "stripe") {
+        const sd = dirToScreen(Math.cos(b.ang), Math.sin(b.ang));
+        const sa = Math.atan2(sd.y, sd.x);
+        g.save();
+        g.translate(sp.x, sp.y);
+        g.rotate(sa);
+        const off = Math.sin(b.roll) * R * 0.92;
+        const band = g.createLinearGradient(off - R * 0.62, 0, off + R * 0.62, 0);
+        band.addColorStop(0, shade(b.color, -0.34));
+        band.addColorStop(0.42, b.color);
+        band.addColorStop(1, shade(b.color, -0.4));
+        g.fillStyle = band;
+        g.fillRect(off - R * 0.6, -R * 1.1, R * 1.2, R * 2.2);
+        g.restore();
+      }
+
+      // number patch, orbiting with the roll and squashing as it turns away
+      if (b.n > 0) {
+        const c = Math.cos(b.roll);
+        if (c > 0.06) {
+          const sd = dirToScreen(Math.cos(b.ang), Math.sin(b.ang));
+          const sa = Math.atan2(sd.y, sd.x);
+          const px = sp.x + Math.sin(b.roll) * R * 0.5 * Math.cos(sa);
+          const py = sp.y + Math.sin(b.roll) * R * 0.5 * Math.sin(sa);
+          g.save();
+          g.translate(px, py);
+          g.rotate(sa);
+          g.scale(Math.max(0.12, c), 1);
+          const patch = g.createRadialGradient(
+            -R * 0.14, -R * 0.14, R * 0.02, 0, 0, R * 0.42);
+          patch.addColorStop(0, "#ffffff");
+          patch.addColorStop(1, "#e6dfcd");
+          g.fillStyle = patch;
+          g.beginPath(); g.arc(0, 0, R * 0.42, 0, TAU); g.fill();
+          g.restore();
+
+          if (c > 0.45 && R > 5.2) {
+            g.save();
+            g.translate(px, py);
+            g.fillStyle = "rgba(26,28,34,0.92)";
+            g.font = "700 " + (R * 0.56).toFixed(1) + "px -apple-system,system-ui,sans-serif";
+            g.textAlign = "center";
+            g.textBaseline = "middle";
+            g.globalAlpha = alpha * Math.min(1, (c - 0.45) / 0.2);
+            g.fillText(String(b.n), 0, R * 0.03);
+            g.restore();
+          }
+        }
+      }
+
+      // bounce light off the cloth along the shaded limb
+      const bounce = g.createRadialGradient(
+        sp.x - LX * R * 0.86, sp.y - LY * R * 0.86, R * 0.05,
+        sp.x - LX * R * 0.72, sp.y - LY * R * 0.72, R * 0.85
+      );
+      bounce.addColorStop(0, "rgba(120,235,175,0.34)");
+      bounce.addColorStop(0.55, "rgba(90,200,150,0.12)");
+      bounce.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = bounce;
+      g.beginPath(); g.arc(sp.x, sp.y, R, 0, TAU); g.fill();
+
+      // ambient occlusion where the ball meets the cloth
+      const ao = g.createRadialGradient(
+        sp.x, sp.y + R * 0.72, R * 0.1, sp.x, sp.y + R * 0.55, R * 0.85);
+      ao.addColorStop(0, "rgba(0,0,0,0.30)");
+      ao.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = ao;
+      g.beginPath(); g.arc(sp.x, sp.y, R, 0, TAU); g.fill();
+      g.restore();
+
+      // speculars
+      const hx = sp.x + LX * R * 0.46, hy = sp.y + LY * R * 0.46;
+      const spec = g.createRadialGradient(hx, hy, 0, hx, hy, R * 0.34);
+      spec.addColorStop(0, "rgba(255,255,255,0.92)");
+      spec.addColorStop(0.4, "rgba(255,255,255,0.34)");
+      spec.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = spec;
+      g.save();
+      g.beginPath(); g.arc(sp.x, sp.y, R, 0, TAU); g.clip();
+      g.beginPath(); g.arc(hx, hy, R * 0.34, 0, TAU); g.fill();
+      g.fillStyle = "rgba(255,255,255,0.95)";
+      ellipse(hx - R * 0.04, hy - R * 0.04, R * 0.11, R * 0.08);
+      g.fill();
+      g.restore();
+
+      // rim, darker where it turns away
+      const rim = g.createLinearGradient(
+        sp.x + LX * R, sp.y + LY * R, sp.x - LX * R, sp.y - LY * R);
+      rim.addColorStop(0, "rgba(255,255,255,0.18)");
+      rim.addColorStop(0.5, "rgba(0,0,0,0.18)");
+      rim.addColorStop(1, "rgba(0,0,0,0.42)");
+      g.strokeStyle = rim;
+      g.lineWidth = Math.max(0.6, R * 0.075);
+      g.beginPath(); g.arc(sp.x, sp.y, R - g.lineWidth * 0.5, 0, TAU); g.stroke();
+      g.restore();
+    }
+
+    // ---- aiming -------------------------------------------------------------
+    function drawAim() {
+      const cue = state.cue;
+      if (!cue || cue.potted || state.screen !== "play") return;
+      const human = state.mode === "pass" || state.turn === 0;
+      if (!human || state.phase !== "aim") return;
+
+      const hit = predict(cue.x, cue.y, state.aim);
+      const lift = hLift(BALL_R);
+      const a = w2s(cue.x, cue.y);
+      const bpt = w2s(hit.x, hit.y);
+      a.y -= lift; bpt.y -= lift;
+
+      const dx = bpt.x - a.x, dy = bpt.y - a.y;
+      const dl = Math.hypot(dx, dy) || 1;
+      const R = BALL_R * view.s;
+
+      g.save();
+      g.lineCap = "round";
+      g.strokeStyle = "rgba(255,255,255,0.5)";
+      g.lineWidth = 1.6;
+      g.setLineDash([7, 6]);
+      g.beginPath();
+      g.moveTo(a.x + (dx / dl) * R, a.y + (dy / dl) * R);
+      g.lineTo(bpt.x, bpt.y);
+      g.stroke();
+      g.setLineDash([]);
+
+      // ghost ball
+      g.strokeStyle = "rgba(255,255,255,0.42)";
+      g.lineWidth = 1.3;
+      g.beginPath(); g.arc(bpt.x, bpt.y, R, 0, TAU); g.stroke();
+      g.fillStyle = "rgba(255,255,255,0.07)";
+      g.beginPath(); g.arc(bpt.x, bpt.y, R, 0, TAU); g.fill();
+
+      if (hit.ball) {
+        const ob = w2s(hit.ball.x, hit.ball.y);
+        ob.y -= lift;
+        let ux = ob.x - bpt.x, uy = ob.y - bpt.y;
+        const ul = Math.hypot(ux, uy) || 1;
+        ux /= ul; uy /= ul;
+        const len = R * 5.2;
+        g.strokeStyle = "rgba(255,226,140,0.9)";
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(ob.x + ux * R, ob.y + uy * R);
+        g.lineTo(ob.x + ux * (R + len), ob.y + uy * (R + len));
+        g.stroke();
+        arrowHead(ob.x + ux * (R + len), ob.y + uy * (R + len),
+          Math.atan2(uy, ux), "rgba(255,226,140,0.9)", R * 0.5);
+
+        // where the cue ball goes: the tangent
+        const sgn = (dx * -uy + dy * ux) > 0 ? 1 : -1;
+        const tx = -uy * sgn, ty = ux * sgn;
+        g.strokeStyle = "rgba(175,220,255,0.42)";
+        g.lineWidth = 1.4;
+        g.setLineDash([4, 5]);
+        g.beginPath();
+        g.moveTo(bpt.x, bpt.y);
+        g.lineTo(bpt.x + tx * R * 3.4, bpt.y + ty * R * 3.4);
+        g.stroke();
+        g.setLineDash([]);
+      }
+      g.restore();
+    }
+
+    function arrowHead(x, y, ang, color, size) {
       g.save();
       g.translate(x, y);
       g.rotate(ang);
       g.fillStyle = color;
       g.beginPath();
-      g.moveTo(1.1, 0); g.lineTo(-0.7, 0.62); g.lineTo(-0.7, -0.62);
+      g.moveTo(size, 0);
+      g.lineTo(-size * 0.62, size * 0.58);
+      g.lineTo(-size * 0.62, -size * 0.58);
       g.closePath(); g.fill();
       g.restore();
     }
 
+    /** A real cue: taper, wrap, joint collar, ferrule and tip, plus a shadow. */
     function drawCueStick(timeMs) {
       const cue = state.cue;
       if (!cue || cue.potted || state.screen !== "play") return;
       const human = state.mode === "pass" || state.turn === 0;
       if (!human || state.phase !== "aim") return;
 
-      const dx = Math.cos(state.aim), dy = Math.sin(state.aim);
-      const idle = Math.sin(timeMs / 700) * 0.22;
-      const pull = BALL_R + 1.4 + state.power * 17 + (state.power > 0 ? 0 : idle);
+      const o = w2s(cue.x, cue.y);
+      const ahead = w2s(cue.x + Math.cos(state.aim), cue.y + Math.sin(state.aim));
+      let dx = ahead.x - o.x, dy = ahead.y - o.y;
+      const ppi = Math.hypot(dx, dy) || 1;      // screen px per world inch, this way
+      dx /= ppi; dy /= ppi;
+
+      const lift = hLift(BALL_R);
+      const idle = state.power > 0 ? 0 : Math.sin(timeMs / 760) * 0.3;
+      const pull = BALL_R + 1.2 + state.power * 17 + idle;
       const len = 52;
-      const bx = cue.x - dx * pull, by = cue.y - dy * pull;
-      const ex = bx - dx * len, ey = by - dy * len;
+      const tipX = o.x - dx * pull * ppi, tipY = o.y - dy * pull * ppi - lift;
+      const buttX = tipX - dx * len * ppi, buttY = tipY - dy * len * ppi;
+      const nx = -dy, ny = dx;
+      const wTip = Math.max(1.1, view.s * 0.30);
+      const wButt = Math.max(2.0, view.s * 0.60);
 
+      // Soft shadow on the cloth. Stacked passes rather than one hard copy —
+      // a thin stick throws a diffuse shadow, and a crisp one just reads as a
+      // second stray line beside the cue.
       g.save();
-      g.lineCap = "round";
-
-      g.strokeStyle = "rgba(0,0,0,0.28)";
-      g.lineWidth = 0.95;
-      g.beginPath();
-      g.moveTo(bx + 0.5, by + 0.7); g.lineTo(ex + 0.5, ey + 0.7);
-      g.stroke();
-
-      const grad = g.createLinearGradient(bx, by, ex, ey);
-      grad.addColorStop(0, "#f0dcae");
-      grad.addColorStop(0.42, "#c99a5c");
-      grad.addColorStop(0.62, "#2a1a12");
-      grad.addColorStop(1, "#120c09");
-      g.strokeStyle = grad;
-      g.lineWidth = 0.86;
-      g.beginPath(); g.moveTo(bx, by); g.lineTo(ex, ey); g.stroke();
-
-      // ferrule + tip
-      g.strokeStyle = "#f7f3e6";
-      g.lineWidth = 0.9;
-      g.beginPath();
-      g.moveTo(bx, by);
-      g.lineTo(bx - dx * 1.5, by - dy * 1.5);
-      g.stroke();
-      g.strokeStyle = "#3f6ea8";
-      g.lineWidth = 0.9;
-      g.beginPath();
-      g.moveTo(bx, by);
-      g.lineTo(bx - dx * 0.42, by - dy * 0.42);
-      g.stroke();
+      g.fillStyle = "#000";
+      for (let i = 0; i < 3; i++) {
+        const spread = 1 + i * 1.7;
+        const ox = spread * 0.55, oy = lift * 0.5 + spread;
+        g.globalAlpha = 0.11 - i * 0.025;
+        g.beginPath();
+        g.moveTo(tipX + nx * (wTip + spread) + ox, tipY + ny * (wTip + spread) + oy);
+        g.lineTo(buttX + nx * (wButt + spread) + ox, buttY + ny * (wButt + spread) + oy);
+        g.lineTo(buttX - nx * (wButt + spread) + ox, buttY - ny * (wButt + spread) + oy);
+        g.lineTo(tipX - nx * (wTip + spread) + ox, tipY - ny * (wTip + spread) + oy);
+        g.closePath(); g.fill();
+      }
       g.restore();
+
+      function seg(t0, t1, w0, w1, fill) {
+        const x0 = tipX + dx * len * ppi * t0, y0 = tipY + dy * len * ppi * t0;
+        const x1 = tipX + dx * len * ppi * t1, y1 = tipY + dy * len * ppi * t1;
+        g.fillStyle = fill;
+        g.beginPath();
+        g.moveTo(x0 + nx * w0, y0 + ny * w0);
+        g.lineTo(x1 + nx * w1, y1 + ny * w1);
+        g.lineTo(x1 - nx * w1, y1 - ny * w1);
+        g.lineTo(x0 - nx * w0, y0 - ny * w0);
+        g.closePath(); g.fill();
+      }
+      const w = (t) => lerp(wTip, wButt, t);
+
+      // shaft, wrap and butt, lit across the barrel
+      const across = g.createLinearGradient(
+        tipX + nx * wButt, tipY + ny * wButt, tipX - nx * wButt, tipY - ny * wButt);
+      across.addColorStop(0, "#f6e3bb");
+      across.addColorStop(0.34, "#d9b578");
+      across.addColorStop(0.72, "#a97c42");
+      across.addColorStop(1, "#5d3d1c");
+      seg(-0.03, 0.56, wTip, w(0.56), across);
+
+      const butt = g.createLinearGradient(
+        tipX + nx * wButt, tipY + ny * wButt, tipX - nx * wButt, tipY - ny * wButt);
+      butt.addColorStop(0, "#4a3324");
+      butt.addColorStop(0.34, "#2f1f14");
+      butt.addColorStop(0.75, "#1d120b");
+      butt.addColorStop(1, "#0d0805");
+      seg(0.6, 1.0, w(0.6), wButt, butt);
+
+      seg(0.56, 0.60, w(0.56), w(0.6), "#d8c9a8");     // joint collar
+      seg(0.72, 0.84, w(0.72), w(0.84), "#241a12");    // wrap
+      seg(-0.055, -0.03, wTip * 0.96, wTip, "#f7f3e6"); // ferrule
+      seg(-0.075, -0.055, wTip * 0.9, wTip * 0.96, "#4f7fb8"); // tip
+
+      // a bright line along the top of the barrel
+      g.strokeStyle = "rgba(255,244,214,0.4)";
+      g.lineWidth = Math.max(0.7, view.s * 0.09);
+      g.beginPath();
+      g.moveTo(tipX + nx * wTip * 0.45, tipY + ny * wTip * 0.45);
+      g.lineTo(buttX + nx * wButt * 0.45, buttY + ny * wButt * 0.45);
+      g.stroke();
     }
 
     function drawBallInHand(timeMs) {
       if (state.phase !== "ballinhand") return;
       const cue = state.cue;
       const ok = cuePlaceable(cue.x, cue.y, false);
-      const pulse = 0.55 + Math.sin(timeMs / 260) * 0.25;
-      g.strokeStyle = ok ? "rgba(150,255,190," + pulse + ")" : "rgba(255,120,120," + pulse + ")";
-      g.lineWidth = 0.22;
-      g.setLineDash([0.9, 0.8]);
-      g.beginPath(); g.arc(cue.x, cue.y, BALL_R + 0.85, 0, TAU); g.stroke();
+      const pulse = 0.5 + Math.sin(timeMs / 280) * 0.25;
+      const p = w2s(cue.x, cue.y);
+      const R = BALL_R * view.s;
+      g.save();
+      g.strokeStyle = ok
+        ? "rgba(150,255,195," + pulse + ")"
+        : "rgba(255,120,120," + pulse + ")";
+      g.lineWidth = 1.8;
+      g.setLineDash([5, 5]);
+      ellipse(p.x, p.y, R * 1.85, R * 1.85 * TILT);
+      g.stroke();
       g.setLineDash([]);
+      g.restore();
     }
 
     function render(timeMs) {
       g.clearRect(0, 0, ctx.width, ctx.height);
+      drawRoom();
+      drawTable(timeMs);
 
-      // backdrop
-      const bg = g.createLinearGradient(0, 0, 0, ctx.height);
-      bg.addColorStop(0, "#171a21");
-      bg.addColorStop(1, "#0c0e13");
-      g.fillStyle = bg;
-      g.fillRect(0, 0, ctx.width, ctx.height);
-
-      applyWorld(g);
-      // Everything lives inside the table outline — mainly so the cue stick,
-      // which is a realistic 52 inches long, slides under the rail instead of
-      // painting across the controls.
-      roundRect(g, -RAIL, -RAIL, PLAY_W + RAIL * 2, PLAY_H + RAIL * 2, 3.2);
+      // Everything with height lives inside the table outline, so a 52-inch
+      // cue slides under the rail instead of painting across the room.
+      const t = planeRect(-RAIL, -RAIL, PLAY_W + RAIL, PLAY_H + RAIL);
+      g.save();
+      roundRect(g, t.x, t.y, t.w, t.h, RAIL * view.s * 0.72);
       g.clip();
-      drawTable();
-      drawShadows();
       drawAim();
+
+      // nearer balls occlude farther ones, so paint back to front
+      const live = [];
       for (const b of state.balls) {
         if (b.potted && b.drop <= 0) continue;
-        drawBall(b);
+        live.push(b);
       }
+      live.sort((p, q) => {
+        const pa = view.rot ? -p.x : p.y;
+        const qa = view.rot ? -q.x : q.y;
+        return pa - qa;
+      });
+      for (const b of live) drawBallShadow(b);
+      for (const b of live) drawBall(b, timeMs);
+
       drawBallInHand(timeMs);
       drawCueStick(timeMs);
       g.restore();
     }
-
     // ====================================================================== //
     // DOM overlay                                                            //
     // ====================================================================== //
@@ -1784,15 +2210,20 @@ window.plethoraBit = {
       return e;
     }
 
-    const PANEL = "background:linear-gradient(180deg,rgba(30,34,44,0.97),rgba(18,21,28,0.97));" +
-      "border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:20px;" +
-      "box-shadow:0 24px 60px rgba(0,0,0,0.6);";
+    const PANEL = "background:linear-gradient(180deg,rgba(36,41,53,0.98),rgba(15,18,25,0.98));" +
+      "border:1px solid rgba(255,255,255,0.11);border-radius:24px;padding:22px 20px;" +
+      "box-shadow:0 30px 70px rgba(0,0,0,0.66),inset 0 1px 0 rgba(255,255,255,0.10);";
     const BTN = "pointer-events:auto;border:0;cursor:pointer;font-family:inherit;" +
-      "border-radius:14px;padding:13px 16px;font-size:15px;font-weight:700;width:100%;" +
-      "background:linear-gradient(180deg,#2fa564,#1d7a48);color:#fff;margin-top:9px;" +
-      "box-shadow:0 4px 0 rgba(0,0,0,0.28);";
-    const BTN2 = BTN.replace("linear-gradient(180deg,#2fa564,#1d7a48)",
-      "rgba(255,255,255,0.09)").replace("color:#fff", "color:#e8e4d8");
+      "border-radius:15px;padding:14px 16px;font-size:15px;font-weight:700;width:100%;" +
+      "letter-spacing:0.005em;margin-top:10px;color:#ffffff;" +
+      "background:linear-gradient(180deg,#3cbd78,#1d7c49);" +
+      "box-shadow:0 4px 0 #14512f,0 9px 20px rgba(0,0,0,0.42)," +
+      "inset 0 1px 0 rgba(255,255,255,0.30);";
+    const BTN2 = "pointer-events:auto;border:0;cursor:pointer;font-family:inherit;" +
+      "border-radius:15px;padding:14px 16px;font-size:15px;font-weight:700;width:100%;" +
+      "letter-spacing:0.005em;margin-top:10px;color:#e9e5d9;" +
+      "background:linear-gradient(180deg,rgba(255,255,255,0.11),rgba(255,255,255,0.05));" +
+      "box-shadow:0 3px 0 rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.12);";
 
     // ---- HUD ----------------------------------------------------------------
     const hud = el("div", "position:absolute;display:flex;align-items:center;gap:8px;");
@@ -1801,29 +2232,36 @@ window.plethoraBit = {
     const chipA = el("div", "");
     const chipB = el("div", "");
     const soundBtn = el("button", "pointer-events:auto;border:0;cursor:pointer;flex:0 0 auto;" +
-      "width:34px;height:34px;border-radius:11px;background:rgba(255,255,255,0.09);" +
-      "color:#e8e4d8;font-size:15px;font-family:inherit;", "🔊");
+      "width:34px;height:34px;border-radius:12px;color:#e8e4d8;font-size:15px;" +
+      "font-family:inherit;background:linear-gradient(180deg," +
+      "rgba(255,255,255,0.12),rgba(255,255,255,0.05));" +
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.14),0 2px 6px rgba(0,0,0,0.4);", "🔊");
     const menuBtn = el("button", "pointer-events:auto;border:0;cursor:pointer;flex:0 0 auto;" +
-      "width:34px;height:34px;border-radius:11px;background:rgba(255,255,255,0.09);" +
-      "color:#e8e4d8;font-size:15px;font-family:inherit;", "☰");
+      "width:34px;height:34px;border-radius:12px;color:#e8e4d8;font-size:15px;" +
+      "font-family:inherit;background:linear-gradient(180deg," +
+      "rgba(255,255,255,0.12),rgba(255,255,255,0.05));" +
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.14),0 2px 6px rgba(0,0,0,0.4);", "☰");
     hud.appendChild(chipA);
     hud.appendChild(chipB);
     hud.appendChild(soundBtn);
     hud.appendChild(menuBtn);
 
+    /** A little shaded sphere, so the HUD reads like the table does. */
     function ballDot(n, size) {
       const col = n === 0 ? CUE_COLOR : BALL_COLORS[n <= 8 ? n : n - 8];
       const s = size || 11;
+      const shell = "display:inline-block;vertical-align:middle;border-radius:50%;" +
+        "width:" + s + "px;height:" + s + "px;" +
+        "box-shadow:inset -0.5px -1px 1.5px rgba(0,0,0,0.32)," +
+        "0 1px 2px rgba(0,0,0,0.45);";
       if (n > 8) {
-        return '<span style="display:inline-block;width:' + s + "px;height:" + s +
-          "px;border-radius:50%;background:#f3efe2;position:relative;overflow:hidden;" +
-          'border:1px solid rgba(0,0,0,0.35);vertical-align:middle;">' +
-          '<span style="position:absolute;left:0;right:0;top:28%;height:44%;background:' +
+        return '<span style="' + shell + "position:relative;overflow:hidden;" +
+          'background:radial-gradient(circle at 32% 26%,#ffffff,#e9e3d1);">' +
+          '<span style="position:absolute;left:0;right:0;top:27%;height:46%;background:' +
           col + ';"></span></span>';
       }
-      return '<span style="display:inline-block;width:' + s + "px;height:" + s +
-        "px;border-radius:50%;background:" + col +
-        ';border:1px solid rgba(0,0,0,0.35);vertical-align:middle;"></span>';
+      return '<span style="' + shell + "background:radial-gradient(circle at 32% 26%," +
+        "rgba(255,255,255,0.72)," + col + ' 62%);"></span>';
     }
 
     function chipHtml(p) {
@@ -1875,8 +2313,9 @@ window.plethoraBit = {
     // spin widget
     const spinWrap = el("div", "pointer-events:auto;flex:0 0 auto;position:relative;" +
       "width:52px;height:52px;border-radius:50%;cursor:pointer;" +
-      "background:radial-gradient(circle at 34% 30%,#ffffff,#e9e3d2 55%,#a8a091);" +
-      "box-shadow:0 3px 10px rgba(0,0,0,0.5),inset 0 0 0 1px rgba(0,0,0,0.2);");
+      "background:radial-gradient(circle at 33% 27%,#ffffff,#f2ecdb 48%,#9b948780);" +
+      "box-shadow:0 5px 12px rgba(0,0,0,0.55),inset -3px -4px 8px rgba(0,0,0,0.28)," +
+      "inset 2px 3px 7px rgba(255,255,255,0.55),inset 0 0 0 1px rgba(0,0,0,0.22);");
     const spinDot = el("div", "position:absolute;width:13px;height:13px;border-radius:50%;" +
       "background:#e0483c;box-shadow:0 0 0 1.5px rgba(255,255,255,0.85);" +
       "left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;");
@@ -1884,19 +2323,30 @@ window.plethoraBit = {
     ctl.appendChild(spinWrap);
 
     const nudgeL = el("button", "pointer-events:auto;flex:0 0 auto;border:0;cursor:pointer;" +
-      "width:36px;height:44px;border-radius:12px;background:rgba(255,255,255,0.09);" +
-      "color:#e8e4d8;font-size:16px;font-family:inherit;", "◀");
+      "width:36px;height:46px;border-radius:14px;color:#e8e4d8;font-size:16px;" +
+      "font-family:inherit;background:linear-gradient(180deg," +
+      "rgba(255,255,255,0.12),rgba(255,255,255,0.05));" +
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.13),0 3px 8px rgba(0,0,0,0.42);", "◀");
     const nudgeR = el("button", nudgeL.style.cssText, "▶");
 
     const powerWrap = el("div", "pointer-events:auto;flex:1;min-width:0;position:relative;" +
-      "height:46px;border-radius:14px;background:rgba(255,255,255,0.08);overflow:hidden;" +
-      "box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09);cursor:pointer;");
+      "height:46px;border-radius:15px;overflow:hidden;cursor:pointer;" +
+      "background:linear-gradient(180deg,rgba(0,0,0,0.44),rgba(255,255,255,0.045));" +
+      "box-shadow:inset 0 2px 6px rgba(0,0,0,0.55)," +
+      "inset 0 0 0 1px rgba(255,255,255,0.09);");
     const powerFill = el("div", "position:absolute;left:0;top:0;bottom:0;width:0%;" +
-      "background:linear-gradient(90deg,#3fbf72,#e8c53c 58%,#e2553a);transition:width 0.04s;");
+      "background:linear-gradient(90deg,#35c47c,#ecc93e 56%,#e2503a);transition:width 0.05s;" +
+      "box-shadow:0 0 16px rgba(255,186,90,0.4),inset 0 1px 0 rgba(255,255,255,0.35);");
     const powerLabel = el("div", "position:absolute;inset:0;display:flex;align-items:center;" +
       "justify-content:center;font-size:12.5px;font-weight:800;letter-spacing:0.04em;" +
       "text-shadow:0 1px 4px rgba(0,0,0,0.7);pointer-events:none;", "DRAG TO SHOOT");
+    // ten notches, so power is a readable quantity rather than a vibe
+    const powerTicks = el("div", "position:absolute;left:0;right:0;bottom:0;height:34%;" +
+      "pointer-events:none;opacity:0.16;" +
+      "background:repeating-linear-gradient(90deg,rgba(0,0,0,0) 0 9%," +
+      "rgba(255,255,255,0.8) 9% calc(9% + 1px),rgba(0,0,0,0) calc(9% + 1px) 10%);");
     powerWrap.appendChild(powerFill);
+    powerWrap.appendChild(powerTicks);
     powerWrap.appendChild(powerLabel);
 
     ctl.appendChild(nudgeL);

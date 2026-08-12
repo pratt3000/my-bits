@@ -57,6 +57,40 @@ spin kicks the tangent on cushion contact and decays across bounces. That
 reproduces draw, follow, stun and a widened cushion angle, which is everything a
 player actually reads off the ball.
 
+## The look
+
+The cloth is a plane seen from above and a little in front of the near rail.
+Screen y is foreshortened by `TILT`, and anything standing above the cloth — a
+ball, the cue, the far cushion face — is lifted up-screen by its height times
+`LIFT`. Balls stay circles, because a sphere projects to a circle from any
+angle; only the plane foreshortens. That is the whole 3D trick, and it costs one
+multiply.
+
+Nothing is drawn under a canvas transform. A non-uniform transform turns round
+strokes elliptical and smears text, so every draw call converts through `w2s()`
+and works in screen pixels.
+
+One key light sits high and to the upper left, and everything obeys it:
+
+- **Balls** get a broad terminator, a green bounce light along the shaded limb
+  picked up off the cloth — which is the thing that actually reads as roundness,
+  more than the highlight does — contact occlusion where they meet the baize,
+  two speculars, and a rim that darkens as it turns away. They are painted back
+  to front so nearer balls occlude farther ones, and their shadows fall on the
+  cloth away from the lamp.
+- **Cushions** stand `RAIL_H` off the bed. The one facing the viewer shows its
+  lit face; the rest just throw a contact shadow. Which one that is comes from
+  the screen-space normal, so it stays right when the table rotates for
+  landscape.
+- **Pockets** are holes cut through the slate rather than black discs laid on
+  top: cloth darkening into the mouth, a brass lip, a throat falling away from
+  the light, and a bright arc where the lamp catches the far rim.
+- **The frame** is an extruded slab — an outer side face under a lit top
+  surface, with grain, a bevelled top edge and inlaid sights.
+- **The cue** is a tapered polygon with a wrap, joint collar, ferrule and tip,
+  and a soft stacked shadow. It is a realistic 52 inches, clipped to the table
+  outline so it slides under the rail instead of painting across the controls.
+
 ## The rules
 
 Standard eight-ball, judged on the pre-shot table:
@@ -136,8 +170,17 @@ submit; pass-and-play does not.
 - No dependencies. All visuals and audio are procedural — the balls, the cloth
   nap, the wood, the sights and every sound are drawn or synthesised at runtime.
 - Portrait and landscape both work: past a 1.05 width/height ratio the whole
-  table rotates 90°, with the numbers on the balls counter-rotated so they stay
-  upright.
-- Controls sit above `ctx.safeArea.bottom`; the cue stick is a realistic 52″ and
-  is clipped to the table outline so it slides under the rail rather than
-  painting across the controls.
+  table rotates 90°, and the lighting follows — the cushion that shows its face
+  is chosen from the screen-space normal, not from a hardcoded edge.
+- Controls sit above `ctx.safeArea.bottom`.
+
+Two things the draft validator rejects that are worth knowing before editing:
+
+- `document.createElement` must be branched on **literal** tags, and canvas
+  `font` must name a **literal** family stack. A computed tag or an
+  interpolated family cannot be resolved, and both come back as "unsupported
+  remote resources".
+- Constants are resolved **without scope**. Two `const`s sharing a name in
+  different functions make the second one unreadable to the validator, which is
+  why the lamp gradient in `drawBed` is `lampGlow` and not `pool` — `rack()`
+  already has a local `pool`.
