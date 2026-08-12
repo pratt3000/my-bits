@@ -99,15 +99,16 @@ window.plethoraBit = {
      * ---------------------------------------------------------------- */
 
     const TUNE = {
-      mistPerSec: 90,
+      mistPerSec: 260,
       // Reference sizes on a 920-wide pane. The sub-pixel haze a real window
       // is covered in lives in the condensation bake, not in the simulation —
       // simulating it would cost thousands of bodies to draw something the
       // texture already draws for free. These start where a drop is visible.
-      beadR: [1.15, 5.5],
-      releaseR: 13.0,
+      beadR: [0.75, 2.5],
+      releaseR: 4.2,
+      maxRunMul: 1.75,
       pinJitter: [0.8, 1.32],
-      beadCoverage: 0.036,
+      beadCoverage: 0.021,
       accrete: 0.5,
       growJitter: [0.35, 1.5],
 
@@ -131,7 +132,7 @@ window.plethoraBit = {
       windGust: 62,
       windRate: 0.6,
 
-      shedEveryPx: 11,
+      shedEveryPx: 5,
       coalesceBudget: 150,
 
       maxLens: 44,
@@ -247,6 +248,10 @@ window.plethoraBit = {
      * ---------------------------------------------------------------- */
 
     const G = { w: 0, h: 0, dpr: 1 };
+    // Thousands of drops are only affordable as instanced geometry. The flat
+    // fallback paints them one at a time, so it gets a population it can
+    // actually draw — at that pane size the extra ones are sub-pixel anyway.
+    let paneIsGL = false;
     const SZ = {};
     let glassCv = null, gg = null;
 
@@ -258,11 +263,16 @@ window.plethoraBit = {
       SZ.beadMin = TUNE.beadR[0] * s;
       SZ.beadMax = TUNE.beadR[1] * s;
       SZ.release = TUNE.releaseR * s;
-      SZ.spriteMax = 12 * s;
-      SZ.lensMin = 5.6 * s;
-      SZ.cell = 26 * s;
-      SZ.grab = 62 * s;
-      SZ.gather = 52 * s;
+      // A drop on a vertical pane cannot grow without limit: past a critical
+      // size the contact line stops holding the extra weight and it sheds the
+      // excess behind it. Without a ceiling a runner that eats a whole lane
+      // ends up the size of a coin.
+      SZ.maxRun = TUNE.releaseR * TUNE.maxRunMul * s;
+      SZ.spriteMax = 5 * s;
+      SZ.lensMin = 2.4 * s;
+      SZ.cell = 13 * s;
+      SZ.grab = 34 * s;
+      SZ.gather = 30 * s;
       SZ.shedEvery = TUNE.shedEveryPx * 1.9 * s;
       SZ.gravity = TUNE.gravity * 1.9 * s;
       // Air over the glass comes from the car moving, so the sideways push
@@ -284,7 +294,9 @@ window.plethoraBit = {
       // radius is cubic-biased toward the minimum (see mistR), whose mean sits
       // a quarter of the way up the range.
       const meanArea = Math.PI * Math.pow(SZ.beadMin + (SZ.beadMax - SZ.beadMin) * 0.25, 2);
-      SZ.maxBeads = clamp(Math.round((G.w * G.h * TUNE.beadCoverage) / meanArea), 220, 2400);
+      SZ.maxBeads = clamp(Math.round((G.w * G.h * TUNE.beadCoverage) / meanArea),
+        400, paneIsGL ? 4200 : 900
+      );
     }
 
     // (Re)build the pane at a given size and repopulate it. Called once for
@@ -828,6 +840,21 @@ window.plethoraBit = {
           const dx = b.x - d.x, dy = b.y - d.y;
           const reach = d.r + b.r * 0.7;
           if (dx * dx + dy * dy < reach * reach) onMerge(d, absorb(d, b));
+        }
+
+        // Past the critical size it cannot hold itself together; the excess
+        // breaks off behind it rather than riding along.
+        if (d.r > SZ.maxRun) {
+          const excess = d.m - massOf(SZ.maxRun);
+          d.m -= excess;
+          d.r = radOf(d.m);
+          if (rnd() < 0.7 && drops.length < SZ.maxBeads + 300) {
+            makeDrop(
+              d.x + rr(-1, 1) * d.r * 0.8,
+              d.y - d.r * rr(1.1, 2.2),
+              clamp(radOf(excess * rr(0.4, 0.8)), SZ.beadMin, SZ.maxRun * 0.75)
+            );
+          }
         }
 
         // Shed a wet track. It re-beads, and a later runner inherits the lane.
@@ -1691,7 +1718,51 @@ window.plethoraBit = {
       return m;
     }
 
-    // Axis-aligned slab from two corners. Everything in the cabin is a slab.
+    // Nothing in a car is a sharp-edged box. Seats, armrests and headrests are
+    // all soft forms, and a bevelled edge is what catches the light coming off
+    // the window — which is most of what tells you the shape is upholstered
+    // rather than folded out of cardboard. Extruded rounded rectangles are
+    // cheap enough to use for every form you actually look at.
+    function roundedShape(a, b, r) {
+      const sh = new THREE.Shape();
+      const x = -a / 2, y = -b / 2;
+      sh.moveTo(x + r, y);
+      sh.lineTo(x + a - r, y);
+      sh.quadraticCurveTo(x + a, y, x + a, y + r);
+      sh.lineTo(x + a, y + b - r);
+      sh.quadraticCurveTo(x + a, y + b, x + a - r, y + b);
+      sh.lineTo(x + r, y + b);
+      sh.quadraticCurveTo(x, y + b, x, y + b - r);
+      sh.lineTo(x, y + r);
+      sh.quadraticCurveTo(x, y, x + r, y);
+      return sh;
+    }
+
+    // `axis` is the one the form is extruded along — pick the shortest, so the
+    // rounding lands on the faces you can actually see.
+    function soft(x0, y0, z0, x1, y1, z1, r, material, axis) {
+      const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0), d = Math.abs(z1 - z0);
+      axis = axis || "z";
+      const a = axis === "x" ? d : w;
+      const b = axis === "y" ? d : h;
+      const D = axis === "x" ? w : axis === "y" ? h : d;
+      const rad = Math.max(0.004, Math.min(r, a / 2 - 0.004, b / 2 - 0.004));
+      const bev = Math.max(0.002, Math.min(rad * 0.7, D / 2 - 0.003));
+      const geo = new THREE.ExtrudeGeometry(roundedShape(a, b, rad), {
+        depth: Math.max(0.003, D - bev * 2),
+        bevelEnabled: true, bevelThickness: bev, bevelSize: bev,
+        bevelSegments: 2, curveSegments: 5
+      });
+      geo.translate(0, 0, -(D - bev * 2) / 2);
+      if (axis === "y") geo.rotateX(-Math.PI / 2);
+      else if (axis === "x") geo.rotateY(Math.PI / 2);
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      scene.add(mesh);
+      return mesh;
+    }
+
+    // Axis-aligned slab from two corners. Everything flat in the cabin is one.
     function slab(x0, y0, z0, x1, y1, z1, material) {
       const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0), d = Math.abs(z1 - z0);
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
@@ -1700,17 +1771,76 @@ window.plethoraBit = {
       return mesh;
     }
 
+    // Chasing individual point lights around a cabin is a losing game: put one
+    // close enough to matter and it blows out whatever it is next to, put it
+    // far enough not to and half the interior goes black. An environment map
+    // solves it in one go — every surface gets a contribution based on which
+    // way it faces, which is exactly the "dark cabin, bright window on one
+    // side" situation this is. Three samples equirect as
+    // u = atan2(z, x)/2pi + 0.5, so the window on -X lands at u = 0 and has to
+    // be painted at both edges of the canvas.
+    function buildEnvironment() {
+      const w = 256, h = 128;
+      const cv = makeSurface(w, h);
+      if (!cv) return null;
+      const c = cv.getContext("2d");
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#39404f");        // headliner bounce, overhead
+      g.addColorStop(0.5, "#141922");
+      g.addColorStop(1, "#06070b");        // carpet, underfoot
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+
+      const band = (cx, r, inner, mid) => {
+        for (const ox of [-w, 0, w]) {
+          const gr = c.createRadialGradient(cx + ox, h * 0.46, 1, cx + ox, h * 0.46, r);
+          gr.addColorStop(0, inner);
+          gr.addColorStop(0.45, mid);
+          gr.addColorStop(1, "rgba(0,0,0,0)");
+          c.fillStyle = gr;
+          c.fillRect(0, 0, w, h);
+        }
+      };
+      band(0, w * 0.32, "#c2d8f5", "#54708f");        // the pane beside you
+      band(w * 0.5, w * 0.2, "#7d94b4", "#37455c");    // the far door
+      band(w * 0.78, w * 0.16, "#6f86a8", "#2f3c50");  // rear screen
+
+      const t = new THREE.CanvasTexture(cv);
+      t.mapping = THREE.EquirectangularReflectionMapping;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.minFilter = THREE.LinearFilter;
+      t.generateMipmaps = false;
+      return t;
+    }
+
     function buildCabin() {
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x03050a);
+      // A raw equirect assigned straight to scene.environment is sampled at
+      // mip 0 whatever the roughness, so matte cloth comes out wrong and dark.
+      // PMREM pre-filters it per roughness, which is the whole point.
+      const envSrc = buildEnvironment();
+      if (envSrc) {
+        try {
+          const pmrem = new THREE.PMREMGenerator(renderer);
+          pmrem.compileEquirectangularShader();
+          scene.environment = pmrem.fromEquirectangular(envSrc).texture;
+          scene.environmentIntensity = 1.25;
+          pmrem.dispose();
+          envSrc.dispose();
+        } catch (_) {
+          scene.environment = envSrc;
+          scene.environmentIntensity = 1.25;
+        }
+      }
 
       const grain = grainTexture();
-      const trim = mat("#23262e", 0.78, grain, 3, 3);       // moulded plastic
-      const card = mat("#383d49", 0.9, grain, 4, 2);        // door card
-      const fabric = mat("#3f3e47", 1, grain, 6, 4);        // seat cloth
-      const dark = mat("#17171b", 1, grain, 8, 8);          // carpet
-      const lining = mat("#3c4049", 1, grain, 5, 5);        // headliner, lighter
-      const chrome = mat("#4c5158", 0.55, null, 1, 1);      // handles and vents
+      const trim = mat("#30343d", 0.78, grain, 3, 3);       // moulded plastic
+      const card = mat("#454b58", 0.9, grain, 4, 2);        // door card
+      const fabric = mat("#55545f", 1, grain, 6, 4);        // seat cloth
+      const dark = mat("#212126", 1, grain, 8, 8);          // carpet
+      const lining = mat("#4e525c", 1, grain, 5, 5);        // headliner, lighter
+      const chrome = mat("#5a6069", 0.5, null, 1, 1);      // handles and vents
 
       const C = CAB;
 
@@ -1721,7 +1851,8 @@ window.plethoraBit = {
       slab(C.glassX - 0.06, C.winBot, C.winZ, C.glassX + 0.03, C.winTop, C.backZ, trim);
 
       // Armrest and the sill lip the drops arrive at.
-      slab(C.glassX + 0.02, C.winBot - 0.16, -0.16, C.glassX + 0.13, C.winBot - 0.07, 0.3, trim);
+      soft(C.glassX + 0.02, C.winBot - 0.16, -0.16, C.glassX + 0.13, C.winBot - 0.07, 0.3,
+           0.03, trim, "y");
       slab(C.glassX + 0.02, C.winBot - 0.02, -C.winZ, C.glassX + 0.07, C.winBot, C.winZ,
            mat("#1c222c", 0.72));
       // A brighter lip along the top of the aperture, so the frame above the
@@ -1732,12 +1863,14 @@ window.plethoraBit = {
       // Door furniture. A door card with nothing on it is just a wall: the
       // pull, the switch pack on the armrest and the speaker grille are what
       // make the eye accept it as a door.
-      slab(C.glassX + 0.03, C.winBot - 0.15, -0.02, C.glassX + 0.15, C.winBot - 0.09, 0.24, trim);
+      soft(C.glassX + 0.03, C.winBot - 0.15, -0.02, C.glassX + 0.15, C.winBot - 0.09, 0.24,
+           0.022, trim, "y");
       slab(C.glassX + 0.05, C.winBot - 0.135, 0.0, C.glassX + 0.14, C.winBot - 0.1, 0.22, chrome);
       slab(C.glassX + 0.03, C.winBot - 0.09, -0.14, C.glassX + 0.12, C.winBot - 0.07, -0.02, trim);
       slab(C.glassX + 0.02, C.winBot - 0.62, -0.1, C.glassX + 0.05, C.winBot - 0.36, 0.16, dark);
       // Roof grab handle above the far door.
-      slab(C.wallX - 0.16, C.roofY - 0.07, -0.26, C.wallX - 0.05, C.roofY - 0.03, -0.02, trim);
+      soft(C.wallX - 0.16, C.roofY - 0.07, -0.26, C.wallX - 0.05, C.roofY - 0.03, -0.02,
+           0.014, trim, "z");
 
       // The pane: world texture, fogged glass and every droplet, all in GL.
       paneMeshW = C.winZ * 2;
@@ -1779,12 +1912,13 @@ window.plethoraBit = {
       // is two seats with a gap rather than one slab, because a single flat
       // panel is what you see when you turn round otherwise.
       const backZ0 = 0.3, backZ1 = 0.46;
-      slab(C.glassX + 0.05, C.seatY - 0.18, -0.32, C.wallX - 0.05, C.seatY, backZ0 + 0.02, fabric);
-      slab(C.glassX + 0.05, C.seatY - 0.16, backZ0, -0.005, -0.02, backZ1, fabric);
-      slab(0.035, C.seatY - 0.16, backZ0, C.wallX - 0.05, -0.02, backZ1, fabric);
+      soft(C.glassX + 0.05, C.seatY - 0.18, -0.32, C.wallX - 0.05, C.seatY, backZ0 + 0.02,
+           0.07, fabric, "y");
+      soft(C.glassX + 0.05, C.seatY - 0.16, backZ0, -0.005, -0.02, backZ1, 0.07, fabric, "z");
+      soft(0.035, C.seatY - 0.16, backZ0, C.wallX - 0.05, -0.02, backZ1, 0.07, fabric, "z");
       // Headrests float on posts rather than growing out of the backrest.
-      slab(-0.5, 0.05, backZ0 + 0.03, -0.18, 0.27, backZ1 - 0.03, fabric);
-      slab(0.22, 0.05, backZ0 + 0.03, 0.54, 0.27, backZ1 - 0.03, fabric);
+      soft(-0.5, 0.05, backZ0 + 0.03, -0.18, 0.27, backZ1 - 0.03, 0.055, fabric, "z");
+      soft(0.22, 0.05, backZ0 + 0.03, 0.54, 0.27, backZ1 - 0.03, 0.055, fabric, "z");
       for (const sx of [[-0.7, -0.005], [0.035, 0.73]]) {
         slab(sx[0], -0.2, backZ0 - 0.004, sx[1], -0.176, backZ1, trim);
         slab(sx[0] + 0.02, C.seatY - 0.16, backZ0 - 0.006, sx[0] + 0.075, -0.02,
@@ -1796,18 +1930,20 @@ window.plethoraBit = {
         slab(hx - 0.012, -0.03, backZ0 + 0.06, hx + 0.012, 0.06, backZ0 + 0.09, chrome);
       }
       // Side bolsters and a seam, so the bench is not one flat panel.
-      slab(C.glassX + 0.05, C.seatY - 0.2, -0.3, C.glassX + 0.16, C.seatY + 0.03, backZ0, fabric);
-      slab(C.wallX - 0.16, C.seatY - 0.2, -0.3, C.wallX - 0.05, C.seatY + 0.03, backZ0, fabric);
+      soft(C.glassX + 0.05, C.seatY - 0.2, -0.3, C.glassX + 0.16, C.seatY + 0.03, backZ0,
+           0.045, fabric, "x");
+      soft(C.wallX - 0.16, C.seatY - 0.2, -0.3, C.wallX - 0.05, C.seatY + 0.03, backZ0,
+           0.045, fabric, "x");
       slab(-0.02, C.seatY - 0.19, -0.3, 0.02, C.seatY + 0.005, backZ0, trim);
 
       // Parcel shelf behind the seat, with the rear screen above it.
       slab(C.glassX + 0.05, -0.04, backZ1, C.wallX - 0.05, 0.01, C.backZ - 0.04, card);
 
       // Front seats ahead of you, and the glow of the windscreen past them.
-      slab(-0.64, C.seatY - 0.2, C.frontZ + 0.16, -0.12, 0.0, C.frontZ + 0.32, fabric);
-      slab(0.18, C.seatY - 0.2, C.frontZ + 0.16, 0.7, 0.0, C.frontZ + 0.32, fabric);
-      slab(-0.55, 0.0, C.frontZ + 0.19, -0.21, 0.24, C.frontZ + 0.29, fabric);
-      slab(0.27, 0.0, C.frontZ + 0.19, 0.61, 0.24, C.frontZ + 0.29, fabric);
+      soft(-0.64, C.seatY - 0.2, C.frontZ + 0.16, -0.12, 0.0, C.frontZ + 0.32, 0.075, fabric, "z");
+      soft(0.18, C.seatY - 0.2, C.frontZ + 0.16, 0.7, 0.0, C.frontZ + 0.32, 0.075, fabric, "z");
+      soft(-0.55, 0.0, C.frontZ + 0.19, -0.21, 0.24, C.frontZ + 0.29, 0.05, fabric, "z");
+      soft(0.27, 0.0, C.frontZ + 0.19, 0.61, 0.24, C.frontZ + 0.29, 0.05, fabric, "z");
 
       const screen = new THREE.Mesh(
         new THREE.PlaneGeometry(1.5, 0.46),
@@ -1845,13 +1981,13 @@ window.plethoraBit = {
       // every face of a box one flat tone; point lights hung in the window
       // aperture rake across the door and the seat instead, so surfaces get a
       // gradient and an edge, which is all a dark cabin needs to look like one.
-      scene.add(new THREE.HemisphereLight(0x33486c, 0x141820, 0.85));
+      scene.add(new THREE.HemisphereLight(0x33486c, 0x141820, 0.28));
       // The sources sit *outside* the glass, where the light actually is. A
       // point light hung inside the cabin is 20cm from whatever it is next to
       // and blows it out; from out there the falloff across the cabin is
       // gentle enough to shade a whole door card.
       for (const lz of [-0.34, 0.3]) {
-        const wl = new THREE.PointLight(0xa9c6ef, 5.2, 9, 2);
+        const wl = new THREE.PointLight(0xa9c6ef, 2.6, 9, 2);
         wl.position.set(C.glassX - 1.75, C.winBot + 0.5, lz * 2.4);
         scene.add(wl);
       }
@@ -1859,10 +1995,10 @@ window.plethoraBit = {
       sweepLight = new THREE.PointLight(0xffb478, 0, 10, 2);
       sweepLight.position.set(C.glassX - 2, 0.5, 0);
       scene.add(sweepLight);
-      const rightPane = new THREE.PointLight(0x8298c4, 4.2, 8, 2);
+      const rightPane = new THREE.PointLight(0x8298c4, 1.6, 8, 2);
       rightPane.position.set(C.wallX + 1.6, C.winBot + 0.45, 0);
       scene.add(rightPane);
-      const rearGlow = new THREE.PointLight(0x93aed8, 3.6, 8, 2);
+      const rearGlow = new THREE.PointLight(0x93aed8, 1.4, 8, 2);
       rearGlow.position.set(0, 0.3, C.backZ + 1.5);
       scene.add(rearGlow);
       // Footwell strip. Cars really do have this, and it keeps the bottom of
@@ -1894,12 +2030,17 @@ window.plethoraBit = {
       renderer.setPixelRatio(Math.min(ctx.nativeDpr || window.devicePixelRatio || 1, 2));
       renderer.setSize(ctx.width, ctx.height, false);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.0;
+      // The pane is a RawShaderMaterial, so it bypasses three's tone-mapping
+      // and output-encoding includes entirely and writes straight to the
+      // framebuffer. Leaving ACES on for everything else meant the cabin was
+      // being crushed while the glass beside it was not, which is why the two
+      // never looked like they belonged in the same scene.
+      renderer.toneMapping = THREE.NoToneMapping;
 
       // Rebuild the pane at the window's aspect before anything references it.
+      paneIsGL = true;
       setupGlass(PANE_3D.w, PANE_3D.h, 1, false);
-      if (!buildCabin()) return false;
+      if (!buildCabin()) { paneIsGL = false; return false; }
 
       ctx.onDestroy(() => {
         try { renderer.dispose(); } catch (_) {}
@@ -2145,7 +2286,7 @@ window.plethoraBit = {
         race.racers[i] = makeDrop(
           G.w * (lanes[i] + rr(-0.05, 0.05)),
           G.h * rr(0.15, 0.23),
-          SZ.release * rr(0.72, 0.82),
+          SZ.release * rr(1.45, 1.7),
           { racer: i, pin: 2.4, grow: 0 }   // pinned hard until the flag drops
         );
       }
@@ -2522,7 +2663,9 @@ window.plethoraBit = {
           const d = race.racers[i];
           if (!d || d.life <= 0) continue;
           const dist = Math.hypot(d.x - p.x, d.y - p.y);
-          if (dist < Math.max(48 * SZ.s, d.r + 30 * SZ.s) && dist < bd) { bd = dist; hit = i; }
+          // The drops are life-sized now, so the tap target cannot be. This is
+          // a generous radius in pane units, picking the nearest ring inside it.
+          if (dist < Math.max(85 * SZ.s, d.r + 40 * SZ.s) && dist < bd) { bd = dist; hit = i; }
         }
         if (hit >= 0) { pickRacer(hit); return; }
       }
