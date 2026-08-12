@@ -417,6 +417,70 @@ window.plethoraBit = {
       }
     }
 
+    // Direct manipulation. The finger is a physical disturbance: particles
+    // near it are shouldered aside and dragged along with the motion, and the
+    // attractor then pulls them back over the next second. This is what makes
+    // the silk feel like a thing you are touching rather than a picture of
+    // one — parameter control alone changes the shape, but gives no local
+    // response under the fingertip, which read as nothing happening at all.
+    let fingerPrev = null;
+    const fingerAt = [0, 0, 0];
+
+    // Screen point -> world point on the plane through the cloud centre facing
+    // the camera. R is orthonormal so its inverse is its transpose, and rotM
+    // is stored column-major for the shader: R[r][c] is rotM[c * 3 + r], so
+    // (R^T q)_r reads across row r as rotM[r * 3 + c].
+    function fingerWorld(x, y, out) {
+      const w = Math.max(1, ctx.width), h = Math.max(1, ctx.height);
+      const nx = (x / w * 2 - 1) * (w / h);
+      const ny = -(y / h * 2 - 1);
+      const s = Math.max(1e-6, fitScale * zoom);
+      out[0] = center[0] + (rotM[0] * nx + rotM[1] * ny) / s;
+      out[1] = center[1] + (rotM[3] * nx + rotM[4] * ny) / s;
+      out[2] = center[2] + (rotM[6] * nx + rotM[7] * ny) / s;
+    }
+
+    function applyFinger(x, y, stepScale) {
+      buildRot();
+      fingerWorld(x, y, fingerAt);
+      const s = Math.max(1e-6, fitScale * zoom);
+      const radius = 0.30 / s;                 // a fingertip's worth of screen
+      const r2 = radius * radius;
+      const size = 0.78 / (2.3 * Math.max(fitScale, 1e-6));
+      const push = size * 0.030 * stepScale;   // shoulder particles aside
+      const drag = 0.85;                       // ...and carry them with the finger
+
+      let mx = 0, my = 0, mz = 0;
+      if (fingerPrev) {
+        mx = fingerAt[0] - fingerPrev[0];
+        my = fingerAt[1] - fingerPrev[1];
+        mz = fingerAt[2] - fingerPrev[2];
+      } else {
+        fingerPrev = [0, 0, 0];
+      }
+      fingerPrev[0] = fingerAt[0];
+      fingerPrev[1] = fingerAt[1];
+      fingerPrev[2] = fingerAt[2];
+
+      const fx = fingerAt[0], fy = fingerAt[1], fz = fingerAt[2];
+      let touched = 0;
+      for (let i = 0; i < count; i++) {
+        const k = i * 3;
+        const dx = pos[k] - fx, dy = pos[k + 1] - fy, dz = pos[k + 2] - fz;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 >= r2) continue;
+        const d = Math.sqrt(d2);
+        const f = 1 - d / radius;
+        const ff = f * f;
+        const inv = d > 1e-6 ? 1 / d : 0;
+        pos[k] += dx * inv * push * ff + mx * drag * ff;
+        pos[k + 1] += dy * inv * push * ff + my * drag * ff;
+        pos[k + 2] += dz * inv * push * ff + mz * drag * ff;
+        touched++;
+      }
+      return touched;
+    }
+
     // One sweep that does two jobs: recycle particles that have wandered off
     // the attractor, and accumulate the mean and variance that auto-framing
     // needs. Sampling every 8th particle for the statistics keeps it cheap.
@@ -1002,7 +1066,7 @@ window.plethoraBit = {
       "text-align:center;pointer-events:none;color:rgba(226,230,255,0.72);" +
       "font:500 13px/1.5 " + FONT + ";transition:opacity 700ms ease;" +
       "text-shadow:0 1px 8px rgba(0,0,0,0.8);padding:0 26px;";
-    hint.textContent = "Drag to bend the equation · two fingers to turn it";
+    hint.textContent = "Touch the silk · two fingers to turn it";
     ui.appendChild(hint);
 
     const panel = document.createElement("div");
@@ -1017,15 +1081,33 @@ window.plethoraBit = {
       'Thirty thousand particles falling through a chaotic flow. The screen is a map ' +
       'of that flow&rsquo;s two parameters.</p>' +
       '<ul style="list-style:none;display:grid;gap:9px;">' +
-      '<li>• <b>Drag one finger</b> — left and right bends the first parameter, up and down the second. The cloud reorganises as you move.</li>' +
+      '<li>• <b>Drag one finger</b> — push the silk around. Particles are shoved aside and dragged with you, then the flow pulls them back.</li>' +
+      '<li>• The same drag bends the equation: left/right sets the first parameter, up/down the second.</li>' +
       '<li>• <b>Two fingers</b> — turn the shape, pinch to zoom, twist to roll it.</li>' +
       '<li>• <b>Tap the name</b> — eight attractors: Aizawa, Lorenz, Thomas, Halvorsen, Rössler, Burke–Shaw, Dadras, Four-Wing.</li>' +
       '<li>• <b>◈</b> changes the colours, <b>♪</b> mutes the sound.</li>' +
       '<li>• <b>Hold still</b> — the picture keeps developing, like a long exposure.</li>' +
       '</ul>' +
-      '<p style="margin-top:15px;opacity:0.55;font-size:13px;">Tap anywhere to close.</p></div>';
+      '<p class="diag" style="margin-top:14px;opacity:0.38;font-size:11px;' +
+      'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;"></p>' +
+      '<p style="margin-top:10px;opacity:0.55;font-size:13px;">Tap anywhere to close.</p></div>';
     ui.appendChild(panel);
     ctx.listen(panel, "click", () => { panel.style.display = "none"; });
+    const diag = panel.querySelector(".diag");
+
+    // Shown in the help panel so a device that stays silent or unresponsive can
+    // be diagnosed without a console.
+    function updateDiag() {
+      if (!diag) return;
+      try {
+        const live = ctx.music && ctx.music.state ? ctx.music.state() : "?";
+        diag.textContent =
+          (useGL ? "webgl" : "canvas2d") + " · " + count + "p · " +
+          "input " + (inputMode || "none") + " · audio " + audioState + "/" + live;
+      } catch (_) {
+        diag.textContent = (useGL ? "webgl" : "canvas2d") + " · input " + (inputMode || "none");
+      }
+    }
 
     function fmt(v) {
       const a = Math.abs(v);
@@ -1045,22 +1127,27 @@ window.plethoraBit = {
     // parameter space is something you hear as well as see.
     // =====================================================================
     let music = null, musicBusy = false, lastIntensity = -1, lastIntensityMs = 0;
+    let audioState = "idle";
 
     async function startMusic() {
-      if (music || musicBusy || !soundOn || !ctx.capabilities.backgroundMusic) return;
+      if (!ctx.capabilities.backgroundMusic) { audioState = "no permission"; return; }
+      if (music || musicBusy || !soundOn) return;
       musicBusy = true;
+      audioState = "starting";
       try {
         await ctx.music.unlock();
         music = await ctx.music.play({
           preset: shape.music.preset,
           scale: shape.music.scale,
           tempo: shape.music.tempo,
-          volume: 0.42,
+          volume: 0.55,
           intensity: 0.3,
           density: 0.42,
           fadeInMs: 2400
         });
+        audioState = "playing";
       } catch (err) {
+        audioState = "blocked: " + String(err && err.message || err).slice(0, 48);
         ctx.platform.error({ where: "music", message: String(err && err.message || err) });
       }
       musicBusy = false;
@@ -1069,6 +1156,7 @@ window.plethoraBit = {
     function stopMusic() {
       try { ctx.music.stop({ fadeOutMs: 700 }); } catch (_) {}
       music = null;
+      audioState = "muted";
     }
 
     async function retuneMusic() {
@@ -1134,6 +1222,7 @@ window.plethoraBit = {
     }
 
     function cycleShape() {
+      firstTouch();
       setShape(shapeIdx + 1, true);
       haptic("medium");
       sting("powerup");
@@ -1144,6 +1233,7 @@ window.plethoraBit = {
     }
 
     function cyclePalette() {
+      firstTouch();
       paletteIdx = (paletteIdx + 1) % PALETTES.length;
       refreshBucketColours();
       haptic("light");
@@ -1154,6 +1244,7 @@ window.plethoraBit = {
 
     function toggleSound() {
       soundOn = !soundOn;
+      if (soundOn) firstTouch();
       soundBtn.textContent = soundOn ? "♪" : "⃠";
       soundBtn.style.color = soundOn ? "#eef0ff" : "rgba(238,240,255,0.45)";
       if (soundOn) startMusic(); else stopMusic();
@@ -1172,6 +1263,8 @@ window.plethoraBit = {
     ctx.listen(palBtn, "click", cyclePalette);
     ctx.listen(soundBtn, "click", toggleSound);
     ctx.listen(helpBtn, "click", () => {
+      firstTouch();
+      updateDiag();
       panel.style.display = panel.style.display === "none" ? "flex" : "none";
     });
 
@@ -1182,18 +1275,47 @@ window.plethoraBit = {
     // come from event.offsetX/offsetY — already canvas-relative, and no layout
     // read per pointer move.
     // =====================================================================
-    const surface = useGL ? canvas : canvas2d;
     const pointers = new Map();
     let gesture = null;      // two-finger baseline
     let lastInteractMs = 0;
 
+    let inputMode = "";      // whichever event family reports first wins
+
+    // Listen on the container, not the canvas. Every touch inside the bit
+    // bubbles to it, so it stops mattering which element the host stacks on
+    // top or whether an overlay swallowed the hit — the control chips are
+    // filtered out by target instead of by stacking order.
+    function isControl(t) {
+      for (let n = t; n && n !== ctx.container; n = n.parentNode) {
+        if (n === panel) return true;
+        if (n.tagName && n.tagName.toLowerCase() === "button") return true;
+      }
+      return false;
+    }
+
+    // offsetX is canvas-relative and costs no layout read, but it is not
+    // reliably present on touch-derived events in every WebView. The surface
+    // fills the container, so clientX is a safe stand-in when it is missing.
+    function localX(e) {
+      const v = e.offsetX;
+      return (typeof v === "number" && isFinite(v)) ? v : (e.clientX || 0);
+    }
+    function localY(e) {
+      const v = e.offsetY;
+      return (typeof v === "number" && isFinite(v)) ? v : (e.clientY || 0);
+    }
+
     function firstTouch() {
-      if (started) return;
-      started = true;
-      drifting = false;
-      ctx.platform.start();
-      startMusic();
-      hint.style.opacity = "0";
+      if (!started) {
+        started = true;
+        drifting = false;
+        ctx.platform.start();
+        hint.style.opacity = "0";
+      }
+      // Retried on every gesture, not just the first: a host can refuse audio
+      // on the opening attempt (still locked, or backgrounded), and the only
+      // way back in is another user gesture.
+      if (!music && soundOn) startMusic();
     }
 
     function setParamsFromPoint(x, y) {
@@ -1209,8 +1331,8 @@ window.plethoraBit = {
     function refreshPadLabels() {
       // Verbatim, not uppercased: the Greek names would stop matching the
       // readout, and a capital rho just reads as a Latin P.
-      axisX.textContent = shape.pa.label + "  ⟶";
-      axisY.textContent = shape.pb.label + "  ⟶";
+      axisX.textContent = shape.pa.label + "  \u27f6";
+      axisY.textContent = shape.pb.label + "  \u27f6";
     }
 
     function showPad(on) {
@@ -1232,34 +1354,36 @@ window.plethoraBit = {
       };
     }
 
-    function onDown(e) {
-      e.preventDefault();
+    // ---- gesture handling, independent of which event family delivered it ----
+
+    function beginAt(id, x, y) {
       firstTouch();
-      pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+      pointers.set(id, { x, y });
       lastTouchMs = performance.now();
       if (pointers.size === 1) {
-        setParamsFromPoint(e.offsetX, e.offsetY);
+        setParamsFromPoint(x, y);
         showPad(true);
         haptic("light");
+        if (soundOn) sting("tap");
       } else if (pointers.size === 2) {
         gesture = twoFingerBaseline();
+        fingerPrev = null;
         showPad(false);
       }
     }
 
-    function onMove(e) {
-      const p = pointers.get(e.pointerId);
+    function moveAt(id, x, y) {
+      const p = pointers.get(id);
       if (!p) return;
-      e.preventDefault();
-      p.x = e.offsetX; p.y = e.offsetY;
+      p.x = x; p.y = y;
       lastTouchMs = performance.now();
 
       if (pointers.size === 1) {
-        setParamsFromPoint(p.x, p.y);
+        setParamsFromPoint(x, y);
         const now = performance.now();
         if (now - lastInteractMs > 500) {
           lastInteractMs = now;
-          ctx.platform.interact({ type: "params", shape: shape.id });
+          ctx.platform.interact({ type: "sculpt", shape: shape.id });
         }
       } else if (pointers.size >= 2 && gesture) {
         const pts = [...pointers.values()];
@@ -1278,12 +1402,13 @@ window.plethoraBit = {
       }
     }
 
-    function onUp(e) {
-      pointers.delete(e.pointerId);
+    function endAt(id) {
+      pointers.delete(id);
+      fingerPrev = null;
       if (pointers.size < 2) gesture = null;
       if (pointers.size === 1) {
-        // Dropping back to one finger re-arms parameter control from wherever
-        // that finger now is, instead of snapping to a stale point.
+        // Dropping back to one finger re-arms from wherever that finger now
+        // is, instead of snapping to a stale point.
         const p = [...pointers.values()][0];
         setParamsFromPoint(p.x, p.y);
         showPad(true);
@@ -1291,11 +1416,55 @@ window.plethoraBit = {
       if (pointers.size === 0) showPad(false);
     }
 
-    ctx.listen(surface, "pointerdown", onDown, { passive: false });
-    ctx.listen(surface, "pointermove", onMove, { passive: false });
-    ctx.listen(surface, "pointerup", onUp);
-    ctx.listen(surface, "pointercancel", onUp);
-    ctx.listen(surface, "pointerleave", onUp);
+    // ---- both event families, first one to fire wins ----
+
+    function onPointerDown(e) {
+      if (inputMode === "touch" || isControl(e.target)) return;
+      inputMode = "pointer";
+      e.preventDefault();
+      beginAt(e.pointerId, localX(e), localY(e));
+    }
+    function onPointerMove(e) {
+      if (inputMode !== "pointer" || !pointers.has(e.pointerId)) return;
+      e.preventDefault();
+      moveAt(e.pointerId, localX(e), localY(e));
+    }
+    function onPointerUp(e) {
+      if (inputMode !== "pointer") return;
+      endAt(e.pointerId);
+    }
+
+    function onTouchStart(e) {
+      if (inputMode === "pointer" || isControl(e.target)) return;
+      inputMode = "touch";
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        beginAt(t.identifier, t.clientX, t.clientY);
+      }
+    }
+    function onTouchMove(e) {
+      if (inputMode !== "touch") return;
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        moveAt(t.identifier, t.clientX, t.clientY);
+      }
+    }
+    function onTouchEnd(e) {
+      if (inputMode !== "touch") return;
+      for (let i = 0; i < e.changedTouches.length; i++) endAt(e.changedTouches[i].identifier);
+    }
+
+    const target = ctx.container;
+    ctx.listen(target, "pointerdown", onPointerDown, { passive: false });
+    ctx.listen(target, "pointermove", onPointerMove, { passive: false });
+    ctx.listen(target, "pointerup", onPointerUp);
+    ctx.listen(target, "pointercancel", onPointerUp);
+    ctx.listen(target, "touchstart", onTouchStart, { passive: false });
+    ctx.listen(target, "touchmove", onTouchMove, { passive: false });
+    ctx.listen(target, "touchend", onTouchEnd);
+    ctx.listen(target, "touchcancel", onTouchEnd);
 
     // =====================================================================
     // 10. Restore, seed, first frame.
@@ -1395,6 +1564,10 @@ window.plethoraBit = {
         // the same speed, just with chunkier trails.
         const sub = clamp(Math.round(shape.sub * dt / 16.7), 1, shape.sub * 3);
         for (let s = 0; s < sub; s++) shape.step(pos, count, pa, pb);
+        if (pointers.size === 1) {
+          const p = pointers.values().next().value;
+          applyFinger(p.x, p.y, clamp(dt / 16.7, 0.5, 2));
+        }
         guard(true);
       }
       measureEnergy();

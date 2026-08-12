@@ -1,20 +1,24 @@
 # Strange Silk
 
 A mobile-first [Plethora Bit](https://create.plethora.studio) — tens of
-thousands of particles falling through a chaotic flow. The whole screen is a map
-of that flow's two parameters, so dragging a finger bends the equation itself
-and the cloud reorganises under your hand. Hold still and the picture keeps
-developing like a long exposure; tap the name and one attractor visibly
-transforms into the next.
+thousands of particles falling through a chaotic flow. Drag a finger and you
+push the silk itself around: particles are shouldered aside and dragged with
+your hand, then the attractor pulls them back. The same drag is bending the
+equation underneath, because the screen doubles as a map of the flow's two
+parameters. Hold still and the picture keeps developing like a long exposure;
+tap the name and one attractor visibly transforms into the next.
 
 Eight attractors: **Aizawa, Lorenz, Thomas, Halvorsen, Rössler, Burke–Shaw,
 Dadras, Four-Wing**.
 
 ## How to play
 
-- **Drag one finger** — left/right bends the first parameter, up/down the
-  second. The position is absolute: the screen *is* parameter space, and a ring
-  marks where you are in it.
+- **Drag one finger** — push the silk. Particles within a fingertip's radius
+  are shoved outward and carried along with the motion, and the flow heals the
+  wake over the next second.
+- The same drag bends the equation: left/right sets the first parameter,
+  up/down the second. The position is absolute — the screen *is* parameter
+  space, and a ring marks where you are in it.
 - **Two fingers** — orbit the shape, pinch to zoom, twist to roll.
 - **Tap the name** — morph into the next attractor.
 - **◈** cycles four palettes, **♪** mutes, **?** explains.
@@ -51,6 +55,25 @@ seeded from that moves as one dense clump instead of a whole attractor.
 Pools are built at each shape's mid parameters and cached, costing one ~30 ms
 hitch the first time a shape is chosen. Dragging then carries the cloud
 anywhere in parameter space on its own.
+
+**Touch is a force, not just a coordinate.** The first build mapped a finger
+only to the two parameters, and on a phone that read as nothing happening: the
+shape did change, but there was no local response under the fingertip and the
+auto-framing quietly absorbed much of the rest. Now the finger is unprojected
+onto the plane through the cloud's centre facing the camera — the rotation
+matrix is orthonormal, so its inverse is just its transpose — and every particle
+within a radius gets a radial shove plus advection along the finger's motion,
+both falling off as `(1 - d/r)²`. The attractor does the healing for free.
+
+**Input binds to the container, not the canvas.** Listening on the canvas alone
+assumes the bit's own surface is the top-most thing under the touch, which is
+not the bit's call to make — the host stacks the container, and an overlay or a
+host-side layer above it silently eats every gesture. Events bubble to
+`ctx.container`, so the listeners sit there and the control chips are excluded
+by walking the target's ancestors instead. Both `PointerEvent` and `TouchEvent`
+are handled, whichever family fires first claiming the session, so a WebView
+that delivers only touch events still works. `offsetX` falls back to `clientX`
+for the same reason — it is not reliably present on touch-derived events.
 
 **The transformation.** Because a pool of on-attractor points exists, changing
 shape is a real morph rather than a cut: the old cloud is normalised into the
@@ -94,6 +117,15 @@ delta alone would never grow the cloud on any healthy device. Two consecutive
 slow windows are required before shedding particles, and bloom can come back
 once things recover.
 
+**Audio starts from any gesture.** Mobile hosts only unlock audio inside a user
+gesture, and the first build hung `ctx.music.play()` off a canvas `pointerdown`
+alone — so a device that never delivered that event was both unresponsive *and*
+silent, from one cause. Every control tap now counts as the opening gesture too,
+and the attempt is retried on each subsequent gesture, since a host can refuse
+the first one while backgrounded. The help panel carries a small diagnostics
+line — renderer, particle count, input family, audio state — so a silent or
+unresponsive device can be diagnosed without a console.
+
 **Sound.** Each attractor carries its own `ctx.music` preset, scale and tempo,
 so switching shapes genuinely changes the music — Aizawa is `ambient` in lydian,
 Thomas a `drone` in whole tones, Four-Wing `bubble` in blues. The bed's
@@ -112,12 +144,14 @@ the documented `ctx` SDK surface:
   and the sound are all generated at runtime.
 - Surfaces via `ctx.createCanvas` / `ctx.createRoot`; listeners, frames and
   music all go through `ctx` so the runtime owns cleanup.
-- Pointer positions come from `event.offsetX` / `offsetY`. The upload validator
-  rejects `canvas.getBoundingClientRect()` — with a message about remote
-  resources that gives no hint layout access is the cause — and offsets are
-  already canvas-relative anyway, skipping a forced reflow per pointer move.
+- Pointer positions come from `event.offsetX` / `offsetY`, falling back to
+  `clientX` / `clientY`. The upload validator rejects
+  `canvas.getBoundingClientRect()` — with a message about remote resources that
+  gives no hint layout access is the cause — and offsets are already
+  canvas-relative anyway, skipping a forced reflow per pointer move.
   `document.createElement` is only ever called with a literal `"div"` or
-  `"button"`; the validator rejects it for `"canvas"`.
+  `"button"`; the validator rejects it for `"canvas"`. The whole source passed
+  the real validator on the first upload attempt.
 - No blank first frame: the cloud is seeded, framed and drawn once before
   `ctx.platform.ready()`.
 - Controls sit at the top inside `ctx.safeArea.top`, leaving the bottom of the
