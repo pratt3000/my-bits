@@ -1,0 +1,2424 @@
+/**
+ * Ripcord -- spin the phone, launch a top, win the arena.
+ *
+ * The launch power is read from the phone's gyroscope: peak angular speed
+ * during the rip window becomes the top's RPM, strictly proportionally.
+ */
+window.plethoraBit = {
+  meta: {
+    title: "Ripcord",
+    runtime: "plethora-bit@2",
+    tags: ["game", "arcade", "motion", "physics", "battle", "spinner", "action"],
+    permissions: ["motion", "audio", "backgroundMusic", "haptics", "storage"]
+  },
+
+  async init(ctx) {
+    /* ============================================================ *
+     * 0. Constants
+     * ============================================================ */
+
+    const TAU = Math.PI * 2;
+    const SQUASH = 0.60;          // pseudo-3D vertical compression
+    const RING_OUT_R = 1.235;     // world radius past which a top is out
+    const BOWL_K = 2.45;          // restoring accel toward centre, per unit r
+    const WALL_R = 0.95;          // where the stadium lip starts to bite
+    const WALL_K = 9;             // lip steepness -- a ring-out has to be earned
+    const DRAG = 0.315;
+    const ORBIT_K = 1.7;          // how hard a top is held to its orbit speed
+
+    // Phone spin (deg/s) -> top RPM. Proportional, with a floor and ceiling.
+    const RIP_FLOOR = 190;        // below this the rip does not register
+    const RIP_CEIL = 2000;        // consumer gyros saturate around here
+    const GEAR = 9.2;             // top RPM per phone deg/s
+    const MIN_RPM = 3200;
+    const MAX_RPM = 14000;
+    const TRIGGER_DEG = 215;      // peak needed before release-detect arms
+
+    const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const easeOut = t => 1 - Math.pow(1 - t, 3);
+
+    /* ============================================================ *
+     * 1. Surfaces
+     * ============================================================ */
+
+    const canvas = ctx.createCanvas2D({ touchAction: "none" });
+    const g = canvas.getContext("2d");
+
+    // Offscreen baking. Minting a canvas element off the document is rejected
+    // by the upload validator; OffscreenCanvas is the supported path. If a
+    // WebView lacks it every bake site falls back to drawing live -- plainer,
+    // but never blank.
+    function makeSurface(w, h) {
+      if (typeof OffscreenCanvas === "undefined") return null;
+      try {
+        return new OffscreenCanvas(Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h)));
+      } catch (err) {
+        return null;
+      }
+    }
+
+    let W = ctx.width;
+    let H = ctx.height;
+    let cx = W / 2;
+    let cy = H / 2;
+    let S = 1;                    // world unit -> screen px
+    const safeTop = () => (ctx.safeArea && ctx.safeArea.top) || 0;
+    const safeBottom = () => (ctx.safeArea && ctx.safeArea.bottom) || 0;
+
+    /* ============================================================ *
+     * 2. Audio -- everything synthesized, no packaged assets
+     * ============================================================ */
+
+    const audio = {
+      ac: null,
+      master: null,
+      noise: null,
+      ok: false,
+      failed: false
+    };
+
+    function audioInit() {
+      if (audio.ok || audio.failed) return audio.ok;
+      if (!ctx.capabilities || !ctx.capabilities.audio) {
+        audio.failed = true;
+        return false;
+      }
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) throw new Error("no AudioContext");
+        audio.ac = new AC();
+        audio.master = audio.ac.createGain();
+        audio.master.gain.value = 0.9;
+        audio.master.connect(audio.ac.destination);
+
+        // One second of white noise, reused by every noise voice.
+        const len = Math.floor(audio.ac.sampleRate);
+        const buf = audio.ac.createBuffer(1, len, audio.ac.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+        audio.noise = buf;
+
+        audio.ok = true;
+        ctx.onDestroy(() => {
+          try { audio.ac.close(); } catch (err) { /* already closed */ }
+        });
+      } catch (err) {
+        audio.failed = true;
+      }
+      return audio.ok;
+    }
+
+    function audioResume() {
+      if (audio.ok && audio.ac.state === "suspended") {
+        audio.ac.resume().catch(() => {});
+      }
+    }
+
+    function noiseSource() {
+      const src = audio.ac.createBufferSource();
+      src.buffer = audio.noise;
+      src.loop = true;
+      src.playbackRate.value = rand(0.85, 1.2);
+      return src;
+    }
+
+    /** Metallic strike: inharmonic partials + a bright transient. */
+    function sfxClash(force) {
+      if (!audioInit()) return;
+      const ac = audio.ac;
+      const t = ac.currentTime;
+      const amp = clamp(force, 0.12, 1) * 0.5;
+      const base = lerp(300, 520, clamp(force, 0, 1)) * rand(0.92, 1.09);
+
+      // Bell-like inharmonic series -- what makes metal read as metal.
+      const ratios = [1, 2.41, 3.86, 5.12, 7.31, 9.04];
+      for (let i = 0; i < ratios.length; i++) {
+        const osc = ac.createOscillator();
+        const gn = ac.createGain();
+        osc.type = "sine";
+        osc.frequency.value = base * ratios[i] * rand(0.995, 1.005);
+        const dur = lerp(0.34, 0.08, i / ratios.length);
+        const peak = amp * Math.pow(0.62, i);
+        gn.gain.setValueAtTime(0.0001, t);
+        gn.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.004);
+        gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        osc.connect(gn).connect(audio.master);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      }
+
+      // Contact transient.
+      const src = noiseSource();
+      const hp = ac.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 2600;
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(amp * 0.9, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+      src.connect(hp).connect(ng).connect(audio.master);
+      src.start(t);
+      src.stop(t + 0.08);
+    }
+
+    /** Electric crackle for the lightning arcs. */
+    function sfxSpark(force) {
+      if (!audioInit()) return;
+      const ac = audio.ac;
+      const t = ac.currentTime;
+      const amp = clamp(force, 0.1, 1) * 0.3;
+      const src = noiseSource();
+      const bp = ac.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(rand(4200, 6800), t);
+      bp.frequency.exponentialRampToValueAtTime(rand(1400, 2400), t + 0.09);
+      bp.Q.value = 1.6;
+      const gn = ac.createGain();
+      gn.gain.setValueAtTime(amp, t);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+      src.connect(bp).connect(gn).connect(audio.master);
+      src.start(t);
+      src.stop(t + 0.14);
+    }
+
+    /** Launch rip -- rising noise sweep plus a pitched whip. */
+    function sfxRip(power) {
+      if (!audioInit()) return;
+      const ac = audio.ac;
+      const t = ac.currentTime;
+      const p = clamp(power, 0, 1);
+
+      const src = noiseSource();
+      const bp = ac.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = 3.2;
+      bp.frequency.setValueAtTime(320, t);
+      bp.frequency.exponentialRampToValueAtTime(lerp(2200, 5200, p), t + 0.32);
+      const gn = ac.createGain();
+      gn.gain.setValueAtTime(0.0001, t);
+      gn.gain.exponentialRampToValueAtTime(0.34, t + 0.06);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+      src.connect(bp).connect(gn).connect(audio.master);
+      src.start(t);
+      src.stop(t + 0.46);
+
+      const osc = ac.createOscillator();
+      const og = ac.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(90, t);
+      osc.frequency.exponentialRampToValueAtTime(lerp(360, 780, p), t + 0.3);
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(0.13, t + 0.07);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+      osc.connect(og).connect(audio.master);
+      osc.start(t);
+      osc.stop(t + 0.4);
+    }
+
+    /** A top leaves the stadium -- descending whoosh. */
+    function sfxRingOut() {
+      if (!audioInit()) return;
+      const ac = audio.ac;
+      const t = ac.currentTime;
+      const src = noiseSource();
+      const bp = ac.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = 2.4;
+      bp.frequency.setValueAtTime(2600, t);
+      bp.frequency.exponentialRampToValueAtTime(180, t + 0.5);
+      const gn = ac.createGain();
+      gn.gain.setValueAtTime(0.3, t);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+      src.connect(bp).connect(gn).connect(audio.master);
+      src.start(t);
+      src.stop(t + 0.6);
+    }
+
+    /** A top runs out of spin and topples. */
+    function sfxDeath() {
+      if (!audioInit()) return;
+      const ac = audio.ac;
+      const t = ac.currentTime;
+      // Rattle: fast repeated taps slowing down, like a top settling.
+      for (let i = 0; i < 11; i++) {
+        const at = t + Math.pow(i / 11, 1.7) * 1.05;
+        const osc = ac.createOscillator();
+        const gn = ac.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = rand(140, 240);
+        gn.gain.setValueAtTime(0.0001, at);
+        gn.gain.exponentialRampToValueAtTime(0.11 * (1 - i / 13), at + 0.003);
+        gn.gain.exponentialRampToValueAtTime(0.0001, at + 0.07);
+        osc.connect(gn).connect(audio.master);
+        osc.start(at);
+        osc.stop(at + 0.09);
+      }
+    }
+
+    /** Continuous spin whirr, one voice per live top. */
+    function makeWhirr(bladeCount) {
+      if (!audioInit()) return null;
+      const ac = audio.ac;
+      let osc, sub, gain, bp, src, ng;
+      try {
+        gain = ac.createGain();
+        gain.gain.value = 0;
+        gain.connect(audio.master);
+
+        osc = ac.createOscillator();
+        osc.type = "sawtooth";
+        const shape = ac.createBiquadFilter();
+        shape.type = "lowpass";
+        shape.frequency.value = 2600;
+        osc.connect(shape).connect(gain);
+        osc.start();
+
+        sub = ac.createOscillator();
+        sub.type = "sine";
+        const subG = ac.createGain();
+        subG.gain.value = 0.6;
+        sub.connect(subG).connect(gain);
+        sub.start();
+
+        src = noiseSource();
+        bp = ac.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.Q.value = 4.5;
+        ng = ac.createGain();
+        ng.gain.value = 0.5;
+        src.connect(bp).connect(ng).connect(gain);
+        src.start();
+      } catch (err) {
+        return null;
+      }
+
+      return {
+        /** rpm drives pitch at the blade-pass frequency; level drives volume. */
+        set(rpm, level) {
+          if (!audio.ok) return;
+          const t = audio.ac.currentTime;
+          const f = clamp((rpm / 60) * bladeCount, 30, 3800);
+          try {
+            osc.frequency.setTargetAtTime(f, t, 0.05);
+            sub.frequency.setTargetAtTime(clamp(f * 0.5, 22, 1200), t, 0.05);
+            bp.frequency.setTargetAtTime(clamp(f * 2.2, 60, 7000), t, 0.06);
+            gain.gain.setTargetAtTime(clamp(level, 0, 1) * 0.045, t, 0.08);
+          } catch (err) { /* context closing */ }
+        },
+        stop() {
+          if (!audio.ok) return;
+          const t = audio.ac.currentTime;
+          try {
+            gain.gain.setTargetAtTime(0, t, 0.09);
+            osc.stop(t + 0.7);
+            sub.stop(t + 0.7);
+            src.stop(t + 0.7);
+          } catch (err) { /* already stopped */ }
+        }
+      };
+    }
+
+    /* ============================================================ *
+     * 3. Spin meter -- the gyroscope read
+     * ============================================================ */
+
+    const spin = {
+      now: 0,            // current angular speed, deg/s
+      peak: 0,           // peak within the active rip window
+      smooth: 0,         // display-smoothed value
+      source: "none",    // "gyro" | "tilt" | "swipe"
+      live: false,       // receiving usable samples
+      window: false,     // rip window open
+      airborne: false,
+      airMs: 0,
+      bestAirMs: 0,
+      gotAir: false,
+      denied: false,
+      lastTilt: null,
+      quietMs: 0,
+      armed: false
+    };
+
+    // Wrap-safe difference between two Euler angles, in degrees.
+    function angDiff(a, b) {
+      let d = (a - b) % 360;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      return d;
+    }
+
+    function feedSpin(degPerSec, source) {
+      if (!isFinite(degPerSec)) return;
+      spin.now = degPerSec;
+      spin.source = source;
+      spin.live = true;
+      if (spin.window && degPerSec > spin.peak) {
+        spin.peak = degPerSec;
+        if (spin.airborne) spin.gotAir = true;
+      }
+      if (spin.window && spin.peak > TRIGGER_DEG) spin.armed = true;
+    }
+
+    function onDeviceMotion(e) {
+      // rotationRate IS the gyroscope: true angular velocity in deg/s, and
+      // unlike orientation it stays valid in freefall, which is the whole
+      // point when the phone is airborne.
+      const rr = e.rotationRate;
+      if (rr && (rr.alpha != null || rr.beta != null || rr.gamma != null)) {
+        const a = rr.alpha || 0;
+        const b = rr.beta || 0;
+        const c = rr.gamma || 0;
+        feedSpin(Math.sqrt(a * a + b * b + c * c), "gyro");
+      }
+
+      // Freefall: an accelerometer in free flight reads ~0g.
+      const ag = e.accelerationIncludingGravity;
+      if (ag) {
+        const m = Math.sqrt(
+          (ag.x || 0) * (ag.x || 0) +
+          (ag.y || 0) * (ag.y || 0) +
+          (ag.z || 0) * (ag.z || 0)
+        );
+        if (m < 3.2) {
+          if (!spin.airborne) { spin.airborne = true; spin.airMs = 0; }
+        } else if (m > 6.5 && spin.airborne) {
+          spin.airborne = false;
+          if (spin.airMs > spin.bestAirMs) spin.bestAirMs = spin.airMs;
+        }
+      }
+    }
+
+    let motionAttached = false;
+    async function motionStart() {
+      if (!ctx.capabilities || !ctx.capabilities.motion) {
+        spin.denied = true;
+        return false;
+      }
+      try {
+        const ok = await ctx.motion.start();
+        if (!ok) { spin.denied = true; return false; }
+      } catch (err) {
+        spin.denied = true;
+        return false;
+      }
+      if (!motionAttached) {
+        motionAttached = true;
+        ctx.listen(window, "devicemotion", onDeviceMotion);
+      }
+      return true;
+    }
+
+    // Fallback path: differentiate ctx.motion.tilt. Coarser than the gyro and
+    // meaningless in freefall (orientation is gravity-referenced), but it
+    // works for an in-hand flick when rotationRate is absent.
+    function tiltSample(dt) {
+      if (spin.source === "gyro") return;
+      const t = ctx.motion && ctx.motion.tilt;
+      if (!t || !ctx.motion.active) return;
+      if (spin.lastTilt && dt > 0.004) {
+        const dx = angDiff(t.x || 0, spin.lastTilt.x);
+        const dy = angDiff(t.y || 0, spin.lastTilt.y);
+        const dz = angDiff(t.z || 0, spin.lastTilt.z);
+        const mag = Math.sqrt(dx * dx + dy * dy + dz * dz) / dt;
+        if (mag < 8000) feedSpin(mag, "tilt");
+      }
+      spin.lastTilt = { x: t.x || 0, y: t.y || 0, z: t.z || 0 };
+    }
+
+    function openRipWindow() {
+      spin.window = true;
+      spin.peak = 0;
+      spin.armed = false;
+      spin.quietMs = 0;
+      spin.gotAir = false;
+      spin.bestAirMs = 0;
+      spin.airMs = 0;
+    }
+
+    function phoneRPM() { return spin.peak / 6; }
+
+    function launchRPM() {
+      const eff = clamp(spin.peak, 0, RIP_CEIL);
+      if (eff < RIP_FLOOR) return MIN_RPM;
+      return clamp(eff * GEAR, MIN_RPM, MAX_RPM);
+    }
+
+    function launchPower() {
+      return clamp((launchRPM() - MIN_RPM) / (MAX_RPM - MIN_RPM), 0, 1);
+    }
+
+    /* ============================================================ *
+     * 4. Archetypes and sprite baking
+     * ============================================================ */
+
+    const ARCHETYPES = [
+      {
+        id: "attack", name: "VOLT LANCE", role: "ATTACK",
+        blades: 3, sharp: 2.5, skew: 0.36, rIn: 0.54,
+        hue: 191, hue2: 168,
+        mass: 0.86, radius: 0.158,
+        decay: 1.10, aggression: 1.0,
+        deal: 1.56, take: 1.14, knock: 1.62,
+        blurb: "Hits hardest of the three. Burns out first."
+      },
+      {
+        id: "defense", name: "IRON BASTION", role: "DEFENSE",
+        blades: 6, sharp: 1.25, skew: -0.13, rIn: 0.73,
+        hue: 27, hue2: 47,
+        mass: 1.34, radius: 0.171,
+        decay: 0.95, aggression: 0.24,
+        deal: 0.85, take: 0.60, knock: 0.64,
+        blurb: "Heavy. Shrugs off hits, holds the centre."
+      },
+      {
+        id: "stamina", name: "PALE ORBIT", role: "STAMINA",
+        blades: 8, sharp: 0.92, skew: 0.07, rIn: 0.79,
+        hue: 285, hue2: 322,
+        mass: 1.0, radius: 0.162,
+        decay: 0.90, aggression: 0.44,
+        deal: 0.78, take: 1.22, knock: 0.90,
+        blurb: "Outlasts everything. Fragile in a clash."
+      }
+    ];
+
+    /**
+     * Polar profile of an energy layer. Smooth lobes, angle-warped so the
+     * blades sweep back -- that asymmetry is what reads as "forged" rather
+     * than "flower", and it shows the spin direction.
+     */
+    function bladeRadius(a, spec) {
+      const warped = a + spec.skew * Math.sin(spec.blades * a);
+      const lobe = Math.pow(0.5 + 0.5 * Math.cos(spec.blades * warped), spec.sharp);
+      return spec.rIn + (1 - spec.rIn) * lobe;
+    }
+
+    function tracebBlade(gg, spec, R, scale) {
+      const steps = 168;
+      gg.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const a = (i / steps) * TAU;
+        const r = bladeRadius(a, spec) * R * scale;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (i === 0) gg.moveTo(x, y); else gg.lineTo(x, y);
+      }
+      gg.closePath();
+    }
+
+    /**
+     * Paint one top, centred at 0,0, in a context already translated there.
+     * `perspective` squashes y so the top reads as seen from a low angle.
+     */
+    function paintTop(gg, spec, R, perspective) {
+      const h1 = spec.hue;
+      const h2 = spec.hue2;
+
+      gg.save();
+      gg.scale(1, perspective);
+
+      // Forge disc -- the heavy metal ring below the blade, offset down so a
+      // sliver of its edge shows past the energy layer.
+      gg.save();
+      gg.translate(0, R * 0.16 / perspective);
+      const discGrad = gg.createLinearGradient(-R, -R, R, R);
+      discGrad.addColorStop(0, "hsl(" + h1 + ", 18%, 30%)");
+      discGrad.addColorStop(0.45, "hsl(" + h1 + ", 12%, 52%)");
+      discGrad.addColorStop(0.55, "hsl(" + h1 + ", 14%, 38%)");
+      discGrad.addColorStop(1, "hsl(" + h1 + ", 20%, 19%)");
+      gg.fillStyle = discGrad;
+      gg.beginPath();
+      gg.arc(0, 0, R * 0.86, 0, TAU);
+      gg.fill();
+      gg.restore();
+
+      // Energy layer body.
+      const bodyGrad = gg.createLinearGradient(-R, -R * 0.9, R * 0.7, R);
+      bodyGrad.addColorStop(0, "hsl(" + h2 + ", 88%, 66%)");
+      bodyGrad.addColorStop(0.38, "hsl(" + h1 + ", 82%, 47%)");
+      bodyGrad.addColorStop(0.72, "hsl(" + h1 + ", 74%, 29%)");
+      bodyGrad.addColorStop(1, "hsl(" + h1 + ", 62%, 17%)");
+      gg.fillStyle = bodyGrad;
+      tracebBlade(gg, spec, R, 1);
+      gg.fill();
+
+      // Facets: alternating light/dark wedges from hub to each blade tip.
+      for (let i = 0; i < spec.blades; i++) {
+        const a0 = (i / spec.blades) * TAU;
+        const a1 = a0 + TAU / spec.blades;
+        const mid = (a0 + a1) / 2;
+        gg.save();
+        gg.beginPath();
+        gg.moveTo(0, 0);
+        for (let k = 0; k <= 18; k++) {
+          const a = lerp(a0, mid, k / 18);
+          const r = bladeRadius(a, spec) * R;
+          gg.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        gg.closePath();
+        gg.fillStyle = "rgba(255,255,255,0.10)";
+        gg.fill();
+        gg.restore();
+
+        gg.save();
+        gg.beginPath();
+        gg.moveTo(0, 0);
+        for (let k = 0; k <= 18; k++) {
+          const a = lerp(mid, a1, k / 18);
+          const r = bladeRadius(a, spec) * R;
+          gg.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        gg.closePath();
+        gg.fillStyle = "rgba(0,0,0,0.20)";
+        gg.fill();
+        gg.restore();
+      }
+
+      // Bright edge on the blade outline.
+      gg.lineWidth = Math.max(1, R * 0.045);
+      gg.strokeStyle = "hsl(" + h2 + ", 96%, 76%)";
+      tracebBlade(gg, spec, R, 1);
+      gg.stroke();
+
+      // Hub: concentric machined rings and a lit core.
+      const hubGrad = gg.createRadialGradient(-R * 0.12, -R * 0.14, R * 0.02, 0, 0, R * 0.46);
+      hubGrad.addColorStop(0, "hsl(" + h2 + ", 96%, 88%)");
+      hubGrad.addColorStop(0.35, "hsl(" + h1 + ", 60%, 44%)");
+      hubGrad.addColorStop(1, "hsl(" + h1 + ", 46%, 15%)");
+      gg.fillStyle = hubGrad;
+      gg.beginPath();
+      gg.arc(0, 0, R * 0.44, 0, TAU);
+      gg.fill();
+
+      gg.lineWidth = Math.max(0.6, R * 0.022);
+      gg.strokeStyle = "rgba(0,0,0,0.35)";
+      for (let i = 1; i <= 3; i++) {
+        gg.beginPath();
+        gg.arc(0, 0, R * 0.44 * (i / 3.4), 0, TAU);
+        gg.stroke();
+      }
+
+      // Bolt slot in the very centre.
+      gg.strokeStyle = "rgba(255,255,255,0.55)";
+      gg.lineWidth = Math.max(1, R * 0.05);
+      gg.beginPath();
+      gg.moveTo(-R * 0.14, 0);
+      gg.lineTo(R * 0.14, 0);
+      gg.stroke();
+
+      gg.restore();
+    }
+
+    const spriteCache = new Map();
+
+    /** Returns { sharp, blur, size } sprites for a spec at a given px radius. */
+    function getSprites(spec, radiusPx) {
+      const key = spec.id + "@" + Math.round(radiusPx);
+      const hit = spriteCache.get(key);
+      if (hit) return hit;
+
+      const margin = 1.22;
+      const size = Math.ceil(radiusPx * 2 * margin);
+      const sharpSurf = makeSurface(size, size);
+      const blurSurf = makeSurface(size, size);
+      let entry;
+
+      if (!sharpSurf || !blurSurf) {
+        entry = { sharp: null, blur: null, size: size, live: true };
+      } else {
+        const sg = sharpSurf.getContext("2d");
+        sg.translate(size / 2, size / 2);
+        paintTop(sg, spec, radiusPx, 1);
+
+        // The blur sprite is the same blade smeared through a full rotation,
+        // which is what a top at speed actually looks like.
+        const bg = blurSurf.getContext("2d");
+        bg.translate(size / 2, size / 2);
+        const passes = 26;
+        bg.globalAlpha = 1 / (passes * 0.55);
+        for (let i = 0; i < passes; i++) {
+          bg.save();
+          bg.rotate((i / passes) * (TAU / spec.blades));
+          paintTop(bg, spec, radiusPx, 1);
+          bg.restore();
+        }
+        bg.globalAlpha = 1;
+
+        entry = { sharp: sharpSurf, blur: blurSurf, size: size, live: false };
+      }
+
+      spriteCache.set(key, entry);
+      return entry;
+    }
+
+    /* ============================================================ *
+     * 5. Arena bake
+     * ============================================================ */
+
+    let arenaSurf = null;
+    let arenaMeta = { w: 0, h: 0, s: 0 };
+
+    function paintArena(gg, scale, sc) {
+      const rx = scale;
+
+      // Outer glow pool.
+      const halo = gg.createRadialGradient(0, 0, rx * 0.4, 0, 0, rx * 1.72);
+      halo.addColorStop(0, "rgba(80,140,255,0.16)");
+      halo.addColorStop(0.55, "rgba(50,80,190,0.07)");
+      halo.addColorStop(1, "rgba(0,0,0,0)");
+      gg.fillStyle = halo;
+      gg.save();
+      gg.scale(1, SQUASH);
+      gg.beginPath();
+      gg.arc(0, 0, rx * 1.72, 0, TAU);
+      gg.fill();
+      gg.restore();
+
+      // Rim: a wide machined ring around the bowl.
+      gg.save();
+      gg.scale(1, SQUASH);
+      const rimGrad = gg.createLinearGradient(0, -rx * 1.3, 0, rx * 1.3);
+      rimGrad.addColorStop(0, "#2b3550");
+      rimGrad.addColorStop(0.4, "#141a2a");
+      rimGrad.addColorStop(0.62, "#1d2438");
+      rimGrad.addColorStop(1, "#39456a");
+      gg.fillStyle = rimGrad;
+      gg.beginPath();
+      gg.arc(0, 0, rx * 1.30, 0, TAU);
+      gg.fill();
+
+      // Hazard ticks around the rim.
+      for (let i = 0; i < 72; i++) {
+        const a = (i / 72) * TAU;
+        const long = i % 6 === 0;
+        const r0 = rx * (long ? 1.19 : 1.23);
+        const r1 = rx * 1.285;
+        gg.strokeStyle = long ? "rgba(150,190,255,0.42)" : "rgba(110,140,200,0.18)";
+        gg.lineWidth = long ? sc * 1.8 : sc * 1;
+        gg.beginPath();
+        gg.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+        gg.lineTo(Math.cos(a) * r1, Math.sin(a) * r1);
+        gg.stroke();
+      }
+
+      // Energy ring at the lip.
+      gg.strokeStyle = "rgba(120,190,255,0.55)";
+      gg.lineWidth = sc * 2.2;
+      gg.beginPath();
+      gg.arc(0, 0, rx * 1.155, 0, TAU);
+      gg.stroke();
+      gg.strokeStyle = "rgba(190,230,255,0.30)";
+      gg.lineWidth = sc * 0.9;
+      gg.beginPath();
+      gg.arc(0, 0, rx * 1.135, 0, TAU);
+      gg.stroke();
+
+      // Bowl interior. Darker toward the bottom so it reads concave, with a
+      // lit far wall.
+      const bowl = gg.createRadialGradient(0, -rx * 0.22, rx * 0.05, 0, 0, rx * 1.16);
+      bowl.addColorStop(0, "#080c18");
+      bowl.addColorStop(0.42, "#0c1226");
+      bowl.addColorStop(0.78, "#141d3c");
+      bowl.addColorStop(1, "#233158");
+      gg.fillStyle = bowl;
+      gg.beginPath();
+      gg.arc(0, 0, rx * 1.14, 0, TAU);
+      gg.fill();
+
+      // Concentric floor rings.
+      for (let i = 1; i <= 6; i++) {
+        const r = rx * (i / 6) * 1.05;
+        gg.strokeStyle = "rgba(120,165,255," + (0.13 - i * 0.012).toFixed(3) + ")";
+        gg.lineWidth = sc * 1;
+        gg.beginPath();
+        gg.arc(0, 0, r, 0, TAU);
+        gg.stroke();
+      }
+
+      // Radial guide spokes.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU;
+        gg.strokeStyle = "rgba(120,165,255,0.07)";
+        gg.lineWidth = sc * 1;
+        gg.beginPath();
+        gg.moveTo(Math.cos(a) * rx * 0.16, Math.sin(a) * rx * 0.16);
+        gg.lineTo(Math.cos(a) * rx * 1.08, Math.sin(a) * rx * 1.08);
+        gg.stroke();
+      }
+
+      // Centre sink.
+      const sink = gg.createRadialGradient(0, 0, 0, 0, 0, rx * 0.3);
+      sink.addColorStop(0, "rgba(90,150,255,0.20)");
+      sink.addColorStop(0.6, "rgba(50,90,190,0.06)");
+      sink.addColorStop(1, "rgba(0,0,0,0)");
+      gg.fillStyle = sink;
+      gg.beginPath();
+      gg.arc(0, 0, rx * 0.3, 0, TAU);
+      gg.fill();
+
+      gg.strokeStyle = "rgba(150,200,255,0.28)";
+      gg.lineWidth = sc * 1.4;
+      gg.beginPath();
+      gg.arc(0, 0, rx * 0.1, 0, TAU);
+      gg.stroke();
+
+      gg.restore();
+    }
+
+    function bakeArena() {
+      const need = { w: W, h: H, s: S };
+      if (arenaSurf && arenaMeta.w === need.w && arenaMeta.h === need.h && arenaMeta.s === need.s) return;
+      arenaMeta = need;
+      const sc = clamp(ctx.dpr || 1, 1, 2);
+      const surf = makeSurface(W * sc, H * sc);
+      if (!surf) { arenaSurf = null; return; }
+      const gg = surf.getContext("2d");
+      gg.scale(sc, sc);
+      gg.translate(cx, cy);
+      paintArena(gg, S, 1);
+      arenaSurf = surf;
+    }
+
+    /* ============================================================ *
+     * 6. Tops and physics
+     * ============================================================ */
+
+    let tops = [];
+    let battleMs = 0;
+    let lastHitMs = 0;
+
+    function makeTop(spec, rpm, angle, isPlayer, label) {
+      const r = 0.86;
+      return {
+        spec: spec,
+        x: Math.cos(angle) * r,
+        y: Math.sin(angle) * r,
+        vx: -Math.sin(angle) * 0.75,
+        vy: Math.cos(angle) * 0.75,
+        rpm: rpm,
+        rpm0: rpm,
+        theta: Math.random() * TAU,
+        wobblePhase: Math.random() * TAU,
+        h: 0.55,               // height above floor, for the drop-in
+        vh: 0,
+        alive: true,
+        out: false,
+        burst: false,
+        deathMs: 0,
+        isPlayer: !!isPlayer,
+        label: label || spec.name,
+        whirr: null,
+        hitFlash: 0,
+        trail: []
+      };
+    }
+
+    function spinNorm(t) { return clamp(t.rpm / MAX_RPM, 0, 1); }
+
+    function stepPhysics(dt) {
+      const live = tops.filter(t => t.alive);
+
+      for (const t of live) {
+        // Drop-in.
+        if (t.h > 0) {
+          t.vh -= 4.2 * dt;
+          t.h += t.vh * dt;
+          if (t.h <= 0) {
+            t.h = 0;
+            t.vh = 0;
+            impactDust(t);
+            sfxClash(0.35);
+            if (t.isPlayer) haptic("medium");
+          }
+          continue;
+        }
+
+        const r = Math.hypot(t.x, t.y) || 1e-6;
+        const nx = t.x / r;
+        const ny = t.y / r;
+        const sn = spinNorm(t);
+
+        // Bowl restoring force -- a paraboloid gives a linear pull to centre.
+        let ax = -nx * BOWL_K * r;
+        let ay = -ny * BOWL_K * r;
+
+        // Stadium lip. Without this a fast top just spirals out on its own,
+        // which would punish the good launch this whole bit is about. Getting
+        // past the lip has to come from an impact.
+        if (r > WALL_R) {
+          const over = r - WALL_R;
+          ax -= nx * over * WALL_K;
+          ay -= ny * over * WALL_K;
+        }
+
+        // Gyroscopic drift: a spinning top walks its orbit rather than sliding
+        // straight down the bowl. Driven toward a preferred orbital speed
+        // instead of applied as a raw force, so it is self-limiting -- a plain
+        // tangential force accelerates without bound and throws the top out.
+        const tangential = -ny * t.vx + nx * t.vy;
+        const wantTangential = lerp(0.32, 1.15, sn);
+        const push = (wantTangential - tangential) * ORBIT_K;
+        ax += -ny * push;
+        ay += nx * push;
+
+        // Seeking. Go for the biggest threat, discounted by how far it is --
+        // not simply the nearest. Chasing the nearest top rewards hanging back
+        // and letting the aggressive ones wreck each other, which made
+        // passivity the dominant strategy. Ganging up on the leader also means
+        // a monster launch has to survive being the target.
+        const agg = t.spec.aggression;
+        let target = null;
+        let bestD = 0;
+        let bestScore = -Infinity;
+        for (const o of live) {
+          if (o === t || o.h > 0) continue;
+          const d = Math.hypot(o.x - t.x, o.y - t.y);
+          const score = spinNorm(o) * 1.7 - d * 0.55;
+          if (score > bestScore) { bestScore = score; target = o; bestD = d; }
+        }
+        if (target && bestD > 1e-4) {
+          const seek = agg * 1.35 * (0.35 + sn * 0.65);
+          ax += ((target.x - t.x) / bestD) * seek;
+          ay += ((target.y - t.y) / bestD) * seek;
+        }
+
+        // A dying top wanders drunkenly.
+        const wob = 1 - sn;
+        t.wobblePhase += dt * lerp(3, 13, wob);
+        ax += Math.cos(t.wobblePhase) * wob * 0.5;
+        ay += Math.sin(t.wobblePhase * 1.31) * wob * 0.5;
+
+        t.vx += ax * dt;
+        t.vy += ay * dt;
+
+        const damp = Math.exp(-DRAG * dt);
+        t.vx *= damp;
+        t.vy *= damp;
+
+        t.x += t.vx * dt;
+        t.y += t.vy * dt;
+
+        // Spin decay: a base burn plus what movement costs.
+        const speed = Math.hypot(t.vx, t.vy);
+        const burn = (150 + speed * 52 + t.rpm * 0.009) * t.spec.decay;
+        t.rpm = Math.max(0, t.rpm - burn * dt);
+
+        // Visual rotation, in radians/sec, damped so it stays readable.
+        t.theta += (t.rpm / 60) * TAU * dt * 0.16;
+
+        t.hitFlash = Math.max(0, t.hitFlash - dt * 3.4);
+
+        // Trail.
+        t.trail.push({ x: t.x, y: t.y, life: 1 });
+        if (t.trail.length > 26) t.trail.shift();
+        for (const p of t.trail) p.life -= dt * 2.1;
+        while (t.trail.length && t.trail[0].life <= 0) t.trail.shift();
+
+        // Ring-out.
+        if (Math.hypot(t.x, t.y) > RING_OUT_R) {
+          t.alive = false;
+          t.out = true;
+          t.deathMs = battleMs;
+          killWhirr(t);
+          sfxRingOut();
+          burstParticles(t, 1.0, true);
+          shake(14);
+          if (t.isPlayer) haptic("error"); else haptic("success");
+          ctx.platform.milestone("ring_out", { player: t.isPlayer });
+        } else if (t.rpm <= 0.5) {
+          t.alive = false;
+          t.deathMs = battleMs;
+          killWhirr(t);
+          sfxDeath();
+          burstParticles(t, 0.5, false);
+          if (t.isPlayer) haptic("warning");
+          ctx.platform.milestone("spin_out", { player: t.isPlayer });
+        }
+      }
+
+      // Collisions.
+      for (let i = 0; i < live.length; i++) {
+        for (let j = i + 1; j < live.length; j++) {
+          const a = live[i];
+          const b = live[j];
+          if (!a.alive || !b.alive || a.h > 0 || b.h > 0) continue;
+          collide(a, b);
+        }
+      }
+
+      // Whirr voices.
+      for (const t of tops) {
+        if (t.alive && t.h <= 0) {
+          if (!t.whirr) t.whirr = makeWhirr(t.spec.blades);
+          if (t.whirr) t.whirr.set(t.rpm, 0.25 + spinNorm(t) * 0.75);
+        }
+      }
+    }
+
+    function killWhirr(t) {
+      if (t.whirr) { t.whirr.stop(); t.whirr = null; }
+    }
+
+    function collide(a, b) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d = Math.hypot(dx, dy);
+      const minD = a.spec.radius + b.spec.radius;
+      if (d >= minD || d < 1e-6) return;
+
+      const nx = dx / d;
+      const ny = dy / d;
+
+      // Separate.
+      const overlap = minD - d;
+      const ma = a.spec.mass;
+      const mb = b.spec.mass;
+      const tot = ma + mb;
+      a.x -= nx * overlap * (mb / tot);
+      a.y -= ny * overlap * (mb / tot);
+      b.x += nx * overlap * (ma / tot);
+      b.y += ny * overlap * (ma / tot);
+
+      // Approach speed along the normal.
+      const rvx = b.vx - a.vx;
+      const rvy = b.vy - a.vy;
+      const vn = rvx * nx + rvy * ny;
+      if (vn > 0) return;
+
+      // Gyroscopic stability: a top spinning hard stands its ground, a dying
+      // one gets thrown. This is most of what makes a strong launch worth it.
+      const stabA = 0.5 + spinNorm(a) * 1.15;
+      const stabB = 0.5 + spinNorm(b) * 1.15;
+
+      // Impulse, with each top's knockback character folded in.
+      const rest = 1.34;
+      const jimp = -(1 + rest) * vn / (1 / ma + 1 / mb);
+      a.vx -= (jimp / ma) * nx * b.spec.knock / stabA;
+      a.vy -= (jimp / ma) * ny * b.spec.knock / stabA;
+      b.vx += (jimp / mb) * nx * a.spec.knock / stabB;
+      b.vy += (jimp / mb) * ny * a.spec.knock / stabB;
+
+      // Spin drain. The faster-spinning top wins the exchange -- as a ratio,
+      // so a 2:1 spin lead is a decisive edge rather than a rounding error.
+      const impact = Math.min(4.2, -vn);
+      const force = clamp(impact / 2.4, 0.05, 1);
+      const sa = Math.max(a.rpm, 1);
+      const sb = Math.max(b.rpm, 1);
+      const advA = Math.pow(clamp(sa / sb, 0.2, 5), 0.75);
+
+      const baseDrain = impact * 430;
+      const drainB = baseDrain * a.spec.deal * b.spec.take * advA;
+      const drainA = baseDrain * b.spec.deal * a.spec.take / advA;
+      a.rpm = Math.max(0, a.rpm - drainA);
+      b.rpm = Math.max(0, b.rpm - drainB);
+
+      a.hitFlash = 1;
+      b.hitFlash = 1;
+
+      // Effects, throttled so a grinding contact does not spam.
+      if (battleMs - lastHitMs > 55) {
+        lastHitMs = battleMs;
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2;
+        sparks(mx, my, force, a.spec, b.spec);
+        shockwave(mx, my, force);
+        sfxClash(force);
+        shake(force * 17);
+        if (force > 0.34) {
+          lightning(a, b, force);
+          sfxSpark(force);
+          flash(force * 0.4);
+          duckMusic(force);
+        }
+        if ((a.isPlayer || b.isPlayer) && force > 0.2) {
+          haptic(force > 0.55 ? "heavy" : "light");
+        }
+        if (force > 0.6) ctx.platform.milestone("heavy_clash", { force: Number(force.toFixed(2)) });
+      }
+    }
+
+    /* ============================================================ *
+     * 7. Effects
+     * ============================================================ */
+
+    const particles = [];
+    const arcs = [];
+    const waves = [];
+    let shakeAmt = 0;
+    let flashAmt = 0;
+
+    function shake(v) { shakeAmt = Math.min(26, shakeAmt + v); }
+    function flash(v) { flashAmt = Math.min(0.75, flashAmt + v); }
+
+    function haptic(kind) {
+      if (ctx.capabilities && ctx.capabilities.haptics) {
+        try { ctx.platform.haptic(kind); } catch (err) { /* unsupported */ }
+      }
+    }
+
+    function sparks(wx, wy, force, sa, sb) {
+      const n = Math.floor(lerp(14, 54, force));
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * TAU;
+        const sp = rand(90, 460) * lerp(0.5, 1.5, force);
+        particles.push({
+          x: cx + wx * S,
+          y: cy + wy * S * SQUASH,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp * 0.62 - rand(30, 190),
+          life: 1,
+          decay: rand(1.5, 3.4),
+          hue: Math.random() < 0.5 ? sa.hue2 : sb.hue2,
+          hot: rand(0.55, 1)
+        });
+      }
+    }
+
+    function impactDust(t) {
+      for (let i = 0; i < 16; i++) {
+        const a = Math.random() * TAU;
+        const sp = rand(40, 190);
+        particles.push({
+          x: cx + t.x * S,
+          y: cy + t.y * S * SQUASH,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp * 0.5 - rand(10, 70),
+          life: 1,
+          decay: rand(2.2, 4),
+          hue: t.spec.hue2,
+          hot: 0.5
+        });
+      }
+      shake(6);
+    }
+
+    function burstParticles(t, force, outward) {
+      const n = outward ? 46 : 26;
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * TAU;
+        const sp = rand(120, 520) * (outward ? 1.4 : 0.7);
+        particles.push({
+          x: cx + t.x * S,
+          y: cy + t.y * S * SQUASH,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp * 0.6 - rand(60, 260),
+          life: 1,
+          decay: rand(1.1, 2.4),
+          hue: t.spec.hue2,
+          hot: 1
+        });
+      }
+      flash(force * 0.35);
+    }
+
+    function shockwave(wx, wy, force) {
+      waves.push({
+        x: cx + wx * S,
+        y: cy + wy * S * SQUASH,
+        r: S * 0.04,
+        max: S * lerp(0.18, 0.52, force),
+        life: 1,
+        force: force
+      });
+    }
+
+    /** Jagged arc between two tops, built by midpoint displacement. */
+    function lightning(a, b, force) {
+      const x0 = cx + a.x * S;
+      const y0 = cy + a.y * S * SQUASH;
+      const x1 = cx + b.x * S;
+      const y1 = cy + b.y * S * SQUASH;
+      const segs = 9;
+      const pts = [];
+      const spread = S * lerp(0.03, 0.1, force);
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const bow = Math.sin(t * Math.PI);
+        pts.push({
+          x: lerp(x0, x1, t) + rand(-spread, spread) * bow,
+          y: lerp(y0, y1, t) + rand(-spread, spread) * bow
+        });
+      }
+      const branches = [];
+      const bn = force > 0.6 ? 3 : 1;
+      for (let i = 0; i < bn; i++) {
+        const at = Math.floor(rand(2, segs - 1));
+        const from = pts[at];
+        const bp = [{ x: from.x, y: from.y }];
+        const dir = Math.random() * TAU;
+        let px = from.x;
+        let py = from.y;
+        const steps = Math.floor(rand(2, 5));
+        for (let k = 0; k < steps; k++) {
+          px += Math.cos(dir + rand(-0.8, 0.8)) * spread * rand(0.6, 1.7);
+          py += Math.sin(dir + rand(-0.8, 0.8)) * spread * rand(0.4, 1.2);
+          bp.push({ x: px, y: py });
+        }
+        branches.push(bp);
+      }
+      arcs.push({
+        pts: pts,
+        branches: branches,
+        life: 1,
+        decay: rand(5.5, 8.5),
+        hue: Math.random() < 0.5 ? a.spec.hue2 : b.spec.hue2,
+        force: force
+      });
+    }
+
+    function stepFx(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.vy += 780 * dt;
+        p.vx *= Math.exp(-2.1 * dt);
+        p.vy *= Math.exp(-0.7 * dt);
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= p.decay * dt;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+      for (let i = arcs.length - 1; i >= 0; i--) {
+        arcs[i].life -= arcs[i].decay * dt;
+        if (arcs[i].life <= 0) arcs.splice(i, 1);
+      }
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const w = waves[i];
+        w.life -= dt * 2.6;
+        w.r = lerp(w.r, w.max, 1 - Math.exp(-9 * dt));
+        if (w.life <= 0) waves.splice(i, 1);
+      }
+      shakeAmt *= Math.exp(-7 * dt);
+      flashAmt *= Math.exp(-6.5 * dt);
+    }
+
+    /* ============================================================ *
+     * 8. Rendering
+     * ============================================================ */
+
+    function drawTop(t) {
+      const sx = cx + t.x * S;
+      const sy = cy + t.y * S * SQUASH - t.h * S;
+      const R = t.spec.radius * S;
+      const sn = spinNorm(t);
+
+      // Contact shadow.
+      g.save();
+      g.globalAlpha = clamp(0.5 - t.h * 0.5, 0.08, 0.5);
+      g.fillStyle = "rgba(0,0,0,0.62)";
+      g.beginPath();
+      g.ellipse(cx + t.x * S, cy + t.y * S * SQUASH, R * (1 + t.h * 0.5), R * SQUASH * (1 + t.h * 0.5), 0, 0, TAU);
+      g.fill();
+      g.restore();
+
+      // Light pool cast on the floor.
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const pool = g.createRadialGradient(sx, sy, 0, sx, sy, R * 2.6);
+      pool.addColorStop(0, "hsla(" + t.spec.hue2 + ", 95%, 60%, " + (0.20 * (0.3 + sn * 0.7)).toFixed(3) + ")");
+      pool.addColorStop(1, "hsla(" + t.spec.hue2 + ", 95%, 60%, 0)");
+      g.fillStyle = pool;
+      g.beginPath();
+      g.ellipse(sx, sy, R * 2.6, R * 2.6 * SQUASH, 0, 0, TAU);
+      g.fill();
+      g.restore();
+
+      // Wobble. As spin dies the top tilts off its tip and precesses.
+      const wob = Math.pow(1 - sn, 2.2);
+      const lean = wob * R * 0.42;
+      const px = Math.cos(t.wobblePhase) * lean;
+      const py = Math.sin(t.wobblePhase) * lean * SQUASH;
+      const persp = clamp(SQUASH + wob * 0.3 * Math.sin(t.wobblePhase * 0.9), 0.32, 0.95);
+
+      const spr = getSprites(t.spec, R);
+      const blurMix = clamp((t.rpm - 1200) / 6200, 0, 1);
+
+      g.save();
+      g.translate(sx + px, sy + py);
+
+      if (spr.live) {
+        // No OffscreenCanvas: draw the blade directly, still rotating.
+        g.save();
+        g.rotate(t.theta);
+        paintTop(g, t.spec, R, persp);
+        g.restore();
+      } else {
+        const half = spr.size / 2;
+        g.save();
+        g.scale(1, persp / 1);
+        g.rotate(t.theta);
+        if (blurMix < 0.98) {
+          g.globalAlpha = 1 - blurMix;
+          g.drawImage(spr.sharp, -half, -half, spr.size, spr.size);
+        }
+        if (blurMix > 0.02) {
+          g.globalAlpha = blurMix;
+          g.drawImage(spr.blur, -half, -half, spr.size, spr.size);
+        }
+        g.globalAlpha = 1;
+        g.restore();
+      }
+
+      // Fixed specular sweep -- light does not rotate with the top.
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      g.beginPath();
+      g.ellipse(0, 0, R, R * persp, 0, 0, TAU);
+      g.clip();
+      const spec = g.createLinearGradient(-R, -R * persp, R * 0.5, R * persp);
+      spec.addColorStop(0, "rgba(255,255,255,0.30)");
+      spec.addColorStop(0.35, "rgba(255,255,255,0.05)");
+      spec.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = spec;
+      g.fillRect(-R, -R * persp, R * 2, R * persp * 2);
+      g.restore();
+
+      // Hit flash.
+      if (t.hitFlash > 0.01) {
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.globalAlpha = t.hitFlash * 0.65;
+        const fl = g.createRadialGradient(0, 0, 0, 0, 0, R * 1.7);
+        fl.addColorStop(0, "rgba(255,255,255,0.9)");
+        fl.addColorStop(0.4, "hsla(" + t.spec.hue2 + ", 100%, 70%, 0.5)");
+        fl.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = fl;
+        g.beginPath();
+        g.ellipse(0, 0, R * 1.7, R * 1.7 * persp, 0, 0, TAU);
+        g.fill();
+        g.restore();
+      }
+
+      g.restore();
+
+      // Player marker.
+      if (t.isPlayer) {
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.strokeStyle = "rgba(255,255,255,0.55)";
+        g.lineWidth = 1.6;
+        g.beginPath();
+        g.ellipse(sx, sy, R * 1.42, R * 1.42 * SQUASH, 0, 0, TAU);
+        g.stroke();
+        g.fillStyle = "rgba(255,255,255,0.85)";
+        g.font = "600 " + Math.round(S * 0.055) + "px ui-sans-serif, system-ui, -apple-system, sans-serif";
+        g.textAlign = "center";
+        g.fillText("YOU", sx, sy - R * 1.75);
+        g.restore();
+      }
+    }
+
+    /** The currently-selected top, spinning in the empty arena on the title. */
+    function drawHero() {
+      const spec = chosen;
+      const R = spec.radius * S * 1.3;
+      const sx = cx;
+      const sy = cy - S * 0.05;
+
+      g.save();
+      g.fillStyle = "rgba(0,0,0,0.55)";
+      g.beginPath();
+      g.ellipse(sx, cy + S * 0.02, R * 1.05, R * 1.05 * SQUASH, 0, 0, TAU);
+      g.fill();
+      g.restore();
+
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const pool = g.createRadialGradient(sx, sy, 0, sx, sy, R * 2.8);
+      pool.addColorStop(0, "hsla(" + spec.hue2 + ", 95%, 60%, 0.22)");
+      pool.addColorStop(1, "hsla(" + spec.hue2 + ", 95%, 60%, 0)");
+      g.fillStyle = pool;
+      g.beginPath();
+      g.ellipse(sx, sy, R * 2.8, R * 2.8 * SQUASH, 0, 0, TAU);
+      g.fill();
+      g.restore();
+
+      const spr = getSprites(spec, R);
+      g.save();
+      g.translate(sx, sy);
+      g.scale(1, SQUASH);
+      g.rotate(introSpin * 1.9);
+      if (spr.live) {
+        paintTop(g, spec, R, 1);
+      } else {
+        const half = spr.size / 2;
+        g.drawImage(spr.sharp, -half, -half, spr.size, spr.size);
+        g.globalAlpha = 0.4;
+        g.drawImage(spr.blur, -half, -half, spr.size, spr.size);
+        g.globalAlpha = 1;
+      }
+      g.restore();
+    }
+
+    function drawTrails() {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      for (const t of tops) {
+        if (!t.alive || t.h > 0 || t.trail.length < 2) continue;
+        for (let i = 1; i < t.trail.length; i++) {
+          const p0 = t.trail[i - 1];
+          const p1 = t.trail[i];
+          const a = clamp(p1.life, 0, 1) * 0.22 * spinNorm(t);
+          if (a <= 0.002) continue;
+          g.strokeStyle = "hsla(" + t.spec.hue2 + ", 95%, 62%, " + a.toFixed(3) + ")";
+          g.lineWidth = (i / t.trail.length) * t.spec.radius * S * 0.30;
+          g.lineCap = "round";
+          g.beginPath();
+          g.moveTo(cx + p0.x * S, cy + p0.y * S * SQUASH);
+          g.lineTo(cx + p1.x * S, cy + p1.y * S * SQUASH);
+          g.stroke();
+        }
+      }
+      g.restore();
+    }
+
+    function drawFx() {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+
+      for (const w of waves) {
+        const a = clamp(w.life, 0, 1);
+        g.strokeStyle = "rgba(200,235,255," + (a * 0.5).toFixed(3) + ")";
+        g.lineWidth = Math.max(0.5, a * 4 * w.force + 0.5);
+        g.beginPath();
+        g.ellipse(w.x, w.y, w.r, w.r * SQUASH, 0, 0, TAU);
+        g.stroke();
+      }
+
+      for (const arc of arcs) {
+        const a = clamp(arc.life, 0, 1);
+        const flick = 0.55 + Math.random() * 0.45;
+        const paths = [arc.pts].concat(arc.branches);
+        // Wide coloured glow, then a hot white core.
+        for (let pass = 0; pass < 2; pass++) {
+          g.strokeStyle = pass === 0
+            ? "hsla(" + arc.hue + ", 100%, 65%, " + (a * 0.45 * flick).toFixed(3) + ")"
+            : "rgba(255,255,255," + (a * 0.95 * flick).toFixed(3) + ")";
+          g.lineWidth = pass === 0 ? S * 0.032 * arc.force + 2 : S * 0.008 + 1;
+          g.lineJoin = "round";
+          g.lineCap = "round";
+          for (const path of paths) {
+            g.beginPath();
+            g.moveTo(path[0].x, path[0].y);
+            for (let i = 1; i < path.length; i++) g.lineTo(path[i].x, path[i].y);
+            g.stroke();
+          }
+        }
+      }
+
+      for (const p of particles) {
+        const a = clamp(p.life, 0, 1);
+        const len = clamp(Math.hypot(p.vx, p.vy) * 0.012, 1.5, 16);
+        const ang = Math.atan2(p.vy, p.vx);
+        const light = lerp(62, 100, p.hot * a);
+        g.strokeStyle = "hsla(" + p.hue + ", 100%, " + light.toFixed(0) + "%, " + a.toFixed(3) + ")";
+        g.lineWidth = lerp(0.8, 2.6, p.hot) * a + 0.4;
+        g.lineCap = "round";
+        g.beginPath();
+        g.moveTo(p.x, p.y);
+        g.lineTo(p.x - Math.cos(ang) * len, p.y - Math.sin(ang) * len);
+        g.stroke();
+      }
+
+      g.restore();
+    }
+
+    function drawArena() {
+      if (arenaSurf) {
+        g.drawImage(arenaSurf, 0, 0, W, H);
+      } else {
+        g.save();
+        g.translate(cx, cy);
+        paintArena(g, S, 1);
+        g.restore();
+      }
+    }
+
+    /* ============================================================ *
+     * 9. UI
+     * ============================================================ */
+
+    const UI = {
+      font(size, weight) {
+        return (weight || 600) + " " + Math.round(size) + "px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
+      },
+      mono(size, weight) {
+        return (weight || 700) + " " + Math.round(size) + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+      }
+    };
+
+    /**
+     * Set g.font to the largest size at or below `size` that fits `text` into
+     * `maxW`. Phone widths vary enough that fixed sizes overflow somewhere.
+     */
+    function fitFont(text, maxW, size, weight, mono) {
+      let s = size;
+      for (let i = 0; i < 10; i++) {
+        g.font = mono ? UI.mono(s, weight) : UI.font(s, weight);
+        if (g.measureText(text).width <= maxW || s < 7) break;
+        s *= 0.92;
+      }
+      return s;
+    }
+
+    /** Dim the arena behind overlay UI so text stays legible over it. */
+    function drawScrim(alpha) {
+      g.save();
+      g.fillStyle = "rgba(4,8,18," + alpha + ")";
+      g.fillRect(0, 0, W, H);
+      g.restore();
+    }
+
+    const buttons = [];
+
+    function addButton(id, label, x, y, w, h, onTap, style) {
+      buttons.push({ id, label, x, y, w, h, onTap, style: style || "primary", enabled: true });
+    }
+
+    function clearButtons() { buttons.length = 0; }
+
+    function roundRect(gg, x, y, w, h, r) {
+      const rr = Math.min(r, w / 2, h / 2);
+      gg.beginPath();
+      gg.moveTo(x + rr, y);
+      gg.lineTo(x + w - rr, y);
+      gg.quadraticCurveTo(x + w, y, x + w, y + rr);
+      gg.lineTo(x + w, y + h - rr);
+      gg.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+      gg.lineTo(x + rr, y + h);
+      gg.quadraticCurveTo(x, y + h, x, y + h - rr);
+      gg.lineTo(x, y + rr);
+      gg.quadraticCurveTo(x, y, x + rr, y);
+      gg.closePath();
+    }
+
+    function drawButton(b) {
+      const isPrimary = b.style === "primary";
+      const isGhost = b.style === "ghost";
+      g.save();
+      if (isPrimary) {
+        const grad = g.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
+        grad.addColorStop(0, "rgba(120,205,255,0.96)");
+        grad.addColorStop(1, "rgba(60,130,255,0.96)");
+        g.fillStyle = grad;
+        roundRect(g, b.x, b.y, b.w, b.h, b.h * 0.32);
+        g.fill();
+        g.strokeStyle = "rgba(220,245,255,0.75)";
+        g.lineWidth = 1.4;
+        g.stroke();
+        g.fillStyle = "#04101f";
+      } else if (isGhost) {
+        g.fillStyle = "rgba(255,255,255,0.05)";
+        roundRect(g, b.x, b.y, b.w, b.h, b.h * 0.32);
+        g.fill();
+        g.strokeStyle = "rgba(180,215,255,0.32)";
+        g.lineWidth = 1.2;
+        g.stroke();
+        g.fillStyle = "rgba(215,235,255,0.92)";
+      } else {
+        g.fillStyle = "rgba(12,20,40,0.85)";
+        roundRect(g, b.x, b.y, b.w, b.h, b.h * 0.32);
+        g.fill();
+        g.strokeStyle = "rgba(150,195,255,0.4)";
+        g.lineWidth = 1.2;
+        g.stroke();
+        g.fillStyle = "rgba(225,240,255,0.95)";
+      }
+      g.font = UI.font(Math.min(b.h * 0.4, 19), 700);
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 0.5);
+      g.restore();
+    }
+
+    function drawButtons() {
+      // "card" buttons are painted by drawSelect; drawing the generic panel
+      // over them would wash out their artwork.
+      for (const b of buttons) if (b.style !== "card") drawButton(b);
+    }
+
+    /* ============================================================ *
+     * 10. Game state
+     * ============================================================ */
+
+    let state = "intro";
+    let chosen = ARCHETYPES[0];
+    let introSpin = 0;
+    let result = null;
+    let resultMs = 0;
+    let chargeMs = 0;
+    let showHelp = false;
+    let bestRPM = 0;
+    let streak = 0;
+    let bestStreak = 0;
+    let music = null;
+    let musicOn = false;
+    let launchInfo = null;
+
+    async function loadSaved() {
+      if (!ctx.capabilities || !ctx.capabilities.storage) return;
+      try {
+        const s = await ctx.storage.get("ripcord");
+        if (s && typeof s === "object") {
+          bestRPM = Number(s.bestRPM) || 0;
+          bestStreak = Number(s.bestStreak) || 0;
+          const pick = ARCHETYPES.find(a => a.id === s.top);
+          if (pick) chosen = pick;
+        }
+      } catch (err) { /* first run */ }
+    }
+
+    function save() {
+      if (!ctx.capabilities || !ctx.capabilities.storage) return;
+      ctx.storage.set("ripcord", {
+        bestRPM: Math.round(bestRPM),
+        bestStreak: bestStreak,
+        top: chosen.id
+      }).catch(() => {});
+    }
+
+    function startMusic() {
+      if (musicOn || !ctx.capabilities || !ctx.capabilities.backgroundMusic) return;
+      musicOn = true;
+      try {
+        ctx.music.unlock().catch(() => {});
+        music = ctx.music.play({
+          preset: "techno",
+          volume: 0.32,
+          tempo: 138,
+          intensity: 0.5,
+          scale: "minorPentatonic"
+        });
+      } catch (err) {
+        musicOn = false;
+      }
+    }
+
+    function setMusicIntensity(v) {
+      if (!musicOn) return;
+      try { ctx.music.setIntensity(clamp(v, 0, 1)); } catch (err) { /* not ready */ }
+    }
+
+    function duckMusic(force) {
+      if (!musicOn) return;
+      try { ctx.music.duck(clamp(force * 0.5, 0.1, 0.6), 180); } catch (err) { /* not ready */ }
+    }
+
+    function sting(name) {
+      if (!musicOn) return;
+      try { ctx.music.sting(name); } catch (err) { /* not ready */ }
+    }
+
+    function goSelect() {
+      state = "select";
+      layout();
+    }
+
+    async function goCharge() {
+      state = "charge";
+      chargeMs = 0;
+      spin.now = 0;
+      spin.smooth = 0;
+      spin.lastTilt = null;
+      layout();
+      const ok = await motionStart();
+      if (!ok) {
+        spin.denied = true;
+      }
+      openRipWindow();
+      layout();
+    }
+
+    function goBattle() {
+      const rpm = launchRPM();
+      const power = launchPower();
+      if (rpm > bestRPM) {
+        bestRPM = rpm;
+        save();
+        ctx.memory.record("launch_rpm")
+          .submit(Math.round(rpm), { label: Math.round(rpm).toLocaleString() + " RPM" })
+          .catch(() => {});
+      }
+
+      spin.window = false;
+      launchInfo = {
+        degPerSec: spin.peak,
+        phoneRPM: phoneRPM(),
+        rpm: rpm,
+        source: spin.source,
+        airMs: spin.bestAirMs
+      };
+
+      // Draw opponents from all three archetypes, the player's included.
+      // Fielding only the *other* two made the choice unfair: picking Stamina
+      // was the one way to never face a Stamina top, which is exactly the
+      // hardest matchup, so it read as strictly the strongest pick.
+      const shuffled = ARCHETYPES.slice();
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = shuffled[i];
+        shuffled[i] = shuffled[j];
+        shuffled[j] = tmp;
+      }
+      const oppSpecs = [shuffled[0], shuffled[1]];
+
+      tops = [];
+      tops.push(makeTop(chosen, rpm, -Math.PI / 2, true, "YOU"));
+      for (let i = 0; i < 2; i++) {
+        const spec = oppSpecs[i % oppSpecs.length];
+        // Opponents scale off the rip, so how hard you spun is the dominant
+        // term in whether you can win -- the whole point of the mechanic. The
+        // elite roll seeds the occasional monster, so a huge rip is a strong
+        // favourite rather than a formality.
+        const roll = Math.random();
+        const variance = roll < 0.26 ? rand(1.15, 1.45)
+          : roll > 0.78 ? rand(0.60, 0.84)
+          : 1;
+        const oppRPM = clamp(
+          lerp(3600, 9200, Math.random()) * (0.72 + power * 0.5) * variance,
+          MIN_RPM, MAX_RPM
+        );
+        const ang = -Math.PI / 2 + (i === 0 ? TAU / 3 : -TAU / 3);
+        tops.push(makeTop(spec, oppRPM, ang, false, spec.name));
+      }
+      for (const t of tops) t.h = 0.55 + Math.random() * 0.12;
+
+      battleMs = 0;
+      result = null;
+      state = "battle";
+      sfxRip(power);
+      startMusic();
+      setMusicIntensity(0.55 + power * 0.4);
+      haptic("heavy");
+      shake(10);
+      ctx.platform.setScore(Math.round(rpm));
+      ctx.platform.interact({ type: "launch", rpm: Math.round(rpm), source: spin.source });
+      layout();
+    }
+
+    function endBattle(win, reason) {
+      state = "result";
+      resultMs = 0;
+      result = { win: win, reason: reason };
+      for (const t of tops) killWhirr(t);
+      if (win) {
+        streak += 1;
+        if (streak > bestStreak) {
+          bestStreak = streak;
+          ctx.memory.record("win_streak")
+            .submit(bestStreak, { label: bestStreak + " in a row" })
+            .catch(() => {});
+        }
+        sting("win");
+        haptic("success");
+        flash(0.35);
+        ctx.platform.complete({ win: true, streak: streak, rpm: Math.round(launchInfo ? launchInfo.rpm : 0) });
+      } else {
+        streak = 0;
+        sting("lose");
+        haptic("error");
+        ctx.platform.fail({ win: false, reason: reason });
+      }
+      save();
+      setMusicIntensity(0.3);
+      layout();
+    }
+
+    function checkEnd() {
+      const live = tops.filter(t => t.alive);
+      const player = tops.find(t => t.isPlayer);
+      if (!player.alive) {
+        if (live.length === 0) endBattle(false, "draw");
+        else endBattle(false, player.out ? "ringout" : "spinout");
+        return true;
+      }
+      if (live.length === 1 && live[0].isPlayer) {
+        endBattle(true, "survivor");
+        return true;
+      }
+      return false;
+    }
+
+    /* ============================================================ *
+     * 11. Layout -- buttons rebuilt per state
+     * ============================================================ */
+
+    function layout() {
+      clearButtons();
+      const bw = Math.min(W * 0.68, 320);
+      const bh = clamp(H * 0.068, 46, 60);
+      const bottom = H - safeBottom() - bh - clamp(H * 0.035, 16, 34);
+
+      if (showHelp) {
+        addButton("close", "GOT IT", (W - bw) / 2, bottom, bw, bh, () => {
+          showHelp = false;
+          layout();
+        });
+        return;
+      }
+
+      if (state !== "battle") {
+        addButton("help", "?", W - 46 - 14, safeTop() + 14, 46, 46, () => {
+          showHelp = true;
+          layout();
+        }, "ghost");
+      }
+
+      if (state === "intro") {
+        addButton("play", "TAP TO PLAY", (W - bw) / 2, bottom, bw, bh, () => {
+          onFirstGesture();
+          goSelect();
+        });
+      } else if (state === "select") {
+        const cardH = clamp(H * 0.11, 74, 104);
+        const gap = clamp(H * 0.018, 8, 16);
+        const top = cy - (cardH * 3 + gap * 2) / 2 + clamp(H * 0.03, 10, 30);
+        for (let i = 0; i < ARCHETYPES.length; i++) {
+          const a = ARCHETYPES[i];
+          const y = top + i * (cardH + gap);
+          addButton("pick_" + a.id, "", W * 0.08, y, W * 0.84, cardH, () => {
+            chosen = a;
+            save();
+            haptic("light");
+            goCharge();
+          }, "card");
+        }
+      } else if (state === "charge") {
+        if (spin.denied || (chargeMs > 7000 && !spin.live)) {
+          // No usable motion: hand them a swipe ripcord instead.
+          addButton("swipehint", "SWIPE THE RIPCORD BELOW", (W - bw) / 2, bottom - bh - 10, bw, bh, () => {}, "ghost");
+        }
+        if (spin.armed) {
+          addButton("launch", "LAUNCH", (W - bw) / 2, bottom, bw, bh, () => goBattle());
+        }
+        addButton("back", "BACK", W * 0.08, safeTop() + 14, 84, 46, () => {
+          spin.window = false;
+          goSelect();
+        }, "ghost");
+      } else if (state === "result") {
+        addButton("again", "RIP AGAIN", (W - bw) / 2, bottom, bw, bh, () => goCharge());
+        addButton("change", "CHANGE TOP", (W - bw) / 2, bottom - bh - 10, bw, bh, () => goSelect(), "ghost");
+      }
+    }
+
+    /* ============================================================ *
+     * 12. Input
+     * ============================================================ */
+
+    let gestureDone = false;
+    function onFirstGesture() {
+      if (gestureDone) return;
+      gestureDone = true;
+      ctx.platform.start();
+      audioInit();
+      audioResume();
+      startMusic();
+    }
+
+    // Swipe ripcord fallback: pointer speed stands in for angular speed.
+    const swipe = { active: false, x: 0, y: 0, t: 0 };
+
+    function pointerPos(e) {
+      // offsetX/offsetY are already canvas-relative. Reading the layout rect
+      // instead is rejected by the upload validator, and going through offsets
+      // skips a forced reflow per pointer event anyway.
+      return { x: e.offsetX, y: e.offsetY };
+    }
+
+    ctx.listen(canvas, "pointerdown", e => {
+      e.preventDefault();
+      onFirstGesture();
+      audioResume();
+      const p = pointerPos(e);
+
+      for (let i = buttons.length - 1; i >= 0; i--) {
+        const b = buttons[i];
+        if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) {
+          haptic("light");
+          b.onTap();
+          return;
+        }
+      }
+
+      if (state === "intro") { goSelect(); return; }
+      if (state === "result" && resultMs > 900) { goCharge(); return; }
+      if (state === "charge") {
+        swipe.active = true;
+        swipe.x = p.x;
+        swipe.y = p.y;
+        swipe.t = 0;
+      }
+    }, { passive: false });
+
+    ctx.listen(canvas, "pointermove", e => {
+      if (!swipe.active || state !== "charge") return;
+      e.preventDefault();
+      const p = pointerPos(e);
+      const dx = p.x - swipe.x;
+      const dy = p.y - swipe.y;
+      const dist = Math.hypot(dx, dy);
+      const dt = Math.max(0.008, swipe.t);
+      // Screen px/s mapped into the same deg/s scale the gyro reports.
+      const equiv = (dist / dt) * 0.42;
+      if (equiv > 60) feedSpin(equiv, "swipe");
+      swipe.x = p.x;
+      swipe.y = p.y;
+      swipe.t = 0;
+    }, { passive: false });
+
+    const endSwipe = () => { swipe.active = false; };
+    ctx.listen(canvas, "pointerup", endSwipe);
+    ctx.listen(canvas, "pointercancel", endSwipe);
+    ctx.listen(canvas, "contextmenu", e => e.preventDefault());
+
+    /* ============================================================ *
+     * 13. Screen painters
+     * ============================================================ */
+
+    function drawTitle() {
+      g.save();
+      g.textAlign = "center";
+
+      const titleY = clamp(H * 0.16, safeTop() + 60, H * 0.24);
+      g.font = UI.font(Math.min(W * 0.155, 66), 800);
+      const grad = g.createLinearGradient(0, titleY - 40, 0, titleY + 14);
+      grad.addColorStop(0, "#dff2ff");
+      grad.addColorStop(0.55, "#7fc6ff");
+      grad.addColorStop(1, "#2f7cff");
+      g.fillStyle = grad;
+      g.fillText("RIPCORD", cx, titleY);
+
+      g.font = UI.font(Math.min(W * 0.038, 15), 600);
+      g.fillStyle = "rgba(175,205,245,0.8)";
+      fitFont("SPIN THE PHONE. THE TOP SPINS WITH IT.", W * 0.86, Math.min(W * 0.038, 15), 600);
+      g.fillText("SPIN THE PHONE. THE TOP SPINS WITH IT.", cx, titleY + clamp(W * 0.06, 22, 30));
+
+      if (bestRPM > 0) {
+        g.font = UI.mono(Math.min(W * 0.033, 13), 700);
+        g.fillStyle = "rgba(140,180,230,0.65)";
+        g.fillText("BEST RIP  " + Math.round(bestRPM).toLocaleString() + " RPM", cx, titleY + clamp(W * 0.115, 44, 56));
+      }
+      g.restore();
+    }
+
+    function drawSelect() {
+      drawScrim(0.78);
+      g.save();
+      g.textAlign = "center";
+      g.font = UI.font(Math.min(W * 0.055, 24), 800);
+      g.fillStyle = "#e6f2ff";
+      g.fillText("CHOOSE YOUR TOP", cx, safeTop() + clamp(H * 0.085, 62, 96));
+      g.restore();
+
+      for (const b of buttons) {
+        if (b.style !== "card") continue;
+        const a = ARCHETYPES.find(x => "pick_" + x.id === b.id);
+        if (!a) continue;
+        const sel = a.id === chosen.id;
+
+        g.save();
+        const grad = g.createLinearGradient(b.x, b.y, b.x + b.w, b.y + b.h);
+        grad.addColorStop(0, "hsla(" + a.hue + ", 60%, 22%, " + (sel ? 0.95 : 0.6) + ")");
+        grad.addColorStop(1, "hsla(" + a.hue2 + ", 55%, 12%, " + (sel ? 0.9 : 0.5) + ")");
+        g.fillStyle = grad;
+        roundRect(g, b.x, b.y, b.w, b.h, 16);
+        g.fill();
+        g.strokeStyle = sel
+          ? "hsla(" + a.hue2 + ", 95%, 68%, 0.95)"
+          : "rgba(140,180,235,0.22)";
+        g.lineWidth = sel ? 2.2 : 1.2;
+        g.stroke();
+
+        // Live preview of the actual top, spinning.
+        const pr = b.h * 0.34;
+        const px = b.x + b.h * 0.52;
+        const py = b.y + b.h / 2;
+        g.save();
+        g.translate(px, py);
+        g.rotate(introSpin * (1 + ARCHETYPES.indexOf(a) * 0.35));
+        const spr = getSprites(a, pr);
+        if (spr.live) {
+          paintTop(g, a, pr, 0.82);
+        } else {
+          g.drawImage(spr.sharp, -spr.size / 2, -spr.size / 2, spr.size, spr.size);
+        }
+        g.restore();
+
+        g.textAlign = "left";
+        g.textBaseline = "alphabetic";
+        const tx = b.x + b.h * 1.02;
+        fitFont(a.name, b.x + b.w - tx - 14, Math.min(b.h * 0.235, 19), 800);
+        g.fillStyle = "#f4f9ff";
+        g.fillText(a.name, tx, b.y + b.h * 0.4);
+
+        g.font = UI.mono(Math.min(b.h * 0.15, 11), 700);
+        g.fillStyle = "hsla(" + a.hue2 + ", 95%, 72%, 0.95)";
+        g.fillText(a.role, tx, b.y + b.h * 0.6);
+
+        fitFont(a.blurb, b.x + b.w - tx - 14, Math.min(b.h * 0.155, 12.5), 500);
+        g.fillStyle = "rgba(190,215,246,0.86)";
+        g.fillText(a.blurb, tx, b.y + b.h * 0.82);
+        g.restore();
+      }
+    }
+
+    function drawGauge() {
+      const gr = Math.min(W * 0.34, H * 0.2);
+      const gx = cx;
+      const gy = cy - clamp(H * 0.02, 6, 26);
+      const a0 = Math.PI * 0.78;
+      const a1 = Math.PI * 2.22;
+
+      const shown = clamp(spin.smooth / RIP_CEIL, 0, 1);
+      const peakN = clamp(spin.peak / RIP_CEIL, 0, 1);
+
+      g.save();
+      g.lineCap = "round";
+
+      // Track.
+      g.strokeStyle = "rgba(120,160,220,0.16)";
+      g.lineWidth = gr * 0.15;
+      g.beginPath();
+      g.arc(gx, gy, gr, a0, a1);
+      g.stroke();
+
+      // Peak-so-far fill.
+      if (peakN > 0.002) {
+        const pg = g.createLinearGradient(gx - gr, gy, gx + gr, gy);
+        pg.addColorStop(0, "rgba(80,190,255,0.55)");
+        pg.addColorStop(1, "rgba(255,120,190,0.55)");
+        g.strokeStyle = pg;
+        g.lineWidth = gr * 0.15;
+        g.beginPath();
+        g.arc(gx, gy, gr, a0, a0 + (a1 - a0) * peakN);
+        g.stroke();
+      }
+
+      // Live needle band.
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      g.strokeStyle = "rgba(190,240,255,0.95)";
+      g.lineWidth = gr * 0.11;
+      g.beginPath();
+      g.arc(gx, gy, gr, a0, a0 + (a1 - a0) * shown);
+      g.stroke();
+      g.restore();
+
+      // Peak tick.
+      if (peakN > 0.01) {
+        const pa = a0 + (a1 - a0) * peakN;
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.strokeStyle = "rgba(255,255,255,0.95)";
+        g.lineWidth = 3;
+        g.beginPath();
+        g.moveTo(gx + Math.cos(pa) * gr * 0.86, gy + Math.sin(pa) * gr * 0.86);
+        g.lineTo(gx + Math.cos(pa) * gr * 1.14, gy + Math.sin(pa) * gr * 1.14);
+        g.stroke();
+        g.restore();
+      }
+
+      // Readout: the measurement inside the dial, what it converts to below.
+      // Keeping the conversion outside the ring stops the numbers colliding
+      // with the arc at high values.
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.font = UI.mono(gr * 0.44, 800);
+      g.fillStyle = "#eaf6ff";
+      g.fillText(Math.round(spin.peak).toLocaleString(), gx, gy - gr * 0.10);
+
+      g.font = UI.mono(gr * 0.135, 700);
+      g.fillStyle = "rgba(150,190,235,0.85)";
+      g.fillText("PEAK \u00b0/SEC", gx, gy + gr * 0.17);
+
+      g.font = UI.mono(gr * 0.155, 800);
+      g.fillStyle = "rgba(120,215,255,0.95)";
+      g.fillText(Math.round(phoneRPM()).toLocaleString() + " RPM", gx, gy + gr * 0.40);
+
+      // What that becomes, clear of the dial.
+      const outY = gy + gr * 1.34;
+      g.font = UI.mono(gr * 0.13, 700);
+      g.fillStyle = "rgba(150,190,235,0.8)";
+      g.fillText("LAUNCHES AT", gx, outY - gr * 0.22);
+
+      g.font = UI.mono(gr * 0.30, 800);
+      const lg = g.createLinearGradient(gx - gr, 0, gx + gr, 0);
+      lg.addColorStop(0, "#7fd8ff");
+      lg.addColorStop(1, "#ff8fd0");
+      g.fillStyle = lg;
+      g.fillText(Math.round(launchRPM()).toLocaleString() + " RPM", gx, outY + gr * 0.06);
+
+      g.restore();
+    }
+
+    function drawCharge() {
+      drawScrim(0.72);
+      g.save();
+      g.textAlign = "center";
+
+      const headY = safeTop() + clamp(H * 0.075, 56, 88);
+      g.font = UI.font(Math.min(W * 0.075, 32), 800);
+      const pulse = 0.75 + 0.25 * Math.sin(chargeMs / 170);
+      g.fillStyle = "rgba(235,248,255," + pulse.toFixed(2) + ")";
+      g.fillText(spin.airborne ? "AIRBORNE!" : "RIP IT!", cx, headY);
+
+      g.font = UI.font(Math.min(W * 0.036, 14), 600);
+      g.fillStyle = "rgba(170,205,245,0.85)";
+      let hint;
+      if (spin.denied) {
+        hint = "No motion sensor \u2014 swipe fast across the screen";
+      } else if (spin.airborne) {
+        hint = "flight " + (spin.airMs / 1000).toFixed(2) + "s \u2014 catch it";
+      } else if (!spin.live) {
+        hint = "waiting for the gyroscope\u2026";
+      } else if (spin.source === "swipe") {
+        hint = "swipe fast \u2014 or flick the phone";
+      } else {
+        hint = "flick your wrist hard, like a ripcord";
+      }
+      g.fillText(hint, cx, headY + clamp(W * 0.055, 20, 27));
+      g.restore();
+
+      drawGauge();
+
+      // Source badge -- honest about which sensor path is live.
+      g.save();
+      g.textAlign = "center";
+      const badgeY = H - safeBottom() - clamp(H * 0.19, 96, 150);
+      const label = spin.source === "gyro" ? "GYROSCOPE"
+        : spin.source === "tilt" ? "ORIENTATION (no gyro)"
+        : spin.source === "swipe" ? "SWIPE FALLBACK"
+        : "NO SIGNAL YET";
+      g.font = UI.mono(Math.min(W * 0.03, 11.5), 700);
+      const tw = g.measureText(label).width + 24;
+      g.fillStyle = "rgba(10,18,36,0.8)";
+      roundRect(g, cx - tw / 2, badgeY - 12, tw, 24, 12);
+      g.fill();
+      g.strokeStyle = spin.live ? "rgba(110,220,180,0.6)" : "rgba(150,180,220,0.3)";
+      g.lineWidth = 1;
+      g.stroke();
+      g.fillStyle = spin.live ? "rgba(150,245,205,0.95)" : "rgba(170,195,230,0.7)";
+      g.textBaseline = "middle";
+      g.fillText(label, cx, badgeY);
+      g.restore();
+
+      // Swipe ripcord affordance.
+      if (spin.denied || (chargeMs > 5200 && !spin.live)) {
+        const ry = H - safeBottom() - clamp(H * 0.105, 62, 92);
+        g.save();
+        g.strokeStyle = "rgba(140,200,255,0.35)";
+        g.lineWidth = 10;
+        g.lineCap = "round";
+        g.beginPath();
+        g.moveTo(W * 0.14, ry);
+        g.lineTo(W * 0.86, ry);
+        g.stroke();
+        const kx = W * 0.14 + (W * 0.72) * (0.5 + 0.5 * Math.sin(chargeMs / 420));
+        g.fillStyle = "rgba(190,235,255,0.95)";
+        g.beginPath();
+        g.arc(kx, ry, 15, 0, TAU);
+        g.fill();
+        g.restore();
+      }
+    }
+
+    function drawBattleHud() {
+      const pad = clamp(W * 0.045, 14, 26);
+      const top = safeTop() + clamp(H * 0.012, 6, 16);
+      const barW = (W - pad * 2 - 16 - 62) / 3;
+      const barH = clamp(H * 0.008, 5, 8);
+
+      for (let i = 0; i < tops.length; i++) {
+        const t = tops[i];
+        const x = pad + i * (barW + 8);
+        const y = top + 26;
+
+        g.save();
+        g.textAlign = "left";
+        g.textBaseline = "alphabetic";
+        g.font = UI.mono(Math.min(W * 0.027, 10.5), 800);
+        g.fillStyle = t.alive
+          ? "hsla(" + t.spec.hue2 + ", 95%, 75%, 0.95)"
+          : "rgba(120,140,170,0.5)";
+        const name = t.isPlayer ? "YOU" : t.spec.name;
+        g.fillText(name, x, y - 7);
+
+        g.fillStyle = "rgba(255,255,255,0.08)";
+        roundRect(g, x, y, barW, barH, barH / 2);
+        g.fill();
+
+        if (t.alive) {
+          const frac = clamp(t.rpm / Math.max(t.rpm0, 1), 0, 1);
+          const bg = g.createLinearGradient(x, 0, x + barW, 0);
+          bg.addColorStop(0, "hsla(" + t.spec.hue + ", 90%, 55%, 0.95)");
+          bg.addColorStop(1, "hsla(" + t.spec.hue2 + ", 95%, 70%, 0.95)");
+          g.fillStyle = bg;
+          roundRect(g, x, y, Math.max(barH, barW * frac), barH, barH / 2);
+          g.fill();
+
+          g.font = UI.mono(Math.min(W * 0.026, 10), 700);
+          g.fillStyle = "rgba(200,225,255,0.7)";
+          g.fillText(Math.round(t.rpm).toLocaleString(), x, y + barH + 12);
+        } else {
+          g.font = UI.mono(Math.min(W * 0.026, 10), 700);
+          g.fillStyle = "rgba(255,120,140,0.75)";
+          g.fillText(t.out ? "RING OUT" : "SPUN OUT", x, y + barH + 12);
+        }
+        g.restore();
+      }
+
+      if (streak > 0) {
+        g.save();
+        g.textAlign = "left";
+        g.font = UI.mono(Math.min(W * 0.03, 12), 800);
+        g.fillStyle = "rgba(255,215,120,0.9)";
+        g.fillText("STREAK " + streak, pad, top + 26 + barH + 34);
+        g.restore();
+      }
+    }
+
+    function drawResult() {
+      const t = clamp(resultMs / 420, 0, 1);
+      const e = easeOut(t);
+      g.save();
+      g.globalAlpha = e;
+      g.fillStyle = "rgba(4,8,20,0.72)";
+      g.fillRect(0, 0, W, H);
+
+      g.textAlign = "center";
+      const midY = cy - clamp(H * 0.06, 20, 60);
+
+      g.font = UI.font(Math.min(W * 0.135, 58), 800);
+      const win = result && result.win;
+      const grad = g.createLinearGradient(0, midY - 40, 0, midY + 12);
+      if (win) {
+        grad.addColorStop(0, "#fff6d8");
+        grad.addColorStop(1, "#ffb43c");
+      } else {
+        grad.addColorStop(0, "#ffd8e2");
+        grad.addColorStop(1, "#ff4d78");
+      }
+      g.fillStyle = grad;
+      g.fillText(win ? "WIN" : "OUT", cx, midY * (0.6 + 0.4 * e) + midY * 0.4 * (1 - e));
+
+      g.font = UI.font(Math.min(W * 0.04, 16), 600);
+      g.fillStyle = "rgba(215,232,255,0.9)";
+      const reason = !result ? ""
+        : result.win ? "last top spinning"
+        : result.reason === "ringout" ? "knocked out of the stadium"
+        : result.reason === "draw" ? "everyone went down"
+        : "ran out of spin";
+      g.fillText(reason, cx, midY + clamp(W * 0.075, 28, 40));
+
+      if (launchInfo) {
+        const y = midY + clamp(W * 0.16, 62, 84);
+        g.font = UI.mono(Math.min(W * 0.032, 12.5), 700);
+        g.fillStyle = "rgba(140,185,235,0.8)";
+        g.fillText(
+          "PHONE " + Math.round(launchInfo.degPerSec).toLocaleString() + "\u00b0/s"
+          + "   \u00b7   LAUNCH " + Math.round(launchInfo.rpm).toLocaleString() + " RPM",
+          cx, y
+        );
+        if (launchInfo.airMs > 120) {
+          g.fillStyle = "rgba(255,205,120,0.85)";
+          g.fillText("AIRBORNE " + (launchInfo.airMs / 1000).toFixed(2) + "s", cx, y + 18);
+        }
+      }
+      g.restore();
+    }
+
+    function drawHelp() {
+      g.save();
+      g.fillStyle = "#040916";
+      g.fillRect(0, 0, W, H);
+
+      const pad = clamp(W * 0.09, 24, 46);
+      let y = safeTop() + clamp(H * 0.1, 70, 120);
+
+      g.textAlign = "left";
+      g.font = UI.font(Math.min(W * 0.062, 26), 800);
+      g.fillStyle = "#e9f4ff";
+      g.fillText("HOW IT WORKS", pad, y);
+      y += clamp(H * 0.045, 30, 44);
+
+      const lines = [
+        ["1", "Pick a top. Attack, Defense or Stamina \u2014 they beat each other in a circle."],
+        ["2", "Spin the phone. The gyroscope reads your peak angular speed in degrees per second."],
+        ["3", "That number becomes RPM. Launch spin is directly proportional to how hard you ripped."],
+        ["4", "A hard wrist flick reads exactly the same as a throw \u2014 you never have to let go."],
+        ["5", "Throws are detected too. Freefall shows as AIRBORNE, and the gyro keeps reading in flight."],
+        ["6", "Win by being the last top spinning, or knock the others out of the stadium."],
+        ["7", "No sensor? Swipe fast across the ripcord instead."]
+      ];
+
+      for (const [n, text] of lines) {
+        g.font = UI.mono(Math.min(W * 0.033, 13), 800);
+        g.fillStyle = "rgba(120,205,255,0.95)";
+        g.fillText(n, pad, y);
+
+        g.font = UI.font(Math.min(W * 0.036, 14.5), 500);
+        g.fillStyle = "rgba(200,222,248,0.92)";
+        const words = text.split(" ");
+        let line = "";
+        const maxW = W - pad * 2 - 22;
+        for (const w of words) {
+          const test = line ? line + " " + w : w;
+          if (g.measureText(test).width > maxW && line) {
+            g.fillText(line, pad + 22, y);
+            y += clamp(H * 0.024, 17, 21);
+            line = w;
+          } else {
+            line = test;
+          }
+        }
+        if (line) {
+          g.fillText(line, pad + 22, y);
+          y += clamp(H * 0.024, 17, 21);
+        }
+        y += clamp(H * 0.014, 8, 14);
+      }
+      g.restore();
+    }
+
+    function drawVignette() {
+      g.save();
+      const v = g.createRadialGradient(cx, cy, Math.min(W, H) * 0.32, cx, cy, Math.max(W, H) * 0.78);
+      v.addColorStop(0, "rgba(0,0,0,0)");
+      v.addColorStop(1, "rgba(0,0,0,0.62)");
+      g.fillStyle = v;
+      g.fillRect(0, 0, W, H);
+      g.restore();
+    }
+
+    /* ============================================================ *
+     * 14. Frame
+     * ============================================================ */
+
+    function resize() {
+      const nw = ctx.width;
+      const nh = ctx.height;
+      if (nw === W && nh === H) return;
+      W = nw;
+      H = nh;
+      cx = W / 2;
+      cy = H * 0.52;
+      S = Math.min(W * 0.405, H * 0.315);
+      spriteCache.clear();
+      arenaSurf = null;
+      bakeArena();
+      layout();
+    }
+
+    function frame(dtMs) {
+      const dt = clamp(dtMs / 1000, 0, 1 / 24);
+      resize();
+
+      introSpin += dt * 1.6;
+
+      if (state === "charge") {
+        chargeMs += dtMs;
+        tiltSample(dt);
+        if (spin.airborne) spin.airMs += dtMs;
+
+        // Decay the live reading so the needle falls back after the flick.
+        spin.now *= Math.exp(-4.5 * dt);
+        spin.smooth = lerp(spin.smooth, spin.now, 1 - Math.exp(-14 * dt));
+
+        // Release detection: once a real rip has landed and the phone goes
+        // quiet, launch. Wait for the landing if they actually threw it.
+        if (spin.armed && !spin.airborne) {
+          if (spin.now < spin.peak * 0.3) {
+            spin.quietMs += dtMs;
+            if (spin.quietMs > 230) goBattle();
+          } else {
+            spin.quietMs = 0;
+          }
+        }
+      }
+
+      if (state === "battle") {
+        battleMs += dtMs;
+        stepPhysics(dt);
+        const player = tops.find(t => t.isPlayer);
+        if (player) ctx.platform.setScore(Math.round(player.rpm));
+        checkEnd();
+        const liveN = tops.filter(t => t.alive).length;
+        setMusicIntensity(clamp(0.35 + (3 - liveN) * 0.22, 0.3, 0.95));
+      }
+
+      if (state === "result") resultMs += dtMs;
+
+      stepFx(dt);
+
+      /* ---- paint ---- */
+      g.save();
+      if (shakeAmt > 0.3) {
+        g.translate(rand(-shakeAmt, shakeAmt), rand(-shakeAmt, shakeAmt) * SQUASH);
+      }
+
+      // Backdrop.
+      const bg = g.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#05070f");
+      bg.addColorStop(0.55, "#070c1c");
+      bg.addColorStop(1, "#03050c");
+      g.fillStyle = bg;
+      g.fillRect(-40, -40, W + 80, H + 80);
+
+      drawArena();
+      if (state === "intro") drawHero();
+      drawTrails();
+
+      // Depth sort: farther up the screen draws first.
+      const drawable = tops.slice().sort((a, b) => (a.y - a.h * 2) - (b.y - b.h * 2));
+      for (const t of drawable) {
+        if (t.alive || (state === "battle" && battleMs - t.deathMs < 400)) drawTop(t);
+      }
+
+      drawFx();
+      g.restore();
+
+      if (flashAmt > 0.004) {
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.fillStyle = "rgba(255,255,255," + clamp(flashAmt, 0, 0.75).toFixed(3) + ")";
+        g.fillRect(0, 0, W, H);
+        g.restore();
+      }
+
+      drawVignette();
+
+      if (state === "intro") drawTitle();
+      else if (state === "select") drawSelect();
+      else if (state === "charge") drawCharge();
+      else if (state === "battle") drawBattleHud();
+      else if (state === "result") { drawBattleHud(); drawResult(); }
+
+      if (showHelp) drawHelp();
+      drawButtons();
+    }
+
+    /* ============================================================ *
+     * 15. Boot
+     * ============================================================ */
+
+    await loadSaved();
+    resize();
+    cy = H * 0.52;
+    S = Math.min(W * 0.405, H * 0.315);
+    bakeArena();
+    layout();
+
+    // Paint a real first frame before telling the host we are ready.
+    frame(16);
+    ctx.markVisualReady("arena");
+
+    ctx.onFrame(frame);
+    ctx.onDestroy(() => {
+      for (const t of tops) killWhirr(t);
+      if (musicOn) {
+        try { ctx.music.stop({ fadeOutMs: 200 }); } catch (err) { /* already stopped */ }
+      }
+    });
+
+    ctx.platform.ready();
+  }
+};

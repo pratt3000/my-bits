@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Ripcord",
+  "description": "Spin your phone and the top spins with it. The gyroscope reads your peak angular speed during the rip — degrees per second, live on a gauge — and that number becomes your launch RPM, directly proportional. Then drop into a bowl stadium against two rival tops: attack, defense and stamina beat each other in a circle, clashes throw sparks and lightning, and the last top spinning wins. Throw it and freefall is detected too, though a hard wrist flick reads exactly the same.",
+  "tags": [
+    "game",
+    "arcade",
+    "motion",
+    "physics",
+    "battle",
+    "spinner",
+    "action",
+    "gyroscope"
+  ],
+  "permissions": [
+    "motion",
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "launch_rpm": {
+        "label": "Fastest Rip",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "win_streak": {
+        "label": "Win Streak",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

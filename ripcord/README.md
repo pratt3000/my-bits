@@ -1,0 +1,199 @@
+# Ripcord
+
+Spin your phone. The gyroscope reads how fast you spun it, and your top launches
+at an RPM directly proportional to that number. Then it fights two rivals in a
+bowl stadium until one top is left spinning.
+
+## The measurement
+
+This is the whole point of the bit, so it is worth being precise about it.
+
+`ctx.motion` exposes only `tilt` (orientation angles) and `accel` — there is no
+`rotationRate` on the documented surface, and the contract forbids inventing
+`ctx` methods. So the gyroscope is read through the standard `devicemotion`
+event via `ctx.listen`, gated behind `ctx.motion.start()` so iOS still shows its
+permission prompt:
+
+```js
+const ok = await ctx.motion.start();          // permission, the documented way
+ctx.listen(window, "devicemotion", e => {
+  const rr = e.rotationRate;                  // deg/sec, three axes
+  feedSpin(Math.hypot(rr.alpha, rr.beta, rr.gamma), "gyro");
+});
+```
+
+`rotationRate` is a true rate gyro. That matters here: it is **not** referenced
+to gravity, so it keeps reading correctly while the phone is in freefall, which
+orientation angles do not. Three sources, in priority order:
+
+| Source | How | When it is used |
+| --- | --- | --- |
+| **`gyro`** | `devicemotion` → `rotationRate` magnitude | Whenever the sensor reports it. Valid airborne. |
+| **`tilt`** | Differentiate `ctx.motion.tilt`, wrap-corrected | Motion granted but no `rotationRate`. In-hand only. |
+| **`swipe`** | Pointer speed across a drawn ripcord | Motion denied or absent. |
+
+The active source is named on screen during the rip, so it never silently
+pretends to have measured something it did not.
+
+**Freefall** is detected from `accelerationIncludingGravity`: an accelerometer
+in free flight reads about 0 g. Under ~3.2 m/s² the bit shows `AIRBORNE` and
+holds the launch until the phone is caught, so the whole flight is captured and
+the flight time is reported afterwards.
+
+### Peak, not average
+
+A rip is a transient. The bit tracks the **peak** angular speed inside the rip
+window, then auto-launches when the reading falls below 30% of that peak for
+230 ms — the release. A hard wrist flick and an actual throw produce the same
+gyroscope signal, so nobody has to let go of their phone to play.
+
+### Spin to RPM
+
+```
+launchRPM = clamp(peakDegPerSec * 9.2, 3200, 14000)
+```
+
+Strictly proportional between the floor and the ceiling. 2,000 °/s is roughly
+where consumer gyros saturate, and the floor means even a limp flick fields a
+viable top. Both numbers stay on screen — the measurement and what it became —
+so the relationship is legible rather than a hidden curve.
+
+## Does spinning harder actually win?
+
+It has to, or the mechanic is decorative. Measured by running the real physics
+headlessly, 40 battles per cell:
+
+| phone °/s | launch RPM | Attack | Defense | Stamina |
+| --------: | ---------: | -----: | ------: | ------: |
+| 250 | 3,200 | 3% | 5% | 3% |
+| 450 | 4,140 | 18% | 15% | 23% |
+| 650 | 5,980 | 50% | 33% | 43% |
+| 850 | 7,820 | 50% | 50% | 70% |
+| 1100 | 10,120 | 75% | 70% | 93% |
+| 1400 | 12,880 | 98% | 88% | 100% |
+| 1800 | 14,000 | 95% | 98% | 100% |
+
+Getting there took reversing two things that made the curve run backwards:
+
+- **Unbounded gyroscopic drift.** A tangential force proportional to spin
+  accelerates a fast top until it leaves the bowl, so *high spin caused
+  ring-outs* — the opposite of the intended mechanic. It is now driven toward a
+  preferred orbital speed, which is self-limiting.
+- **A stadium with no lip.** Without one, orbiting fast was enough to fly out.
+  A steep restoring force past `r = 0.95` means a ring-out has to be delivered
+  by an impact.
+
+Two more changes make spin decisive rather than incidental: incoming knockback
+is divided by a gyroscopic stability term (`0.5 + spinNorm * 1.15`), and spin
+drain is a **ratio** (`(sa/sb)^0.75`) rather than a narrow lerp, so a 2:1 spin
+lead is a 2.8× drain advantage instead of 1.4×.
+
+Stamina remains the most forgiving pick — it saturates a step earlier than the
+other two. Two earlier attempts to fix that by shaving its stats did nothing,
+because the cause was structural, not numeric: opponents were drawn from *the
+other two* archetypes, so choosing Stamina was the only way never to face the
+hardest matchup. Opponents are now drawn from all three.
+
+## The tops
+
+Each is a polar profile — `rIn + (1 - rIn) * cos(blades * a)^sharp`, with the
+angle warped by `skew` so the blades sweep back rather than sitting radially
+symmetric. That asymmetry is what reads as forged metal instead of a flower, and
+it shows which way the top is turning.
+
+| | Blades | Character |
+| --- | --- | --- |
+| ⚡ **Volt Lance** | 3 | Attack. Hits hardest, burns out first, wins by ejection. |
+| 🛡 **Iron Bastion** | 6 | Defense. Heavy, takes 40% less drain, hard to move. |
+| 🌀 **Pale Orbit** | 8 | Stamina. Outlasts everything, fragile in an exchange. |
+
+Each is baked once into two `OffscreenCanvas` sprites: a crisp one, and a
+**blur** built by drawing the blade 26 times through one blade-pitch of
+rotation. The renderer crossfades between them on spin rate, so a top at speed
+is a smeared disc and a dying one resolves into individual blades — two
+`drawImage` calls per top per frame rather than re-tracing the polygon. A fixed
+specular sweep is drawn after, clipped to the top, so highlights do not rotate
+with the body.
+
+As spin drops, the top leans off its tip by `(1 - spinNorm)²` and precesses,
+and its projected squash oscillates. That is the wobble a real top does as it
+dies, and it is the clearest read on who is losing.
+
+## Physics
+
+A paraboloid bowl gives a linear restoring force toward the centre. On top of
+that: the orbital-speed drive, the stadium lip, threat-weighted seeking, and a
+drunken wander that grows as spin fades.
+
+Collisions are mass-weighted impulses with restitution 1.34, each top's
+knockback character folded in, and the receiver's gyroscopic stability dividing
+what it absorbs. Opponents target **the biggest threat discounted by distance**,
+not the nearest — chasing the nearest rewards hanging back while the aggressive
+tops wreck each other, which made passivity dominant. It also means a monster
+launch has to survive being everyone's target.
+
+Spin burns at `(150 + speed * 52 + rpm * 0.009) * decay` per second. The
+`rpm * 0.009` term is spin-proportional drag: faster spin costs more to sustain,
+which is what keeps a maximal rip a strong favourite rather than a formality.
+
+## Sound
+
+All synthesized; there are no packaged assets.
+
+Each live top runs a **spin whirr** whose oscillator sits at the blade-pass
+frequency — `rpm / 60 * bladeCount` — so a 3-blade top at 9,000 RPM sings at
+450 Hz and the pitch falls as it dies. You can hear who is losing without
+looking. Clashes are six inharmonic partials (1, 2.41, 3.86, 5.12, 7.31, 9.04)
+with a highpassed contact transient, amplitude scaled by impact. Lightning is a
+noise burst swept down through a bandpass; a death is eleven decelerating taps,
+the rattle of a top settling. `ctx.music` carries a techno bed that rises in
+intensity as tops are eliminated and ducks on heavy hits.
+
+## Effects
+
+Sparks are drawn as streaks along their velocity rather than dots, additively,
+white-hot fading through amber. Lightning is midpoint-displaced with forking
+branches, drawn as a wide coloured glow under a thin white core, flickering over
+~150 ms. Plus shockwave rings, screen shake, an additive flash on big hits, and
+a coloured light pool each top casts on the floor.
+
+## Files
+
+```
+ripcord/
+  plethora.json   # manifest: motion/audio/haptics permissions, two record channels
+  main.js         # the whole bit
+  README.md
+```
+
+## Contract notes
+
+- Permissions: `motion` (the gyroscope), `audio` (Web Audio synthesis),
+  `backgroundMusic` (`ctx.music` bed), `haptics`, `storage` (best rip, streak,
+  chosen top).
+- Memory: two `records` channels — `launch_rpm` ("Fastest Rip") and
+  `win_streak` ("Win Streak").
+- No dependencies and no packaged assets: geometry, textures, stadium and audio
+  are all generated at runtime.
+- The stadium is baked once to an `OffscreenCanvas` and blitted per frame; only
+  tops, trails, particles and light pools are drawn live. Where `OffscreenCanvas`
+  is missing, every bake site falls back to drawing live — plainer, still
+  playable, never blank.
+- The source is deliberately **pure ASCII**; every non-ASCII character in a
+  user-visible string is a `\uXXXX` escape. Rendering the raw bytes through a
+  non-UTF-8 path turns `°` into `Â°` and `—` into `â€"`, which is exactly what
+  happened the first time this was rendered in a browser.
+
+### What the upload validator rejects
+
+Inherited from [`cairn`](../cairn), and both still apply:
+
+- **Minting a canvas element off the document** → *"Direct document/body access
+  is not allowed."* `OffscreenCanvas` is the supported path for offscreen work.
+- **Reading a canvas's layout rect** → *"This bit uses unsupported remote
+  resources…"*, a message that gives no hint that layout access is the cause.
+  Use `event.offsetX` / `offsetY`, which are canvas-relative already.
+
+Worth adding: the validator appears to pattern-match source text, so both of the
+above are described in prose in this codebase rather than written out literally
+in a comment.
