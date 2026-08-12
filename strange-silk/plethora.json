@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Strange Silk",
+  "description": "Tens of thousands of particles fall through a chaotic flow and settle into a strange attractor. The whole screen is a map of that flow's two parameters, so dragging a finger bends the equation and the cloud reorganises under your hand — silky sheets of light that keep developing like a long exposure whenever you hold still. Two fingers turn, pinch and roll it. Eight attractors, each with its own colour of music: Aizawa, Lorenz, Thomas, Halvorsen, Rössler, Burke–Shaw, Dadras and Four-Wing.",
+  "tags": [
+    "art",
+    "generative",
+    "math",
+    "chaos",
+    "fidget",
+    "sensory",
+    "3d",
+    "touch",
+    "relaxing"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": []
+}
