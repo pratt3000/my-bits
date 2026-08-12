@@ -104,10 +104,16 @@ window.plethoraBit = {
       // is covered in lives in the condensation bake, not in the simulation —
       // simulating it would cost thousands of bodies to draw something the
       // texture already draws for free. These start where a drop is visible.
-      beadR: [0.75, 2.5],
+      beadR: [0.6, 3.6],
       releaseR: 4.2,
       maxRunMul: 1.75,
-      pinJitter: [0.8, 1.32],
+      // How far each drop's own critical size sits from that nominal ceiling,
+      // and how slippery the glass under it happens to be. Both matter more
+      // than they look: terminal speed goes as r^2, so a single shared ceiling
+      // made every runner converge on one size and therefore on one speed.
+      capJitter: [0.62, 1.15],
+      slipJitter: [0.8, 1.25],
+      pinJitter: [0.74, 1.46],
       beadCoverage: 0.021,
       accrete: 0.5,
       growJitter: [0.35, 1.5],
@@ -139,7 +145,7 @@ window.plethoraBit = {
       coalesceBudget: 150,
 
       maxLens: 44,
-      raceTimeoutMs: 26000,
+      raceTimeoutMs: 40000,
       betWindowMs: 13000,
       breathMs: 3200
     };
@@ -689,6 +695,12 @@ window.plethoraBit = {
         vx: 0, vy: 0,
         run: false,
         pin: rr(TUNE.pinJitter[0], TUNE.pinJitter[1]),
+        // What holds a drop on glass is the state of the glass under it — an
+        // old dried track, a speck of dust, a fingerprint — so how big it can
+        // get before it sheds and how freely it slides are properties of this
+        // drop, not constants of the pane.
+        cap: SZ.maxRun * rr(TUNE.capJitter[0], TUNE.capJitter[1]),
+        slip: rr(TUNE.slipJitter[0], TUNE.slipJitter[1]),
         life: 1,
         shedAcc: 0,
         shedNext: SZ.shedEvery * rr(0.45, 1.9),
@@ -710,7 +722,7 @@ window.plethoraBit = {
     // bead the same apparent size and the glass looks printed.
     function mistR() {
       const t = rnd();
-      return SZ.beadMin + (SZ.beadMax - SZ.beadMin) * t * t * t * t;
+      return SZ.beadMin + (SZ.beadMax - SZ.beadMin) * t * t * t;
     }
 
     function seedGlass(n) {
@@ -761,6 +773,8 @@ window.plethoraBit = {
       // drop carries its colours on and inherits its start-line pin, so a
       // pooling bead cannot flag it away early. Two racers meeting is a
       // knockout for the smaller one.
+      a.cap = Math.max(a.cap, b.cap);
+
       if (b.racer !== null) {
         if (a.racer === null) {
           a.racer = b.racer;
@@ -822,7 +836,7 @@ window.plethoraBit = {
         // Both axes relax toward terminal exponentially, which is exact rather
         // than merely stable — a drop that sheds down to a sliver would blow
         // up an explicit step at this friction.
-        const fr = Math.max(0.05, SZ.friction / (d.r * d.r));
+        const fr = Math.max(0.05, (SZ.friction * d.slip) / (d.r * d.r));
         const k = Math.exp(-fr * dt);
         const tvy = SZ.gravity / fr;
         const tvx = (wind * (SZ.release / d.r)) / fr;
@@ -845,17 +859,22 @@ window.plethoraBit = {
           if (dx * dx + dy * dy < reach * reach) onMerge(d, absorb(d, b));
         }
 
-        // Past the critical size it cannot hold itself together; the excess
-        // breaks off behind it rather than riding along.
-        if (d.r > SZ.maxRun) {
-          const excess = d.m - massOf(SZ.maxRun);
+        // Past its own critical size it cannot hold itself together and the
+        // excess breaks off behind it. Only part of it goes each time, so a
+        // drop that has just swallowed something big stays visibly too fat for
+        // a moment instead of snapping back — and clamping it flat to a shared
+        // ceiling was what made every runner the same size, and so the same
+        // speed, within a second of setting off.
+        if (d.r > d.cap) {
+          const excess = (d.m - massOf(d.cap)) * rr(0.3, 0.7);
           d.m -= excess;
           d.r = radOf(d.m);
-          if (rnd() < 0.7 && drops.length < SZ.maxBeads + 300) {
+          if (excess > massOf(SZ.beadMin) && rnd() < 0.7 &&
+              drops.length < SZ.maxBeads + 300) {
             makeDrop(
               d.x + rr(-1, 1) * d.r * 0.8,
               d.y - d.r * rr(1.1, 2.2),
-              clamp(radOf(excess * rr(0.4, 0.8)), SZ.beadMin, SZ.maxRun * 0.75)
+              clamp(radOf(excess * rr(0.4, 0.8)), SZ.beadMin, d.cap * 0.75)
             );
           }
         }
@@ -2676,7 +2695,11 @@ window.plethoraBit = {
         race.racers[i] = makeDrop(
           G.w * (lanes[i] + rr(-0.05, 0.05)),
           G.h * rr(0.15, 0.23),
-          SZ.release * rr(1.45, 1.7),
+          // A real spread of weights. Three drops within a sixth of each other
+          // all fall at the same speed, which turns backing one into a coin
+          // toss — you want to be able to see who the favourite is, and you
+          // want the favourite to be beatable by a lucky lane.
+          SZ.release * rr(1.2, 1.95),
           { racer: i, pin: 2.4, grow: 0 }   // pinned hard until the flag drops
         );
       }
@@ -2694,7 +2717,7 @@ window.plethoraBit = {
         if (d && d.life > 0 && !d.run) {
           d.pin = 0.85;
           d.run = true;
-          d.vy = rr(5, 14) * SZ.s;
+          d.vy = rr(5, 14) * SZ.s * (d.r / SZ.release);
           onRelease(d);
         }
       }
@@ -3141,6 +3164,7 @@ window.plethoraBit = {
         // Released. If you built something heavy, it goes straight away.
         if (held.r >= SZ.release * 0.76) {
           held.pin = 0.8;
+          held.cap = Math.max(held.cap, SZ.maxRun * rr(1.1, 1.4));
           held.run = true;
           held.vy = Math.max(held.vy, 24 * SZ.s);
           onRelease(held);

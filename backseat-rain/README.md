@@ -56,6 +56,16 @@ of it:
   relax toward terminal exponentially rather than by an explicit step, because a
   drop that sheds down to a sliver would blow an explicit integrator up.
 
+- **The critical size is a property of the drop, not of the pane.** What holds a
+  drop on glass is the state of the glass underneath it — an old dried track, a
+  speck of dust, a fingerprint — so how big each one can get before it sheds,
+  and how freely it slides, are drawn per drop. This matters more than it looks.
+  A single shared ceiling clamped every runner to exactly one radius within a
+  second of setting off, and since speed goes as `r²`, one radius means *one
+  speed*: the whole glass fell in step. The ceiling is also soft now, so a drop
+  that has just swallowed something big stays visibly too fat for a moment
+  rather than snapping back.
+
 Runners shed mass as they go, and the shed beads re-pool. So a later runner can
 inherit a lane the first one cleared and go screaming down it. That is where the
 rivalry between paths comes from, and it is emergent, not authored.
@@ -72,6 +82,16 @@ both views.
 Tilt leans your head on top of that: a real look-around in the room, and a shift
 of the world behind the pane in the flat view. Without a motion grant the view
 drifts on its own.
+
+The three backed drops are minted at a real spread of weights — the heaviest
+about two and a half times the mass of the lightest, which is a bit under twice
+the speed. Three drops within a sixth of each other all fall at the same rate,
+which turns backing one into a coin toss; you want to be able to see who the
+favourite is, and you want the favourite to be beatable. Slip is what beats it:
+a light drop on clean glass can take a heavy one on a sticky lane, and what each
+of them happens to eat on the way down does the rest. Across a few thousand
+simulated draws the fastest of three is typically 1.7 times the slowest, and
+about one race in ten is close enough to be a photo finish.
 
 Drops that are *in* the race cannot be grabbed. Being able to carry your own
 runner down to the sill would settle every race before it started — so you feed
