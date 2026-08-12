@@ -641,7 +641,8 @@ window.plethoraBit = {
       } catch (_) {}
     }
 
-    // Audio follows the two loudest sources, throttled well below frame rate.
+    // Retunes the two voices against the current pair of sources, throttled well
+    // below frame rate so parameter changes stay glitch-free.
     let audioClock = 0;
     let beatHz = 0;
     function updateAudio(dt, motion) {
@@ -720,7 +721,9 @@ window.plethoraBit = {
       '<div data-el="panel" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;' +
         'pointer-events:auto;background:rgba(4,7,14,0.72);backdrop-filter:blur(10px);' +
         '-webkit-backdrop-filter:blur(10px);">' +
-        '<div style="max-width:330px;margin:0 20px;padding:20px 22px;border-radius:20px;' +
+        // Bounded and scrollable so the list cannot run off a short screen.
+        '<div style="max-width:330px;max-height:78vh;overflow-y:auto;margin:0 20px;' +
+          'padding:20px 22px;border-radius:20px;' +
           'background:rgba(14,20,34,0.90);box-shadow:0 12px 44px rgba(0,0,0,0.6),inset 0 0 0 1px rgba(255,255,255,0.10);' +
           'font-family:' + FONT + ';color:#e6f0ff;">' +
           '<div style="font-size:17px;font-weight:700;margin-bottom:10px;letter-spacing:0.2px;">Wave Interference</div>' +
