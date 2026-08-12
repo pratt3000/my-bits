@@ -1,22 +1,26 @@
 # Pixel Fog
 
-Nine views of San Francisco. Tap one to open it, then rub it with a finger — a
-living mosaic of that same picture blooms wherever you touch. Rub most of it
-away and the whole view gives itself over to pixels.
+Nine places in San Francisco, each buried under a living mosaic of itself. Rub
+the pixels away with a finger and the picture surfaces — and with it one fact
+about the place that you almost certainly do not know. Clear one, swipe for the
+next.
 
-## The nine views
+## The nine, and what is hidden in each
 
-| Tile             | What it is                                                        |
-| ---------------- | ----------------------------------------------------------------- |
-| Golden Gate      | The bridge at sunset, fog snagged around the tower feet.           |
-| Downtown Dusk    | The skyline across the bay — Salesforce Tower, Transamerica.       |
-| Painted Ladies   | The Alamo Square row, warm windows, downtown hazy behind.          |
-| Coit Tower       | Telegraph Hill at midday, Alcatraz out in a bright blue bay.       |
-| Bay Bridge       | The west span lit up after dark, cable lights doubled in water.    |
-| Karl the Fog     | Dawn ridges receding, fog rivers pooling between them.             |
-| Hyde Street      | A steep street in one-point perspective, cable car climbing.       |
-| Sutro Tower      | The three-pronged lattice standing above a sea of fog.             |
-| Ocean Beach      | The sun going into the Pacific over wet, mirroring sand.           |
+| Place                | The fact underneath                                                        |
+| -------------------- | -------------------------------------------------------------------------- |
+| Golden Gate Bridge   | Charles Ellis did the engineering; Strauss forced him off in 1931 and took the credit. Corrected in 2007. |
+| Alcatraz Island      | Carried the first lighthouse ever lit on the Pacific coast, in 1854 — long before the cellhouse. |
+| The Painted Ladies   | Surplus battleship grey covered them for decades; colour returned only after 1963. |
+| Bay Bridge           | Until 1958 the lower deck carried electric commuter trains rather than cars. |
+| Fort Point           | The bridge's steel arch exists so it could vault this 1861 fort instead of demolishing it. |
+| Hyde Street          | No cable car has an engine — each grips a cable moving at a flat 9.5 mph.   |
+| Coit Tower           | The 1934 murals were branded communist; a hammer and sickle was scrubbed off before opening. |
+| Ocean Beach          | The clipper *King Philip* broke up here in 1878 and still surfaces at the lowest tides. |
+| Financial District   | Dozens of Gold Rush ships lie buried under the streets; crews still hit their hulls. |
+
+The bar for these was deliberately high: nothing a San Franciscan would already
+trot out. No international orange, no escapes from the Rock, no Karl.
 
 ## Files
 
@@ -32,122 +36,113 @@ pixel-fog/
 The runtime blocks remote images (`ctx.fetch` is data/blob only, http/https
 egress is denied) and packaged assets are off (`maxAssets: 0`). So there are no
 photographs here: all nine views are painted at runtime out of canvas gradients,
-ridges built from stacked sine octaves, seeded scatter, and hand-placed
-landmark geometry. Each scene is a pure `paint(g, W, H)` function driven by a
-seeded PRNG, so it composes identically at any size — the same code paints a
-110 px tile and a 363 px picture.
+ridges built from stacked sine octaves, seeded scatter, and hand-placed landmark
+geometry. Each is a pure `paint(g, W, H)` function driven by a seeded PRNG, so
+it composes identically at any size.
+
+The fact is painted *into* the picture, under the same bake — which is why
+rubbing uncovers the words the same way it uncovers the bridge.
 
 ## How the reveal works
 
-Two layers and a mask, rebuilt per frame:
+The picture starts hidden and is uncovered, so the mosaic is the base layer and
+the photograph is what breaks through:
 
-1. The chosen scene is baked once to an `OffscreenCanvas` at the picture size.
+1. The place is baked once to an `OffscreenCanvas` at full screen size.
 2. That bake is read back **once** with `getImageData` and averaged into a fine
-   colour grid (~11 CSS px blocks) plus a coarse grid folded down from it 3×3.
-   Every shade string each cell can use is pre-built at the same time, so the
-   frame loop never does string work per cell.
-3. Rubbing stamps a pre-baked soft brush into a mask surface.
-4. Each frame the mosaic is drawn into a scratch surface, `destination-in`
-   composites the mask onto it, and the result is drawn over the crisp picture —
-   so the mosaic appears only where you have rubbed, with soft edges.
+   colour grid (~13 CSS px blocks) plus a coarse grid folded down from it 3×3.
+   Every shade string each cell can use is pre-built here, so the frame loop
+   never does string work per cell.
+3. Each frame the mosaic is drawn across the whole screen.
+4. Rubbing stamps a pre-baked soft brush into a mask. The crisp bake is copied
+   into a scratch surface, `destination-in` composites the mask onto it, and the
+   result is drawn over the mosaic — so the picture shows only where you rubbed.
 
 The mosaic animates three ways at once: a slow diagonal wave fades the fine grid
 in and out over the coarse one, so bands of coarseness travel across the frame;
-each block breathes a little, so the grout lines between them pulse; and each
-block drifts through six pre-built brightness shades on its own phase.
+each block breathes, so the grout lines between them pulse; and each block
+drifts through six pre-built brightness shades on its own phase.
 
-Cross the 88 % mark and a sweep fills the rest of the mask, the tile picks up a
-gold dot, and `platform.milestone` fires. Revealing all nine calls
-`platform.complete`.
+Cross 72 % and a sweep clears the rest, the dot goes gold, and
+`platform.milestone` fires. Clearing all nine calls `platform.complete`.
+
+## Rub versus swipe
+
+Worth stating plainly, because the obvious implementation does not work.
+
+A swipe cannot be told apart from a rub by velocity, straightness or direction:
+**rubbing a picture clean *is* a fast, straight, horizontal scrub.** A first
+attempt used a flick heuristic and every single rub stroke paged instead. A
+screen-edge zone fails for the same reason — rubbing edge to edge starts in it.
+
+So the rule is binary, and has no false positives:
+
+- **While pixels remain, every drag rubs.** Nothing pages.
+- **Once the picture is clear** there is nothing left to rub, so any sideways
+  drag pages — which is what you reach for anyway once you are done.
+- **To leave a picture early, tap a dot** at the top. The dots are padded hit
+  targets and jump straight to any of the nine.
+
+Both were verified in a browser: vigorous mid-screen scrubbing never pages, and
+a swipe on a cleared picture always does.
 
 ## Contract notes
 
 - Permissions: `backgroundMusic` (a `drift` bed plus tap/success stings),
-  `haptics`, `storage` (which views you have already revealed).
+  `haptics`, `storage` (which places you have already uncovered).
 - No dependencies, no packaged assets, no memory channels.
-- Tile and picture share one computed aspect ratio, so opening a tile is a pure
-  scale with nothing to distort. The aspect stretches toward the screen's height
-  (capped at 1.6) — square tiles left a third of a tall phone empty.
-- Layout re-derives from `ctx.width`/`ctx.height` compared each frame rather
-  than a resize listener, and re-bakes the thumbnails and the open picture when
-  they change. The mask is sized to the picture, so rotating the phone with a
-  view open restarts that view's reveal — the tile's revealed dot is kept.
-- Thumbnails bake one or two per frame instead of all nine up front, so the
-  first frame is a backdrop plus placeholders rather than a stall, and the grid
-  develops in front of you. `platform.ready()` fires on that first frame.
+- The picture is the whole screen. The only chrome is the dot row, a one-line
+  hint that fades on first rub, and a small `?`.
+- Pages are cached three at a time (previous, current, next) and rebuilt on a
+  layout change. Masks live at CSS resolution, the bake at up to 2×, which keeps
+  the working set to roughly 20 MB rather than 50.
+- Layout re-derives from `ctx.width`/`ctx.height` compared each frame rather than
+  a resize listener. A rotation rebuilds every page, so a half-cleared picture
+  resets; the gold dot is kept.
+- Thumbnails are gone with the grid: the first frame is page one's mosaic, drawn
+  before `platform.ready()`.
 
 ### Working within what the upload validator rejects
 
-Two constraints are inherited from `cairn/README.md`, and both are honoured
-here:
+Three constraints, all inherited the hard way. The validator reports every one
+of them with the same message about unsupported remote resources and registry
+loaders, which is never what is actually wrong.
 
-- **`document.createElement("canvas")`** is rejected. Every offscreen surface
-  goes through `makeSurface()`, which returns an `OffscreenCanvas` or `null`.
-  `document.createElement` with a literal `"div"`/`"button"` is fine and is what
-  the chrome uses.
-- **Querying the canvas for its layout box** is rejected. Pointer positions come
-  from `event.offsetX`/`offsetY`, which are already canvas-relative. Note the
-  validator text-scans the source, so *naming* that rejected call in a comment
-  is itself enough to fail the upload — this file describes it instead.
+- **`document.createElement("canvas")`** is rejected (found by `cairn`). Every
+  offscreen surface goes through `makeSurface()`, which returns an
+  `OffscreenCanvas` or `null`. `document.createElement` with a literal
+  `"div"`/`"button"` is fine and is what the chrome uses.
+- **Querying the canvas for its layout box** is rejected (found by `cairn`).
+  Pointer positions come from `event.offsetX`/`offsetY`, already
+  canvas-relative. The validator text-scans the source, so *naming* that call in
+  a comment also fails the upload — this file describes it instead.
+- **`const ph = <call expression>`** is rejected — the local's name alone. It is
+  the declaration, not the use: deleting the line while leaving `ph.addColorStop(...)`
+  in place passes, and `const ph = cellPhase[i]` (a member expression) passes
+  too. The arguments are irrelevant. No local in this file is named `ph`.
 
-Timers go through `ctx.timeout`, and no canvas blur-filter property is used.
+`measureText`, `fillText`, `clip("evenodd")`, `getImageData`/`putImageData`,
+`setPointerCapture` and drawing the display canvas into an `OffscreenCanvas` were
+all probed against the real endpoint and are accepted.
 
-#### A third one, found the hard way: `const ph = <call>`
-
-This bit cost a long bisection to upload, so it is worth writing down. This line
-
-```js
-const ph = g.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
-```
-
-fails the upload with *"This bit uses unsupported remote resources. Use
-ctx.loadScript(), ctx.importModule(), or ctx.loadFont() with declared Plethora
-registry dependencies."* — the same misleading message `cairn` documents for
-layout access, and equally unrelated to what is actually wrong.
-
-Renaming the local to anything else makes the identical code pass. What was
-established by bisecting real uploads:
-
-- It is the **declaration**, not the use. Deleting the `const ph = ...` line
-  while leaving `ph.addColorStop(...)` and `g.fillStyle = ph` in place passes.
-- It is the **name plus a call initialiser**. `const ph = cellPhase[i]` (a member
-  expression) passes, and so does `const ph = [rng() * TAU, ...]` — both are
-  still in this file. Only `const ph = <call expression>` trips it.
-- It is not the arguments: changing the gradient's x-args to `0` still fails.
-- `drawImage` was not involved. Plain identifiers, property access, and array
-  indexing with literal or variable subscripts all upload fine.
-
-So: **do not name a local `ph` when initialising it from a call.** The local
-here is `placeholderGrad`, with a comment at the site so nobody shortens it
-back.
-
-Method, for the next time a bit is rejected with an error that names the wrong
-thing: upload truncated-but-parseable prefixes of the source and binary-search
-for the line range that flips PASS → FAIL, then ablate single statements inside
-it. Uploading under the same `title` updates one draft instead of littering the
-account, and a paired token makes each probe a one-second round trip.
+Method, for the next rejection that names the wrong thing: upload
+truncated-but-parseable prefixes of the source and binary-search for the line
+range that flips PASS → FAIL, then ablate single statements inside it. Uploading
+under the same `title` updates one draft instead of littering the account.
 
 ### Without `OffscreenCanvas`
 
-`makeSurface()` returns `null` and the bit takes a plainer path that is still
-fully playable:
-
-- The nine tiles are painted live into the grid once rather than baked and
-  blitted, and the grid repaints only when something changes.
-- Opening a picture skips the zoom (there is no bake to scale) and paints
-  straight into the frame, then captures it with `getImageData`.
-- The reveal becomes a hard-edged clip built from the rub stamps instead of a
-  soft mask, and each frame restores only the rubbed bounding box via
-  `putImageData` — the backdrop is deliberately *not* repainted, so the rest of
-  the picture survives untouched.
-- The progress line is skipped on this path: with no per-frame backdrop repaint,
-  a translucent bar drawn over itself every frame would accumulate to solid
-  white.
+`makeSurface()` returns `null` and the bit takes a plainer path that still works:
+the picture is painted once straight to the canvas and kept as `ImageData`
+before the mosaic ever covers it; each frame restores the rubbed bounding box
+with `putImageData` and then lays the mosaic over everything *except* the rub
+stamps, using an `evenodd` clip. Hard edges instead of a soft mask, no slide
+animation between places, and stamps are capped at 700.
 
 ## Verified
 
-Driven headless in Chromium against a mock `ctx`: grid renders, all nine scenes
-open and paint, rubbing reveals, consecutive frames differ (the mosaic really is
-animating), the completion sweep fires `milestone` and `setProgress`, a
-mid-session viewport change re-layouts and re-bakes, and back returns to the
-grid — with no runtime errors at any stage.
+Driven headless in Chromium against a mock `ctx`: all nine places paint and
+reveal, consecutive frames differ (the mosaic really is animating), vigorous
+horizontal rubbing never pages, a swipe on a cleared picture does, dot jumps
+work, clearing fires `milestone` and `setProgress`, and a mid-session viewport
+change re-layouts — with no runtime errors at any stage.

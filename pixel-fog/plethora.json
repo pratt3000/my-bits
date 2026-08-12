@@ -3,10 +3,11 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Pixel Fog",
-  "description": "Nine painted views of San Francisco — the Golden Gate at sunset, Karl the Fog on the hills, Sutro Tower above the cloud. Tap one, then rub it with your finger: a living mosaic of that same picture blooms wherever you touch, breathing and rippling in travelling bands. Rub most of it away and the whole view gives itself over to pixels.",
+  "description": "Nine places in San Francisco, each buried under a living mosaic of itself. Rub the pixels away with a finger and the picture surfaces — and with it one fact about the place that you almost certainly do not know: who really engineered the Golden Gate, what is still buried under Ocean Beach, why that steel arch at Fort Point exists at all. Clear one, swipe for the next.",
   "tags": [
     "art",
-    "photo",
+    "history",
+    "facts",
     "san-francisco",
     "mosaic",
     "pixel",

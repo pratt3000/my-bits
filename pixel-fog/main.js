@@ -107,7 +107,7 @@ window.plethoraBit = {
     // A hill/headland silhouette built from four stacked sine octaves.
     function ridge(g, W, H, baseY, amp, seed, fill) {
       const rng = mulberry32(seed);
-      const ph = [rng() * TAU, rng() * TAU, rng() * TAU, rng() * TAU];
+      const phase = [rng() * TAU, rng() * TAU, rng() * TAU, rng() * TAU];
       const fr = [0.6 + rng() * 0.5, 1.5 + rng() * 0.9, 3.0 + rng() * 1.4, 6.0 + rng() * 2.2];
       const am = [amp, amp * 0.44, amp * 0.2, amp * 0.09];
       const step = Math.max(2, W / 150);
@@ -116,7 +116,7 @@ window.plethoraBit = {
       for (let x = -2; x <= W + step; x += step) {
         const u = x / W;
         let y = baseY;
-        for (let i = 0; i < 4; i++) y += fsin(u * TAU * fr[i] + ph[i]) * am[i];
+        for (let i = 0; i < 4; i++) y += fsin(u * TAU * fr[i] + phase[i]) * am[i];
         g.lineTo(x, y);
       }
       g.lineTo(W + 2, H + 2);
@@ -225,7 +225,7 @@ window.plethoraBit = {
     // The nine pictures                                                      //
     // ====================================================================== //
 
-    // 1 — Golden Gate Bridge, sun going down behind the headlands.
+    // Golden Gate Bridge, sun going down behind the headlands.
     function sceneGoldenGate(g, W, H) {
       const rng = mulberry32(1017);
       const s = Math.min(W, H) / 400;
@@ -343,7 +343,7 @@ window.plethoraBit = {
         0.55, (a) => "rgba(228,214,222," + clamp(a, 0, 1).toFixed(3) + ")", 14);
     }
 
-    // 2 — The downtown skyline at dusk, seen across the bay.
+    // The downtown skyline at dusk, seen across the bay.
     function sceneDowntown(g, W, H) {
       const rng = mulberry32(2311);
       const s = Math.min(W, H) / 400;
@@ -445,7 +445,7 @@ window.plethoraBit = {
         0.3, (a) => "rgba(210,200,220," + clamp(a, 0, 1).toFixed(3) + ")", 10);
     }
 
-    // 3 — The Painted Ladies on Alamo Square, late afternoon.
+    // The Painted Ladies on Alamo Square, late afternoon.
     function scenePaintedLadies(g, W, H) {
       const rng = mulberry32(3607);
       const s = Math.min(W, H) / 400;
@@ -557,7 +557,7 @@ window.plethoraBit = {
       cypress(g, W * 0.95, lawnY + H * 0.02, H * 0.19, "#2a5228", rng);
     }
 
-    // 4 — Coit Tower on Telegraph Hill, bright midday.
+    // Coit Tower on Telegraph Hill, bright midday.
     function sceneCoitTower(g, W, H) {
       const rng = mulberry32(4441);
       const s = Math.min(W, H) / 400;
@@ -653,7 +653,7 @@ window.plethoraBit = {
       }
     }
 
-    // 5 — The Bay Bridge, lit up after dark.
+    // The Bay Bridge, lit up after dark.
     function sceneBayBridge(g, W, H) {
       const rng = mulberry32(5153);
       const s = Math.min(W, H) / 400;
@@ -771,49 +771,14 @@ window.plethoraBit = {
       }
     }
 
-    // 6 — Karl the Fog pouring over the hills at dawn.
-    function sceneKarlTheFog(g, W, H) {
-      const rng = mulberry32(6271);
-      const hz = H * 0.42;
-
-      band(g, W, 0, H * 0.75, [
-        [0, "#48407f"], [0.28, "#8a6a9c"], [0.55, "#d093a0"],
-        [0.78, "#f2b899"], [1, "#fbdcbe"]
-      ]);
-      glowBall(g, W * 0.68, hz - H * 0.06, H * 0.3,
-        "rgba(255,226,190,0.65)", "rgba(255,206,170,0)");
-      glowBall(g, W * 0.68, hz - H * 0.06, H * 0.035,
-        "rgba(255,250,238,0.95)", "rgba(255,232,196,0)");
-
-      // Four ridges receding into haze, fog rivers pooling between them.
-      const layers = [
-        { y: hz + H * 0.04, amp: H * 0.035, fill: "#9a86a8", fog: 0.55 },
-        { y: hz + H * 0.14, amp: H * 0.045, fill: "#7b6690", fog: 0.6 },
-        { y: hz + H * 0.28, amp: H * 0.055, fill: "#584a72", fog: 0.65 },
-        { y: hz + H * 0.46, amp: H * 0.07, fill: "#38304f", fog: 0.7 }
-      ];
-      for (let i = 0; i < layers.length; i++) {
-        const L2 = layers[i];
-        ridge(g, W, H, L2.y, L2.amp, 700 + i * 37, L2.fill);
-        fogBank(g, W, L2.y + H * 0.045, H * 0.06, rng, L2.fog,
-          (a) => "rgba(240,232,240," + clamp(a, 0, 1).toFixed(3) + ")", 13);
-      }
-
-      // Foreground ridge with a few trees breaking the skyline.
-      ridge(g, W, H, H * 0.9, H * 0.05, 909, "#241f38");
-      for (let i = 0; i < 5; i++) {
-        const cx = W * (0.08 + rng() * 0.85);
-        cypress(g, cx, H * (0.9 + rng() * 0.05), H * (0.07 + rng() * 0.06), "#191529", rng);
-      }
-      fogBank(g, W, H * 0.86, H * 0.05, rng, 0.5,
-        (a) => "rgba(226,220,232," + clamp(a, 0, 1).toFixed(3) + ")", 9);
-    }
-
-    // 7 — Looking down a steep Russian Hill street to the bay.
+    // Looking down a steep Russian Hill street to the bay.
     function sceneHydeStreet(g, W, H) {
       const rng = mulberry32(7717);
       const s = Math.min(W, H) / 400;
       const vpY = H * 0.46;
+      // On a tall phone the raw height would stretch this one-point view into
+      // spikes, so vertical features are sized off a squarer reference frame.
+      const R = Math.min(H, W * 1.7);
       const bayTop = H * 0.3;
 
       band(g, W, 0, bayTop, [[0, "#3d78bb"], [0.6, "#82b3dd"], [1, "#c4dcee"]]);
@@ -887,12 +852,12 @@ window.plethoraBit = {
       for (let side = -1; side <= 1; side += 2) {
         for (let i = 7; i >= 0; i--) {
           const u0 = i / 8, u1 = (i + 1) / 8;
-          const sc0 = Math.pow(u0, 1.7), sc1 = Math.pow(u1, 1.7);
+          const sc0 = Math.pow(u0, 1.45), sc1 = Math.pow(u1, 1.45);
           const x0 = vpX + side * lerp(roadHalfTop * 1.5, roadHalfBottom * 1.45, sc0);
           const x1 = vpX + side * lerp(roadHalfTop * 1.5, roadHalfBottom * 1.45, sc1);
           const yb0 = lerp(vpY, H, sc0);
           const yb1 = lerp(vpY, H, sc1);
-          const hh = lerp(H * 0.07, H * 0.72, sc1);
+          const hh = lerp(R * 0.09, R * 0.66, sc1);
           const col = houseCols[(i + (side > 0 ? 3 : 0)) % houseCols.length];
 
           g.fillStyle = col;
@@ -900,7 +865,7 @@ window.plethoraBit = {
           g.moveTo(x0, yb0);
           g.lineTo(x1, yb1);
           g.lineTo(x1, yb1 - hh);
-          g.lineTo(x0, yb0 - hh * (yb0 - vpY) / Math.max(1, yb1 - vpY));
+          g.lineTo(x0, yb0 - hh * Math.pow((yb0 - vpY) / Math.max(1, yb1 - vpY), 0.72));
           g.closePath();
           g.fill();
 
@@ -923,8 +888,8 @@ window.plethoraBit = {
 
       // A cable car climbing toward us.
       const cu = 0.42;
-      const cy = lerp(vpY, H, Math.pow(cu, 1.7));
-      const cw = lerp(roadHalfTop, roadHalfBottom, Math.pow(cu, 1.7)) * 0.85;
+      const cy = lerp(vpY, H, Math.pow(cu, 1.45));
+      const cw = lerp(roadHalfTop, roadHalfBottom, Math.pow(cu, 1.45)) * 0.85;
       const ch = cw * 0.85;
       g.fillStyle = "#8d2f26";
       roundRect(g, vpX - cw / 2, cy - ch, cw, ch * 0.82, ch * 0.08);
@@ -947,109 +912,7 @@ window.plethoraBit = {
         (a) => "rgba(232,238,244," + clamp(a, 0, 1).toFixed(3) + ")", 9);
     }
 
-    // 8 — Sutro Tower standing above a sea of fog.
-    function sceneSutroTower(g, W, H) {
-      const rng = mulberry32(8837);
-      const s = Math.min(W, H) / 400;
-      const fogTop = H * 0.55;
-
-      band(g, W, 0, fogTop + H * 0.1, [
-        [0, "#2b1a4d"], [0.26, "#6b2f61"], [0.5, "#b84a55"],
-        [0.72, "#e8834a"], [0.9, "#f7b56d"], [1, "#fdd9a4"]
-      ]);
-      for (let i = 0; i < 8; i++) {
-        const y = H * 0.06 + rng() * H * 0.34;
-        const w = W * (0.35 + rng() * 0.7);
-        const x = rng() * W - w * 0.3;
-        g.fillStyle = "rgba(255,180,140," + (0.08 + rng() * 0.2).toFixed(3) + ")";
-        g.beginPath();
-        g.ellipse(x, y, w * 0.5, H * (0.006 + rng() * 0.014), 0, 0, TAU);
-        g.fill();
-      }
-
-      // Hills half-drowned in fog.
-      ridge(g, W, H, fogTop - H * 0.01, H * 0.04, 88, "#4a2f52");
-      ridge(g, W, H, fogTop + H * 0.06, H * 0.05, 99, "#33223d");
-
-      // --- the tower ------------------------------------------------------- //
-      const tx = W * 0.5;
-      const baseY = fogTop + H * 0.12;
-      const topY = H * 0.06;
-      const th = baseY - topY;
-      const halfW = W * 0.15;
-      const RED = "#a8341f";
-      const WHT = "#e9e2d6";
-      const lw = Math.max(1.4, 3.6 * s);
-
-      // Three legs: the outer pair splay outward, the centre one runs straight.
-      const legs = [
-        { x0: tx - halfW, x1: tx - halfW * 0.2 },
-        { x0: tx, x1: tx },
-        { x0: tx + halfW, x1: tx + halfW * 0.2 }
-      ];
-
-      // Cross bracing between adjacent legs, banded red/white by height.
-      const bands = 9;
-      for (let b = 0; b < bands; b++) {
-        const u0 = b / bands, u1 = (b + 1) / bands;
-        g.strokeStyle = b % 2 === 0 ? RED : WHT;
-        g.lineWidth = lw * 0.5;
-        for (let i = 0; i < legs.length - 1; i++) {
-          const a0 = lerp(legs[i].x0, legs[i].x1, u0), a1 = lerp(legs[i].x0, legs[i].x1, u1);
-          const c0 = lerp(legs[i + 1].x0, legs[i + 1].x1, u0), c1 = lerp(legs[i + 1].x0, legs[i + 1].x1, u1);
-          const y0 = baseY - th * u0, y1 = baseY - th * u1;
-          g.beginPath();
-          g.moveTo(a0, y0); g.lineTo(c1, y1);
-          g.moveTo(c0, y0); g.lineTo(a1, y1);
-          g.moveTo(a1, y1); g.lineTo(c1, y1);
-          g.stroke();
-        }
-      }
-
-      // The legs themselves.
-      for (const leg of legs) {
-        for (let b = 0; b < bands; b++) {
-          const u0 = b / bands, u1 = (b + 1) / bands;
-          g.strokeStyle = b % 2 === 0 ? RED : WHT;
-          g.lineWidth = lw;
-          g.beginPath();
-          g.moveTo(lerp(leg.x0, leg.x1, u0), baseY - th * u0);
-          g.lineTo(lerp(leg.x0, leg.x1, u1), baseY - th * u1);
-          g.stroke();
-        }
-      }
-
-      // The three prongs at the crown.
-      g.strokeStyle = RED;
-      g.lineWidth = lw * 0.8;
-      for (const leg of legs) {
-        const x = leg.x1;
-        g.beginPath();
-        g.moveTo(x, topY);
-        g.lineTo(x, topY - th * 0.14);
-        g.stroke();
-      }
-      g.strokeStyle = WHT;
-      g.lineWidth = lw * 0.45;
-      g.beginPath();
-      g.moveTo(legs[0].x1, topY - th * 0.05);
-      g.lineTo(legs[2].x1, topY - th * 0.05);
-      g.stroke();
-      // Aircraft warning light.
-      glowBall(g, tx, topY - th * 0.15, H * 0.02, "rgba(255,90,70,0.95)", "rgba(255,60,40,0)");
-
-      // The fog sea, thick and luminous where the sun hits it.
-      band(g, W, fogTop, H, [
-        [0, "rgba(255,214,180,0.0)"], [0.18, "rgba(248,214,196,0.85)"],
-        [0.5, "rgba(232,214,214,0.97)"], [1, "rgba(196,192,208,1)"]
-      ]);
-      fogBank(g, W, fogTop + H * 0.06, H * 0.1, rng, 0.85,
-        (a) => "rgba(255,236,220," + clamp(a, 0, 1).toFixed(3) + ")", 18);
-      fogBank(g, W, fogTop + H * 0.26, H * 0.14, rng, 0.7,
-        (a) => "rgba(228,222,236," + clamp(a, 0, 1).toFixed(3) + ")", 14);
-    }
-
-    // 9 — Ocean Beach, the sun going into the Pacific.
+    // Ocean Beach, the sun going into the Pacific.
     function sceneOceanBeach(g, W, H) {
       const rng = mulberry32(9319);
       const s = Math.min(W, H) / 400;
@@ -1152,17 +1015,527 @@ window.plethoraBit = {
       }
     }
 
-    const SCENES = [
-      { id: "golden_gate", label: "Golden Gate", paint: sceneGoldenGate },
-      { id: "downtown", label: "Downtown Dusk", paint: sceneDowntown },
-      { id: "painted_ladies", label: "Painted Ladies", paint: scenePaintedLadies },
-      { id: "coit_tower", label: "Coit Tower", paint: sceneCoitTower },
-      { id: "bay_bridge", label: "Bay Bridge", paint: sceneBayBridge },
-      { id: "karl", label: "Karl the Fog", paint: sceneKarlTheFog },
-      { id: "hyde_street", label: "Hyde Street", paint: sceneHydeStreet },
-      { id: "sutro", label: "Sutro Tower", paint: sceneSutroTower },
-      { id: "ocean_beach", label: "Ocean Beach", paint: sceneOceanBeach }
+    // Fort Point — the 1861 brick fort the bridge was re-drawn to vault over.
+    function sceneFortPoint(g, W, H) {
+      const rng = mulberry32(4477);
+      const s = Math.min(W, H) / 400;
+      const hz = H * 0.76;
+
+      band(g, W, 0, hz, [
+        [0, "#26365e"], [0.26, "#4f6288"], [0.52, "#93949f"],
+        [0.78, "#d7a988"], [1, "#f3d5ab"]
+      ]);
+      glowBall(g, W * 0.18, hz - H * 0.05, H * 0.2,
+        "rgba(255,224,182,0.5)", "rgba(255,200,150,0)");
+
+      for (let i = 0; i < 7; i++) {
+        const y = H * 0.04 + rng() * H * 0.3;
+        const w = W * (0.3 + rng() * 0.7);
+        g.fillStyle = "rgba(255,208,176," + (0.07 + rng() * 0.16).toFixed(3) + ")";
+        g.beginPath();
+        g.ellipse(rng() * W, y, w * 0.5, H * (0.005 + rng() * 0.012), 0, 0, TAU);
+        g.fill();
+      }
+
+      // Marin, across the strait.
+      ridge(g, W, hz, hz - H * 0.045, H * 0.026, 313, "#5b5870");
+      ridge(g, W, hz, hz - H * 0.016, H * 0.013, 611, "#454258");
+
+      band(g, W, hz, H, [[0, "#5b6072"], [0.4, "#3d4256"], [1, "#23283a"]]);
+      shimmer(g, W, hz, H, rng, (a) => "rgba(255,226,202," + a.toFixed(3) + ")", 55);
+
+      // ---- the bridge overhead ------------------------------------------ //
+      const STEEL = "#7d2f17";
+      const STEEL_LIT = "#bf4a20";
+      const deckY = H * 0.135;
+      const springY = H * 0.6;
+      const apexY = H * 0.3;
+      const archThick = H * 0.05;
+      const ay = (x) => {
+        const u = (2 * (x / W) - 1);
+        return apexY + (springY - apexY) * u * u;
+      };
+
+      // Roadway across the very top, with the tower leg rising out of frame.
+      g.fillStyle = "#5c2311";
+      g.fillRect(-2, deckY, W + 4, Math.max(3.5, 10 * s));
+      g.fillStyle = STEEL_LIT;
+      g.fillRect(-2, deckY, W + 4, Math.max(1.2, 2.6 * s));
+
+      const legX = W * 0.78;
+      const legW = Math.max(4, 13 * s);
+      g.fillStyle = STEEL;
+      g.fillRect(legX - legW * 1.6, 0, legW, deckY);
+      g.fillRect(legX + legW * 0.6, 0, legW, deckY);
+      g.fillStyle = STEEL_LIT;
+      g.fillRect(legX - legW * 1.6, 0, Math.max(1, 2 * s), deckY);
+      g.fillRect(legX + legW * 0.6, 0, Math.max(1, 2 * s), deckY);
+      g.fillStyle = STEEL;
+      g.fillRect(legX - legW * 1.6, deckY * 0.42, legW * 3.2, Math.max(2, 5 * s));
+
+      // Posts from the arch up to the roadway.
+      g.strokeStyle = STEEL;
+      g.lineWidth = Math.max(1.4, 3.4 * s);
+      g.beginPath();
+      for (let i = 1; i < 15; i++) {
+        const x = (W * i) / 15;
+        const top = ay(x);
+        if (top <= deckY) continue;
+        g.moveTo(x, top + archThick);
+        g.lineTo(x, deckY);
+      }
+      g.stroke();
+
+      // The arch itself: two ribs with lacing between them.
+      function ribPath(off) {
+        g.beginPath();
+        const step = Math.max(3, W / 70);
+        for (let x = -4; x <= W + step; x += step) {
+          const y = ay(x) + off;
+          if (x <= -4) g.moveTo(x, y);
+          else g.lineTo(x, y);
+        }
+      }
+      g.strokeStyle = STEEL;
+      g.lineWidth = Math.max(2.6, 7 * s);
+      ribPath(0);
+      g.stroke();
+      g.lineWidth = Math.max(2, 5.5 * s);
+      ribPath(archThick);
+      g.stroke();
+      g.strokeStyle = STEEL;
+      g.lineWidth = Math.max(0.8, 1.8 * s);
+      g.beginPath();
+      for (let i = 0; i <= 26; i++) {
+        const x0 = (W * i) / 26;
+        const x1 = (W * (i + 1)) / 26;
+        g.moveTo(x0, ay(x0));
+        g.lineTo(x1, ay(x1) + archThick);
+        g.moveTo(x0, ay(x0) + archThick);
+        g.lineTo(x1, ay(x1));
+      }
+      g.stroke();
+      // Sun catching the top edge of the arch.
+      g.strokeStyle = STEEL_LIT;
+      g.lineWidth = Math.max(0.8, 1.8 * s);
+      ribPath(-Math.max(1, 2 * s));
+      g.stroke();
+
+      // ---- the fort ------------------------------------------------------ //
+      const fx = W * 0.1;
+      const fw = W * 0.8;
+      const fTop = H * 0.615;
+      const fBot = H * 0.79;
+      const fh = fBot - fTop;
+
+      // Rock apron under the walls.
+      g.fillStyle = "#3b3946";
+      g.beginPath();
+      g.moveTo(fx - W * 0.09, H);
+      g.lineTo(fx - W * 0.05, fBot - fh * 0.06);
+      g.lineTo(fx + fw + W * 0.05, fBot - fh * 0.06);
+      g.lineTo(fx + fw + W * 0.09, H);
+      g.closePath();
+      g.fill();
+
+      // Main brick mass, slightly battered walls.
+      g.fillStyle = "#6d3f33";
+      g.beginPath();
+      g.moveTo(fx, fTop);
+      g.lineTo(fx + fw, fTop);
+      g.lineTo(fx + fw + fw * 0.02, fBot);
+      g.lineTo(fx - fw * 0.02, fBot);
+      g.closePath();
+      g.fill();
+
+      // Brick courses.
+      g.fillStyle = "rgba(0,0,0,0.09)";
+      for (let y = fTop + fh * 0.03; y < fBot; y += Math.max(2, fh * 0.045)) {
+        g.fillRect(fx - fw * 0.02, y, fw * 1.04, Math.max(0.6, 1.1 * s));
+      }
+      // Shaded right flank.
+      g.fillStyle = "rgba(0,0,0,0.2)";
+      g.fillRect(fx + fw * 0.78, fTop, fw * 0.24, fh);
+      // Warm light on the left flank.
+      g.fillStyle = "rgba(255,190,140,0.14)";
+      g.fillRect(fx, fTop, fw * 0.22, fh);
+
+      // Three tiers of arched casemates.
+      const cols = 8;
+      for (let row = 0; row < 3; row++) {
+        const oy = fTop + fh * (0.2 + row * 0.26);
+        const ohHeight = fh * 0.17;
+        for (let c = 0; c < cols; c++) {
+          const ox = fx + fw * (0.06 + c * (0.88 / (cols - 1)));
+          const ow = fw * 0.058;
+          g.fillStyle = "#2a1c1c";
+          g.beginPath();
+          g.moveTo(ox, oy + ohHeight);
+          g.lineTo(ox, oy + ow * 0.5);
+          g.arc(ox + ow * 0.5, oy + ow * 0.5, ow * 0.5, Math.PI, 0);
+          g.lineTo(ox + ow, oy + ohHeight);
+          g.closePath();
+          g.fill();
+          // A little sky-glow catching the arch lip.
+          g.fillStyle = "rgba(255,206,168,0.12)";
+          g.fillRect(ox, oy + ow * 0.45, ow, Math.max(0.7, 1.3 * s));
+        }
+      }
+
+      // Parapet along the top.
+      g.fillStyle = "#7b4839";
+      g.fillRect(fx - fw * 0.015, fTop - fh * 0.05, fw * 1.03, fh * 0.06);
+      g.fillStyle = "rgba(255,214,176,0.16)";
+      g.fillRect(fx - fw * 0.015, fTop - fh * 0.05, fw * 1.03, Math.max(1, 1.8 * s));
+
+      // Fort Point's own little lighthouse, up on the roof.
+      const lx = fx + fw * 0.84;
+      const lBase = fTop - fh * 0.05;
+      const lh = fh * 0.34;
+      g.fillStyle = "#e8e2d6";
+      g.fillRect(lx - fw * 0.016, lBase - lh, fw * 0.032, lh);
+      g.fillStyle = "#2f3238";
+      g.fillRect(lx - fw * 0.024, lBase - lh - fh * 0.05, fw * 0.048, fh * 0.05);
+      glowBall(g, lx, lBase - lh - fh * 0.025, fh * 0.12,
+        "rgba(255,236,190,0.75)", "rgba(255,220,150,0)");
+
+      // Surf at the base.
+      g.strokeStyle = "rgba(255,250,244,0.6)";
+      g.lineWidth = Math.max(1.2, 2.6 * s);
+      g.beginPath();
+      for (let x = -6; x <= W + 6; x += Math.max(3, W / 60)) {
+        const y = fBot + fh * 0.06 + fsin(x / W * TAU * 2.6) * H * 0.005;
+        if (x <= -6) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.stroke();
+      for (let i = 0; i < 60; i++) {
+        const x = rng() * W;
+        const y = fBot + fh * 0.02 + rng() * H * 0.06;
+        g.fillStyle = "rgba(255,252,248," + (0.08 + rng() * 0.3).toFixed(3) + ")";
+        g.beginPath();
+        g.arc(x, y, Math.max(0.6, rng() * 2.4 * s), 0, TAU);
+        g.fill();
+      }
+
+      fogBank(g, W, hz - H * 0.01, H * 0.04, rng, 0.35,
+        (a) => "rgba(226,226,238," + clamp(a, 0, 1).toFixed(3) + ")", 9);
+    }
+
+    // Alcatraz — the rock, its cellhouse, and the light that came first.
+    function sceneAlcatraz(g, W, H) {
+      const rng = mulberry32(1854);
+      const s = Math.min(W, H) / 400;
+      const hz = H * 0.66;
+
+      band(g, W, 0, hz, [
+        [0, "#1b2448"], [0.26, "#3b4470"], [0.54, "#7d6b8e"],
+        [0.78, "#c9849a"], [0.93, "#e9ab92"], [1, "#f6cfa8"]
+      ]);
+      starfield(g, W, H * 0.26, 60, rng);
+
+      for (let i = 0; i < 8; i++) {
+        const y = H * 0.06 + rng() * H * 0.34;
+        const w = W * (0.3 + rng() * 0.7);
+        g.fillStyle = "rgba(120,86,120," + (0.1 + rng() * 0.22).toFixed(3) + ")";
+        g.beginPath();
+        g.ellipse(rng() * W, y, w * 0.5, H * (0.005 + rng() * 0.012), 0, 0, TAU);
+        g.fill();
+      }
+
+      // The far shore behind the island.
+      ridge(g, W, hz, hz - H * 0.035, H * 0.02, 77, "#4a4763");
+
+      band(g, W, hz, H, [[0, "#3d4463"], [0.35, "#2b3049"], [1, "#171a2b"]]);
+
+      // ---- the island ----------------------------------------------------- //
+      const ix = W * 0.5;
+      const iw = W * 0.86;
+      const rockTop = hz - H * 0.055;
+      const rockBot = hz + H * 0.045;
+
+      g.fillStyle = "#4a4450";
+      g.beginPath();
+      g.moveTo(ix - iw * 0.5, rockBot);
+      g.lineTo(ix - iw * 0.42, rockTop + H * 0.018);
+      g.lineTo(ix - iw * 0.2, rockTop);
+      g.lineTo(ix + iw * 0.24, rockTop - H * 0.004);
+      g.lineTo(ix + iw * 0.43, rockTop + H * 0.02);
+      g.lineTo(ix + iw * 0.5, rockBot);
+      g.closePath();
+      g.fill();
+      // Strata + a lit face on the sunset side.
+      g.fillStyle = "rgba(0,0,0,0.16)";
+      for (let i = 0; i < 5; i++) {
+        const y = rockTop + (rockBot - rockTop) * (0.24 + i * 0.16);
+        g.fillRect(ix - iw * 0.5, y, iw, Math.max(1, 2.2 * s));
+      }
+      g.fillStyle = "rgba(255,190,150,0.13)";
+      g.beginPath();
+      g.moveTo(ix - iw * 0.5, rockBot);
+      g.lineTo(ix - iw * 0.42, rockTop + H * 0.018);
+      g.lineTo(ix - iw * 0.24, rockTop + H * 0.004);
+      g.lineTo(ix - iw * 0.28, rockBot);
+      g.closePath();
+      g.fill();
+
+      // Cellhouse: a long, low block along the ridge.
+      const chX = ix - iw * 0.34;
+      const chW = iw * 0.62;
+      const chH = H * 0.052;
+      const chY = rockTop - chH;
+      g.fillStyle = "#b9ad9d";
+      g.fillRect(chX, chY, chW, chH);
+      g.fillStyle = "rgba(0,0,0,0.22)";
+      g.fillRect(chX + chW * 0.74, chY, chW * 0.26, chH);
+      g.fillStyle = "#8e8375";
+      g.fillRect(chX, chY - chH * 0.16, chW, chH * 0.17);
+      // Cell windows, a few still lit.
+      for (let i = 0; i < 16; i++) {
+        const wx = chX + chW * (0.04 + i * 0.06);
+        g.fillStyle = rng() > 0.72
+          ? "rgba(255,224,168,0.9)"
+          : "rgba(58,62,74,0.85)";
+        g.fillRect(wx, chY + chH * 0.3, chW * 0.028, chH * 0.4);
+      }
+
+      // Water tower on its spindly legs.
+      const wtX = ix - iw * 0.42;
+      const wtY = rockTop - H * 0.052;
+      g.strokeStyle = "#6d6660";
+      g.lineWidth = Math.max(1, 2 * s);
+      g.beginPath();
+      g.moveTo(wtX - W * 0.02, rockTop);
+      g.lineTo(wtX - W * 0.008, wtY);
+      g.moveTo(wtX + W * 0.02, rockTop);
+      g.lineTo(wtX + W * 0.008, wtY);
+      g.stroke();
+      g.fillStyle = "#9a9187";
+      g.fillRect(wtX - W * 0.022, wtY - H * 0.022, W * 0.044, H * 0.024);
+
+      // ---- the lighthouse: the reason this rock matters here --------------- //
+      const gx = ix + iw * 0.2;
+      const gBase = rockTop - chH * 0.2;
+      const gh = H * 0.15;
+      const gw = W * 0.036;
+
+      // Keeper's house at the foot.
+      g.fillStyle = "#c6bcae";
+      g.fillRect(gx - gw * 1.5, gBase - gh * 0.2, gw * 3, gh * 0.2);
+      g.fillStyle = "#8d8478";
+      g.fillRect(gx - gw * 1.6, gBase - gh * 0.25, gw * 3.2, gh * 0.06);
+
+      // Tapered white tower.
+      g.fillStyle = "#f0ece2";
+      g.beginPath();
+      g.moveTo(gx - gw * 0.5, gBase);
+      g.lineTo(gx - gw * 0.34, gBase - gh * 0.82);
+      g.lineTo(gx + gw * 0.34, gBase - gh * 0.82);
+      g.lineTo(gx + gw * 0.5, gBase);
+      g.closePath();
+      g.fill();
+      g.fillStyle = "rgba(90,80,74,0.18)";
+      g.beginPath();
+      g.moveTo(gx + gw * 0.16, gBase);
+      g.lineTo(gx + gw * 0.12, gBase - gh * 0.82);
+      g.lineTo(gx + gw * 0.34, gBase - gh * 0.82);
+      g.lineTo(gx + gw * 0.5, gBase);
+      g.closePath();
+      g.fill();
+
+      // Gallery and lantern room.
+      g.fillStyle = "#3a3d45";
+      g.fillRect(gx - gw * 0.62, gBase - gh * 0.88, gw * 1.24, gh * 0.06);
+      g.fillStyle = "#2f333c";
+      g.fillRect(gx - gw * 0.42, gBase - gh * 1.0, gw * 0.84, gh * 0.13);
+      g.fillStyle = "rgba(255,240,196,0.95)";
+      g.fillRect(gx - gw * 0.3, gBase - gh * 0.98, gw * 0.6, gh * 0.09);
+      g.fillStyle = "#3a3d45";
+      g.beginPath();
+      g.moveTo(gx - gw * 0.42, gBase - gh * 1.0);
+      g.lineTo(gx, gBase - gh * 1.09);
+      g.lineTo(gx + gw * 0.42, gBase - gh * 1.0);
+      g.closePath();
+      g.fill();
+
+      // The light itself, and its beam out over the water.
+      glowBall(g, gx, gBase - gh * 0.94, gh * 0.5,
+        "rgba(255,238,186,0.7)", "rgba(255,220,150,0)");
+      g.save();
+      g.globalAlpha = 0.16;
+      g.fillStyle = "rgba(255,240,200,1)";
+      g.beginPath();
+      g.moveTo(gx, gBase - gh * 0.94);
+      g.lineTo(-W * 0.1, hz + H * 0.02);
+      g.lineTo(-W * 0.1, hz + H * 0.13);
+      g.closePath();
+      g.fill();
+      g.restore();
+
+      // Reflections and chop.
+      shimmer(g, W, hz + H * 0.05, H, rng, (a) => "rgba(255,214,180," + a.toFixed(3) + ")", 60);
+      for (let i = 0; i < 70; i++) {
+        const y = hz + H * 0.05 + rng() * (H - hz - H * 0.05);
+        const t = (y - hz) / (H - hz);
+        g.fillStyle = "rgba(255,232,190," + ((0.16 - t * 0.1) * rng()).toFixed(3) + ")";
+        g.fillRect(gx + (rng() - 0.5) * W * 0.16 * (1 + t * 3), y,
+          Math.max(1, W * 0.006 * (1 + t * 2)), Math.max(1, H * 0.004));
+      }
+
+      fogBank(g, W, rockBot + H * 0.01, H * 0.035, rng, 0.4,
+        (a) => "rgba(226,224,238," + clamp(a, 0, 1).toFixed(3) + ")", 10);
+
+      // Gulls.
+      g.strokeStyle = "rgba(30,28,40,0.5)";
+      g.lineWidth = Math.max(1, 1.5 * s);
+      for (let i = 0; i < 4; i++) {
+        const x = W * (0.12 + rng() * 0.76);
+        const y = H * (0.12 + rng() * 0.22);
+        const w = W * (0.016 + rng() * 0.02);
+        g.beginPath();
+        g.moveTo(x - w, y);
+        g.quadraticCurveTo(x - w * 0.5, y - w * 0.62, x, y);
+        g.quadraticCurveTo(x + w * 0.5, y - w * 0.62, x + w, y);
+        g.stroke();
+      }
+    }
+
+    // Each picture hides one fact. The rule for these: nothing a San Franciscan
+    // would already trot out. No orange paint, no Rock escapes, no Karl.
+    const PLACES = [
+      {
+        id: "golden_gate",
+        name: "Golden Gate Bridge",
+        paint: sceneGoldenGate,
+        fact: "Charles Ellis did the engineering that holds this up. Strauss forced him off the job in 1931, took the credit, and the record was corrected only in 2007."
+      },
+      {
+        id: "alcatraz",
+        name: "Alcatraz Island",
+        paint: sceneAlcatraz,
+        fact: "Long before the cellhouse, this rock carried the first lighthouse ever lit on the Pacific coast, in 1854."
+      },
+      {
+        id: "painted_ladies",
+        name: "The Painted Ladies",
+        paint: scenePaintedLadies,
+        fact: "Surplus battleship grey covered these houses for decades. The colour returned only after 1963, when one artist defied the block."
+      },
+      {
+        id: "bay_bridge",
+        name: "Bay Bridge",
+        paint: sceneBayBridge,
+        fact: "Until 1958 the lower deck carried electric commuter trains rather than cars."
+      },
+      {
+        id: "fort_point",
+        name: "Fort Point",
+        paint: sceneFortPoint,
+        fact: "That arch exists for one reason: so the bridge could vault this 1861 fort instead of demolishing it."
+      },
+      {
+        id: "hyde_street",
+        name: "Hyde Street",
+        paint: sceneHydeStreet,
+        fact: "No cable car has an engine. Each grips a cable that never stops moving, at a flat 9.5 mph."
+      },
+      {
+        id: "coit_tower",
+        name: "Coit Tower",
+        paint: sceneCoitTower,
+        fact: "Its 1934 murals were branded communist, and a hammer and sickle was scrubbed off the wall before the doors could open."
+      },
+      {
+        id: "ocean_beach",
+        name: "Ocean Beach",
+        paint: sceneOceanBeach,
+        fact: "The clipper King Philip broke apart here in 1878 and still surfaces through the sand at the lowest tides."
+      },
+      {
+        id: "downtown",
+        name: "Financial District",
+        paint: sceneDowntown,
+        fact: "Dozens of Gold Rush ships lie buried under these streets, abandoned in 1849; construction crews still hit their hulls."
+      }
     ];
+
+    // ====================================================================== //
+    // The fact, baked into the picture so rubbing uncovers it                //
+    // ====================================================================== //
+
+    function wrapLines(g2, text, maxWidth) {
+      const words = text.split(" ");
+      const out = [];
+      let line = "";
+      for (let i = 0; i < words.length; i++) {
+        const test = line ? line + " " + words[i] : words[i];
+        if (line && g2.measureText(test).width > maxWidth) {
+          out.push(line);
+          line = words[i];
+        } else {
+          line = test;
+        }
+      }
+      if (line) out.push(line);
+      return out;
+    }
+
+    function trackedText(g2, text, x, y, extra) {
+      let cx = x;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text.charAt(i);
+        g2.fillText(ch, cx, y);
+        cx += g2.measureText(ch).width + extra;
+      }
+      return cx - x;
+    }
+
+    /** The full picture: the scene, then its fact laid into the lower third. */
+    function paintPage(g2, W, H, index, safeBottom) {
+      const place = PLACES[index];
+      place.paint(g2, W, H);
+
+      const bodySize = clamp(W * 0.047, 13, 22);
+      const nameSize = clamp(W * 0.032, 9.5, 14);
+      const pad = Math.max(18, W * 0.075);
+      const maxW = W - pad * 2;
+
+      g2.font = "500 " + bodySize.toFixed(1) + "px -apple-system,system-ui,sans-serif";
+      const lines = wrapLines(g2, place.fact, maxW);
+      const lineH = bodySize * 1.46;
+      const blockH = nameSize * 2.8 + lines.length * lineH;
+      const bottom = H - safeBottom - Math.max(24, H * 0.04);
+      const top = bottom - blockH;
+
+      // A scrim, so the words hold up over a bright sky or a dark bay alike.
+      const scrimTop = Math.max(0, top - H * 0.17);
+      const scrim = g2.createLinearGradient(0, scrimTop, 0, H);
+      scrim.addColorStop(0, "rgba(6,7,14,0)");
+      scrim.addColorStop(0.38, "rgba(6,7,14,0.6)");
+      scrim.addColorStop(0.7, "rgba(6,7,14,0.87)");
+      scrim.addColorStop(1, "rgba(6,7,14,0.96)");
+      g2.fillStyle = scrim;
+      g2.fillRect(0, scrimTop, W, H - scrimTop);
+
+      g2.textAlign = "left";
+      g2.textBaseline = "alphabetic";
+
+      g2.font = "700 " + nameSize.toFixed(1) + "px -apple-system,system-ui,sans-serif";
+      g2.fillStyle = "rgba(255,206,150,0.96)";
+      const nameY = top + nameSize;
+      trackedText(g2, place.name.toUpperCase(), pad, nameY, nameSize * 0.19);
+
+      g2.fillStyle = "rgba(255,206,150,0.4)";
+      g2.fillRect(pad, nameY + nameSize * 0.72, W * 0.13, Math.max(1, W * 0.0035));
+
+      g2.font = "500 " + bodySize.toFixed(1) + "px -apple-system,system-ui,sans-serif";
+      g2.fillStyle = "rgba(247,243,237,0.98)";
+      let y = top + nameSize * 2.8 + bodySize * 0.82;
+      for (let i = 0; i < lines.length; i++) {
+        g2.fillText(lines[i], pad, y);
+        y += lineH;
+      }
+    }
 
     // ====================================================================== //
     // Surfaces                                                               //
@@ -1176,8 +1549,8 @@ window.plethoraBit = {
     /**
      * Offscreen drawing surface. The runtime owns every canvas in the DOM and
      * document.createElement("canvas") is rejected at upload, so bakes go to an
-     * OffscreenCanvas. Without one we return null and the bit runs the plainer
-     * ImageData path below.
+     * OffscreenCanvas. Without one, makeSurface returns null and the bit runs
+     * the plainer ImageData path below.
      */
     const CAN_BAKE = typeof OffscreenCanvas === "function";
     function makeSurface(w, h) {
@@ -1190,181 +1563,60 @@ window.plethoraBit = {
       }
     }
 
-    // Device pixels per CSS pixel on the display canvas, derived rather than
-    // assumed so the ImageData fallback lines up exactly.
     const DP = () => (ctx.width > 0 ? canvas.width / ctx.width : 1);
-    const PX = Math.min(ctx.dpr || 1, 2);   // supersampling for baked surfaces
+    const PX = Math.min(ctx.dpr || 1, 2);   // supersampling for the baked picture
+    const MASK_PX = 1;                      // the brush is soft; CSS res is plenty
 
     // ====================================================================== //
-    // Layout                                                                 //
+    // Layout — the picture is the whole screen                               //
     // ====================================================================== //
 
-    let L = null;
+    let L = { W: ctx.width, H: ctx.height, top: 0, bot: 0 };
 
     function layout() {
-      const W = ctx.width, H = ctx.height;
-      const top = (ctx.safeArea && ctx.safeArea.top) || 0;
-      const bot = (ctx.safeArea && ctx.safeArea.bottom) || 0;
-      const padX = Math.max(12, W * 0.04);
-
-      const headerH = top + Math.min(84, H * 0.13);
-      const footerH = bot + Math.min(56, H * 0.08);
-      const availH = Math.max(60, H - headerH - footerH);
-      const availW = W - padX * 2;
-      const gap = Math.max(7, W * 0.025);
-
-      // Tiles are portrait, and stretch toward the height the screen actually
-      // has — square tiles leave a third of a tall phone empty. The picture
-      // frame below uses the same aspect, so opening a tile is a pure scale
-      // with nothing to distort.
-      const cellW = Math.max(24, (availW - gap * 2) / 3);
-      const maxCellH = (availH - gap * 2) / 3;
-      const aspect = clamp(maxCellH / cellW, 1, 1.6);
-      const cellH = cellW * aspect;
-
-      const gw = cellW * 3 + gap * 2;
-      const gh = cellH * 3 + gap * 2;
-      const gx = (W - gw) / 2;
-      const gy = headerH + (availH - gh) / 2;
-
-      const cells = [];
-      for (let i = 0; i < 9; i++) {
-        cells.push({
-          x: gx + (i % 3) * (cellW + gap),
-          y: gy + ((i / 3) | 0) * (cellH + gap),
-          w: cellW,
-          h: cellH
-        });
-      }
-
-      const dTop = top + 56;
-      const dBot = H - bot - 52;
-      const maxW = W - Math.max(10, W * 0.035) * 2;
-      const maxH = Math.max(80, dBot - dTop);
-      let dw = maxW, dh = dw * aspect;
-      if (dh > maxH) { dh = maxH; dw = dh / aspect; }
-      const detail = { x: (W - dw) / 2, y: dTop + (maxH - dh) / 2, w: dw, h: dh };
-
-      L = { W, H, top, bot, padX, headerH, footerH, cells, cellW, cellH, aspect, gap, detail };
-    }
-    layout();
-
-    // ====================================================================== //
-    // Thumbnails — baked one per frame so the first frame is never blank      //
-    // ====================================================================== //
-
-    const THUMB_SCALE = 1.6;             // supersample the small tiles a little
-    let thumbs = new Array(9).fill(null);
-    let thumbW = 0, thumbH = 0;
-    let bakeQueue = [];
-
-    function queueThumbs() {
-      const w = Math.round(Math.min(240, L.cellW * THUMB_SCALE));
-      const h = Math.round(w * L.aspect);
-      if (!CAN_BAKE || (w === thumbW && h === thumbH)) return;
-      thumbW = w;
-      thumbH = h;
-      thumbs = new Array(9).fill(null);
-      bakeQueue = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-    }
-
-    function bakeStep() {
-      if (!bakeQueue.length) return false;
-      const i = bakeQueue.shift();
-      const sf = makeSurface(thumbW, thumbH);
-      if (sf) {
-        const sg = sf.getContext("2d");
-        sg.save();
-        SCENES[i].paint(sg, thumbW, thumbH);
-        sg.restore();
-        thumbs[i] = sf;
-      }
-      return true;
-    }
-    queueThumbs();
-
-    // ====================================================================== //
-    // Persistent state                                                       //
-    // ====================================================================== //
-
-    const revealedSet = new Set();
-    let storageOk = !!(ctx.capabilities && ctx.capabilities.storage);
-    if (storageOk) {
-      try {
-        const saved = await ctx.storage.get("revealed");
-        if (Array.isArray(saved)) for (const id of saved) revealedSet.add(id);
-      } catch (_) {
-        storageOk = false;
-      }
-    }
-    function persistRevealed() {
-      if (!storageOk) return;
-      try { ctx.storage.set("revealed", Array.from(revealedSet)); } catch (_) { /* non-fatal */ }
+      L = {
+        W: ctx.width,
+        H: ctx.height,
+        top: (ctx.safeArea && ctx.safeArea.top) || 0,
+        bot: (ctx.safeArea && ctx.safeArea.bottom) || 0
+      };
+      FCOLS = clamp(Math.round(L.W / 13), 18, 40);
+      FROWS = Math.max(6, Math.round(FCOLS * (L.H / L.W)));
+      CCOLS = Math.ceil(FCOLS / 3);
+      CROWS = Math.ceil(FROWS / 3);
     }
 
     // ====================================================================== //
-    // Detail state — the crisp bake, the mosaic grids, the rub mask           //
+    // The mosaic grids                                                       //
     // ====================================================================== //
 
-    let view = "grid";          // "grid" | "detail"
-    let trans = null;           // { i, t, dir } while zooming in/out
-    let selected = -1;
-
-    let crisp = null;           // OffscreenCanvas of the scene at detail size
-    let pixelSurf = null;       // mosaic layer, masked before it is composited
-    let maskSurf = null;        // accumulated rub strokes (white = revealed)
-    let brush = null;           // pre-baked soft brush stamp
-
-    // Fallback path (no OffscreenCanvas): the crisp picture lives as ImageData
-    // captured straight off the display canvas, and the reveal is a clip path.
-    let baseImg = null;
-    let baseImgOrigin = { x: 0, y: 0 };
-    let clipStamps = [];
-
-    // Mosaic grids.
     let FCOLS = 0, FROWS = 0, CCOLS = 0, CROWS = 0;
-    let fineShades = null, coarseShades = null, cellPhase = null;
-    let gridsReady = false;
-    let gridsPending = false;
-
-    // Reveal bookkeeping.
-    const RCOLS = 24, RROWS = 30;
-    let revealCells = new Uint8Array(RCOLS * RROWS);
-    let revealCount = 0;
-    let revealBox = null;       // {x0,y0,x1,y1} in detail-local CSS px
-    let sceneDone = false;
-    let autoFill = 0;           // 0..1 sweep that finishes the reveal
-    let rubbing = false;
-    let everRubbed = false;
-
     const SHADE_MUL = [0.72, 0.85, 0.95, 1.03, 1.13, 1.26];
     const SHADES = SHADE_MUL.length;
+    const RCOLS = 20, RROWS = 40;
+    const DONE_AT = 0.72;
 
-    function makeBrush(r) {
-      const size = Math.max(4, Math.round(r * 2 * PX));
-      const sf = makeSurface(size, size);
-      if (!sf) return null;
-      const bg = sf.getContext("2d");
-      const c = size / 2;
-      const gr = bg.createRadialGradient(c, c, 0, c, c, c);
-      gr.addColorStop(0, "rgba(255,255,255,1)");
-      gr.addColorStop(0.45, "rgba(255,255,255,0.92)");
-      gr.addColorStop(0.78, "rgba(255,255,255,0.4)");
-      gr.addColorStop(1, "rgba(255,255,255,0)");
-      bg.fillStyle = gr;
-      bg.beginPath();
-      bg.arc(c, c, c, 0, TAU);
-      bg.fill();
-      return sf;
+    layout();
+
+    function shadeTable(grid, count) {
+      const out = new Array(count);
+      for (let i = 0; i < count; i++) {
+        const r = grid[i * 3], gg = grid[i * 3 + 1], b = grid[i * 3 + 2];
+        const arr = new Array(SHADES);
+        for (let k = 0; k < SHADES; k++) {
+          const m = SHADE_MUL[k];
+          arr[k] = "rgb(" + (clamp(r * m, 0, 255) | 0) + "," +
+            (clamp(gg * m, 0, 255) | 0) + "," + (clamp(b * m, 0, 255) | 0) + ")";
+        }
+        out[i] = arr;
+      }
+      return out;
     }
 
-    function brushRadius() {
-      return clamp(Math.min(L.detail.w, L.detail.h) * 0.115, 22, 58);
-    }
-
-    // Average the baked picture down into a fine grid, then fold the fine grid
-    // into a coarse one. Two resolutions is all the mosaic animation needs.
-    function buildGrids(img) {
+    /** Average the baked picture into a fine grid, then fold that 3x3 into a
+     *  coarse one. Every shade string is pre-built here so the frame loop never
+     *  does string work per cell. */
+    function buildGrids(page, img) {
       const iw = img.width, ih = img.height, data = img.data;
       const fine = new Float32Array(FCOLS * FROWS * 3);
       const step = 2;
@@ -1388,8 +1640,6 @@ window.plethoraBit = {
         }
       }
 
-      CCOLS = Math.ceil(FCOLS / 3);
-      CROWS = Math.ceil(FROWS / 3);
       const coarse = new Float32Array(CCOLS * CROWS * 3);
       for (let cy = 0; cy < CROWS; cy++) {
         for (let cx = 0; cx < CCOLS; cx++) {
@@ -1406,50 +1656,29 @@ window.plethoraBit = {
         }
       }
 
-      // Pre-build the shade strings once: the frame loop must never do string
-      // work per cell.
-      function shadeTable(grid, count) {
-        const out = new Array(count);
-        for (let i = 0; i < count; i++) {
-          const r = grid[i * 3], gg = grid[i * 3 + 1], b = grid[i * 3 + 2];
-          const arr = new Array(SHADES);
-          for (let s2 = 0; s2 < SHADES; s2++) {
-            const m = SHADE_MUL[s2];
-            arr[s2] = "rgb(" + (clamp(r * m, 0, 255) | 0) + "," +
-              (clamp(gg * m, 0, 255) | 0) + "," + (clamp(b * m, 0, 255) | 0) + ")";
-          }
-          out[i] = arr;
-        }
-        return out;
-      }
-      fineShades = shadeTable(fine, FCOLS * FROWS);
-      coarseShades = shadeTable(coarse, CCOLS * CROWS);
-
-      const rng = mulberry32(20260811);
-      cellPhase = new Float32Array(FCOLS * FROWS);
-      for (let i = 0; i < cellPhase.length; i++) cellPhase[i] = rng() * TAU;
-      gridsReady = true;
+      page.fineShades = shadeTable(fine, FCOLS * FROWS);
+      page.coarseShades = shadeTable(coarse, CCOLS * CROWS);
+      const rng = mulberry32(20260812);
+      page.cellPhase = new Float32Array(FCOLS * FROWS);
+      for (let i = 0; i < page.cellPhase.length; i++) page.cellPhase[i] = rng() * TAU;
+      page.ready = true;
     }
 
-    // Paint one frame of the mosaic into `pg`, sized (w, h) in CSS px.
-    function drawMosaic(pg, w, h, timeMs) {
-      if (!gridsReady) return;
+    /** One frame of the living mosaic, drawn into g2 across (W, H). */
+    function drawMosaic(g2, W, H, page, timeMs) {
+      if (!page.ready) return;
       const t = timeMs * 0.001;
 
-      // Coarse base — the big blocks that show through in the wave crests.
-      const ccw = w / CCOLS, cch = h / CROWS;
+      const ccw = W / CCOLS, cch = H / CROWS;
       for (let y = 0; y < CROWS; y++) {
         for (let x = 0; x < CCOLS; x++) {
-          const i = y * CCOLS + x;
-          const sI = clamp(2 + (fsin(t * 0.9 + (x * 3 + y * 5) * 0.5) * 2.2) | 0, 0, SHADES - 1);
-          pg.fillStyle = coarseShades[i][sI];
-          pg.fillRect(x * ccw, y * cch, ccw + 0.7, cch + 0.7);
+          const idx = clamp(2 + (fsin(t * 0.9 + (x * 3 + y * 5) * 0.5) * 2.2) | 0, 0, SHADES - 1);
+          g2.fillStyle = page.coarseShades[y * CCOLS + x][idx];
+          g2.fillRect(x * ccw, y * cch, ccw + 0.8, cch + 0.8);
         }
       }
 
-      // Fine detail on top, faded out along a slow diagonal wave so the mosaic
-      // visibly coarsens and refines in travelling bands.
-      const cw = w / FCOLS, ch = h / FROWS;
+      const cw = W / FCOLS, ch = H / FROWS;
       for (let y = 0; y < FROWS; y++) {
         const rowW = y * 0.1;
         for (let x = 0; x < FCOLS; x++) {
@@ -1457,44 +1686,141 @@ window.plethoraBit = {
           const a = 1 - wv * wv;
           if (a < 0.04) continue;
           const i = y * FCOLS + x;
-          const ph = cellPhase[i];
-          const sI = clamp((2 + (fsin(t * 1.7 + ph) * 2.6)) | 0, 0, SHADES - 1);
-          pg.globalAlpha = a;
-          pg.fillStyle = fineShades[i][sI];
-          // Each block breathes a touch, so grout lines pulse between them.
-          const k = 0.86 + 0.14 * (0.5 + 0.5 * fsin(t * 2.1 + ph * 1.7));
+          const phase = page.cellPhase[i];
+          const idx = clamp((2 + (fsin(t * 1.7 + phase) * 2.6)) | 0, 0, SHADES - 1);
+          g2.globalAlpha = a;
+          g2.fillStyle = page.fineShades[i][idx];
+          const k = 0.86 + 0.14 * (0.5 + 0.5 * fsin(t * 2.1 + phase * 1.7));
           const bw = cw * k, bh = ch * k;
-          pg.fillRect(x * cw + (cw - bw) * 0.5, y * ch + (ch - bh) * 0.5, bw + 0.4, bh + 0.4);
+          g2.fillRect(x * cw + (cw - bw) * 0.5, y * ch + (ch - bh) * 0.5, bw + 0.5, bh + 0.5);
         }
       }
-      pg.globalAlpha = 1;
+      g2.globalAlpha = 1;
     }
 
-    function resetReveal() {
-      revealCells = new Uint8Array(RCOLS * RROWS);
-      revealCount = 0;
-      revealBox = null;
-      sceneDone = false;
-      autoFill = 0;
-      everRubbed = false;
-      clipStamps = [];
+    // ====================================================================== //
+    // Pages                                                                  //
+    // ====================================================================== //
+
+    const revealedSet = new Set();
+    let storageOk = !!(ctx.capabilities && ctx.capabilities.storage);
+    if (storageOk) {
+      try {
+        const saved = await ctx.storage.get("revealed_v2");
+        if (Array.isArray(saved)) for (const id of saved) revealedSet.add(id);
+      } catch (_) {
+        storageOk = false;
+      }
+    }
+    function persistRevealed() {
+      if (!storageOk) return;
+      try { ctx.storage.set("revealed_v2", Array.from(revealedSet)); } catch (_) { /* non-fatal */ }
     }
 
-    function markReveal(x, y, r) {
-      const d = L.detail;
-      const c0 = clamp(Math.floor(((x - r) / d.w) * RCOLS), 0, RCOLS - 1);
-      const c1 = clamp(Math.floor(((x + r) / d.w) * RCOLS), 0, RCOLS - 1);
-      const r0 = clamp(Math.floor(((y - r) / d.h) * RROWS), 0, RROWS - 1);
-      const r1 = clamp(Math.floor(((y + r) / d.h) * RROWS), 0, RROWS - 1);
+    let brush = null;
+    function brushRadius() {
+      return clamp(Math.min(L.W, L.H) * 0.1, 24, 62);
+    }
+    function makeBrush(r) {
+      const size = Math.max(4, Math.round(r * 2 * MASK_PX));
+      const sf = makeSurface(size, size);
+      if (!sf) return null;
+      const bg = sf.getContext("2d");
+      const c = size / 2;
+      const grad = bg.createRadialGradient(c, c, 0, c, c, c);
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(0.45, "rgba(255,255,255,0.93)");
+      grad.addColorStop(0.78, "rgba(255,255,255,0.42)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      bg.fillStyle = grad;
+      bg.beginPath();
+      bg.arc(c, c, c, 0, TAU);
+      bg.fill();
+      return sf;
+    }
+
+    const pages = new Map();
+
+    function makePage(i) {
+      const W = L.W, H = L.H;
+      const page = {
+        i: i,
+        crisp: null,
+        mask: null,
+        crispData: null,      // fallback path only
+        painted: false,       // fallback path only
+        finalPainted: false,  // fallback path only
+        fineShades: null,
+        coarseShades: null,
+        cellPhase: null,
+        ready: false,
+        revealCells: new Uint8Array(RCOLS * RROWS),
+        revealCount: 0,
+        revealBox: null,
+        stamps: [],
+        done: revealedSet.has(PLACES[i].id) ? false : false,
+        autoFill: 0,
+        everRubbed: false
+      };
+
+      if (CAN_BAKE) {
+        page.crisp = makeSurface(W * PX, H * PX);
+        if (page.crisp) {
+          const cg = page.crisp.getContext("2d");
+          cg.save();
+          cg.scale(PX, PX);
+          paintPage(cg, W, H, i, L.bot);
+          cg.restore();
+          try {
+            buildGrids(page, cg.getImageData(0, 0, page.crisp.width, page.crisp.height));
+          } catch (_) {
+            page.ready = false;
+          }
+        }
+        page.mask = makeSurface(W * MASK_PX, H * MASK_PX);
+      }
+      return page;
+    }
+
+    function getPage(i) {
+      const k = ((i % PLACES.length) + PLACES.length) % PLACES.length;
+      if (!pages.has(k)) pages.set(k, makePage(k));
+      return pages.get(k);
+    }
+
+    function trimPages(center) {
+      const keep = new Set([wrapIndex(center - 1), center, wrapIndex(center + 1)]);
+      for (const k of Array.from(pages.keys())) {
+        if (!keep.has(k)) pages.delete(k);
+      }
+    }
+
+    function wrapIndex(i) {
+      return ((i % PLACES.length) + PLACES.length) % PLACES.length;
+    }
+
+    let index = 0;
+    let dragX = 0;            // live horizontal offset while swiping
+    let slide = null;         // { from, to, dir } settle animation
+
+    // ====================================================================== //
+    // Rubbing                                                                //
+    // ====================================================================== //
+
+    function markReveal(page, x, y, r) {
+      const c0 = clamp(Math.floor(((x - r) / L.W) * RCOLS), 0, RCOLS - 1);
+      const c1 = clamp(Math.floor(((x + r) / L.W) * RCOLS), 0, RCOLS - 1);
+      const r0 = clamp(Math.floor(((y - r) / L.H) * RROWS), 0, RROWS - 1);
+      const r1 = clamp(Math.floor(((y + r) / L.H) * RROWS), 0, RROWS - 1);
       for (let ry = r0; ry <= r1; ry++) {
         for (let rx = c0; rx <= c1; rx++) {
           const i = ry * RCOLS + rx;
-          if (!revealCells[i]) { revealCells[i] = 1; revealCount++; }
+          if (!page.revealCells[i]) { page.revealCells[i] = 1; page.revealCount++; }
         }
       }
-      const b = revealBox;
+      const b = page.revealBox;
       if (!b) {
-        revealBox = { x0: x - r, y0: y - r, x1: x + r, y1: y + r };
+        page.revealBox = { x0: x - r, y0: y - r, x1: x + r, y1: y + r };
       } else {
         if (x - r < b.x0) b.x0 = x - r;
         if (y - r < b.y0) b.y0 = y - r;
@@ -1503,110 +1829,27 @@ window.plethoraBit = {
       }
     }
 
-    function revealFraction() {
-      return revealCount / (RCOLS * RROWS);
-    }
-
-    function stampAt(x, y) {
+    function stampAt(page, x, y) {
       const r = brushRadius();
-      if (maskSurf) {
-        const mg = maskSurf.getContext("2d");
+      if (page.mask) {
+        const mg = page.mask.getContext("2d");
         if (brush) {
-          mg.drawImage(brush, (x - r) * PX, (y - r) * PX, r * 2 * PX, r * 2 * PX);
+          mg.drawImage(brush, (x - r) * MASK_PX, (y - r) * MASK_PX,
+            r * 2 * MASK_PX, r * 2 * MASK_PX);
         } else {
           mg.fillStyle = "#fff";
           mg.beginPath();
-          mg.arc(x * PX, y * PX, r * PX, 0, TAU);
+          mg.arc(x * MASK_PX, y * MASK_PX, r * MASK_PX, 0, TAU);
           mg.fill();
         }
-      } else if (clipStamps.length < 900) {
-        clipStamps.push({ x, y, r: r * 0.85 });
+      } else if (page.stamps.length < 700) {
+        page.stamps.push({ x: x, y: y, r: r * 0.85 });
       }
-      markReveal(x, y, r * 0.78);
+      markReveal(page, x, y, r * 0.78);
     }
 
-    // ====================================================================== //
-    // Opening and closing a picture                                          //
-    // ====================================================================== //
-
-    function openScene(i) {
-      selected = i;
-      resetReveal();
-      const d = L.detail;
-
-      if (CAN_BAKE) {
-        const pw = Math.round(d.w * PX), ph = Math.round(d.h * PX);
-        crisp = makeSurface(pw, ph);
-        if (crisp) {
-          const cg = crisp.getContext("2d");
-          cg.save();
-          cg.scale(PX, PX);
-          SCENES[i].paint(cg, d.w, d.h);
-          cg.restore();
-        }
-        pixelSurf = makeSurface(pw, ph);
-        maskSurf = makeSurface(pw, ph);
-        brush = makeBrush(brushRadius());
-      }
-
-      // Mosaic resolution: ~11 CSS px blocks, clamped so tiny/huge screens
-      // both land somewhere sensible.
-      FCOLS = clamp(Math.round(d.w / 11), 20, 46);
-      FROWS = Math.max(4, Math.round(FCOLS * (d.h / d.w)));
-      gridsReady = false;
-      gridsPending = true;   // built on a later frame; the zoom covers the cost
-
-      if (CAN_BAKE) {
-        trans = { i, t: 0, dir: 1 };
-      } else {
-        // Nothing baked to zoom, and repainting nine scenes per frame would
-        // stutter — open straight into the picture instead.
-        trans = null;
-        view = "detail";
-        fallbackNeedsBase = true;
-      }
-    }
-
-    function buildGridsNow() {
-      gridsPending = false;
-      try {
-        if (crisp) {
-          const cg = crisp.getContext("2d");
-          buildGrids(cg.getImageData(0, 0, crisp.width, crisp.height));
-        } else if (baseImg) {
-          buildGrids(baseImg);
-        }
-      } catch (_) {
-        gridsReady = false;   // readback blocked: the picture simply stays crisp
-      }
-    }
-
-    function closeScene() {
-      if (selected < 0) return;
-      if (CAN_BAKE) {
-        trans = { i: selected, t: 1, dir: -1 };
-      } else {
-        trans = null;
-        view = "grid";
-        releaseDetail();
-        resetReveal();
-        fallbackGridDrawn = false;
-        syncChrome();
-      }
-    }
-
-    function releaseDetail() {
-      crisp = null;
-      pixelSurf = null;
-      maskSurf = null;
-      brush = null;
-      baseImg = null;
-      fineShades = null;
-      coarseShades = null;
-      cellPhase = null;
-      gridsReady = false;
-      gridsPending = false;
-      selected = -1;
+    function revealFraction(page) {
+      return page.revealCount / (RCOLS * RROWS);
     }
 
     // ====================================================================== //
@@ -1621,7 +1864,10 @@ window.plethoraBit = {
     function haptic(kind) {
       if (canHaptic) { try { ctx.platform.haptic(kind); } catch (_) { /* ignore */ } }
     }
-
+    function sting(name) {
+      if (!canMusic) return;
+      try { ctx.music.sting(name); } catch (_) { /* ignore */ }
+    }
     async function firstGesture() {
       if (started) return;
       started = true;
@@ -1630,25 +1876,16 @@ window.plethoraBit = {
       try {
         await ctx.music.unlock();
         music = ctx.music.play({
-          preset: "drift",
-          volume: 0.3,
-          tempo: 64,
-          intensity: 0.3,
-          scale: "pentatonic",
-          fadeInMs: 2200
+          preset: "drift", volume: 0.28, tempo: 62,
+          intensity: 0.28, scale: "pentatonic", fadeInMs: 2400
         });
       } catch (_) {
         music = null;
       }
     }
 
-    function sting(name) {
-      if (!canMusic) return;
-      try { ctx.music.sting(name); } catch (_) { /* ignore */ }
-    }
-
     // ====================================================================== //
-    // UI chrome                                                              //
+    // Chrome                                                                 //
     // ====================================================================== //
 
     function el(tag, css, html) {
@@ -1660,100 +1897,95 @@ window.plethoraBit = {
 
     const FONT = "font-family:inherit;-webkit-tap-highlight-color:transparent;";
     const CHIP = FONT + "pointer-events:auto;border:0;cursor:pointer;color:#f3eee8;" +
-      "background:rgba(22,20,30,0.62);border:1px solid rgba(255,255,255,0.14);" +
+      "background:rgba(16,16,24,0.5);border:1px solid rgba(255,255,255,0.16);" +
       "backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);" +
-      "border-radius:999px;font-weight:700;letter-spacing:0.01em;";
+      "border-radius:999px;font-weight:700;";
 
-    // Grid header.
-    const header = el("div", "position:absolute;left:0;right:0;top:0;text-align:center;" +
-      "pointer-events:none;color:#f4efe8;");
-    header.innerHTML =
-      '<div id="pfTitle" style="font-size:19px;font-weight:800;letter-spacing:0.02em;">Pixel Fog</div>' +
-      '<div id="pfSub" style="font-size:11.5px;opacity:0.62;margin-top:3px;letter-spacing:0.16em;' +
-      'text-transform:uppercase;">nine views of san francisco</div>';
-    ui.appendChild(header);
+    const dots = el("div", "position:absolute;left:0;right:0;display:flex;gap:2px;" +
+      "justify-content:center;align-items:center;pointer-events:none;");
+    ui.appendChild(dots);
+    const dotEls = [];
+    for (let i = 0; i < PLACES.length; i++) {
+      // Each dot is a padded hit target wrapping the visible pip, so jumping
+      // straight to a place is always possible without any gesture at all.
+      const hit = el("div", FONT + "pointer-events:auto;cursor:pointer;padding:9px 4px;" +
+        "display:flex;align-items:center;justify-content:center;");
+      const pip = el("div", "width:6px;height:6px;border-radius:99px;" +
+        "background:rgba(255,255,255,0.3);transition:width 0.25s,background 0.25s;");
+      hit.appendChild(pip);
+      dots.appendChild(hit);
+      dotEls.push(pip);
+      ctx.listen(hit, "click", () => {
+        if (slide || i === index) return;
+        firstGesture();
+        index = i;
+        dragX = 0;
+        trimPages(index);
+        haptic("light");
+        sting("tap");
+        ctx.platform.interact({ type: "jump", place: PLACES[index].id });
+        syncChrome();
+      });
+    }
 
-    const helpBtn = el("button", CHIP + "position:absolute;width:32px;height:32px;font-size:15px;" +
-      "display:flex;align-items:center;justify-content:center;padding:0;", "?");
-    ui.appendChild(helpBtn);
-
-    // Detail chrome.
-    const backBtn = el("button", CHIP + "position:absolute;padding:8px 15px 8px 12px;font-size:14px;" +
-      "display:none;align-items:center;gap:5px;", "&#8249;&nbsp;Back");
-    ui.appendChild(backBtn);
-
-    const detailTitle = el("div", "position:absolute;left:0;right:0;text-align:center;" +
-      "pointer-events:none;color:#f4efe8;font-size:14px;font-weight:700;display:none;" +
-      "text-shadow:0 2px 12px rgba(0,0,0,0.6);letter-spacing:0.03em;");
-    ui.appendChild(detailTitle);
-
-    const hint = el("div", "position:absolute;left:0;right:0;text-align:center;pointer-events:none;" +
-      "color:#f4efe8;font-size:12.5px;font-weight:600;display:none;opacity:0.85;" +
-      "text-shadow:0 2px 12px rgba(0,0,0,0.7);letter-spacing:0.05em;transition:opacity 0.5s;");
+    const hint = el("div", "position:absolute;left:58px;right:58px;text-align:center;pointer-events:none;" +
+      "color:#f4efe8;font-size:12px;font-weight:600;letter-spacing:0.06em;opacity:0.85;" +
+      "text-shadow:0 2px 12px rgba(0,0,0,0.8);transition:opacity 0.6s;");
     ui.appendChild(hint);
 
-    // Instructions panel.
+    const helpBtn = el("button", CHIP + "position:absolute;width:29px;height:29px;font-size:14px;" +
+      "display:flex;align-items:center;justify-content:center;padding:0;opacity:0.75;", "?");
+    ui.appendChild(helpBtn);
+
     const panel = el("div", "position:absolute;left:0;right:0;top:0;bottom:0;display:none;" +
       "align-items:center;justify-content:center;padding:24px;pointer-events:auto;" +
-      "background:rgba(8,8,14,0.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);");
-    const panelCard = el("div", FONT + "max-width:330px;color:#f2ede6;background:rgba(24,22,32,0.96);" +
+      "background:rgba(8,8,14,0.74);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);");
+    const card = el("div", FONT + "max-width:330px;color:#f2ede6;background:rgba(24,22,32,0.96);" +
       "border:1px solid rgba(255,255,255,0.1);border-radius:22px;padding:22px 20px 18px;" +
       "box-shadow:0 20px 60px rgba(0,0,0,0.55);");
-    panelCard.innerHTML =
+    card.innerHTML =
       '<div style="font-size:16px;font-weight:800;margin-bottom:12px;">How it works</div>' +
       '<div style="font-size:13.5px;line-height:1.75;opacity:0.9;">' +
-      '&bull;&nbsp; Tap any of the nine views to open it.<br>' +
-      '&bull;&nbsp; Rub the picture with your finger.<br>' +
-      '&bull;&nbsp; A living mosaic of that same picture blooms wherever you rub.<br>' +
-      '&bull;&nbsp; Clear most of it and the whole picture turns to pixels.<br>' +
-      '&bull;&nbsp; <b>Back</b> returns to the nine views.' +
+      '&bull;&nbsp; Every picture starts buried under living pixels.<br>' +
+      '&bull;&nbsp; Rub with your finger to clear them away.<br>' +
+      '&bull;&nbsp; Underneath is a place in San Francisco — and one fact about it you almost certainly do not know.<br>' +
+      '&bull;&nbsp; Clear most of it and the rest falls away on its own.<br>' +
+      '&bull;&nbsp; Once it is clear, swipe sideways for the next place.<br>' +
+      '&bull;&nbsp; To leave one early, tap a dot at the top. There are nine.' +
       '</div>';
-    const panelBtn = el("button", CHIP + "margin-top:16px;width:100%;padding:11px 0;font-size:14px;" +
+    const cardBtn = el("button", CHIP + "margin-top:16px;width:100%;padding:11px 0;font-size:14px;" +
       "background:rgba(255,255,255,0.14);", "Got it");
-    panelCard.appendChild(panelBtn);
-    panel.appendChild(panelCard);
+    card.appendChild(cardBtn);
+    panel.appendChild(card);
     ui.appendChild(panel);
 
     function placeChrome() {
-      const top = L.top;
-      header.style.top = (top + 12) + "px";
-      helpBtn.style.top = (top + 12) + "px";
-      helpBtn.style.right = L.padX + "px";
-      backBtn.style.top = (top + 10) + "px";
-      backBtn.style.left = L.padX + "px";
-      detailTitle.style.top = (top + 18) + "px";
-      hint.style.bottom = (L.bot + 16) + "px";
+      dots.style.top = (L.top + 8) + "px";
+      hint.style.top = (L.top + 42) + "px";
+      helpBtn.style.top = (L.top + 10) + "px";
+      helpBtn.style.right = Math.max(12, L.W * 0.04) + "px";
     }
-    placeChrome();
 
     function syncChrome() {
-      const detailish = view === "detail" || (trans && trans.dir > 0);
-      header.style.display = detailish ? "none" : "";
-      helpBtn.style.display = detailish ? "none" : "";
-      backBtn.style.display = view === "detail" ? "flex" : "none";
-      detailTitle.style.display = view === "detail" ? "" : "none";
-      hint.style.display = view === "detail" ? "" : "none";
-      if (view === "detail" && selected >= 0) {
-        detailTitle.textContent = SCENES[selected].label;
-        hint.textContent = sceneDone
-          ? "all pixels ✦  —  go back for another"
-          : (everRubbed ? "" : "rub the picture");
-        hint.style.opacity = sceneDone ? "0.9" : (everRubbed ? "0" : "0.85");
+      for (let i = 0; i < dotEls.length; i++) {
+        const on = i === index;
+        dotEls[i].style.width = on ? "18px" : "6px";
+        dotEls[i].style.background = on
+          ? "rgba(255,214,150,0.95)"
+          : (revealedSet.has(PLACES[i].id) ? "rgba(255,214,150,0.45)" : "rgba(255,255,255,0.28)");
       }
+      const page = getPage(index);
+      if (page.done) hint.textContent = "swipe for the next place";
+      else if (page.everRubbed) hint.textContent = "";
+      else hint.textContent = "rub away the pixels";
+      hint.style.opacity = hint.textContent ? "0.85" : "0";
     }
-    syncChrome();
 
     ctx.listen(helpBtn, "click", () => { panel.style.display = "flex"; haptic("light"); });
-    ctx.listen(panelBtn, "click", () => { panel.style.display = "none"; haptic("light"); });
-    ctx.listen(backBtn, "click", () => {
-      if (view !== "detail") return;
-      haptic("light");
-      sting("tap");
-      closeScene();
-    });
+    ctx.listen(cardBtn, "click", () => { panel.style.display = "none"; haptic("light"); });
 
     // ====================================================================== //
-    // Pointer handling                                                       //
+    // Gestures — one drag is either a rub or a swipe, never both             //
     // ====================================================================== //
 
     // offsetX/offsetY are already canvas-relative, which keeps us off the
@@ -1766,359 +1998,229 @@ window.plethoraBit = {
       return { x: e.clientX, y: e.clientY };
     }
 
-    let lastRub = null;
+    let gesture = null;
     let lastInteract = 0;
     let lastRubHaptic = 0;
-    let pressCell = -1;
-    let pressPt = null;
-
-    function cellAt(x, y) {
-      for (let i = 0; i < 9; i++) {
-        const c = L.cells[i];
-        if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return i;
-      }
-      return -1;
-    }
 
     ctx.listen(canvas, "pointerdown", (e) => {
       if (panel.style.display === "flex") return;
+      if (slide) return;
       const p = localPoint(e);
       firstGesture();
-
-      if (view === "grid" && !trans) {
-        pressCell = cellAt(p.x, p.y);
-        pressPt = p;
-        if (pressCell >= 0) haptic("light");
-        return;
+      if (canvas.setPointerCapture) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
       }
-
-      if (view === "detail") {
-        const d = L.detail;
-        const lx = p.x - d.x, ly = p.y - d.y;
-        if (lx < -12 || ly < -12 || lx > d.w + 12 || ly > d.h + 12) return;
-        rubbing = true;
-        everRubbed = true;
-        if (canvas.setPointerCapture) {
-          try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
-        }
-        lastRub = { x: clamp(lx, 0, d.w), y: clamp(ly, 0, d.h) };
-        stampAt(lastRub.x, lastRub.y);
-        syncChrome();
-        haptic("light");
-      }
+      gesture = {
+        x0: p.x, y0: p.y, t0: e.timeStamp || 0,
+        lx: p.x, ly: p.y,
+        kind: null,                 // null until the drag declares itself
+        buffer: [{ x: p.x, y: p.y }],
+        dist: 0
+      };
     });
 
     ctx.listen(canvas, "pointermove", (e) => {
-      if (!rubbing || view !== "detail") return;
+      if (!gesture || panel.style.display === "flex") return;
       const p = localPoint(e);
-      const d = L.detail;
-      const x = clamp(p.x - d.x, 0, d.w);
-      const y = clamp(p.y - d.y, 0, d.h);
-      if (!lastRub) { lastRub = { x, y }; stampAt(x, y); return; }
+      const dx = p.x - gesture.x0;
+      const dy = p.y - gesture.y0;
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+      const dt = Math.max(1, (e.timeStamp || 0) - gesture.t0);
+      gesture.dist += Math.hypot(p.x - gesture.lx, p.y - gesture.ly);
 
-      // Stamp along the segment so a fast swipe stays continuous.
-      const r = brushRadius();
-      const dx = x - lastRub.x, dy = y - lastRub.y;
-      const dist = Math.hypot(dx, dy);
-      const step = Math.max(2, r * 0.3);
-      const n = Math.min(40, Math.floor(dist / step));
-      for (let i = 1; i <= n; i++) {
-        stampAt(lastRub.x + (dx * i) / n, lastRub.y + (dy * i) / n);
-      }
-      if (n === 0 && dist > 0.5) stampAt(x, y);
-      lastRub = { x, y };
+      if (gesture.kind === null) {
+        const page = getPage(index);
+        // Rubbing a picture clean *is* a fast horizontal scrub, so no mix of
+        // velocity, straightness or direction can tell a rub from a swipe.
+        // Nor can a screen-edge zone: rubbing edge to edge starts there too.
+        // So the rule is binary and has no false positives — while pixels
+        // remain, every drag rubs; once the picture is clear there is nothing
+        // left to rub and any sideways drag pages. To leave a picture early,
+        // tap a dot at the top.
+        const horizontal = adx >= 1.8 * ady;
+        const canSwipe = page.done;
 
-      const now = e.timeStamp || 0;
-      if (now - lastInteract > 400) {
-        lastInteract = now;
-        ctx.platform.interact({ type: "rub", scene: SCENES[selected].id });
+        const needDx = page.done ? 30 : 44;
+        if (canSwipe && horizontal && adx >= needDx) {
+          gesture.kind = "swipe";
+          gesture.buffer = null;
+        } else if (canSwipe && horizontal && dt <= 320) {
+          // Still short of the threshold but travelling like a swipe — keep
+          // buffering rather than committing to a rub we would have to undo.
+          gesture.buffer.push({ x: p.x, y: p.y });
+          gesture.lx = p.x; gesture.ly = p.y;
+          return;
+        } else if (gesture.dist > 14 || dt > 90) {
+          gesture.kind = "rub";
+          for (const q of gesture.buffer) stampAt(page, q.x, q.y);
+          gesture.buffer = null;
+          page.everRubbed = true;
+          syncChrome();
+        } else {
+          gesture.buffer.push({ x: p.x, y: p.y });
+          gesture.lx = p.x; gesture.ly = p.y;
+          return;
+        }
       }
-      if (now - lastRubHaptic > 130) {
-        lastRubHaptic = now;
-        haptic("light");
+
+      if (gesture.kind === "swipe") {
+        dragX = dx;
+        gesture.lx = p.x; gesture.ly = p.y;
+        return;
       }
+
+      // Rubbing: stamp along the segment so a fast sweep stays continuous.
+      const page = getPage(index);
+      if (!page.done) {
+        const r = brushRadius();
+        const sdx = p.x - gesture.lx, sdy = p.y - gesture.ly;
+        const dist = Math.hypot(sdx, sdy);
+        const n = Math.min(40, Math.floor(dist / Math.max(2, r * 0.3)));
+        for (let i = 1; i <= n; i++) {
+          stampAt(page, gesture.lx + (sdx * i) / n, gesture.ly + (sdy * i) / n);
+        }
+        if (n === 0 && dist > 0.5) stampAt(page, p.x, p.y);
+
+        const now = e.timeStamp || 0;
+        if (now - lastInteract > 400) {
+          lastInteract = now;
+          ctx.platform.interact({ type: "rub", place: PLACES[index].id });
+        }
+        if (now - lastRubHaptic > 130) {
+          lastRubHaptic = now;
+          haptic("light");
+        }
+      }
+      gesture.lx = p.x; gesture.ly = p.y;
     }, { passive: true });
 
-    function endRub(e) {
-      if (view === "grid" && pressCell >= 0 && !trans) {
-        const p = e ? localPoint(e) : pressPt;
-        const still = !p || !pressPt || Math.hypot(p.x - pressPt.x, p.y - pressPt.y) < 14;
-        if (still && cellAt(p.x, p.y) === pressCell) {
+    function endGesture(e) {
+      if (!gesture) return;
+      const kind = gesture.kind;
+      const dx = e ? localPoint(e).x - gesture.x0 : dragX;
+      const dt = Math.max(1, ((e && e.timeStamp) || 0) - gesture.t0);
+
+      if (kind === "swipe") {
+        const speed = Math.abs(dx) / dt;
+        const commit = Math.abs(dx) > L.W * 0.22 || speed > 0.5;
+        if (commit) {
+          const dir = dx < 0 ? 1 : -1;
+          slide = { dir: dir, target: dir > 0 ? -L.W : L.W };
+          haptic("light");
           sting("tap");
-          ctx.platform.interact({ type: "open", scene: SCENES[pressCell].id });
-          openScene(pressCell);
+        } else {
+          slide = { dir: 0, target: 0 };
+        }
+      } else if (kind === null && gesture.buffer) {
+        // A tap: dab a small opening rather than doing nothing.
+        const page = getPage(index);
+        if (!page.done) {
+          stampAt(page, gesture.x0, gesture.y0);
+          page.everRubbed = true;
+          haptic("light");
           syncChrome();
         }
       }
-      pressCell = -1;
-      pressPt = null;
-      rubbing = false;
-      lastRub = null;
+      gesture = null;
     }
-    ctx.listen(canvas, "pointerup", endRub);
-    ctx.listen(canvas, "pointercancel", () => { pressCell = -1; rubbing = false; lastRub = null; });
-    ctx.listen(canvas, "lostpointercapture", () => { rubbing = false; lastRub = null; });
+    ctx.listen(canvas, "pointerup", endGesture);
+    ctx.listen(canvas, "pointercancel", () => { gesture = null; if (dragX) slide = { dir: 0, target: 0 }; });
+    ctx.listen(canvas, "lostpointercapture", () => { gesture = null; });
 
     // ====================================================================== //
     // Rendering                                                              //
     // ====================================================================== //
 
-    function backdrop(timeMs) {
+    let scratch = null;
+    function ensureScratch() {
+      const want = Math.round(L.W * PX);
+      if (!scratch || scratch.width !== want) {
+        scratch = makeSurface(L.W * PX, L.H * PX);
+      }
+      return scratch;
+    }
+
+    /** Mosaic, then the crisp picture showing through wherever it was rubbed. */
+    function renderPage(page, ox, timeMs) {
+      const W = L.W, H = L.H;
+      g.save();
+      g.translate(ox, 0);
+      g.beginPath();
+      g.rect(0, 0, W, H);
+      g.clip();
+
+      if (page.crisp) {
+        if (page.done && page.autoFill >= 1) {
+          g.drawImage(page.crisp, 0, 0, W, H);
+        } else {
+          drawMosaic(g, W, H, page, timeMs);
+          const sc = ensureScratch();
+          if (sc && page.mask && (page.revealBox || page.autoFill > 0)) {
+            const sg = sc.getContext("2d");
+            sg.setTransform(1, 0, 0, 1, 0, 0);
+            sg.clearRect(0, 0, sc.width, sc.height);
+            sg.drawImage(page.crisp, 0, 0, sc.width, sc.height);
+            sg.globalCompositeOperation = "destination-in";
+            sg.drawImage(page.mask, 0, 0, sc.width, sc.height);
+            sg.globalCompositeOperation = "source-over";
+            g.drawImage(sc, 0, 0, W, H);
+          }
+        }
+      } else {
+        // Fallback: the picture was painted once and kept as ImageData. Restore
+        // the rubbed box, then lay the mosaic over everything *except* the rub
+        // stamps, so cleared areas keep showing the picture underneath.
+        const dp = DP();
+        if (page.done) {
+          if (!page.finalPainted && page.crispData) {
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.putImageData(page.crispData, ox * dp, 0);
+            g.setTransform(dp, 0, 0, dp, 0, 0);
+            page.finalPainted = true;
+          }
+        } else {
+          if (page.crispData && page.revealBox) {
+            const b = page.revealBox;
+            const bx = clamp(Math.floor((b.x0 - 4) * dp), 0, page.crispData.width);
+            const by = clamp(Math.floor((b.y0 - 4) * dp), 0, page.crispData.height);
+            const bw = clamp(Math.ceil((b.x1 - b.x0 + 8) * dp), 1, page.crispData.width - bx);
+            const bh = clamp(Math.ceil((b.y1 - b.y0 + 8) * dp), 1, page.crispData.height - by);
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.putImageData(page.crispData, ox * dp, 0, bx, by, bw, bh);
+            g.setTransform(dp, 0, 0, dp, 0, 0);
+            g.save();
+            g.translate(ox, 0);
+            g.beginPath();
+            g.rect(0, 0, W, H);
+            g.clip();
+          }
+          g.beginPath();
+          g.rect(0, 0, W, H);
+          for (const st of page.stamps) {
+            g.moveTo(st.x + st.r, st.y);
+            g.arc(st.x, st.y, st.r, 0, TAU);
+          }
+          g.clip("evenodd");
+          drawMosaic(g, W, H, page, timeMs);
+          if (page.crispData && page.revealBox) g.restore();
+        }
+      }
+      g.restore();
+    }
+
+    function draw(timeMs) {
       const W = L.W, H = L.H;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.scale(DP(), DP());
-      g.fillStyle = "#0b0a12";
+      g.fillStyle = "#08080e";
       g.fillRect(0, 0, W, H);
-      const t = timeMs * 0.00006;
-      const g1 = g.createRadialGradient(
-        W * (0.3 + 0.22 * Math.sin(t)), H * (0.22 + 0.1 * Math.cos(t * 1.3)), 0,
-        W * 0.5, H * 0.4, Math.max(W, H) * 0.85
-      );
-      g1.addColorStop(0, "rgba(72,60,110,0.55)");
-      g1.addColorStop(1, "rgba(10,9,18,0)");
-      g.fillStyle = g1;
-      g.fillRect(0, 0, W, H);
-      const g2 = g.createRadialGradient(
-        W * (0.7 - 0.2 * Math.cos(t * 0.8)), H * (0.82 + 0.08 * Math.sin(t * 1.1)), 0,
-        W * 0.5, H * 0.7, Math.max(W, H) * 0.7
-      );
-      g2.addColorStop(0, "rgba(122,74,96,0.35)");
-      g2.addColorStop(1, "rgba(10,9,18,0)");
-      g.fillStyle = g2;
-      g.fillRect(0, 0, W, H);
-    }
 
-    /**
-     * One grid tile. `skipImage` is for the no-OffscreenCanvas path, where the
-     * scene has already been painted live into the same rect and only the
-     * scrim, label and hairline are still owed.
-     */
-    function drawTile(i, rect, radius, alpha, skipImage) {
-      const sf = thumbs[i];
-      g.save();
-      g.globalAlpha = alpha;
+      const cur = getPage(index);
+      renderPage(cur, dragX, timeMs);
 
-      if (!skipImage) {
-        // Cheap drop shadow: a dark rounded rect nudged down behind the tile.
-        g.fillStyle = "rgba(0,0,0,0.4)";
-        roundRect(g, rect.x, rect.y + rect.h * 0.03, rect.w, rect.h, radius);
-        g.fill();
-      }
-
-      roundRect(g, rect.x, rect.y, rect.w, rect.h, radius);
-      g.save();
-      g.clip();
-      if (skipImage) {
-        // already painted
-      } else if (sf) {
-        g.drawImage(sf, rect.x, rect.y, rect.w, rect.h);
-      } else {
-        // Not baked yet — a soft placeholder so the grid is never empty.
-        // NB: this local must not be called `ph`. The upload validator's
-        // remote-resource heuristic false-positives on `const ph = <call>`,
-        // rejecting the whole bit with a message about registry loaders.
-        const placeholderGrad = g.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
-        placeholderGrad.addColorStop(0, "#2a2740");
-        placeholderGrad.addColorStop(1, "#171525");
-        g.fillStyle = placeholderGrad;
-        g.fillRect(rect.x, rect.y, rect.w, rect.h);
-      }
-      // Label scrim.
-      const sc = g.createLinearGradient(0, rect.y + rect.h * 0.55, 0, rect.y + rect.h);
-      sc.addColorStop(0, "rgba(0,0,0,0)");
-      sc.addColorStop(1, "rgba(0,0,0,0.6)");
-      g.fillStyle = sc;
-      g.fillRect(rect.x, rect.y + rect.h * 0.55, rect.w, rect.h * 0.45);
-      g.restore();
-
-      // Label + revealed marker.
-      const fs = clamp(rect.w * 0.098, 7.5, 12);
-      g.fillStyle = "rgba(245,240,232,0.94)";
-      g.font = "600 " + fs.toFixed(1) + "px -apple-system, system-ui, sans-serif";
-      g.textAlign = "left";
-      g.textBaseline = "alphabetic";
-      g.fillText(SCENES[i].label, rect.x + rect.w * 0.075, rect.y + rect.h - rect.h * 0.072);
-      if (revealedSet.has(SCENES[i].id)) {
-        g.fillStyle = "rgba(255,214,150,0.95)";
-        g.beginPath();
-        g.arc(rect.x + rect.w - rect.w * 0.09, rect.y + rect.h * 0.1, Math.max(2, rect.w * 0.026), 0, TAU);
-        g.fill();
-      }
-
-      // Inner hairline.
-      roundRect(g, rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1, radius);
-      g.strokeStyle = "rgba(255,255,255,0.13)";
-      g.lineWidth = 1;
-      g.stroke();
-      g.restore();
-    }
-
-    function drawGrid(timeMs, dimFor) {
-      backdrop(timeMs);
-      for (let i = 0; i < 9; i++) {
-        if (dimFor === i) continue;
-        const c = L.cells[i];
-        const pressed = pressCell === i;
-        const k = pressed ? 0.965 : 1;
-        const rect = {
-          x: c.x + (c.w * (1 - k)) / 2,
-          y: c.y + (c.h * (1 - k)) / 2,
-          w: c.w * k,
-          h: c.h * k
-        };
-        drawTile(i, rect, Math.max(7, c.w * 0.1), dimFor != null ? 0.35 : 1);
-      }
-    }
-
-    // Composite the detail view: crisp picture, mosaic showing through the rub.
-    function drawDetail(timeMs) {
-      const d = L.detail;
-      const radius = Math.max(10, d.w * 0.035);
-
-      if (crisp) {
-        backdrop(timeMs);
-
-        // Frame shadow.
-        g.fillStyle = "rgba(0,0,0,0.45)";
-        roundRect(g, d.x, d.y + d.h * 0.012, d.w, d.h, radius);
-        g.fill();
-
-        g.save();
-        roundRect(g, d.x, d.y, d.w, d.h, radius);
-        g.clip();
-        g.drawImage(crisp, d.x, d.y, d.w, d.h);
-
-        if (gridsReady && (revealBox || autoFill > 0) && pixelSurf && maskSurf) {
-          const pg = pixelSurf.getContext("2d");
-          pg.setTransform(1, 0, 0, 1, 0, 0);
-          pg.clearRect(0, 0, pixelSurf.width, pixelSurf.height);
-          pg.setTransform(PX, 0, 0, PX, 0, 0);
-          drawMosaic(pg, d.w, d.h, timeMs);
-          pg.setTransform(1, 0, 0, 1, 0, 0);
-          pg.globalCompositeOperation = "destination-in";
-          pg.drawImage(maskSurf, 0, 0);
-          pg.globalCompositeOperation = "source-over";
-          g.drawImage(pixelSurf, d.x, d.y, d.w, d.h);
-        }
-        g.restore();
-
-        g.save();
-        roundRect(g, d.x + 0.5, d.y + 0.5, d.w - 1, d.h - 1, radius);
-        g.strokeStyle = "rgba(255,255,255,0.16)";
-        g.lineWidth = 1;
-        g.stroke();
-        g.restore();
-      } else {
-        // Fallback: the backdrop and the crisp picture were painted once when
-        // the view opened, so this path must NOT repaint them — it only
-        // restores the rubbed region from the captured picture and redraws the
-        // mosaic inside a clip built from the rub stamps.
-        const dp = DP();
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        const b = revealBox;
-        if (baseImg && b) {
-          const bx = clamp(Math.floor((b.x0 - 4) * dp), 0, baseImg.width);
-          const by = clamp(Math.floor((b.y0 - 4) * dp), 0, baseImg.height);
-          const bw = clamp(Math.ceil((b.x1 - b.x0 + 8) * dp), 1, baseImg.width - bx);
-          const bh = clamp(Math.ceil((b.y1 - b.y0 + 8) * dp), 1, baseImg.height - by);
-          g.putImageData(baseImg, baseImgOrigin.x, baseImgOrigin.y, bx, by, bw, bh);
-        }
-        g.scale(dp, dp);
-        if (gridsReady && (clipStamps.length || autoFill > 0)) {
-          g.save();
-          g.beginPath();
-          if (autoFill > 0) {
-            g.rect(d.x, d.y, d.w, d.h);
-          } else {
-            for (const s2 of clipStamps) {
-              g.moveTo(d.x + s2.x + s2.r, d.y + s2.y);
-              g.arc(d.x + s2.x, d.y + s2.y, s2.r, 0, TAU);
-            }
-          }
-          g.clip();
-          g.translate(d.x, d.y);
-          drawMosaic(g, d.w, d.h, timeMs);
-          g.restore();
-        }
-      }
-
-      // Progress line. Only on the baked path: the fallback never repaints its
-      // backdrop, so redrawing a translucent bar over itself every frame would
-      // accumulate to solid white.
-      const frac = clamp(revealFraction() / 0.88, 0, 1);
-      if (crisp && frac > 0.002) {
-        const bw = d.w * 0.44;
-        const bx = d.x + (d.w - bw) / 2;
-        const by = d.y + d.h + Math.min(16, L.footerH * 0.3);
-        g.fillStyle = "rgba(255,255,255,0.14)";
-        roundRect(g, bx, by, bw, 3, 1.5);
-        g.fill();
-        g.fillStyle = sceneDone ? "rgba(255,214,150,0.95)" : "rgba(255,236,208,0.8)";
-        roundRect(g, bx, by, Math.max(3, bw * frac), 3, 1.5);
-        g.fill();
-      }
-    }
-
-    // Zoom between a grid cell and the detail frame.
-    function drawTransition(timeMs) {
-      const tr = trans;
-      const e = easeInOut(clamp(tr.t, 0, 1));
-      const c = L.cells[tr.i];
-      const d = L.detail;
-      const rect = {
-        x: lerp(c.x, d.x, e),
-        y: lerp(c.y, d.y, e),
-        w: lerp(c.w, d.w, e),
-        h: lerp(c.h, d.h, e)
-      };
-      const radius = lerp(Math.max(7, c.w * 0.1), Math.max(10, d.w * 0.035), e);
-
-      drawGrid(timeMs, tr.i);
-      g.save();
-      g.globalAlpha = 1;
-      g.fillStyle = "rgba(0,0,0,0.45)";
-      roundRect(g, rect.x, rect.y + rect.h * 0.015, rect.w, rect.h, radius);
-      g.fill();
-      roundRect(g, rect.x, rect.y, rect.w, rect.h, radius);
-      g.clip();
-      if (thumbs[tr.i]) g.drawImage(thumbs[tr.i], rect.x, rect.y, rect.w, rect.h);
-      if (crisp) {
-        g.globalAlpha = e;
-        g.drawImage(crisp, rect.x, rect.y, rect.w, rect.h);
-        g.globalAlpha = 1;
-      }
-      g.restore();
-    }
-
-    // In the fallback path the picture must exist on the display canvas before
-    // it can be captured, so paint it once and read it straight back.
-    function captureFallbackBase(timeMs) {
-      const d = L.detail;
-      const dp = DP();
-      const radius = Math.max(10, d.w * 0.035);
-      backdrop(timeMs);
-      g.fillStyle = "rgba(0,0,0,0.45)";
-      roundRect(g, d.x, d.y + d.h * 0.012, d.w, d.h, radius);
-      g.fill();
-      g.save();
-      roundRect(g, d.x, d.y, d.w, d.h, radius);
-      g.clip();
-      g.translate(d.x, d.y);
-      SCENES[selected].paint(g, d.w, d.h);
-      g.restore();
-      g.save();
-      roundRect(g, d.x + 0.5, d.y + 0.5, d.w - 1, d.h - 1, radius);
-      g.strokeStyle = "rgba(255,255,255,0.16)";
-      g.lineWidth = 1;
-      g.stroke();
-      g.restore();
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      try {
-        const ox = Math.floor(d.x * dp), oy = Math.floor(d.y * dp);
-        baseImg = g.getImageData(ox, oy, Math.ceil(d.w * dp), Math.ceil(d.h * dp));
-        baseImgOrigin = { x: ox, y: oy };
-      } catch (_) {
-        baseImg = null;
+      if (dragX !== 0) {
+        const nb = dragX < 0 ? getPage(index + 1) : getPage(index - 1);
+        renderPage(nb, dragX < 0 ? dragX + W : dragX - W, timeMs);
       }
     }
 
@@ -2126,127 +2228,99 @@ window.plethoraBit = {
     // Frame loop                                                             //
     // ====================================================================== //
 
-    let lastW = L.W, lastH = L.H;
+    let lastW = ctx.width, lastH = ctx.height;
     let readyCalled = false;
-    let fallbackNeedsBase = false;
-    let fallbackGridDrawn = false;
+
+    layout();
+    brush = makeBrush(brushRadius());
+    getPage(0);
+    placeChrome();
+    syncChrome();
 
     ctx.onFrame((dtMs, timeMs) => {
-      // Re-layout without a resize listener: the runtime keeps ctx.width/height
-      // current, so a cheap compare each frame is enough.
       if (ctx.width !== lastW || ctx.height !== lastH) {
         lastW = ctx.width;
         lastH = ctx.height;
         layout();
+        pages.clear();
+        scratch = null;
+        brush = makeBrush(brushRadius());
+        dragX = 0;
+        slide = null;
         placeChrome();
-        queueThumbs();
-        fallbackGridDrawn = false;
-        if (view === "detail" && selected >= 0) {
-          const keep = selected;
-          releaseDetail();
-          openScene(keep);
-          trans = null;
-          view = "detail";
-          if (!CAN_BAKE) fallbackNeedsBase = true;
+        syncChrome();
+      }
+
+      // Settle a swipe.
+      if (slide) {
+        const step = (L.W / 260) * dtMs;
+        if (slide.target === 0) {
+          dragX = dragX > 0 ? Math.max(0, dragX - step) : Math.min(0, dragX + step);
+          if (dragX === 0) slide = null;
+        } else {
+          dragX += slide.dir > 0 ? -step : step;
+          if ((slide.dir > 0 && dragX <= slide.target) || (slide.dir < 0 && dragX >= slide.target)) {
+            index = wrapIndex(index + slide.dir);
+            dragX = 0;
+            slide = null;
+            trimPages(index);
+            ctx.platform.interact({ type: "page", place: PLACES[index].id });
+            syncChrome();
+          }
         }
       }
 
-      // Bake up to two thumbnails per frame; the grid develops in front of you.
-      if (bakeQueue.length) { bakeStep(); bakeStep(); }
+      const page = getPage(index);
 
-      // Build the mosaic tables once the zoom is under way.
-      if (gridsPending && (!trans || trans.t > 0.35)) {
-        if (CAN_BAKE) buildGridsNow();
-        else if (baseImg) buildGridsNow();
-      }
-
-      // Transition stepping.
-      if (trans) {
-        const speed = dtMs / 380;
-        trans.t += trans.dir > 0 ? speed : -speed;
-        if (trans.dir > 0 && trans.t >= 1) {
-          trans.t = 1;
-          const i = trans.i;
-          trans = null;
-          view = "detail";
-          selected = i;
-          if (!CAN_BAKE) fallbackNeedsBase = true;
-          syncChrome();
-        } else if (trans.dir < 0 && trans.t <= 0) {
-          trans = null;
-          view = "grid";
-          releaseDetail();
-          resetReveal();
-          fallbackGridDrawn = false;
-          syncChrome();
+      // The fallback path paints its picture once, straight to the canvas, and
+      // keeps it as ImageData before the mosaic ever covers it.
+      if (!page.crisp && !page.painted) {
+        const dp = DP();
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.scale(dp, dp);
+        paintPage(g, L.W, L.H, page.i, L.bot);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        try {
+          page.crispData = g.getImageData(0, 0, Math.round(L.W * dp), Math.round(L.H * dp));
+          buildGrids(page, page.crispData);
+        } catch (_) {
+          page.ready = false;
         }
+        page.painted = true;
       }
 
-      // Reveal completion: sweep the rest away, then mark the picture done.
-      if (view === "detail" && !sceneDone && revealFraction() >= 0.88) {
-        sceneDone = true;
+      // Finish the reveal once most of it is gone.
+      if (!page.done && page.ready && revealFraction(page) >= DONE_AT) {
+        page.done = true;
         haptic("success");
         sting("success");
-        const id = SCENES[selected].id;
+        const id = PLACES[page.i].id;
         if (!revealedSet.has(id)) {
           revealedSet.add(id);
           persistRevealed();
-          ctx.platform.milestone("scene_revealed", { scene: id });
+          ctx.platform.milestone("place_revealed", { place: id });
         }
-        ctx.platform.setProgress(clamp(revealedSet.size / SCENES.length, 0, 1));
-        if (revealedSet.size >= SCENES.length) ctx.platform.complete({ scenes: SCENES.length });
+        ctx.platform.setProgress(clamp(revealedSet.size / PLACES.length, 0, 1));
+        if (revealedSet.size >= PLACES.length) ctx.platform.complete({ places: PLACES.length });
         syncChrome();
       }
-      if (sceneDone && autoFill < 1) {
-        autoFill = clamp(autoFill + dtMs / 700, 0, 1);
-        if (maskSurf) {
-          const mg = maskSurf.getContext("2d");
-          mg.globalAlpha = clamp(dtMs / 700, 0, 1) * 1.4;
+      if (page.done && page.autoFill < 1) {
+        page.autoFill = clamp(page.autoFill + dtMs / 620, 0, 1);
+        if (page.mask) {
+          const mg = page.mask.getContext("2d");
+          mg.globalAlpha = clamp(dtMs / 620, 0, 1) * 1.5;
           mg.fillStyle = "#fff";
-          mg.fillRect(0, 0, maskSurf.width, maskSurf.height);
+          mg.fillRect(0, 0, page.mask.width, page.mask.height);
           mg.globalAlpha = 1;
         }
-        if (autoFill >= 1) {
-          revealBox = { x0: 0, y0: 0, x1: L.detail.w, y1: L.detail.h };
-        }
+        if (page.autoFill >= 1) page.revealBox = { x0: 0, y0: 0, x1: L.W, y1: L.H };
       }
 
-      // Draw.
-      if (trans) {
-        drawTransition(timeMs);
-      } else if (view === "detail") {
-        if (!CAN_BAKE && fallbackNeedsBase) {
-          captureFallbackBase(timeMs);
-          fallbackNeedsBase = false;
-          if (gridsPending) buildGridsNow();
-        }
-        drawDetail(timeMs);
-      } else if (CAN_BAKE) {
-        drawGrid(timeMs, null);
-      } else if (!fallbackGridDrawn) {
-        // No baked thumbnails to blit, so the nine scenes are painted live —
-        // once, not per frame.
-        backdrop(timeMs);
-        for (let i = 0; i < 9; i++) {
-          const c = L.cells[i];
-          const radius = Math.max(7, c.w * 0.1);
-          g.save();
-          g.fillStyle = "rgba(0,0,0,0.4)";
-          roundRect(g, c.x, c.y + c.h * 0.03, c.w, c.h, radius);
-          g.fill();
-          roundRect(g, c.x, c.y, c.w, c.h, radius);
-          g.clip();
-          g.translate(c.x, c.y);
-          SCENES[i].paint(g, c.w, c.h);
-          g.restore();
-          drawTile(i, c, radius, 1, true);
-        }
-        fallbackGridDrawn = true;
-      }
+      draw(timeMs);
 
       if (!readyCalled) {
         readyCalled = true;
-        ctx.markVisualReady("first_grid_frame");
+        ctx.markVisualReady("first_page_frame");
         ctx.platform.ready();
       }
     });
