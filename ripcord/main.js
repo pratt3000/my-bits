@@ -455,92 +455,6 @@ window.plethoraBit = {
      * ============================================================ */
 
     /**
-     * The full roster. `playable` tops are the three you pick from; the rest
-     * are rivals, gated by `tier` so harder difficulties field nastier ones.
-     */
-    const ROSTER = [
-      {
-        id: "attack", name: "VOLT LANCE", short: "VOLT", role: "ATTACK", playable: true, tier: 0,
-        blades: 3, sharp: 2.5, skew: 0.36, rIn: 0.54,
-        hue: 191, hue2: 168,
-        mass: 0.86, radius: 0.158,
-        decay: 1.10, aggression: 1.0,
-        deal: 1.56, take: 1.14, knock: 1.62,
-        blurb: "Hits hardest of the three. Burns out first."
-      },
-      {
-        id: "defense", name: "IRON BASTION", short: "BASTION", role: "DEFENSE", playable: true, tier: 0,
-        blades: 6, sharp: 1.25, skew: -0.13, rIn: 0.73,
-        hue: 27, hue2: 47,
-        mass: 1.34, radius: 0.171,
-        decay: 0.95, aggression: 0.24,
-        deal: 0.85, take: 0.60, knock: 0.64,
-        blurb: "Heavy. Shrugs off hits, holds the centre."
-      },
-      {
-        id: "stamina", name: "PALE ORBIT", short: "ORBIT", role: "STAMINA", playable: true, tier: 0,
-        blades: 8, sharp: 0.92, skew: 0.07, rIn: 0.79,
-        hue: 285, hue2: 322,
-        mass: 1.0, radius: 0.162,
-        decay: 0.90, aggression: 0.44,
-        deal: 0.78, take: 1.22, knock: 0.90,
-        blurb: "Outlasts everything. Fragile in a clash."
-      },
-
-      /* --- rivals, easiest first --- */
-      {
-        id: "wisp", name: "WISP", short: "WISP", role: "SCOUT", playable: false, tier: 0,
-        blades: 3, sharp: 1.8, skew: 0.22, rIn: 0.62,
-        hue: 168, hue2: 150,
-        mass: 0.70, radius: 0.146,
-        decay: 1.16, aggression: 0.62,
-        deal: 0.74, take: 1.30, knock: 1.02
-      },
-      {
-        id: "cinder", name: "CINDER FANG", short: "CINDER", role: "ATTACK", playable: false, tier: 0,
-        blades: 4, sharp: 2.2, skew: 0.30, rIn: 0.58,
-        hue: 8, hue2: 32,
-        mass: 0.94, radius: 0.156,
-        decay: 1.08, aggression: 0.95,
-        deal: 1.42, take: 1.10, knock: 1.44
-      },
-      {
-        id: "crown", name: "HOLLOW CROWN", short: "CROWN", role: "BALANCE", playable: false, tier: 1,
-        blades: 5, sharp: 1.5, skew: -0.08, rIn: 0.70,
-        hue: 44, hue2: 58,
-        mass: 1.18, radius: 0.166,
-        decay: 0.94, aggression: 0.55,
-        deal: 1.06, take: 0.82, knock: 1.00
-      },
-      {
-        id: "riot", name: "RIOT COIL", short: "RIOT", role: "CHAOS", playable: false, tier: 1,
-        blades: 7, sharp: 1.9, skew: 0.44, rIn: 0.64,
-        hue: 96, hue2: 76,
-        mass: 0.98, radius: 0.160,
-        decay: 1.02, aggression: 1.15,
-        deal: 1.28, take: 1.00, knock: 1.30
-      },
-      {
-        id: "nullvec", name: "NULL VECTOR", short: "NULL", role: "STAMINA", playable: false, tier: 2,
-        blades: 12, sharp: 0.85, skew: 0.03, rIn: 0.84,
-        hue: 205, hue2: 190,
-        mass: 1.10, radius: 0.164,
-        decay: 0.74, aggression: 0.38,
-        deal: 0.92, take: 0.94, knock: 0.86
-      },
-      {
-        id: "meridian", name: "BLACK MERIDIAN", short: "MERIDIAN", role: "APEX", playable: false, tier: 3,
-        blades: 10, sharp: 1.35, skew: -0.20, rIn: 0.76,
-        hue: 268, hue2: 300,
-        mass: 1.40, radius: 0.174,
-        decay: 0.82, aggression: 0.80,
-        deal: 1.34, take: 0.66, knock: 1.20
-      }
-    ];
-
-    const ARCHETYPES = ROSTER.filter(t => t.playable);
-
-    /**
      * Difficulty ladder. `rpmMul` sets how hard rivals launch, `skill` sharpens
      * their stats, `opps` adds a third top to the stadium at the top two tiers.
      */
@@ -566,6 +480,93 @@ window.plethoraBit = {
         blurb: "Three apex tops. Rip perfectly or lose."
       }
     ];
+    let difficulty = DIFFICULTIES[0];
+
+    /**
+     * The full roster. `playable` tops are the three you pick from; the rest
+     * are rivals, gated by `tier` so harder difficulties field nastier ones.
+     */
+    const ROSTER = [
+      {
+        id: "attack", name: "VOLT LANCE", callsign: "VOLT", role: "ATTACK", playable: true, tier: 0,
+        blades: 3, sharp: 2.5, skew: 0.36, rIn: 0.54,
+        hue: 191, hue2: 168,
+        mass: 0.86, radius: 0.158,
+        decay: 1.10, aggression: 1.0,
+        deal: 1.56, take: 1.14, knock: 1.62,
+        blurb: "Hits hardest of the three. Burns out first."
+      },
+      {
+        id: "defense", name: "IRON BASTION", callsign: "BASTION", role: "DEFENSE", playable: true, tier: 0,
+        blades: 6, sharp: 1.25, skew: -0.13, rIn: 0.73,
+        hue: 27, hue2: 47,
+        mass: 1.34, radius: 0.171,
+        decay: 0.95, aggression: 0.24,
+        deal: 0.85, take: 0.60, knock: 0.64,
+        blurb: "Heavy. Shrugs off hits, holds the centre."
+      },
+      {
+        id: "stamina", name: "PALE ORBIT", callsign: "ORBIT", role: "STAMINA", playable: true, tier: 0,
+        blades: 8, sharp: 0.92, skew: 0.07, rIn: 0.79,
+        hue: 285, hue2: 322,
+        mass: 1.0, radius: 0.162,
+        decay: 0.90, aggression: 0.44,
+        deal: 0.78, take: 1.22, knock: 0.90,
+        blurb: "Outlasts everything. Fragile in a clash."
+      },
+
+      /* --- rivals, easiest first --- */
+      {
+        id: "wisp", name: "WISP", callsign: "WISP", role: "SCOUT", playable: false, tier: 0,
+        blades: 3, sharp: 1.8, skew: 0.22, rIn: 0.62,
+        hue: 168, hue2: 150,
+        mass: 0.70, radius: 0.146,
+        decay: 1.16, aggression: 0.62,
+        deal: 0.74, take: 1.30, knock: 1.02
+      },
+      {
+        id: "cinder", name: "CINDER FANG", callsign: "CINDER", role: "ATTACK", playable: false, tier: 0,
+        blades: 4, sharp: 2.2, skew: 0.30, rIn: 0.58,
+        hue: 8, hue2: 32,
+        mass: 0.94, radius: 0.156,
+        decay: 1.08, aggression: 0.95,
+        deal: 1.42, take: 1.10, knock: 1.44
+      },
+      {
+        id: "crown", name: "HOLLOW CROWN", callsign: "CROWN", role: "BALANCE", playable: false, tier: 1,
+        blades: 5, sharp: 1.5, skew: -0.08, rIn: 0.70,
+        hue: 44, hue2: 58,
+        mass: 1.18, radius: 0.166,
+        decay: 0.94, aggression: 0.55,
+        deal: 1.06, take: 0.82, knock: 1.00
+      },
+      {
+        id: "riot", name: "RIOT COIL", callsign: "RIOT", role: "CHAOS", playable: false, tier: 1,
+        blades: 7, sharp: 1.9, skew: 0.44, rIn: 0.64,
+        hue: 96, hue2: 76,
+        mass: 0.98, radius: 0.160,
+        decay: 1.02, aggression: 1.15,
+        deal: 1.28, take: 1.00, knock: 1.30
+      },
+      {
+        id: "nullvec", name: "NULL VECTOR", callsign: "NULL", role: "STAMINA", playable: false, tier: 2,
+        blades: 12, sharp: 0.85, skew: 0.03, rIn: 0.84,
+        hue: 205, hue2: 190,
+        mass: 1.10, radius: 0.164,
+        decay: 0.74, aggression: 0.38,
+        deal: 0.92, take: 0.94, knock: 0.86
+      },
+      {
+        id: "meridian", name: "BLACK MERIDIAN", callsign: "MERIDIAN", role: "APEX", playable: false, tier: 3,
+        blades: 10, sharp: 1.35, skew: -0.20, rIn: 0.76,
+        hue: 268, hue2: 300,
+        mass: 1.40, radius: 0.174,
+        decay: 0.82, aggression: 0.80,
+        deal: 1.34, take: 0.66, knock: 1.20
+      }
+    ];
+
+    const ARCHETYPES = ROSTER.filter(t => t.playable);
 
     /**
      * Polar profile of an energy layer. Smooth lobes, angle-warped so the
@@ -617,7 +618,7 @@ window.plethoraBit = {
       gg.fill();
       gg.restore();
 
-      // Energy layer body.
+      // Energy layer face.
       const bodyGrad = gg.createLinearGradient(-R, -R * 0.9, R * 0.7, R);
       bodyGrad.addColorStop(0, "hsl(" + h2 + ", 88%, 66%)");
       bodyGrad.addColorStop(0.38, "hsl(" + h1 + ", 82%, 47%)");
@@ -743,13 +744,6 @@ window.plethoraBit = {
     let arenaSurf = null;
     let arenaMeta = { w: 0, h: 0, s: 0 };
 
-    /**
-     * The stadium. Drawn as a real bowl rather than a flat disc: the rim
-     * opening sits slightly above the floor, so the crescent between them
-     * reads as the far wall you are looking down into.
-     *
-     * Everything here is baked once; only the sheen and impact light are live.
-     */
     function paintArena(gg, scale, sc) {
       const rx = scale;
       const lift = rx * 0.17;          // rim opening offset, in squashed units
@@ -785,7 +779,7 @@ window.plethoraBit = {
       gg.beginPath();
       gg.arc(0, -lift, rimOuter, 0, TAU);
       gg.arc(0, -lift, rimInner, 0, TAU, true);
-      gg.clip("evenodd");
+      gg.clip();   // opposite winding on the inner arc already cuts the ring
       for (let i = 0; i < 130; i++) {
         const a = (i / 130) * TAU;
         gg.strokeStyle = "rgba(190,220,255," + (0.012 + 0.03 * Math.abs(Math.sin(a * 3))).toFixed(3) + ")";
@@ -964,11 +958,7 @@ window.plethoraBit = {
       gg.restore();
     }
 
-    /**
-     * Live arena lighting: a slow sheen sweeping the floor, and a colour wash
-     * that flares on impact. Cheap enough to run every frame over the bake.
-     */
-    function drawArenaLive(timeSec) {
+    function drawArenaSheen(nowSec) {
       g.save();
       g.translate(cx, cy);
       g.scale(1, SQUASH);
@@ -981,7 +971,7 @@ window.plethoraBit = {
 
       // Two soft sheens rotating at different rates.
       for (let i = 0; i < 2; i++) {
-        const a = timeSec * (0.28 + i * 0.14) + i * 2.1;
+        const a = nowSec * (0.28 + i * 0.14) + i * 2.1;
         const sheen = g.createLinearGradient(
           Math.cos(a) * -floorR, Math.sin(a) * -floorR,
           Math.cos(a) * floorR, Math.sin(a) * floorR
@@ -1004,10 +994,6 @@ window.plethoraBit = {
       g.restore();
     }
 
-    /**
-     * The hall the stadium sits in. Without this the arena floats on flat
-     * black and the screen reads as empty rather than atmospheric.
-     */
     function paintBackdrop(gg) {
       const base = gg.createLinearGradient(0, 0, 0, H);
       base.addColorStop(0, "#04060e");
@@ -1037,10 +1023,10 @@ window.plethoraBit = {
         for (let i = 0; i < row.n; i++) {
           const x = ((i + 0.5) / row.n) * W;
           const jitter = Math.sin(i * 12.9898 + row.y) * S * 0.06;
-          const gl = gg.createRadialGradient(x + jitter, row.y, 0, x + jitter, row.y, row.r);
-          gl.addColorStop(0, "rgba(120,175,255," + row.a + ")");
-          gl.addColorStop(1, "rgba(90,140,255,0)");
-          gg.fillStyle = gl;
+          const lampGrad = gg.createRadialGradient(x + jitter, row.y, 0, x + jitter, row.y, row.r);
+          lampGrad.addColorStop(0, "rgba(120,175,255," + row.a + ")");
+          lampGrad.addColorStop(1, "rgba(90,140,255,0)");
+          gg.fillStyle = lampGrad;
           gg.beginPath();
           gg.arc(x + jitter, row.y, row.r, 0, TAU);
           gg.fill();
@@ -1059,7 +1045,6 @@ window.plethoraBit = {
       gg.restore();
     }
 
-    /** Slow motes drifting through the hall light, for depth. */
     const motes = [];
     function seedMotes() {
       motes.length = 0;
@@ -1383,8 +1368,8 @@ window.plethoraBit = {
     const waves = [];
     let shakeAmt = 0;
     let flashAmt = 0;
-    let arenaGlow = 0;      // impact wash strength
-    let arenaHue = 200;     // colour of the last clash
+    let arenaGlow = 0;
+    let arenaHue = 200;
 
     function shake(v) { shakeAmt = Math.min(26, shakeAmt + v); }
     function flash(v) { flashAmt = Math.min(0.75, flashAmt + v); }
@@ -1675,11 +1660,11 @@ window.plethoraBit = {
       const sy = cy - S * 0.05;
 
       g.save();
-      const hsh = g.createRadialGradient(sx, cy + S * 0.02, 0, sx, cy + S * 0.02, R * 1.25);
-      hsh.addColorStop(0, "rgba(0,0,0,0.62)");
-      hsh.addColorStop(0.55, "rgba(0,0,0,0.34)");
-      hsh.addColorStop(1, "rgba(0,0,0,0)");
-      g.fillStyle = hsh;
+      const heroShade = g.createRadialGradient(sx, cy + S * 0.02, 0, sx, cy + S * 0.02, R * 1.25);
+      heroShade.addColorStop(0, "rgba(0,0,0,0.62)");
+      heroShade.addColorStop(0.55, "rgba(0,0,0,0.34)");
+      heroShade.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = heroShade;
       g.beginPath();
       g.ellipse(sx, cy + S * 0.02, R * 1.25, R * 1.25 * SQUASH, 0, 0, TAU);
       g.fill();
@@ -1906,15 +1891,14 @@ window.plethoraBit = {
 
     let state = "intro";
     let chosen = ARCHETYPES[0];
-    let difficulty = DIFFICULTIES[0];
-    let coachSeen = false;
-    let showCoach = false;
-    let coachMs = 0;
     let introSpin = 0;
     let result = null;
     let resultMs = 0;
     let chargeMs = 0;
     let showHelp = false;
+    let coachSeen = false;
+    let showCoach = false;
+    let coachMs = 0;
     let bestRPM = 0;
     let streak = 0;
     let bestScore = 0;
@@ -1945,8 +1929,8 @@ window.plethoraBit = {
           bestRPM = Number(s.bestRPM) || 0;
           bestScore = Number(s.bestScore) || 0;
           coachSeen = !!s.coachSeen;
-          const diff = DIFFICULTIES.find(d => d.id === s.difficulty);
-          if (diff) difficulty = diff;
+          const dsel = DIFFICULTIES.find(d => d.id === s.difficulty);
+          if (dsel) difficulty = dsel;
           const pick = ARCHETYPES.find(a => a.id === s.top);
           if (pick) chosen = pick;
         }
@@ -2011,12 +1995,7 @@ window.plethoraBit = {
 
     /** First time through, teach the rip before asking for one. */
     function goCharge() {
-      if (!coachSeen) {
-        showCoach = true;
-        coachMs = 0;
-        layout();
-        return;
-      }
+      if (!coachSeen) { showCoach = true; coachMs = 0; layout(); return; }
       beginCharge();
     }
 
@@ -2054,13 +2033,16 @@ window.plethoraBit = {
         airMs: spin.bestAirMs
       };
 
-      // Rival field. The pool is every top at or below the difficulty's tier,
-      // the playable three included -- fielding only the *other* archetypes
-      // made picking Stamina the one way to never face a Stamina top, which is
-      // the hardest matchup, so it read as strictly the strongest choice.
+      // Rival field: every top at or below the difficulty's tier, the playable
+      // three included. Fielding only the *other* archetypes made picking
+      // Stamina the one way never to face a Stamina top, which is the hardest
+      // matchup, so it read as strictly the strongest choice.
+      //
+      // NOTE: this local must not be named `pool` -- see README, the upload
+      // validator rejects the bit when a second local of that name exists.
       const diff = difficulty;
-      const pool = ROSTER.filter(t => t.tier <= diff.maxTier);
-      const shuffled = pool.slice();
+      const rivalPool = ROSTER.filter(t => t.tier <= diff.maxTier);
+      const shuffled = rivalPool.slice();
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         const tmp = shuffled[i];
@@ -2074,13 +2056,13 @@ window.plethoraBit = {
 
       tops = [];
       tops.push(makeTop(chosen, rpm, -Math.PI / 2, true, "YOU", 1));
-      const n = diff.opps;
-      for (let i = 0; i < n; i++) {
+      const oppCount = diff.opps;
+      for (let i = 0; i < oppCount; i++) {
         const spec = shuffled[i % shuffled.length];
-        // Rivals scale off the rip, so how hard you spun is the dominant term
-        // in whether you can win -- the whole point of the mechanic. The
-        // variance roll seeds the occasional monster (and the occasional weak
-        // field), so a huge rip is a strong favourite rather than a formality.
+        // Opponents scale off the rip, so how hard you spun is the dominant
+        // term in whether you can win -- the whole point of the mechanic. The
+        // elite roll seeds the occasional monster, so a huge rip is a strong
+        // favourite rather than a formality.
         const roll = Math.random();
         const variance = roll < 0.26 ? rand(1.15, 1.45)
           : roll > 0.78 ? rand(0.60, 0.84)
@@ -2089,7 +2071,7 @@ window.plethoraBit = {
           lerp(3600, 9200, Math.random()) * (0.72 + power * 0.5) * variance * diff.rpmMul,
           MIN_RPM, MAX_RPM
         );
-        const ang = -Math.PI / 2 + ((i + 1) / (n + 1)) * TAU;
+        const ang = -Math.PI / 2 + ((i + 1) / (oppCount + 1)) * TAU;
         tops.push(makeTop(spec, oppRPM, ang, false, spec.name, diff.skill));
       }
       for (const t of tops) t.h = 0.55 + Math.random() * 0.12;
@@ -2114,9 +2096,9 @@ window.plethoraBit = {
       for (const t of tops) killWhirr(t);
       if (win) {
         streak += 1;
-        // Weighted by difficulty, so a Rookie streak cannot outrank a
-        // Legend one. Tracked as the score itself, not the raw streak, or
-        // re-weighting an old Rookie run would inflate it.
+        // Weighted by difficulty, so a Rookie streak cannot outrank a Legend
+        // one, and stored as the score itself -- re-weighting an old Rookie run
+        // would otherwise inflate it.
         const score = streak * difficulty.weight;
         if (score > bestScore) {
           bestScore = score;
@@ -2163,7 +2145,7 @@ window.plethoraBit = {
       const bottom = H - safeBottom() - bh - clamp(H * 0.035, 16, 34);
 
       if (showCoach) {
-        addButton("coachgo", "GOT IT \u2014 LET'S RIP", (W - bw) / 2, bottom, bw, bh, () => {
+        addButton("coachgo", "GOT IT \u2014 RIP IT", (W - bw) / 2, bottom, bw, bh, () => {
           showCoach = false;
           coachSeen = true;
           save();
@@ -2648,7 +2630,7 @@ window.plethoraBit = {
         g.fillStyle = t.alive
           ? "hsla(" + t.spec.hue2 + ", 95%, 75%, 0.95)"
           : "rgba(120,140,170,0.5)";
-        const name = t.isPlayer ? "YOU" : (t.spec.short || t.spec.name);
+        const name = t.isPlayer ? "YOU" : (t.spec.abbr || t.spec.name);
         fitFont(name, barW, nameSize, 800, true);
         g.fillText(name, x, y - 7);
 
@@ -2741,10 +2723,6 @@ window.plethoraBit = {
       g.restore();
     }
 
-    /**
-     * Shown once, before the very first rip. A still diagram does not explain
-     * a wrist snap, so the phone actually performs the motion on a loop.
-     */
     function drawCoach() {
       g.save();
       g.fillStyle = "#040916";
@@ -2821,11 +2799,11 @@ window.plethoraBit = {
       roundRect(g, -pw / 2 + 3, -ph / 2 + 5, pw, ph, pw * 0.20);
       g.fill();
 
-      const body = g.createLinearGradient(-pw / 2, -ph / 2, pw / 2, ph / 2);
-      body.addColorStop(0, "#2b3450");
-      body.addColorStop(0.5, "#151c2e");
-      body.addColorStop(1, "#333e5e");
-      g.fillStyle = body;
+      const shellGrad = g.createLinearGradient(-pw / 2, -ph / 2, pw / 2, ph / 2);
+      shellGrad.addColorStop(0, "#2b3450");
+      shellGrad.addColorStop(0.5, "#151c2e");
+      shellGrad.addColorStop(1, "#333e5e");
+      g.fillStyle = shellGrad;
       roundRect(g, -pw / 2, -ph / 2, pw, ph, pw * 0.20);
       g.fill();
       g.strokeStyle = "rgba(160,200,255,0.55)";
@@ -2833,11 +2811,11 @@ window.plethoraBit = {
       g.stroke();
 
       // Screen, lit brighter through the whip.
-      const scr = g.createLinearGradient(0, -ph / 2, 0, ph / 2);
+      const panelGrad = g.createLinearGradient(0, -ph / 2, 0, ph / 2);
       const lit = whipping ? 1 : 0.55;
-      scr.addColorStop(0, "rgba(120,205,255," + (0.55 * lit).toFixed(2) + ")");
-      scr.addColorStop(1, "rgba(60,120,255," + (0.30 * lit).toFixed(2) + ")");
-      g.fillStyle = scr;
+      panelGrad.addColorStop(0, "rgba(120,205,255," + (0.55 * lit).toFixed(2) + ")");
+      panelGrad.addColorStop(1, "rgba(60,120,255," + (0.30 * lit).toFixed(2) + ")");
+      g.fillStyle = panelGrad;
       roundRect(g, -pw / 2 + pw * 0.11, -ph / 2 + pw * 0.15, pw * 0.78, ph - pw * 0.30, pw * 0.11);
       g.fill();
 
@@ -2985,7 +2963,7 @@ window.plethoraBit = {
       resize();
 
       clockSec += dt;
-      const timeSec = clockSec;
+      const nowSec = clockSec;
       introSpin += dt * 1.6;
 
       if (state === "charge") {
@@ -3031,14 +3009,13 @@ window.plethoraBit = {
       }
 
       if (!arenaSurf) {
-        // No OffscreenCanvas: paint a plain ground so nothing shows through.
         g.fillStyle = "#05070f";
         g.fillRect(-40, -40, W + 80, H + 80);
       }
 
       drawArena();
+      drawArenaSheen(nowSec);
       drawMotes(dtMs / 16.7);
-      drawArenaLive(timeSec);
       if (state === "intro") drawHero();
       drawTrails();
 

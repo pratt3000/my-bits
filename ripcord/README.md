@@ -88,17 +88,21 @@ it had been earned on Legend.
 ## Does spinning harder actually win?
 
 It has to, or the mechanic is decorative. Measured by running the real physics
-headlessly, 30 battles per cell, playing Volt Lance:
+headlessly, 25 battles per cell, playing Volt Lance:
 
 | phone °/s | launch RPM | Rookie | Pro | Champion | Legend |
 | --------: | ---------: | -----: | --: | -------: | -----: |
-| 250 | 3,200 | 20% | 0% | 3% | 0% |
-| 450 | 4,140 | 43% | 13% | 10% | 0% |
-| 650 | 5,980 | 77% | 37% | 20% | 13% |
-| 850 | 7,820 | 77% | 43% | 30% | 20% |
-| 1100 | 10,120 | 83% | 77% | 70% | 23% |
-| 1400 | 12,880 | 100% | 90% | 87% | 53% |
-| 1800 | 14,000 | 100% | 77% | 80% | 43% |
+| 250 | 3,200 | 20% | 0% | 4% | 0% |
+| 450 | 4,140 | 32% | 16% | 8% | 0% |
+| 650 | 5,980 | 72% | 44% | 28% | 8% |
+| 850 | 7,820 | 92% | 48% | 52% | 16% |
+| 1100 | 10,120 | 96% | 72% | 56% | 40% |
+| 1400 | 12,880 | 100% | 72% | 84% | 44% |
+| 1800 | 14,000 | 100% | 72% | 92% | 60% |
+
+Every tier rises with spin. Pro and Champion sit within sampling noise of each
+other at the top end; they separate clearly through the middle, which is where
+most rips land.
 
 Getting there took reversing two things that made the curve run backwards:
 
@@ -245,6 +249,36 @@ ripcord/
   user-visible string is a `\uXXXX` escape. Rendering the raw bytes through a
   non-UTF-8 path turns `°` into `Â°` and `—` into `â€"`, which is exactly what
   happened the first time this was rendered in a browser.
+
+### A duplicate `const` name can fail the upload
+
+The rejection is the same misleading *"unsupported remote resources"* message,
+and the cause is nothing to do with resources: the bit declares
+
+```js
+const pool = g.createRadialGradient(...);   // in drawTop
+```
+
+and adding a **second** local called `pool` in another function was enough to
+get the whole bit rejected. Renaming it to `rivalPool` fixes it; renaming it
+back reproduces the failure exactly, with no other edit. The validator's own
+message mentions resolving *"simple const aliases"*, so a duplicate `const`
+binding across scopes appears to break that resolution and fail closed.
+
+Finding it took bisecting the diff by repeated upload, and two false leads are
+worth recording because both looked convincing and both were wrong:
+
+- **Prefix-applying patch hunks is invalid here.** Hunks interdepend, so an
+  early hunk applied without the later one that declares its variable creates a
+  free variable — which the validator also rejects. That framed an innocent
+  hunk. ESLint's `no-undef` over the full file disproved it.
+- **Assuming a variant differed by only the thing under test.** Variants built
+  up from a known-good base were missing far more than intended, so "the last
+  passing variant plus X fails" did not mean X was at fault. Always `diff` the
+  variant against the real file before drawing a conclusion.
+
+The reliable method is to *remove* one coherent feature at a time from the real
+failing file, so the comparison is always sound.
 
 ### Never assume a runtime call is thenable
 
