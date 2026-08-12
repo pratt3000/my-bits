@@ -40,6 +40,11 @@ n-body/
   to genuinely overlap. At 0.86 they swallowed each other on approach and the
   slingshot never got a chance to happen.
 
+Both aiming regimes are covered by the harness, which sweeps drag length and
+reads back the reported orbit class: on a single star 45/80px report bound,
+115/160px circular, 230/330px open; on a binary — where the old
+strongest-pull reference could not snap at all — 115/160px now report circular.
+
 ## Feel
 
 - **Aiming is static.** The first version threw on the finger's own velocity,
@@ -47,16 +52,49 @@ n-body/
   and then release, because holding still to look sets the velocity to zero. The
   world now stays where you first touched — which also keeps your finger off it
   — and the drag vector sets the launch.
-- **Speed is quoted in circular orbits, not pixels.** A drag of `AIM_REF` (96
+- **Speed is quoted in circular orbits, not pixels.** A drag of `AIM_REF` (115
   screen px) launches at exactly the local circular-orbit speed, wherever you
   happen to be standing, so an ordinary drag produces an orbit instead of a
-  lucky one. Within 13% of that speed and 13° of the tangent it snaps to a clean
-  circle and the preview turns gold. Velocities are built in the attractor's
-  frame, so aiming still works around a star that is itself moving.
+  lucky one. Velocities are built in the reference's frame, so aiming still
+  works around a star that is itself moving.
+- **The drag curve saturates rather than running straight.** This is the fix for
+  "they just go into deep space, it's so sensitive". Escape sits at only 1.41×
+  circular, so a linear map with a 96px reference put escape at a 136px swipe —
+  on a 390px screen the entire bound range was one short drag and everything
+  past it left for good. The curve is now
+  `1.75 · (1 − e^(−0.847 · len/115))`, which spends its resolution where orbits
+  live and compresses the rest:
+
+  | drag | 45px | 80px | 115px | 160px | 225px | 390px |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | × circular | 0.48 | 0.78 | **1.00** | 1.21 | 1.41 | 1.65 |
+  | | bound | bound | circular | circular | escape | escape |
+
+  Escape now needs a deliberate 225px drag, and the ceiling is 1.75× circular —
+  only 1.24× escape, so even a full-screen fling leaves gently instead of
+  rocketing off.
+- **The snap window is wide on purpose**: within 22% of circular speed and 20°
+  of the tangent, which is a drag anywhere from ~80px to ~160px. Inside it the
+  velocity is replaced with the exact circular solution, the tick and the path
+  turn gold, and you get a real circle rather than a near-miss.
+- **The reference is the barycentre when nothing dominates.** Picking the
+  strongest-pulling body is right for a single sun, but in a binary it quotes a
+  tangent that is wrong by tens of degrees and makes clean orbits essentially
+  unreachable. If no body holds 55% of the system mass, the aim is quoted
+  against the mass centroid instead — which is what a wide orbit actually goes
+  around.
 - **The preview says whether it comes back.** Bound or not is the two-body
-  specific orbital energy `v²/2 − GM/r` against the dominant attractor, which is
-  exact and free; the path is drawn solid when that is negative and dashed when
-  it is not.
+  specific orbital energy `v²/2 − GM/r` against the reference, which is exact
+  and free; the path is solid when that is negative and dashed when it is not,
+  and it stops after one complete lap so a closed orbit is drawn once instead of
+  stacking three offset copies into what looks like a spiral.
+- **Collisions are only claimed for the dominant body.** Other bodies are frozen
+  for the length of the preview, so treating a small planet as a wall over-claims
+  badly — in reality it has moved on, and "you cross this planet's orbit" is a
+  maybe, not a prediction. Anything under half the reference's mass is passed
+  through; a path that really does fall into the star goes warm and dashed.
+- **A faint ring** shows the circular orbit available from wherever you pressed,
+  drawn as soon as you touch down, so the target exists before the aiming does.
 - **Mass locks when aiming starts**, otherwise a careful aim silently buys you a
   heavier world than a careless one.
 - Nurseries are stored in screen space and converted to world space when read —

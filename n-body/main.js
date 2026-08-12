@@ -889,30 +889,59 @@ window.plethoraBit = {
     const nurseries = new Map();
     let started = false;
 
-    const AIM_REF = 96;          // drag in screen px that means "circular orbit"
-    const AIM_MAX_MULT = 2.4;    // hardest throw, as a multiple of circular speed
+    // Speed is a multiple of the local circular-orbit speed, and the drag maps
+    // to it on a saturating curve rather than a straight line. Linear was the
+    // problem: escape sits at only 1.41x circular, so with a 96px reference the
+    // entire bound range was a 136px swipe and everything past it left for
+    // deep space. The curve spends its resolution where orbits live and
+    // compresses the rest, so a hard drag cannot fling a world much past
+    // escape however hard it is thrown.
+    //
+    //   drag 115px  ->  1.00x  circular orbit
+    //   drag 224px  ->  1.41x  escape velocity
+    //   drag ->inf  ->  1.75x  ceiling, only 1.24x escape
+    const AIM_REF = 115;         // drag in screen px that means "circular orbit"
+    const AIM_MAX_MULT = 1.75;   // ceiling, as a multiple of circular speed
+    const AIM_K = 0.847;         // shapes the curve so AIM_REF lands exactly on 1.00x
     const AIM_LOCK = 13;         // drag in screen px that locks mass and starts aiming
-    const FREE_SCALE = 1.7;      // world px/s per screen px, with nothing to orbit
-    const SNAP_COS = 0.975;      // ~13 degrees of tangent
-    const SNAP_SPEED = 0.13;     // and within 13% of circular
+    const FREE_SCALE = 0.7;      // world px/s per screen px, in genuinely empty space
+    const SNAP_COS = 0.94;       // ~20 degrees of tangent
+    const SNAP_SPEED = 0.22;     // and within 22% of circular
+
+    /** Drag length in screen px -> speed as a multiple of circular. */
+    const aimMult = (len) => AIM_MAX_MULT * (1 - Math.exp(-AIM_K * len / AIM_REF));
+    /** ...and the inverse at escape velocity, for the second tick. */
+    const ESCAPE_LEN = (-AIM_REF / AIM_K) * Math.log(1 - Math.SQRT2 / AIM_MAX_MULT);
 
     /**
-     * The body that sets the orbital scale where a world is being placed —
-     * strongest pull, not simply the heaviest, so a binary or a cluster hands
-     * back whichever star actually governs that spot. Anything not clearly
-     * heavier than the world being placed is ignored; two comparable masses do
-     * not have a "circular orbit" worth quoting.
+     * What the aim is quoted against. Usually the dominant body, picked by
+     * strongest pull rather than raw mass. But when nothing holds a clear
+     * majority — a binary, a cluster — the honest reference is the whole
+     * system's barycentre, which is what a wide orbit actually goes around.
+     * Aiming at one star of a binary quoted a tangent that was wrong by tens
+     * of degrees and made clean orbits essentially unreachable there.
      */
-    function attractorFor(x, y, mass) {
+    function aimReference(x, y, mass) {
       let best = null, bestPull = 0;
+      let total = 0, cx = 0, cy = 0, px = 0, py = 0;
       for (let i = 0; i < bodies.length; i++) {
         const b = bodies[i];
+        total += b.mass;
+        cx += b.x * b.mass; cy += b.y * b.mass;
+        px += b.vx * b.mass; py += b.vy * b.mass;
         if (b.mass < mass * 4) continue;
         const dx = b.x - x, dy = b.y - y;
         const pull = b.mass / Math.max(1, dx * dx + dy * dy);
         if (pull > bestPull) { bestPull = pull; best = b; }
       }
-      return best;
+      if (total <= 0) return null;
+      if (best && best.mass >= total * 0.55) return best;
+      // Not enough to orbit meaningfully, and no single governor.
+      if (total < mass * 4) return null;
+      return {
+        x: cx / total, y: cy / total, mass: total,
+        vx: px / total, vy: py / total, r: 8
+      };
     }
 
     /**
@@ -923,7 +952,7 @@ window.plethoraBit = {
      */
     function nurseryState(n) {
       const p = toWorld(n.ox, n.oy);
-      const a = attractorFor(p.x, p.y, n.mass);
+      const a = aimReference(p.x, p.y, n.mass);
       const out = {
         x: p.x, y: p.y,
         vx: a ? a.vx : 0, vy: a ? a.vy : 0,
@@ -939,7 +968,7 @@ window.plethoraBit = {
           const rx = p.x - a.x, ry = p.y - a.y;
           const r = Math.max(a.r * 1.5, Math.hypot(rx, ry));
           const vc = out.vc = Math.sqrt(G * a.mass / r);
-          const sp = vc * clamp(len / AIM_REF, 0, AIM_MAX_MULT);
+          const sp = vc * aimMult(len);
           // Tangent, turned to whichever way round the player is aiming.
           let tx = -ry / r, ty = rx / r;
           if (tx * dirx + ty * diry < 0) { tx = -tx; ty = -ty; }
@@ -1057,13 +1086,26 @@ window.plethoraBit = {
       const dt = 1 / 40;
       let x = s.x, y = s.y, vx = s.vx, vy = s.vy;
       const pts = [x, y];
+      const res = { pts: pts, hit: false, closed: false };
+      // A closed orbit would otherwise be drawn two or three times over,
+      // stacking slightly offset laps into what looks like a spiral. One lap
+      // says everything the player needs.
+      const a = s.attractor;
+      // Other bodies are frozen for the length of the preview, so treating a
+      // small planet as a wall over-claims badly: in reality it has moved on,
+      // and "you cross this planet's orbit" is a maybe, not a prediction. Only
+      // the dominant body is stationary enough to call. Everything lighter is
+      // passed through — softening keeps that stable — so the preview shows the
+      // orbit rather than stopping dead on a coincidence.
+      const solidMass = a ? a.mass * 0.5 : 0;
+      let swept = 0, prevAng = a ? Math.atan2(y - a.y, x - a.x) : 0;
       for (let k = 0; k < steps; k++) {
         let axs = 0, ays = 0;
         for (let i = 0; i < bodies.length; i++) {
           const b = bodies[i];
           const dx = b.x - x, dy = b.y - y;
           const d2 = dx * dx + dy * dy;
-          if (d2 < b.r * b.r) return pts;      // it hits something; stop there
+          if (d2 < b.r * b.r && b.mass >= solidMass) { res.hit = true; return res; }
           const soft = d2 + b.r * b.r * 0.2 + 4;
           const f = G * b.mass / (soft * Math.sqrt(soft));
           axs += dx * f; ays += dy * f;
@@ -1072,8 +1114,17 @@ window.plethoraBit = {
         x += vx * dt;   y += vy * dt;
         pts.push(x, y);
         if (Math.hypot(x - sysX, y - sysY) > CULL_RADIUS) break;
+        if (a) {
+          const ang = Math.atan2(y - a.y, x - a.x);
+          let d = ang - prevAng;
+          if (d > Math.PI) d -= TAU;
+          if (d < -Math.PI) d += TAU;
+          swept += d;
+          prevAng = ang;
+          if (Math.abs(swept) >= TAU) { res.closed = true; break; }
+        }
       }
-      return pts;
+      return res;
     }
 
     // ====================================================================== //
@@ -1423,26 +1474,51 @@ window.plethoraBit = {
       const s = nurseryState(n);
       const z = cam.zoom;
 
-      // The predicted path is the whole point of aiming statically, so it says
-      // outright whether this throw comes back: bright and solid when the orbit
-      // is bound, dim and dashed when it is on its way out.
-      const pts = predict(s);
+      // The predicted path is the whole point of aiming statically: solid when
+      // the throw comes back, dashed when it is leaving, warm when it collides.
+      // That last case is why the styling follows the integrated path rather
+      // than the two-body energy alone — a third body near the spawn point can
+      // turn a textbook circular aim into a crash, and a confident gold circle
+      // would be lying about it.
+      const pr = predict(s);
+      const pts = pr.pts;
+      const clean = s.snapped && !pr.hit;
       if (pts.length > 4) {
         g.save();
-        if (!s.bound) {
+        if (pr.hit) {
+          g.setLineDash([5 / z, 5 / z]);
+          g.lineDashOffset = -timeMs * 0.02;
+          g.strokeStyle = "rgba(255,166,132,0.72)";
+          g.lineWidth = 1.6 / z;
+        } else if (!s.bound) {
           g.setLineDash([6 / z, 7 / z]);
           g.lineDashOffset = -timeMs * 0.02;
           g.strokeStyle = "rgba(180,205,238,0.46)";
           g.lineWidth = 1.3 / z;
         } else {
-          g.strokeStyle = s.snapped ? "rgba(255,232,176,0.8)" : "rgba(188,226,255,0.62)";
-          g.lineWidth = (s.snapped ? 2 : 1.6) / z;
+          g.strokeStyle = clean ? "rgba(255,232,176,0.8)" : "rgba(188,226,255,0.62)";
+          g.lineWidth = (clean ? 2 : 1.6) / z;
         }
         g.beginPath();
         g.moveTo(pts[0], pts[1]);
         for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
         g.stroke();
         g.restore();
+      }
+
+      // The circular orbit available from this spot, drawn as soon as you press
+      // so the target exists before the aiming does.
+      if (s.attractor) {
+        const a = s.attractor;
+        const gr = Math.hypot(s.x - a.x, s.y - a.y);
+        if (gr > a.r) {
+          g.save();
+          g.setLineDash([3 / z, 6 / z]);
+          g.strokeStyle = clean ? "rgba(255,226,150,0.3)" : "rgba(170,205,245,0.16)";
+          g.lineWidth = 1 / z;
+          g.beginPath(); g.arc(a.x, a.y, gr, 0, TAU); g.stroke();
+          g.restore();
+        }
       }
 
       // Aim line, with the circular-orbit and escape speeds marked on it. Those
@@ -1470,14 +1546,14 @@ window.plethoraBit = {
           g.stroke();
         };
         const pulse = 0.65 + Math.sin(timeMs * 0.008) * 0.35;
-        tick(AIM_REF, s.snapped ? "rgba(255,226,150," + pulse + ")" : "rgba(214,236,255,0.75)", s.snapped);
-        tick(AIM_REF * Math.SQRT2, "rgba(255,178,150,0.5)", false);
+        tick(AIM_REF, clean ? "rgba(255,226,150," + pulse + ")" : "rgba(214,236,255,0.75)", clean);
+        tick(ESCAPE_LEN, "rgba(255,178,150,0.5)", false);
       }
 
-      const gl = glowSprite(s.snapped ? "#ffe6b0" : "#bcd8ff");
+      const gl = glowSprite(clean ? "#ffe6b0" : "#bcd8ff");
       if (gl) {
         g.globalCompositeOperation = "lighter";
-        g.globalAlpha = s.snapped ? 0.45 : 0.32;
+        g.globalAlpha = clean ? 0.45 : 0.32;
         const gr = r * 3;
         g.drawImage(gl, s.x - gr, s.y - gr, gr * 2, gr * 2);
         g.globalCompositeOperation = "source-over";
