@@ -78,6 +78,12 @@ more than their 30 s dwell alone. Distances are measured along the real track
 geometry, so a round's numbers are properties of the corridor rather than
 invented.
 
+On screen those constants are quoted as **times, not accelerations**: "20 s to
+wind up to 72 km/h, 18 s to brake back to a stand, 30 s waiting at every stop".
+It is the same model — 20 m/s ÷ 1.0 m/s² is 20 s, and ÷ 1.1 m/s² is 18 s — but
+"brake at 1.1" with the unit dropped is not a sentence anyone can read, and the
+whole lesson depends on the premise landing.
+
 This is deliberately an *idealised* model: it answers "what if a train only had to
 accelerate, cruise and stop?" Real trains are slower, held down by signal timers,
 curves and traffic, so the express's advantage here is cleaner than the one you
@@ -124,6 +130,42 @@ and reads each row's name, value and "is this me" flag through a list of
 plausible field names. Anything it cannot recognise degrades to a quiet "Scores
 are not available right now" instead of a broken panel. All four states —
 loading, populated, empty, unavailable — are exercised in the harness.
+
+## Handling the map
+
+One finger drags, two pinch. Zoom is bounded so you can always pull back far
+enough to see the whole network and push in until a pixel is about three metres —
+past that, a map with no street detail is only thick lines on white. Panning is
+fenced to the network plus a 2.5 km margin, so the map cannot be flung off into
+empty projection space.
+
+A press only counts as a tap if it moved less than 11 px and lasted under half a
+second, so dragging never fires a station label or a fast-forward by accident,
+and a second finger landing cancels the tap outright. Touching the map also
+seizes the camera from any running fly-to, rather than fighting it. Changing
+screen — a new round, the result, the finish — re-frames as it always did, which
+doubles as the way back if you get lost.
+
+Station dots grow and gain their dark ring as you zoom in; at whole-network scale
+they stay small translucent notches, because 488 ringed dots at that size turn
+every line into a dashed one.
+
+## Sound
+
+A quiet ambient bed starts on the first touch, and **each train rings softly as
+it pulls into a platform**. That is the point of it: down Lexington Avenue the
+local rings nineteen times and the express five, so you hear the difference
+before you see it on the graph. Cues are throttled to 95 ms apart and dropped
+entirely under fast-forward, where the real spacing would collapse into a rattle.
+The express also gets a small cue on arrival, and the run end gets one.
+
+The speaker button in the top bar mutes everything and the choice is remembered
+in `ctx.storage`. Audio only starts from a user gesture, and every call is
+wrapped, so a WebView that refuses to play makes no difference to the bit.
+
+`ctx.music`'s handle is deliberately never held: everything needed is on
+`ctx.music` itself, and keeping the returned object is the const-alias shape the
+upload validator rejects (below).
 
 ## Contract notes
 

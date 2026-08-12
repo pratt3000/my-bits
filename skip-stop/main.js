@@ -38,6 +38,11 @@
  * with small answers are not brutal. Five rounds go to the global board at the
  * end, which the finish screen renders in place — top five, your row picked out,
  * and pulled up from below if you placed outside it.
+ *
+ * One finger drags the map and two pinch it; a press only counts as a tap if it
+ * barely moved, so panning never names a station by accident. And each train
+ * rings as it pulls in: down Lexington Avenue the local rings nineteen times to
+ * the express's five, which is the whole lesson before the graph says it.
  */
 window.plethoraBit = {
   meta: {
@@ -254,6 +259,8 @@ window.plethoraBit = {
     const camFrom = { cx: 0, cy: 0, s: 1, rot: 0 };
     let camT = 1, camDur = 1;
     let cosR = 1, sinR = 0;
+    let frameScale = 1;                // the scale the current framing settled on
+    let WORLD_BOX = null;              // pan is fenced to the network, plus a margin
 
     let W = 0, H = 0;
     const map = { x: 0, y: 0, w: 1, h: 1, cx: 0, cy: 0 };
@@ -285,6 +292,7 @@ window.plethoraBit = {
       camTo.cy = -mcx * s + mcy * c;
       camTo.s = sc;
       camTo.rot = rot;
+      frameScale = sc;                 // what the pinch limits are measured against
       if (immediate) {
         cam.cx = camTo.cx; cam.cy = camTo.cy; cam.s = camTo.s; cam.rot = camTo.rot;
         camT = 1;
@@ -300,7 +308,7 @@ window.plethoraBit = {
     }
 
     // Two framings: the subway alone, and everything including PATH's reach into
-    // New Jersey. The opening shot uses the wider one so nothing is cut off.
+    // New Jersey. The opening shot uses the narrower one so nothing is cut off.
     const SUB_PTS = [], ALL_PTS = [];
     for (const ln of D.L) {
       for (const poly of ln.p) for (const p of poly) {
@@ -309,6 +317,48 @@ window.plethoraBit = {
       }
     }
     let netScale = 1;
+
+    {
+      let a = 1e18, b = 1e18, c = -1e18, e = -1e18;
+      for (const p of ALL_PTS) {
+        if (p[0] < a) a = p[0];
+        if (p[1] < b) b = p[1];
+        if (p[0] > c) c = p[0];
+        if (p[1] > e) e = p[1];
+      }
+      WORLD_BOX = [a - 2500, b - 2500, c + 2500, e + 2500];
+    }
+
+    /** The world point sitting under a canvas pixel. */
+    function screenToWorld(px, py) {
+      const rx = (px - map.cx) / cam.s, ry = (py - map.cy) / cam.s;
+      return { x: cam.cx + rx * cosR + ry * sinR, y: cam.cy - rx * sinR + ry * cosR };
+    }
+    function clampCam() {
+      cam.cx = clamp(cam.cx, WORLD_BOX[0], WORLD_BOX[2]);
+      cam.cy = clamp(cam.cy, WORLD_BOX[1], WORLD_BOX[3]);
+    }
+    /** Re-centre so that `world` stays under the canvas pixel it was under. */
+    function anchorTo(world, px, py) {
+      const rx = (px - map.cx) / cam.s, ry = (py - map.cy) / cam.s;
+      cam.cx = world.x - (rx * cosR + ry * sinR);
+      cam.cy = world.y - (-rx * sinR + ry * cosR);
+      clampCam();
+    }
+    function zoomLimits() {
+      // You can always pull back far enough to see the whole network, and push
+      // in until a pixel is about three metres — past that a map with no street
+      // detail is just thick lines on white.
+      return [Math.min(frameScale * 0.72, netScale * 0.85),
+              Math.min(frameScale * 12, 0.33)];
+    }
+    /** Hand the camera over to the finger, cancelling any running fly-to. */
+    function seizeCamera() {
+      if (camT < 1) {
+        camT = 1;
+        camTo.cx = cam.cx; camTo.cy = cam.cy; camTo.s = cam.s; camTo.rot = cam.rot;
+      }
+    }
 
     // ====================================================================== //
     // Map drawing                                                            //
@@ -400,7 +450,7 @@ window.plethoraBit = {
       if (dotA > 0.02) {
         const zoom = cam.s / netScale;
         const grow = clamp((zoom - 1) / 1.5, 0, 1);
-        const r = clamp(lw * (0.27 + 0.15 * grow), 0.95, 3.2);
+        const r = clamp(lw * (0.27 + 0.2 * grow), 0.95, 4.2);
         const ringA = clamp((zoom - 1.25) / 1.3, 0, 1);
         t.globalAlpha = dotA * (0.5 + 0.5 * grow);
         t.fillStyle = "#FFFFFF";
@@ -551,13 +601,19 @@ window.plethoraBit = {
       '</style>';
 
     ui.innerHTML = STYLE +
-      '<div data-el="top" style="position:absolute;left:0;right:0;top:' + (SA.top + 10) + 'px;' +
-        'display:flex;justify-content:space-between;align-items:center;padding:0 18px;' +
-        'font-family:' + FONT + ';pointer-events:none;opacity:0;transition:opacity 220ms;">' +
+      '<div data-el="top" style="position:absolute;left:0;right:0;top:' + (SA.top + 8) + 'px;' +
+        'display:flex;justify-content:space-between;align-items:center;padding:0 14px 0 18px;' +
+        'font-family:' + FONT + ';pointer-events:none;">' +
         '<div data-el="round" style="font-size:11px;letter-spacing:1.4px;text-transform:uppercase;' +
           'font-weight:600;color:#98A0A9;"></div>' +
-        '<div data-el="score" style="font-size:13px;font-weight:700;color:#11151A;' +
-          'font-family:' + MONO + ';"></div>' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<div data-el="score" style="font-size:13px;font-weight:700;color:#11151A;' +
+            'font-family:' + MONO + ';"></div>' +
+          '<button data-el="mute" aria-label="Sound" style="pointer-events:auto;border:none;' +
+            'cursor:pointer;width:30px;height:30px;border-radius:50%;padding:0;font-size:14px;' +
+            'line-height:1;background:rgba(255,255,255,0.82);color:#11151A;' +
+            'box-shadow:0 1px 5px rgba(16,24,32,0.12);">&#128266;</button>' +
+        '</div>' +
       '</div>' +
       '<div data-el="label" style="position:absolute;left:0;top:0;opacity:0;pointer-events:none;' +
         'transform:translate(-50%,-170%);background:#11151A;color:#fff;font-family:' + FONT + ';' +
@@ -570,10 +626,10 @@ window.plethoraBit = {
         'box-shadow:0 8px 30px rgba(16,24,32,0.10);font-family:' + FONT + ';' +
         'color:#11151A;pointer-events:auto;"></div>';
 
-    const elTop = ui.querySelector('[data-el="top"]');
     const elRound = ui.querySelector('[data-el="round"]');
     const elScore = ui.querySelector('[data-el="score"]');
     const elLabel = ui.querySelector('[data-el="label"]');
+    const elMute = ui.querySelector('[data-el="mute"]');
     const panel = ui.querySelector('[data-el="panel"]');
 
     const BTN =
@@ -644,6 +700,8 @@ window.plethoraBit = {
     let order = [], roundIx = 0, score = 0, best = 0;
     let guess = 0, qType = 0, raceT = 0, raceScale = 1, raceDone = false, fastFwd = 1;
     let results = [];                       // one { name, colour, pts, acc } per round
+    const dwelt = { L: false, X: false };   // was this train standing last frame?
+    const pulled = { L: false, X: false };  // has it reached the far end yet?
     let boardScope = "global", boardState = "idle", boardRows = null, beatBest = false;
 
     const QUESTIONS = [
@@ -696,19 +754,62 @@ window.plethoraBit = {
     // Feedback                                                               //
     // ====================================================================== //
     const canHaptic = !!ctx.capabilities.haptics;
-    const canSting = !!ctx.capabilities.backgroundMusic;
-    let audioUnlocked = false;
+    const canAudio = !!ctx.capabilities.backgroundMusic;
+    let audioUnlocked = false, muted = false, bedOn = false, lastTickAt = -1e9;
+
     function tap(kind) {
       if (canHaptic) { try { ctx.platform.haptic(kind || "light"); } catch (_) {} }
     }
     function sting(name) {
-      if (!canSting || !audioUnlocked) return;
+      if (!canAudio || muted || !audioUnlocked) return;
       try { ignore(ctx.music.sting(name)); } catch (_) {}
     }
+    // The handle is deliberately not kept: every control we need is on ctx.music
+    // itself, and holding the returned object is the const-alias shape the
+    // upload validator rejects.
+    function startBed() {
+      if (!canAudio || muted || bedOn || !audioUnlocked) return;
+      try {
+        ignore(ctx.music.play({ preset: "ambient", volume: 0.2, intensity: 0.3, tempo: 84 }));
+        bedOn = true;
+      } catch (_) { bedOn = false; }
+    }
+    function stopBed() {
+      if (!bedOn) return;
+      bedOn = false;
+      try { ignore(ctx.music.stop({ fadeOutMs: 420 })); } catch (_) {}
+    }
     function unlockAudio() {
-      if (audioUnlocked || !canSting) return;
+      if (audioUnlocked || !canAudio) return;
       audioUnlocked = true;
       try { ignore(ctx.music.unlock()); } catch (_) {}
+      startBed();
+    }
+    /**
+     * A soft cue each time a train pulls in. It is the clearest statement the
+     * bit makes: the local ticks nineteen times down Lexington Avenue and the
+     * express five, so the difference is audible before it is on the graph.
+     * Throttled, and dropped entirely under fast-forward, where the real
+     * spacing collapses into a rattle.
+     */
+    function stationTick(nowMs) {
+      if (fastFwd > 1 || nowMs - lastTickAt < 95) return;
+      lastTickAt = nowMs;
+      sting("tap");
+    }
+    function renderMute() {
+      if (!elMute) return;
+      if (!canAudio) { elMute.style.display = "none"; return; }
+      elMute.innerHTML = muted ? "&#128263;" : "&#128266;";
+      elMute.style.opacity = muted ? "0.5" : "1";
+    }
+    function setMuted(next) {
+      muted = next;
+      if (muted) stopBed(); else startBed();
+      if (ctx.capabilities.storage) {
+        try { ctx.storage.set("muted", muted); } catch (_) {}
+      }
+      renderMute();
     }
 
     // ====================================================================== //
@@ -716,7 +817,8 @@ window.plethoraBit = {
     // ====================================================================== //
     function showIntro() {
       state = "intro"; focus = null;
-      elTop.style.opacity = "0";
+      elRound.textContent = "";
+      elScore.textContent = "";
       setPanelHeight(200);
       reframe(false);
       panel.innerHTML =
@@ -744,7 +846,6 @@ window.plethoraBit = {
       guess = Math.round((rng[0] + rng[1]) / 2);
       raceT = 0; raceDone = false; fastFwd = 1;
 
-      elTop.style.opacity = "1";
       elRound.textContent = "Round " + (roundIx + 1) + " / " + ROUNDS;
       elScore.textContent = score > 0 ? String(score) : "";
 
@@ -767,7 +868,8 @@ window.plethoraBit = {
             '</b> stops</span></div>' +
         '</div>' +
         '<div style="margin-top:8px;font-size:11px;line-height:1.45;color:#98A0A9;">' +
-          'Both trains: 0 to 72 km/h at 1.0 m/s&sup2;, brake at 1.1, 30 s at every stop.</div>' +
+          'Identical trains: 20 s to wind up to 72 km/h, 18 s to brake back to a ' +
+          'stand, 30 s waiting at every stop they make.</div>' +
         '<div style="margin-top:11px;display:flex;justify-content:space-between;' +
           'align-items:baseline;gap:10px;">' +
           '<div style="font-size:13px;font-weight:600;">' + esc(q.ask(c)) + '</div>' +
@@ -823,6 +925,7 @@ window.plethoraBit = {
       state = "race";
       const c = focus;
       raceT = 0; raceDone = false; fastFwd = 1;
+      dwelt.L = false; dwelt.X = false; pulled.L = false; pulled.X = false;
       // Normalised so every corridor takes about the same time to watch, whether
       // it is nine minutes of Queens Boulevard or fifty-six of Eighth Avenue.
       raceScale = Math.max(c.L.run.total, c.X.run.total) / 11;
@@ -1110,15 +1213,8 @@ window.plethoraBit = {
     // Input                                                                  //
     // ====================================================================== //
     let labelToken = 0;
-    ctx.listen(canvas, "pointerdown", (e) => {
-      unlockAudio();
-      if (state === "race") {
-        fastFwd = fastFwd > 1 ? 1 : 4;
-        tap("light");
-        return;
-      }
-      if (state !== "intro" && state !== "done") return;
-      const px = e.offsetX, py = e.offsetY;
+
+    function nameStationAt(px, py) {
       let bestD = 26 * 26, hit = null;
       for (const s of D.S) {
         prj(s[1], s[2]);
@@ -1135,7 +1231,76 @@ window.plethoraBit = {
       const mine = ++labelToken;
       ctx.timeout(() => { if (mine === labelToken) elLabel.style.opacity = "0"; }, 1800);
       tap("light");
+    }
+
+    // One finger drags the map, two pinch it. A press only counts as a tap if it
+    // barely moved and was brief, so panning never fires a station label or a
+    // fast-forward by accident.
+    const touches = new Map();
+    let pinchDist = 0, pinchStart = 0, pressAt = 0, pressX = 0, pressY = 0, moved = 0;
+    const twoOf = () => {
+      const it = touches.values();
+      return [it.next().value, it.next().value];
+    };
+    const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const spread = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    ctx.listen(canvas, "pointerdown", (e) => {
+      unlockAudio();
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      touches.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+      seizeCamera();
+      if (touches.size === 1) {
+        pressAt = e.timeStamp; pressX = e.offsetX; pressY = e.offsetY; moved = 0;
+      } else if (touches.size === 2) {
+        const pair = twoOf();
+        pinchDist = spread(pair[0], pair[1]) || 1;
+        pinchStart = cam.s;
+        moved = 999;                                   // a pinch is never a tap
+      }
     });
+
+    ctx.listen(canvas, "pointermove", (e) => {
+      const prev = touches.get(e.pointerId);
+      if (!prev) return;
+      const now = { x: e.offsetX, y: e.offsetY };
+      touches.set(e.pointerId, now);
+
+      if (touches.size === 1) {
+        const dx = now.x - prev.x, dy = now.y - prev.y;
+        moved += Math.hypot(dx, dy);
+        cam.cx -= (dx * cosR + dy * sinR) / cam.s;
+        cam.cy -= (-dx * sinR + dy * cosR) / cam.s;
+        clampCam();
+      } else if (touches.size === 2) {
+        const pair = twoOf();
+        const mid = midpoint(pair[0], pair[1]);
+        const under = screenToWorld(mid.x, mid.y);
+        const lim = zoomLimits();
+        cam.s = clamp(pinchStart * (spread(pair[0], pair[1]) / pinchDist), lim[0], lim[1]);
+        anchorTo(under, mid.x, mid.y);
+      }
+    });
+
+    function endTouch(e) {
+      const had = touches.size;
+      touches.delete(e.pointerId);
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (touches.size === 1) {
+        // Dropping to one finger: restart the pan from where that finger is.
+        moved = 999;
+      }
+      if (had !== 1 || moved > 11 || e.timeStamp - pressAt > 500) return;
+
+      if (state === "race") {
+        fastFwd = fastFwd > 1 ? 1 : 4;
+        tap("light");
+        return;
+      }
+      if (state === "intro" || state === "done") nameStationAt(pressX, pressY);
+    }
+    ctx.listen(canvas, "pointerup", endTouch);
+    ctx.listen(canvas, "pointercancel", (e) => { touches.delete(e.pointerId); });
 
     // ====================================================================== //
     // Frame                                                                  //
@@ -1144,7 +1309,7 @@ window.plethoraBit = {
     layout();
     reframe(true);
 
-    ctx.onFrame((dt) => {
+    ctx.onFrame((dt, timeMs) => {
       if (ctx.width !== W || ctx.height !== H) { layout(); reframe(true); }
 
       if (camT < 1) {
@@ -1169,6 +1334,13 @@ window.plethoraBit = {
         if (clk) clk.textContent = fmtClock(Math.min(raceT, endT));
         for (const s of [{ leg: c.X, k: "X" }, { leg: c.L, k: "L" }]) {
           const t = Math.min(raceT, s.leg.run.total);
+          const standing = runDwelling(s.leg.run, t);
+          if (standing && !dwelt[s.k]) stationTick(timeMs);
+          dwelt[s.k] = standing;
+          if (!pulled[s.k] && t >= s.leg.run.total) {
+            pulled[s.k] = true;
+            if (s.k === "X") sting("coin");
+          }
           const bar = panel.querySelector('[data-el="bar' + s.k + '"]');
           const tally = panel.querySelector('[data-el="st' + s.k + '"]');
           if (bar) bar.style.width = clamp(t / s.leg.run.total, 0, 1) * 100 + "%";
@@ -1213,6 +1385,19 @@ window.plethoraBit = {
         const v = await ctx.storage.get("best");
         if (typeof v === "number" && isFinite(v)) best = v;
       } catch (_) {}
+      try {
+        const m = await ctx.storage.get("muted");
+        if (m === true) muted = true;
+      } catch (_) {}
+    }
+    renderMute();
+    if (elMute) {
+      ctx.listen(elMute, "click", (e) => {
+        e.stopPropagation();
+        unlockAudio();
+        setMuted(!muted);
+        tap("light");
+      });
     }
     showIntro();
   }
