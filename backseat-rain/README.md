@@ -81,31 +81,62 @@ size and speed.
 If you never tap, the rings simply release on their own after a while and it
 goes back to being rain on a window. Nothing here demands to be played.
 
+## Why the drops are geometry, not painting
+
+A droplet is a lens, and a lens cannot be faked with gradients. The first
+version of this bit painted each drop as a shaded circle onto a canvas, and
+the result read exactly as what it was: grey bubbles stuck to a picture. No
+amount of tuning the gradients fixes that, because the thing your eye actually
+uses to decide it is looking at water is never in them.
+
+So the pane is rendered properly. The world outside goes to the GPU as a
+texture, the glass is a blurred sample of it, and every droplet is an
+**instanced quad carrying a baked surface normal**. For a dome
+`z = H·√(1 − d²)` that normal works out as `(k·u/s, k·v/s, 1)` with
+`s = √(1 − d²)` and `k = H/R`, so a small `k` bakes the flat wide-contact
+bead that sits on cold glass and a large one bakes a fat drop about to run.
+The fragment shader then samples the world **against** that normal, which
+pulls in the far side of what is behind the drop — the image arrives inverted
+and magnified, the way a real bead delivers it. Add a dark rim where light
+hits at a grazing angle, a tight caustic where the dome faces the sky and a
+softer one low down where the road throws light back up, and it stops looking
+painted.
+
+Instancing is also what makes the density believable. Painting each drop by
+hand capped the glass at a few hundred; one quad each means thousands, so the
+haze a real window is covered in can actually be there. The sub-pixel end of
+that haze still lives in the condensation bake — simulating it would cost
+thousands of bodies to draw what a texture draws for free.
+
+Backing a drop tints the light coming through it rather than drawing a ring
+around it. A ring is UI stuck on top of a scene; a drop with a colour in it is
+still a drop.
+
 ## Two views, one simulation
 
-The glass is simulated into its own surface in its own coordinate space, which
-means the same pixels can be presented two ways:
+The glass is simulated into its own coordinate space, so the same drops can be
+presented two ways:
 
-- **Cabin.** `three@0.164.1` builds the back of the car and hangs the glass in
-  the window aperture as a texture. The streetlights sliding past outside are
-  the *same* lamps that light the interior — `stepCabinLight` finds whichever
-  near-strip lamp is squarest to the window and puts the sweep light there — so
-  a lamp crossing the pane washes warm light across the seat beside you.
-- **Flat.** The glass drawn straight to a 2D canvas inside a painted frame.
-  This is what renders on the very first frame, before three has finished
-  loading, and it is where the bit stays for good if three fails, if there is
-  no WebGL, or if there is no `OffscreenCanvas`. Fully playable either way —
-  the cabin is presentation, not mechanics.
+- **Cabin.** `three@0.164.1` builds the back of the car and hangs the pane in
+  the window aperture. The streetlights sliding past outside are the *same*
+  lamps that light the interior — `stepCabinLight` finds whichever near-strip
+  lamp is squarest to the window and puts the sweep light there — so a lamp
+  crossing the pane washes warm light across the seat beside you.
+- **Flat.** The glass drawn to a 2D canvas inside a painted frame. This is the
+  very first frame, before three has finished loading, and it is where the bit
+  stays if three fails, if there is no WebGL, or if there is no
+  `OffscreenCanvas`. It cannot do real refraction, so it is plainer — but it is
+  fully playable, and the cabin is presentation, not mechanics.
 
-Only the cabin gets an offscreen surface. The flat view paints straight into
-the display canvas, because Chromium accelerates a canvas that is on screen but
-rasterises an offscreen 2D context in software: routing the flat view through
-one measured **1.7 ms → 22.5 ms per frame** for no benefit at all.
+The flat view paints straight into the display canvas rather than through an
+offscreen one, because Chromium accelerates a canvas that is on screen but
+rasterises an offscreen 2D context in software: routing it through one measured
+**1.7 ms → 22.5 ms per frame** for no benefit at all.
 
-The cabin is lit almost entirely by what is happening outside. Night interiors
-are forgiving — what you read is silhouette and rim light — so plain slabs in
-the right darkness sell it better than detail would, with one tileable grain
-reused at different repeats so the big door and seat panels are not flat voids.
+Cabin proportions matter more than cabin detail. Eye height above the cushion
+is what tells you whether you are sitting in a car or kneeling on the floor of
+one; the sill has to sit about a forearm above the seat; and the seat backs
+have to stop at your shoulder, or turning your head just walls you in.
 
 ## Rendering notes
 

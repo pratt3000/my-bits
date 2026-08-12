@@ -99,11 +99,15 @@ window.plethoraBit = {
      * ---------------------------------------------------------------- */
 
     const TUNE = {
-      mistPerSec: 26,
-      beadR: [2.0, 5.0],
-      releaseR: 9.2,
+      mistPerSec: 90,
+      // Reference sizes on a 920-wide pane. The sub-pixel haze a real window
+      // is covered in lives in the condensation bake, not in the simulation —
+      // simulating it would cost thousands of bodies to draw something the
+      // texture already draws for free. These start where a drop is visible.
+      beadR: [1.15, 5.5],
+      releaseR: 13.0,
       pinJitter: [0.8, 1.32],
-      beadCoverage: 0.105,
+      beadCoverage: 0.036,
       accrete: 0.5,
       growJitter: [0.35, 1.5],
 
@@ -138,7 +142,7 @@ window.plethoraBit = {
     // Pane size used when the glass is a texture in the cabin. Wider than tall
     // like a real rear side window, and sized so one texel lands near one
     // device pixel once it is on screen.
-    const PANE_3D = { w: 690, h: 732 };
+    const PANE_3D = { w: 920, h: 640 };
 
     /* ---------------------------------------------------------------- *
      * Random. Reseeded per run so it is never the same window twice.
@@ -240,38 +244,38 @@ window.plethoraBit = {
     let glassCv = null, gg = null;
 
     function sizes() {
-      // The pane maps to roughly the full screen width in both views, so
-      // scaling drops by pane width keeps their apparent size constant.
-      const s = clamp(G.w / 380, 0.8, 2.8);
+      // Sizes are quoted against the 920-wide reference pane, so a drop keeps
+      // the same apparent size whichever surface it ends up on.
+      const s = clamp(G.w / 920, 0.34, 2.2);
       SZ.s = s;
       SZ.beadMin = TUNE.beadR[0] * s;
       SZ.beadMax = TUNE.beadR[1] * s;
       SZ.release = TUNE.releaseR * s;
-      SZ.spriteMax = 9.5 * s;
-      SZ.lensMin = 5.2 * s;
-      SZ.cell = 34 * s;
-      SZ.grab = 54 * s;
-      SZ.gather = 42 * s;
-      SZ.shedEvery = TUNE.shedEveryPx * s;
-      SZ.gravity = TUNE.gravity * s;
-      SZ.windBase = TUNE.windBase * s;
-      SZ.windGust = TUNE.windGust * s;
+      SZ.spriteMax = 12 * s;
+      SZ.lensMin = 5.6 * s;
+      SZ.cell = 26 * s;
+      SZ.grab = 62 * s;
+      SZ.gather = 52 * s;
+      SZ.shedEvery = TUNE.shedEveryPx * 1.9 * s;
+      SZ.gravity = TUNE.gravity * 1.9 * s;
+      SZ.windBase = TUNE.windBase * 1.9 * s;
+      SZ.windGust = TUNE.windGust * 1.9 * s;
       // Terminal speed is gravity*r^2/friction. Gravity carries one factor of
       // s and r^2 carries two, so friction needs s^2 for speeds to stay
       // pane-relative instead of exploding on a bigger pane.
-      SZ.friction = TUNE.friction * s * s;
+      SZ.friction = TUNE.friction * 1.9 * s * s;
       // Vapour lands on beads in proportion to the area they present, so
       // dm/dt = k*r^2 with m = r^3 makes dr/dt constant: a bead takes
       // 3*(release - r0)/k seconds to break loose regardless of where it
       // started. Per-drop `grow` jitter spreads those releases out.
-      SZ.accrete = TUNE.accrete * s;
+      SZ.accrete = TUNE.accrete * 1.9 * s;
 
       // Hold the resting mist at a roughly constant fraction of the pane so a
       // big pane looks as wet as a small one rather than emptier. The spawn
       // radius is cubic-biased toward the minimum (see mistR), whose mean sits
       // a quarter of the way up the range.
       const meanArea = Math.PI * Math.pow(SZ.beadMin + (SZ.beadMax - SZ.beadMin) * 0.25, 2);
-      SZ.maxBeads = clamp(Math.round((G.w * G.h * TUNE.beadCoverage) / meanArea), 120, 620);
+      SZ.maxBeads = clamp(Math.round((G.w * G.h * TUNE.beadCoverage) / meanArea), 220, 2400);
     }
 
     // (Re)build the pane at a given size and repopulate it. Called once for
@@ -336,8 +340,8 @@ window.plethoraBit = {
       stripW = Math.max(64, Math.round(G.w * 0.62));
       stripH = Math.max(64, Math.round(G.h * 0.62));
 
-      const far = makeSurface(stripW * 2, stripH);
-      const near = makeSurface(stripW * 2, stripH);
+      const far = makeSurface(stripW, stripH);
+      const near = makeSurface(stripW, stripH);
       if (!far || !near) return;
 
       paintFar(far.getContext("2d"), stripW, stripH);
@@ -397,88 +401,106 @@ window.plethoraBit = {
     }
 
     function paintFar(c, w, h) {
+      const hy = h * 0.44;                       // horizon
+
       const sky = c.createLinearGradient(0, 0, 0, h);
-      sky.addColorStop(0, SKY[0]);
-      sky.addColorStop(0.42, SKY[1]);
-      sky.addColorStop(0.72, SKY[2]);
-      sky.addColorStop(1, SKY[3]);
+      sky.addColorStop(0, "#0a1226");
+      sky.addColorStop(0.34, "#152444");
+      sky.addColorStop(0.58, "#1f2a48");
+      sky.addColorStop(0.74, "#2a2440");
+      sky.addColorStop(1, "#1a1626");
       c.fillStyle = sky;
-      c.fillRect(0, 0, w * 2, h);
+      c.fillRect(0, 0, w, h);
 
-      // Sodium haze along the horizon — the town you are driving out of.
-      const hy = h * 0.6;
-      const glow = c.createLinearGradient(0, hy - h * 0.34, 0, hy + h * 0.2);
+      // Sodium haze sitting on the horizon — the town you are driving out of.
+      const glow = c.createLinearGradient(0, hy - h * 0.4, 0, hy + h * 0.06);
       glow.addColorStop(0, "rgba(255,150,84,0)");
-      glow.addColorStop(0.62, "rgba(255,142,74,0.17)");
-      glow.addColorStop(1, "rgba(255,110,66,0.04)");
+      glow.addColorStop(0.7, "rgba(255,146,78,0.14)");
+      glow.addColorStop(1, "rgba(255,178,110,0.2)");
       c.fillStyle = glow;
-      c.fillRect(0, 0, w * 2, h);
+      c.fillRect(0, 0, w, h);
 
+      // Everything is generated once and stamped at every period so the strip
+      // tiles, and drawn three times over so a shape crossing an edge wraps.
       const lamps = [];
-      const n = clamp(Math.round(w / 42), 5, 18);
+      const n = clamp(Math.round(w / 13), 14, 70);
       for (let i = 0; i < n; i++) {
+        const near = rnd();
         lamps.push({
           x: rr(0, w),
-          y: hy + rr(-h * 0.3, h * 0.22),
-          r: rr(h * 0.05, h * 0.15),
-          warm: rnd() < 0.72,
-          a: rr(0.34, 0.74)
+          y: hy + rr(-h * 0.22, h * 0.1) * (1 - near * 0.5),
+          r: rr(h * 0.012, h * 0.075) * (0.5 + near),
+          warm: rnd() < 0.7,
+          a: rr(0.4, 1) * (0.45 + near * 0.55),
+          streak: rnd() < 0.55
         });
       }
-      const cores = [];
-      for (let i = 0; i < Math.round(n * 0.6); i++) {
-        cores.push({
-          x: rr(0, w), y: hy + rr(-h * 0.26, h * 0.16),
-          r: rr(1.5, 3.4), warm: rnd() < 0.8
-        });
+      // A handful of headlights and tail lights down at road level.
+      const cars = [];
+      for (let i = 0; i < clamp(Math.round(w / 90), 2, 8); i++) {
+        cars.push({ x: rr(0, w), y: hy + rr(h * 0.02, h * 0.1), r: rr(h * 0.02, h * 0.05),
+                    red: rnd() < 0.5, a: rr(0.5, 0.95) });
       }
 
       for (let p = 0; p < PERIODS.length; p++) {
         const ox = PERIODS[p] * w;
-        darkMass(c, w, h, h * 0.74, h * 0.028, "rgba(5,8,14,0.62)", ox);
+        // Wet tarmac takes every light and smears it downward.
         for (let i = 0; i < lamps.length; i++) {
           const lp = lamps[i];
-          lamp(c, ox + lp.x, lp.y, lp.r, lp.warm ? [255, 184, 108] : [136, 196, 255], lp.a);
+          if (!lp.streak) continue;
+          const rgb = lp.warm ? [255, 178, 104] : [150, 196, 255];
+          const steps = 7;
+          for (let k = 1; k <= steps; k++) {
+            const t = k / steps;
+            const y = lp.y + (h - lp.y) * t;
+            lamp(c, ox + lp.x, y, lp.r * (1.6 + t * 2.6), rgb, lp.a * 0.09 * (1 - t));
+          }
         }
-        for (let i = 0; i < cores.length; i++) {
-          const cr = cores[i];
-          c.fillStyle = cr.warm ? "rgba(255,224,178,0.62)" : "rgba(198,228,255,0.5)";
-          c.beginPath();
-          c.arc(ox + cr.x, cr.y, cr.r, 0, Math.PI * 2);
-          c.fill();
+        for (let i = 0; i < lamps.length; i++) {
+          const lp = lamps[i];
+          lamp(c, ox + lp.x, lp.y, lp.r * 3.4,
+               lp.warm ? [255, 184, 108] : [142, 194, 255], lp.a * 0.3);
+          lamp(c, ox + lp.x, lp.y, lp.r,
+               lp.warm ? [255, 214, 158] : [190, 220, 255], lp.a);
+        }
+        for (let i = 0; i < cars.length; i++) {
+          const cr = cars[i];
+          lamp(c, ox + cr.x, cr.y, cr.r * 2.6,
+               cr.red ? [255, 70, 50] : [255, 240, 220], cr.a * 0.5);
         }
       }
 
-      // Wet tarmac throwing the streetlights back up at you.
-      const road = c.createLinearGradient(0, h * 0.78, 0, h);
-      road.addColorStop(0, "rgba(255,158,88,0.11)");
-      road.addColorStop(1, "rgba(110,150,215,0.05)");
+      const road = c.createLinearGradient(0, h * 0.72, 0, h);
+      road.addColorStop(0, "rgba(255,168,96,0.04)");
+      road.addColorStop(0.5, "rgba(140,146,190,0.05)");
+      road.addColorStop(1, "rgba(10,12,22,0.72)");
       c.fillStyle = road;
-      c.fillRect(0, h * 0.78, w * 2, h * 0.22);
+      c.fillRect(0, h * 0.72, w, h * 0.28);
     }
 
     function paintNear(c, w, h) {
-      c.clearRect(0, 0, w * 2, h);
+      c.clearRect(0, 0, w, h);
 
       // Big soft lamps whipping past close to the car, and a low verge.
       const blobs = [];
-      const n = clamp(Math.round(w / 150), 2, 6);
+      const n = clamp(Math.round(w / 130), 3, 8);
       for (let i = 0; i < n; i++) {
         blobs.push({
           x: (w * (i + rr(0.15, 0.85))) / n,
-          y: rr(h * 0.14, h * 0.42),
-          r: rr(h * 0.13, h * 0.26),
-          a: rr(0.42, 0.78)
+          y: rr(h * 0.08, h * 0.4),
+          r: rr(h * 0.1, h * 0.24),
+          a: rr(0.5, 0.95)
         });
       }
       nearLamps = blobs.map((b) => ({ u: b.x / w, a: b.a }));
 
       for (let p = 0; p < PERIODS.length; p++) {
         const ox = PERIODS[p] * w;
-        darkMass(c, w, h, h * 0.88, h * 0.032, "rgba(2,4,9,0.9)", ox);
+        darkMass(c, w, h, h * 0.93, h * 0.02, "rgba(3,5,11,0.8)", ox);
         for (let i = 0; i < blobs.length; i++) {
           const b = blobs[i];
-          lamp(c, ox + b.x, b.y, b.r, [255, 172, 96], b.a);
+          lamp(c, ox + b.x, b.y, b.r * 2.2, [255, 176, 100], b.a * 0.34);
+          lamp(c, ox + b.x, b.y, b.r * 0.55, [255, 226, 178], b.a);
         }
       }
     }
@@ -508,9 +530,9 @@ window.plethoraBit = {
 
       // Smoky body first. Without it the layer is only specks, and a channel
       // cut through specks reads as missing dots rather than as clear glass.
-      const blobs = Math.round((w * h) / 900);
+      const blobs = Math.round((w * h) / 520);
       for (let i = 0; i < blobs; i++) {
-        const x = rr(0, w), y = rr(0, h), r = rr(3, 11) * SZ.s * MIST_SCALE;
+        const x = rr(0, w), y = rr(0, h), r = rr(3, 12) * MIST_SCALE * clamp(SZ.s, 0.6, 1.6);
         const gr = c.createRadialGradient(x, y, 0, x, y, r);
         gr.addColorStop(0, "rgba(198,220,250," + rr(0.05, 0.13) + ")");
         gr.addColorStop(1, "rgba(198,220,250,0)");
@@ -522,9 +544,9 @@ window.plethoraBit = {
 
       // Then the grain on top. Fine and faint — any speck you can pick out
       // reads as dirt or a starfield, not as breath on cold glass.
-      const n = Math.round((w * h) / 20);
+      const n = Math.round((w * h) / 7);
       for (let i = 0; i < n; i++) {
-        const r = rr(0.28, 0.95) * SZ.s * MIST_SCALE;
+        const r = rr(0.3, 1.15) * MIST_SCALE * clamp(SZ.s, 0.6, 1.6);
         c.fillStyle = "rgba(202,222,250," + rr(0.04, 0.16) + ")";
         c.beginPath();
         c.arc(rr(0, w), rr(0, h), r, 0, Math.PI * 2);
@@ -544,6 +566,7 @@ window.plethoraBit = {
       mistCtx.arc(x * MIST_SCALE, y * MIST_SCALE, r * MIST_SCALE, 0, Math.PI * 2);
       mistCtx.fill();
       mistCtx.globalCompositeOperation = "source-over";
+      mistDirty = true;
     }
 
     function healMist(dt) {
@@ -554,6 +577,7 @@ window.plethoraBit = {
       mistCtx.globalAlpha = 0.05;
       mistCtx.drawImage(mistBase, 0, 0);
       mistCtx.globalAlpha = 1;
+      mistDirty = true;
     }
 
     /* ---------------------------------------------------------------- *
@@ -581,8 +605,8 @@ window.plethoraBit = {
         const body = c.createRadialGradient(
           half - r * 0.3, half - r * 0.35, r * 0.08, half, half, r
         );
-        body.addColorStop(0, "rgba(198,222,252,0.34)");
-        body.addColorStop(0.55, "rgba(112,144,190,0.17)");
+        body.addColorStop(0, "rgba(150,180,220,0.26)");
+        body.addColorStop(0.55, "rgba(70,96,140,0.2)");
         body.addColorStop(0.88, "rgba(8,13,24,0.3)");
         body.addColorStop(1, "rgba(4,7,14,0.08)");
         c.fillStyle = body;
@@ -597,15 +621,15 @@ window.plethoraBit = {
         );
         rim.addColorStop(0, "rgba(210,232,255,0)");
         rim.addColorStop(0.68, "rgba(210,232,255,0.03)");
-        rim.addColorStop(1, "rgba(222,240,255,0.46)");
+        rim.addColorStop(1, "rgba(200,222,250,0.28)");
         c.fillStyle = rim;
         c.beginPath();
         c.arc(half, half, r, 0, Math.PI * 2);
         c.fill();
 
-        c.fillStyle = "rgba(255,255,255,0.72)";
+        c.fillStyle = "rgba(255,255,255,0.58)";
         c.beginPath();
-        c.arc(half - r * 0.32, half - r * 0.36, Math.max(0.4, r * 0.16), 0, Math.PI * 2);
+        c.arc(half - r * 0.32, half - r * 0.36, Math.max(0.35, r * 0.12), 0, Math.PI * 2);
         c.fill();
 
         out.push({ cv: s, half });
@@ -646,6 +670,10 @@ window.plethoraBit = {
         shedNext: SZ.shedEvery * rr(0.45, 1.9),
         racer: null,
         grow: rr(TUNE.growJitter[0], TUNE.growJitter[1]),
+        vari: ri(0, 2),
+        // Beads are never perfectly round; a little ellipticity per drop
+        // does the job that a lobed outline only pretends to.
+        aspect: rr(0.88, 1.14),
         wob: rr(0, 6.28)
       };
       if (opts) for (const k in opts) d[k] = opts[k];
@@ -658,7 +686,7 @@ window.plethoraBit = {
     // bead the same apparent size and the glass looks printed.
     function mistR() {
       const t = rnd();
-      return SZ.beadMin + (SZ.beadMax - SZ.beadMin) * t * t * t;
+      return SZ.beadMin + (SZ.beadMax - SZ.beadMin) * t * t * t * t;
     }
 
     function seedGlass(n) {
@@ -714,6 +742,9 @@ window.plethoraBit = {
           a.racer = b.racer;
           a.pin = Math.max(a.pin, b.pin);
           race.racers[b.racer] = a;
+          // If the drop that swallowed it was already running, the race would
+          // start with one runner mid-flight. Pin it back to the line.
+          if (race.state === "betting") { a.run = false; a.vx = 0; a.vy = 0; }
         } else if (race.racers[b.racer] === b) {
           race.racers[b.racer] = null;
         }
@@ -958,12 +989,12 @@ window.plethoraBit = {
       c.scale(-1, -1);                      // a lens flips the image
       c.globalAlpha = 0.95;
       c.drawImage(
-        stripFar, clamp(fx * qx - swx / 2, 0, stripW * 2 - swx), sy, swx, swy,
+        stripFar, clamp(fx * qx - swx / 2, 0, stripW - swx), sy, swx, swy,
         -d.r, -d.r, d.r * 2, d.r * 2
       );
       c.globalAlpha = 0.78;
       c.drawImage(
-        stripNear, clamp(nx * qx - swx / 2, 0, stripW * 2 - swx), sy, swx, swy,
+        stripNear, clamp(nx * qx - swx / 2, 0, stripW - swx), sy, swx, swy,
         -d.r, -d.r, d.r * 2, d.r * 2
       );
       c.restore();
@@ -978,7 +1009,7 @@ window.plethoraBit = {
       c.clip();
 
       if (!lens || !drawLensInto(c, d)) {
-        c.fillStyle = "rgba(132,164,208,0.15)";
+        c.fillStyle = "rgba(70,92,126,0.3)";
         c.fill();
       }
 
@@ -990,7 +1021,7 @@ window.plethoraBit = {
       );
       rim.addColorStop(0, "rgba(206,230,255,0)");
       rim.addColorStop(0.66, "rgba(206,230,255,0.03)");
-      rim.addColorStop(1, "rgba(220,238,255,0.5)");
+      rim.addColorStop(1, "rgba(198,220,248,0.3)");
       c.fillStyle = rim;
       c.fill();
       c.restore();
@@ -998,13 +1029,13 @@ window.plethoraBit = {
       // A thin dark line just inside the edge, where refraction bends the
       // background away. Thin — a heavy outline turns water into a sticker.
       dropPath(c, d);
-      c.strokeStyle = "rgba(6,10,20,0.32)";
+      c.strokeStyle = "rgba(4,7,14,0.45)";
       c.lineWidth = Math.max(0.5, d.r * 0.09);
       c.stroke();
 
-      c.fillStyle = "rgba(255,255,255,0.72)";
+      c.fillStyle = "rgba(255,255,255,0.6)";
       c.beginPath();
-      c.arc(d.x - d.r * 0.32, d.y - d.r * 0.36, Math.max(0.4, d.r * 0.13), 0, Math.PI * 2);
+      c.arc(d.x - d.r * 0.32, d.y - d.r * 0.36, Math.max(0.35, d.r * 0.1), 0, Math.PI * 2);
       c.fill();
 
       if (d.racer !== null) drawRacerMark(c, d);
@@ -1052,11 +1083,15 @@ window.plethoraBit = {
       if (blurFar && blurNear) {
         const over = G.h * 0.05;
         c.imageSmoothingEnabled = true;
-        c.drawImage(blurFar, -scrollFar + worldOffX, -over + worldOffY, G.w * 2, G.h + over * 2);
+        for (let k = 0; k < 2; k++) {
+          c.drawImage(blurFar, -scrollFar + k * G.w + worldOffX, -over + worldOffY,
+                      G.w, G.h + over * 2);
+        }
         c.globalAlpha = 0.95;
-        c.drawImage(
-          blurNear, -scrollNear + worldOffX * 1.35, -over + worldOffY, G.w * 2, G.h + over * 2
-        );
+        for (let k = 0; k < 2; k++) {
+          c.drawImage(blurNear, -scrollNear + k * G.w + worldOffX * 1.35, -over + worldOffY,
+                      G.w, G.h + over * 2);
+        }
         c.globalAlpha = 1;
       }
 
@@ -1212,6 +1247,337 @@ window.plethoraBit = {
     }
 
     /* ---------------------------------------------------------------- *
+     * The pane, in GL
+     *
+     * A droplet is a lens, and a lens cannot be faked with gradients — that
+     * is what made the first version read as grey bubbles rather than water.
+     * So the pane is rendered properly: the world outside goes in as a
+     * texture, the glass itself is a blurred sample of it, and every droplet
+     * is an instanced quad carrying a baked surface normal that *refracts*
+     * that world. Sampling opposite the normal is what inverts and magnifies
+     * the image inside the drop, which is the single thing your eye uses to
+     * decide it is looking at water.
+     *
+     * Instancing is also what makes the density believable. Painting each
+     * drop by hand capped the glass at a few hundred; one quad each means
+     * thousands, so the fine haze of condensation that a real window is
+     * covered in can actually be there.
+     * ---------------------------------------------------------------- */
+
+    const DROP_CAP = 5000;
+    const ATLAS_TILE = 96;          // per variant, 2x2 grid
+    let dropAtlas = null;
+
+    // Baked droplet surface normals. For a dome z = H·sqrt(1 - d²) the normal
+    // works out as (k·u/s, k·v/s, 1) with s = sqrt(1 - d²) and k = H/R, so a
+    // small k gives the flat, wide-contact-angle bead that sits on cold glass
+    // and a large k gives a fat one about to run.
+    function bakeDropAtlas() {
+      const T = ATLAS_TILE, N = T * 2;
+      const cv = makeSurface(N, N);
+      if (!cv) return null;
+      const c = cv.getContext("2d");
+      const img = c.createImageData(N, N);
+      const px = img.data;
+      // k, and how much the outline wobbles away from a circle.
+      const VAR = [
+        { k: 0.55, wob: 0, tail: 0 },
+        { k: 0.78, wob: 0, tail: 0 },
+        { k: 1.05, wob: 0, tail: 0 },
+        { k: 0.86, wob: 0, tail: 0.5 }
+      ];
+      for (let v = 0; v < 4; v++) {
+        const ox = (v % 2) * T, oy = ((v / 2) | 0) * T;
+        const cfg = VAR[v];
+        const ph = rr(0, 6.28), ph2 = rr(0, 6.28);
+        for (let y = 0; y < T; y++) {
+          for (let x = 0; x < T; x++) {
+            let u = (x + 0.5) / T * 2 - 1;
+            let w = (y + 0.5) / T * 2 - 1;
+            // Teardrop: squeeze the trailing half so it tapers to a point.
+            let uu = u;
+            if (cfg.tail > 0 && w < 0) uu = u / Math.max(0.18, 1 + cfg.tail * w * 1.6);
+            const ang = Math.atan2(w, uu);
+            const shape =
+              1 - cfg.wob * (Math.sin(ang * 5 + ph) * 0.55 + Math.sin(ang * 9 + ph2) * 0.45);
+            const d = Math.hypot(uu, w) / shape;
+            const i = ((oy + y) * N + ox + x) * 4;
+            if (d >= 1) { px[i + 3] = 0; continue; }
+            const s = Math.max(0.16, Math.sqrt(1 - d * d));
+            let nx = (cfg.k * uu) / s, ny = (cfg.k * w) / s, nz = 1;
+            const len = Math.hypot(nx, ny, nz);
+            nx /= len; ny /= len; nz /= len;
+            px[i] = Math.round((nx * 0.5 + 0.5) * 255);
+            px[i + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+            px[i + 2] = Math.round(s * 255);
+            // One pixel of coverage falloff, so edges are not stair-stepped.
+            px[i + 3] = Math.round(255 * clamp((1 - d) * (T * 0.5), 0, 1));
+          }
+        }
+      }
+      c.putImageData(img, 0, 0);
+      return cv;
+    }
+
+    // Shared by both pane shaders: the world outside, far and near layers
+    // sliding past at their own rates, wrapped in a single tileable period.
+    const GLSL_SCENE = [
+      "uniform sampler2D uFar; uniform sampler2D uNear;",
+      "uniform sampler2D uFarBlur; uniform sampler2D uNearBlur;",
+      "uniform vec2 uScroll;",
+      "vec3 sceneAt(vec2 uv) {",
+      "  float y = clamp(uv.y, 0.002, 0.998);",
+      "  vec3 f = texture2D(uFar, vec2(fract(uv.x + uScroll.x), y)).rgb;",
+      "  vec4 n = texture2D(uNear, vec2(fract(uv.x + uScroll.y), y));",
+      "  return mix(f, n.rgb, n.a);",
+      "}",
+      "vec3 sceneSoft(vec2 uv) {",
+      "  float y = clamp(uv.y, 0.002, 0.998);",
+      "  vec3 f = texture2D(uFarBlur, vec2(fract(uv.x + uScroll.x), y)).rgb;",
+      "  vec4 n = texture2D(uNearBlur, vec2(fract(uv.x + uScroll.y), y));",
+      "  return mix(f, n.rgb, n.a);",
+      "}"
+    ].join("\n");
+
+    const PANE_VERT = [
+      "precision highp float;",
+      "uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix;",
+      "attribute vec2 aQuad;",
+      "uniform vec2 uPane;",
+      "varying vec2 vUv;",
+      "void main() {",
+      "  vUv = aQuad * 0.5 + 0.5;",
+      "  vUv.y = 1.0 - vUv.y;",
+      "  gl_Position = projectionMatrix * modelViewMatrix *",
+      "                vec4(aQuad * uPane * 0.5, 0.0, 1.0);",
+      "}"
+    ].join("\n");
+
+    // The glass itself. Never perfectly sharp — you are focused on the pane,
+    // not on the street — and where condensation sits it is blurrier and
+    // lighter still. A track a runner has cleared shows through noticeably
+    // crisper, which is most of why a trail reads as *cleared glass*.
+    const PANE_FRAG = [
+      "precision highp float;",
+      GLSL_SCENE,
+      "uniform sampler2D uMist;",
+      "uniform float uFog;",
+      "varying vec2 vUv;",
+      "void main() {",
+      "  float m = texture2D(uMist, vUv).a * uFog;",
+      "  vec3 col = mix(sceneAt(vUv), sceneSoft(vUv), clamp(0.56 + 0.44 * m, 0.0, 1.0));",
+      "  col += vec3(0.055, 0.068, 0.086) * m;",
+      "  col = col * 0.95 + vec3(0.018, 0.024, 0.038);",
+"  gl_FragColor = vec4(col, 1.0);",
+      "}"
+    ].join("\n");
+
+    const DROP_VERT = [
+      "precision highp float;",
+      "uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix;",
+      "attribute vec2 aQuad;",
+      "attribute vec2 iPos;",     // centre, pane uv
+      "attribute vec2 iSize;",    // half extent, pane-local units
+      "attribute float iRot;",
+      "attribute float iVar;",
+      "attribute vec4 iTint;",
+      "uniform vec2 uPane;",
+      "varying vec2 vLocal; varying vec2 vUv; varying vec4 vTint;",
+      "varying vec2 vAtlas; varying vec2 vRot; varying float vRad;",
+      "void main() {",
+      "  float ca = cos(iRot), sa = sin(iRot);",
+      "  vec2 q = aQuad * iSize;",
+      "  vec2 r = vec2(q.x * ca - q.y * sa, q.x * sa + q.y * ca);",
+      "  vec2 centre = vec2((iPos.x - 0.5) * uPane.x, (0.5 - iPos.y) * uPane.y);",
+      "  vec2 local = centre + r;",
+      "  vLocal = aQuad;",
+      "  vUv = vec2(local.x / uPane.x + 0.5, 0.5 - local.y / uPane.y);",
+      "  vTint = iTint;",
+      "  vAtlas = vec2(mod(iVar, 2.0), floor(iVar * 0.5));",
+      "  vRot = vec2(ca, sa);",
+      "  vRad = iSize.x / uPane.x;",
+      "  gl_Position = projectionMatrix * modelViewMatrix * vec4(local, 0.001, 1.0);",
+      "}"
+    ].join("\n");
+
+    // One droplet. Everything here is doing one job: convince you that light
+    // went through water on its way to your eye.
+    const DROP_FRAG = [
+      "precision highp float;",
+      GLSL_SCENE,
+      "uniform sampler2D uDrop;",
+      "uniform float uRefract;",
+      "varying vec2 vLocal; varying vec2 vUv; varying vec4 vTint;",
+      "varying vec2 vAtlas; varying vec2 vRot; varying float vRad;",
+      "void main() {",
+      "  vec2 t = clamp(vLocal * 0.5 + 0.5, 0.006, 0.994) * 0.5 + vAtlas * 0.5;",
+      "  vec4 nm = texture2D(uDrop, t);",
+      "  if (nm.a < 0.02) discard;",
+      "  vec3 N = normalize(vec3(nm.rg * 2.0 - 1.0, max(nm.b, 0.02)));",
+      "  vec2 nr = vec2(N.x * vRot.x - N.y * vRot.y, N.x * vRot.y + N.y * vRot.x);",
+      // Sampling *against* the surface normal is the whole trick: it pulls in
+      // the far side of what is behind the drop, so the image inside arrives
+      // inverted and magnified the way a real bead of water delivers it.
+      "  vec2 off = -nr * uRefract * vRad;",
+      "  vec3 col = sceneAt(vUv + off);",
+      "  col *= 1.18;",
+      // Light that hits the rim at a grazing angle never gets through.
+      "  float d = length(vLocal);",
+      "  col *= mix(1.0, 0.22, smoothstep(0.55, 1.0, d));",
+      // A bright, tight caustic where the dome faces the sky, and a second
+      // softer one low down where the road throws light back up.
+      "  vec3 H1 = normalize(vec3(-0.34, 0.62, 0.71));",
+      "  vec3 H2 = normalize(vec3(0.22, -0.55, 0.8));",
+      "  col += vec3(1.0, 0.99, 0.96) * pow(max(dot(N, H1), 0.0), 68.0) * 1.15;",
+      "  col += vec3(1.0, 0.86, 0.7) * pow(max(dot(N, H2), 0.0), 34.0) * 0.3;",
+      // A backed drop is lit differently rather than ringed: the light coming
+      // through it takes a colour, so you find it the way you would find a
+      // drop with a streetlight behind it.
+      "  float lum = dot(col, vec3(0.34));",
+"  col = mix(col, vTint.rgb * (0.22 + lum * 2.0), vTint.a * 0.72);",
+"  col += vTint.rgb * vTint.a * 0.3;",
+      "  gl_FragColor = vec4(col, nm.a);",
+      "}"
+    ].join("\n");
+
+    let paneMesh = null, dropMesh = null, dropGeo = null;
+    let iPos = null, iSize = null, iRot = null, iVar = null, iTint = null;
+    let mistGLTex = null, mistDirty = true;
+    const sceneUniforms = {};
+
+    function makeStripTexture(cv, wrap) {
+      const t = new THREE.CanvasTexture(cv);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = THREE.RepeatWrapping;
+      t.wrapT = THREE.ClampToEdgeWrapping;
+      t.minFilter = THREE.LinearFilter;
+      t.magFilter = THREE.LinearFilter;
+      t.generateMipmaps = false;
+      return t;
+    }
+
+    function buildPaneGL(paneW, paneH) {
+      dropAtlas = bakeDropAtlas();
+      if (!dropAtlas || !stripFar) return null;
+
+      const atlasTex = new THREE.CanvasTexture(dropAtlas);
+      atlasTex.colorSpace = THREE.NoColorSpace;   // it is geometry, not colour
+      atlasTex.minFilter = THREE.LinearFilter;
+      atlasTex.magFilter = THREE.LinearFilter;
+      atlasTex.generateMipmaps = false;
+
+      mistGLTex = new THREE.CanvasTexture(mistTex);
+      mistGLTex.colorSpace = THREE.NoColorSpace;
+      mistGLTex.minFilter = THREE.LinearFilter;
+      mistGLTex.generateMipmaps = false;
+
+      sceneUniforms.uFar = { value: makeStripTexture(stripFar) };
+      sceneUniforms.uNear = { value: makeStripTexture(stripNear) };
+      sceneUniforms.uFarBlur = { value: makeStripTexture(blurFar) };
+      sceneUniforms.uNearBlur = { value: makeStripTexture(blurNear) };
+      sceneUniforms.uScroll = { value: new THREE.Vector2(0, 0) };
+      const uPane = { value: new THREE.Vector2(paneW, paneH) };
+
+      const quad = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
+      const idx = [0, 1, 2, 0, 2, 3];
+
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute("aQuad", new THREE.BufferAttribute(quad, 2));
+      pg.setIndex(idx);
+      paneMesh = new THREE.Mesh(pg, new THREE.RawShaderMaterial({
+        vertexShader: PANE_VERT,
+        fragmentShader: PANE_FRAG,
+        uniforms: Object.assign({}, sceneUniforms, {
+          uPane: uPane, uMist: { value: mistGLTex }, uFog: { value: 2.1 }
+        })
+      }));
+
+      dropGeo = new THREE.InstancedBufferGeometry();
+      dropGeo.setAttribute("aQuad", new THREE.BufferAttribute(quad, 2));
+      dropGeo.setIndex(idx);
+      iPos = new THREE.InstancedBufferAttribute(new Float32Array(DROP_CAP * 2), 2);
+      iSize = new THREE.InstancedBufferAttribute(new Float32Array(DROP_CAP * 2), 2);
+      iRot = new THREE.InstancedBufferAttribute(new Float32Array(DROP_CAP), 1);
+      iVar = new THREE.InstancedBufferAttribute(new Float32Array(DROP_CAP), 1);
+      iTint = new THREE.InstancedBufferAttribute(new Float32Array(DROP_CAP * 4), 4);
+      for (const a of [iPos, iSize, iRot, iVar, iTint]) a.setUsage(THREE.DynamicDrawUsage);
+      dropGeo.setAttribute("iPos", iPos);
+      dropGeo.setAttribute("iSize", iSize);
+      dropGeo.setAttribute("iRot", iRot);
+      dropGeo.setAttribute("iVar", iVar);
+      dropGeo.setAttribute("iTint", iTint);
+      dropGeo.instanceCount = 0;
+
+      dropMesh = new THREE.Mesh(dropGeo, new THREE.RawShaderMaterial({
+        vertexShader: DROP_VERT,
+        fragmentShader: DROP_FRAG,
+        uniforms: Object.assign({}, sceneUniforms, {
+          uPane: uPane, uDrop: { value: atlasTex }, uRefract: { value: 1.35 }
+        }),
+        transparent: true,
+        depthWrite: false
+      }));
+      dropMesh.renderOrder = 2;
+      paneMesh.renderOrder = 1;
+      // Geometry built from a custom attribute has no bounding sphere for
+      // three to test, so both would be culled the moment they were added.
+      dropMesh.frustumCulled = false;
+      paneMesh.frustumCulled = false;
+
+      const group = new THREE.Group();
+      group.add(paneMesh);
+      group.add(dropMesh);
+      return group;
+    }
+
+    // Pack the live drops into the instance buffers. Sorted small-first so the
+    // big ones land on top, which is also the order they overlap in reality.
+    const packOrder = [];
+    function updateDropInstances() {
+      if (!dropGeo) return;
+      const pw = G.w, ph = G.h;
+      const toLocal = paneMeshW / pw;
+      packOrder.length = 0;
+      for (let i = 0; i < drops.length; i++) {
+        const d = drops[i];
+        if (d.life > 0) packOrder.push(d);
+      }
+      packOrder.sort((a, b) => a.r - b.r);
+      const n = Math.min(packOrder.length, DROP_CAP);
+      const P = iPos.array, S = iSize.array, R = iRot.array, V = iVar.array, T = iTint.array;
+      for (let i = 0; i < n; i++) {
+        const d = packOrder[i];
+        P[i * 2] = d.x / pw;
+        P[i * 2 + 1] = d.y / ph;
+
+        const sp = d.run ? Math.hypot(d.vx, d.vy) : 0;
+        // A running drop stretches along its path and thins across it.
+        const stretch = d.run ? 1 + Math.min(0.8, sp * 0.0032 / SZ.s) : 1;
+        const rad = d.r * toLocal;
+        S[i * 2] = rad * d.aspect * (1 - 0.16 * (stretch - 1));
+        S[i * 2 + 1] = (rad / d.aspect) * stretch;
+        R[i] = d.run && sp > 12 * SZ.s ? Math.atan2(d.vy, -d.vx) - Math.PI / 2 : 0;
+        V[i] = d.run && sp > 26 * SZ.s ? 3 : d.vari;
+
+        if (d.racer !== null) {
+          const t = RACER_TINTS[d.racer];
+          const mine = race.pick === d.racer;
+          const pulse = race.state === "betting"
+            ? 0.62 + 0.38 * Math.sin(nowMs / 300 + d.wob) : 1;
+          T[i * 4] = t.rgb[0] / 255;
+          T[i * 4 + 1] = t.rgb[1] / 255;
+          T[i * 4 + 2] = t.rgb[2] / 255;
+          T[i * 4 + 3] = (mine ? 0.92 : 0.55) * pulse + feedFlash * 0.15;
+        } else {
+          T[i * 4 + 3] = 0;
+        }
+      }
+      dropGeo.instanceCount = n;
+      iPos.needsUpdate = iSize.needsUpdate = iRot.needsUpdate = true;
+      iVar.needsUpdate = iTint.needsUpdate = true;
+    }
+
+    /* ---------------------------------------------------------------- *
      * Cabin view
      *
      * The back of the car, built from boxes and lit almost entirely by what
@@ -1228,18 +1594,19 @@ window.plethoraBit = {
     // above the seat or the whole cabin reads as a toy.
     const CAB = {
       glassX: -0.75,                 // window plane
-      winZ: 0.33, winTop: 0.45, winBot: -0.25,
+      winZ: 0.46, winTop: 0.40, winBot: -0.24,
       wallX: 0.78, floorY: -0.98, roofY: 0.56,
       seatY: -0.62,                  // top of the cushion you are sitting on
       frontZ: -1.05, backZ: 0.88,
       // Far enough back that the pane's full width fits the narrow horizontal
       // field a portrait screen gives you, and high enough above the cushion
       // to be a person rather than a camera on a tripod.
-      eye: [0.31, 0.08, 0]
+      eye: [0.17, 0.05, 0.02]
     };
 
     let THREE = null, renderer = null, scene = null, camera = null;
-    let glassTex = null, glassMesh = null, raycaster = null, ndc = null;
+    let glassMesh = null, raycaster = null, ndc = null;
+    let paneMeshW = 1;
     let sweepLight = null;
     // Three's camera looks down -Z; the window is on -X. Turning +90 degrees
     // about Y maps forward onto -X, so that is where a head starts.
@@ -1329,11 +1696,11 @@ window.plethoraBit = {
       scene.background = new THREE.Color(0x03050a);
 
       const grain = grainTexture();
-      const trim = mat("#2a3140", 0.95, grain, 3, 3);
-      const card = mat("#333b4c", 0.92, grain, 4, 2);
-      const fabric = mat("#3b4356", 1, grain, 5, 3);
+      const trim = mat("#333b4c", 0.95, grain, 3, 3);
+      const card = mat("#3d4658", 0.92, grain, 4, 2);
+      const fabric = mat("#464f64", 1, grain, 5, 3);
       const dark = mat("#161b25", 0.98, grain, 6, 6);
-      const lining = mat("#2c3341", 1, grain, 4, 4);
+      const lining = mat("#374050", 1, grain, 4, 4);
 
       const C = CAB;
 
@@ -1352,17 +1719,21 @@ window.plethoraBit = {
       slab(C.glassX + 0.015, C.winTop, -C.winZ, C.glassX + 0.06, C.winTop + 0.022, C.winZ,
            mat("#232a36", 0.66));
 
-      // The pane itself. Unlit: the texture already contains a lit world.
-      glassTex = new THREE.CanvasTexture(glassCv);
-      glassTex.colorSpace = THREE.SRGBColorSpace;
-      glassTex.minFilter = THREE.LinearFilter;
-      glassTex.generateMipmaps = false;
+      // The pane: world texture, fogged glass and every droplet, all in GL.
+      paneMeshW = C.winZ * 2;
+      const paneGroup = buildPaneGL(paneMeshW, C.winTop - C.winBot);
+      if (!paneGroup) return false;
+      paneGroup.position.set(C.glassX, (C.winTop + C.winBot) / 2, 0);
+      paneGroup.rotation.y = Math.PI / 2;   // faces +X, into the cabin
+      scene.add(paneGroup);
+      // An invisible plane on the same spot, purely so a touch can be
+      // raycast onto the glass and turned back into pane coordinates.
       glassMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(C.winZ * 2, C.winTop - C.winBot),
-        new THREE.MeshBasicMaterial({ map: glassTex })
+        new THREE.PlaneGeometry(paneMeshW, C.winTop - C.winBot),
+        new THREE.MeshBasicMaterial({ visible: false })
       );
-      glassMesh.position.set(C.glassX, (C.winTop + C.winBot) / 2, 0);
-      glassMesh.rotation.y = Math.PI / 2;   // faces +X, into the cabin
+      glassMesh.position.copy(paneGroup.position);
+      glassMesh.rotation.y = Math.PI / 2;
       scene.add(glassMesh);
 
       // Right door, with its own window onto the same weather.
@@ -1370,9 +1741,10 @@ window.plethoraBit = {
       slab(C.wallX - 0.03, C.winTop, C.frontZ, C.wallX + 0.06, C.roofY, C.backZ, lining);
       slab(C.wallX - 0.03, C.winBot, C.frontZ, C.wallX + 0.06, C.winTop, -C.winZ, trim);
       slab(C.wallX - 0.03, C.winBot, C.winZ, C.wallX + 0.06, C.winTop, C.backZ, trim);
+      const farGlass = makeStripTexture(blurFar);
       const far = new THREE.Mesh(
         new THREE.PlaneGeometry(C.winZ * 2, C.winTop - C.winBot),
-        new THREE.MeshBasicMaterial({ map: glassTex, opacity: 0.42, transparent: true })
+        new THREE.MeshBasicMaterial({ map: farGlass, opacity: 0.5, transparent: true })
       );
       far.position.set(C.wallX - 0.04, (C.winTop + C.winBot) / 2, 0);
       far.rotation.y = -Math.PI / 2;
@@ -1397,22 +1769,24 @@ window.plethoraBit = {
       slab(C.glassX + 0.05, -0.04, backZ1, C.wallX - 0.05, 0.01, C.backZ - 0.04, card);
 
       // Front seats ahead of you, and the glow of the windscreen past them.
-      slab(-0.64, C.seatY - 0.2, C.frontZ + 0.16, -0.12, 0.2, C.frontZ + 0.32, fabric);
-      slab(0.18, C.seatY - 0.2, C.frontZ + 0.16, 0.7, 0.2, C.frontZ + 0.32, fabric);
-      slab(-0.56, 0.2, C.frontZ + 0.18, -0.2, 0.42, C.frontZ + 0.3, fabric);
-      slab(0.26, 0.2, C.frontZ + 0.18, 0.62, 0.42, C.frontZ + 0.3, fabric);
+      slab(-0.64, C.seatY - 0.2, C.frontZ + 0.16, -0.12, 0.0, C.frontZ + 0.32, fabric);
+      slab(0.18, C.seatY - 0.2, C.frontZ + 0.16, 0.7, 0.0, C.frontZ + 0.32, fabric);
+      slab(-0.55, 0.0, C.frontZ + 0.19, -0.21, 0.24, C.frontZ + 0.29, fabric);
+      slab(0.27, 0.0, C.frontZ + 0.19, 0.61, 0.24, C.frontZ + 0.29, fabric);
 
       const screen = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.5, 0.5),
-        new THREE.MeshBasicMaterial({ map: glassTex, opacity: 0.26, transparent: true })
+        new THREE.PlaneGeometry(1.5, 0.46),
+        new THREE.MeshBasicMaterial({ map: makeStripTexture(blurFar), opacity: 0.75,
+                                      transparent: true })
       );
-      screen.position.set(0, 0.3, C.frontZ + 0.02);
+      screen.position.set(0, 0.16, C.frontZ + 0.02);
       scene.add(screen);
 
       // Rear window behind your shoulder.
       const rear = new THREE.Mesh(
         new THREE.PlaneGeometry(1.3, 0.4),
-        new THREE.MeshBasicMaterial({ map: glassTex, opacity: 0.32, transparent: true })
+        new THREE.MeshBasicMaterial({ map: makeStripTexture(blurNear), opacity: 0.42,
+                                      transparent: true })
       );
       rear.position.set(0, 0.22, C.backZ - 0.02);
       rear.rotation.y = Math.PI;
@@ -1434,10 +1808,10 @@ window.plethoraBit = {
       // Light in here is entirely borrowed: sky through the glass above,
       // black carpet below, and a soft source at each window. Turning away
       // from the pane has to leave you with something to look at.
-      scene.add(new THREE.HemisphereLight(0x3b5178, 0x0d1220, 1.2));
+      scene.add(new THREE.HemisphereLight(0x44608c, 0x11172a, 2.1));
       // The pane is the only real source in here, so a directional light
       // stands in for it and rakes across everything it can see.
-      const paneLight = new THREE.DirectionalLight(0x8fb0dd, 0.75);
+      const paneLight = new THREE.DirectionalLight(0x9dbde8, 1.5);
       paneLight.position.set(C.glassX - 1.4, 0.5, 0.2);
       paneLight.target.position.set(C.wallX, -0.2, 0);
       scene.add(paneLight);
@@ -1445,19 +1819,19 @@ window.plethoraBit = {
       sweepLight = new THREE.PointLight(0xffb478, 0, 9, 2.1);
       sweepLight.position.set(C.glassX - 1.35, 0.36, 0);
       scene.add(sweepLight);
-      const fill = new THREE.PointLight(0x5f83bd, 0.55, 5.5, 1.8);
+      const fill = new THREE.PointLight(0x6b90cc, 1.1, 5.5, 1.8);
       fill.position.set(C.glassX + 0.25, 0.05, -0.2);
       scene.add(fill);
-      const rightPane = new THREE.PointLight(0x7f9ecb, 0.7, 4.6, 1.9);
+      const rightPane = new THREE.PointLight(0x88a6d4, 1.3, 4.8, 1.8);
       rightPane.position.set(C.wallX - 0.28, 0.02, 0);
       scene.add(rightPane);
-      const rearGlow = new THREE.PointLight(0x9ab6e0, 0.8, 4.2, 1.8);
+      const rearGlow = new THREE.PointLight(0x9ab6e0, 1.3, 4.4, 1.7);
       rearGlow.position.set(0, 0.22, C.backZ - 0.16);
       scene.add(rearGlow);
       // Footwell strip. Cars really do have this, and without it the whole
       // lower half of the cabin is an unreadable black field once you turn
       // away from the window.
-      const footwell = new THREE.PointLight(0xffab68, 0.55, 1.9, 2);
+      const footwell = new THREE.PointLight(0xffab68, 0.9, 2.2, 2);
       footwell.position.set(0.18, C.floorY + 0.28, -0.34);
       scene.add(footwell);
 
@@ -1468,6 +1842,7 @@ window.plethoraBit = {
 
       raycaster = new THREE.Raycaster();
       ndc = new THREE.Vector2();
+      return true;
     }
 
     async function tryCabin() {
@@ -1484,11 +1859,11 @@ window.plethoraBit = {
       renderer.setSize(ctx.width, ctx.height, false);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.12;
+      renderer.toneMappingExposure = 1.0;
 
       // Rebuild the pane at the window's aspect before anything references it.
-      setupGlass(PANE_3D.w, PANE_3D.h, 1, true);
-      buildCabin();
+      setupGlass(PANE_3D.w, PANE_3D.h, 1, false);
+      if (!buildCabin()) return false;
 
       ctx.onDestroy(() => {
         try { renderer.dispose(); } catch (_) {}
@@ -1514,16 +1889,18 @@ window.plethoraBit = {
     }
 
     function renderCabin(dt) {
-      // Only pay for a texture upload when the pane is actually in view, and
-      // never more than ~40 times a second — the drops do not move fast enough
-      // to need more, and this is the single most expensive thing per frame.
+      // Drops go straight into instance buffers, so there is no canvas repaint
+      // and no full-pane upload. The condensation layer is the only thing that
+      // still has to be pushed to the GPU, and only when a runner has cut it.
+      updateDropInstances();
+      sceneUniforms.uScroll.value.set(
+        (scrollFar - worldOffX) / G.w, (scrollNear - worldOffX * 1.35) / G.w
+      );
       texClock += dt;
-      const facing = Math.sin(yaw) > 0.42;   // heading is (-sin yaw, ., -cos yaw)
-      const every = avgDt > 26 ? 0.05 : 0.025;
-      if (glassTex && texClock > every && (facing || texClock > 0.2)) {
+      if (mistGLTex && mistDirty && texClock > (avgDt > 26 ? 0.1 : 0.05)) {
         texClock = 0;
-        renderGlass(gg);
-        glassTex.needsUpdate = true;
+        mistDirty = false;
+        mistGLTex.needsUpdate = true;
       }
       stepCabinLight();
       camera.rotation.y = yaw;
