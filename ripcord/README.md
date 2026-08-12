@@ -130,6 +130,81 @@ resisted several rounds of stat-shaving before the real cause was found:
   Each rival now rolls a `focus` flag: some play the leader, the rest go for
   whoever is nearest.
 
+## Elemental specials
+
+Every top carries one, and it is the only thing in the battle you press. A bar
+at the bottom fills over the element's cooldown; when it is full, tapping it
+unleashes the attack on whatever is in range. Rivals do the same on their own,
+so the stadium is never quiet.
+
+Three shapes cover the whole set:
+
+| Shape | What it does | Elements |
+| --- | --- | --- |
+| **bolt** | Forks to the two nearest rivals — heavy drain, small shove | Storm, Radiant |
+| **burst** | Radial nova — drain and a hard shove, both falling off with range | Fire, Gale, Ember, Tide |
+| **zone** | A field left on the floor that drains and *slows* anything standing in it | Frost, Venom, Umbra |
+
+| Top | Element | |
+| --- | --- | --- |
+| Volt Lance | ⚡ **Storm** | forked lightning to the two nearest |
+| Iron Bastion | 🔥 **Fire** | nova that also leaves a burn ticking |
+| Pale Orbit | ❄️ **Frost** | freezing field, heavy drag on anything inside |
+| Wisp | 🌬 **Gale** | weak drain, huge shove — a ring-out tool |
+| Cinder Fang | 🔥 **Ember** | a smaller Fire |
+| Hollow Crown | ✨ **Radiant** | bolt |
+| Riot Coil | ☠️ **Venom** | lingering field |
+| Null Vector | 🌊 **Tide** | wide shove |
+| Black Meridian | 🌑 **Umbra** | the strongest field |
+
+A cast scales with the caster's remaining spin (`0.55 + spinNorm * 0.45`), so a
+dying top cannot cheat a win out of one button press.
+
+**Is it overpowered?** No — measured, not assumed. Running Legend twice, once
+with the driver ignoring the button and once tapping it whenever ready, 26
+battles per cell:
+
+| phone °/s | ignoring it | using it |
+| --------: | ----------: | -------: |
+| 250 | 12% | 8% |
+| 650 | 8% | 12% |
+| 1100 | 31% | 23% |
+| 1400 | 23% | 46% |
+| 1800 | 42% | 50% |
+
+Roughly **+4 points on average and ~+15 at the strongest rips**, and pure noise
+at weak ones — a feeble launch dies before the bar ever fills. The special is
+worth using without deciding the match, which is the intent.
+
+## Steering
+
+Drag anywhere in the stadium and your top drives at that point, at a strength
+scaled by its remaining spin — a dying top barely answers the helm. Release and
+it goes back to its own devices. **You only ever steer your own top.** A dashed
+line and a pulsing ring show where you are pulling it.
+
+This exists because tops orbiting a bowl politely avoid each other. Alongside
+it, the orbital-speed target dropped (`lerp(0.32, 1.15)` → `lerp(0.26, 0.88)`)
+so tops spiral inward instead of circling, and the seek force rose from
+`1.35` to `1.70`. They meet far more often now.
+
+Matches also run about **twice as long** (spin burn `150 + …` → `86 + …`),
+because a fight shorter than two cooldowns makes the specials decorative.
+
+## The garden
+
+The stadium stands in a garden at golden hour rather than on flat black. Baked
+once with the arena: a dusk sky, a low sun behind the bowl, two hill layers, a
+tree line, the grass bed with a few hundred tufts, and the shadow the stadium
+casts on the grass. A warm gradient rakes across the bowl from the sun side so
+the cool tech stadium belongs to the scene instead of floating over it.
+
+Live on top: **wind** — a slow prevailing drift with occasional gusts — carrying
+82 petals that flutter as they turn, and a fringe of foreground grass along the
+bottom edge that leans with the same value. The scenery is generated from a
+`sin`-based hash keyed by index, so it is stable across rebakes rather than
+reshuffling every resize.
+
 ## The tops
 
 Each is a polar profile — `rIn + (1 - rIn) * cos(blades * a)^sharp`, with the
@@ -250,32 +325,39 @@ ripcord/
   non-UTF-8 path turns `°` into `Â°` and `—` into `â€"`, which is exactly what
   happened the first time this was rendered in a browser.
 
-### A duplicate `const` name can fail the upload
+### One identifier name can fail the upload, for reasons unknown
 
-The rejection is the same misleading *"unsupported remote resources"* message,
-and the cause is nothing to do with resources: the bit declares
+The rejection is the misleading *"unsupported remote resources"* message, and
+the cause has nothing to do with resources. This single-token change flips the
+upload from accepted to rejected, with no other edit:
 
 ```js
-const pool = g.createRadialGradient(...);   // in drawTop
+const rivalPool = ROSTER.filter(t => t.tier <= diff.maxTier);   // accepted
+const pool      = ROSTER.filter(t => t.tier <= diff.maxTier);   // rejected
 ```
 
-and adding a **second** local called `pool` in another function was enough to
-get the whole bit rejected. Renaming it to `rivalPool` fixes it; renaming it
-back reproduces the failure exactly, with no other edit. The validator's own
-message mentions resolving *"simple const aliases"*, so a duplicate `const`
-binding across scopes appears to break that resolution and fail closed.
+**The mechanism is not known.** The obvious theory — that a duplicate `const`
+name is illegal — is wrong: this file ships with three other `const pool`
+declarations and uploads fine. What is different about the rejected one is that
+those three all bind a gradient, and this one binds an array; the validator's
+own message talks about resolving *"simple const aliases"*, so a name bound to
+inconsistent kinds of value may defeat that. That is a guess, not a finding.
 
-Finding it took bisecting the diff by repeated upload, and two false leads are
-worth recording because both looked convincing and both were wrong:
+What is solid is the reproduction, so: **if an upload is rejected with the
+remote-resources message and the bit loads nothing remote, suspect a name.**
+
+Finding it took bisecting by repeated upload, and three intermediate
+conclusions were wrong before this one. Two methodology errors caused them, both
+worth avoiding:
 
 - **Prefix-applying patch hunks is invalid here.** Hunks interdepend, so an
   early hunk applied without the later one that declares its variable creates a
-  free variable — which the validator also rejects. That framed an innocent
-  hunk. ESLint's `no-undef` over the full file disproved it.
-- **Assuming a variant differed by only the thing under test.** Variants built
-  up from a known-good base were missing far more than intended, so "the last
+  free variable, which the validator also rejects. That framed an innocent
+  hunk. ESLint's `no-undef` over the whole file disproved it.
+- **Assuming a variant differed only by the thing under test.** Variants built
+  up from a known-good base were missing far more than intended, so "last
   passing variant plus X fails" did not mean X was at fault. Always `diff` the
-  variant against the real file before drawing a conclusion.
+  variant against the real file before concluding.
 
 The reliable method is to *remove* one coherent feature at a time from the real
 failing file, so the comparison is always sound.

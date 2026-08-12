@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Ripcord",
-  "description": "Spin your phone and the top spins with it. The gyroscope reads your peak angular speed during the rip -- degrees per second, live on a gauge -- and that number becomes your launch RPM, directly proportional. Then drop into a bowl stadium against rival tops across four difficulty tiers: attack, defense and stamina beat each other in a circle, clashes throw sparks and lightning, and the last top spinning wins. Throw it and freefall is detected too, though a hard wrist flick reads exactly the same.",
+  "description": "Spin your phone and the top spins with it. The gyroscope reads your peak angular speed during the rip -- degrees per second, live on a gauge -- and that becomes your launch RPM, directly proportional. Then fight in a bowl stadium set in a garden at golden hour: drag to steer your top into the others, and unleash its element -- storm, fire, frost, gale, venom, tide -- when the bar fills. Four difficulty tiers, nine tops, and the last one spinning wins.",
   "tags": [
     "game",
     "arcade",

@@ -483,12 +483,31 @@ window.plethoraBit = {
     let difficulty = DIFFICULTIES[0];
 
     /**
+     * Elemental specials. Every top has one; yours fires on a button, rivals
+     * fire theirs on their own. Three shapes cover the set:
+     *   bolt  - forks to the nearest rivals, heavy drain, little shove
+     *   burst - radial nova, drain and a hard shove that scales with range
+     *   zone  - a lingering field that drains and slows whatever stands in it
+     */
+    const ELEMENTS = {
+      storm:  { label: "STORM",  hue: 196, kind: "bolt",  reach: 0.70, drain: 1450, shove: 1.1, cool: 8500,  hold: 0 },
+      fire:   { label: "FIRE",   hue: 20,  kind: "burst", reach: 0.56, drain: 1600, shove: 2.4, cool: 9500,  hold: 0 },
+      frost:  { label: "FROST",  hue: 188, kind: "zone",  reach: 0.52, drain: 950,  shove: 0.2, cool: 9000,  hold: 3400 },
+      gale:   { label: "GALE",   hue: 150, kind: "burst", reach: 0.72, drain: 700,  shove: 3.4, cool: 8000,  hold: 0 },
+      ember:  { label: "EMBER",  hue: 8,   kind: "burst", reach: 0.50, drain: 1500, shove: 2.0, cool: 9000,  hold: 0 },
+      radiant:{ label: "RADIANT",hue: 46,  kind: "bolt",  reach: 0.66, drain: 1250, shove: 0.9, cool: 9500,  hold: 0 },
+      venom:  { label: "VENOM",  hue: 92,  kind: "zone",  reach: 0.50, drain: 1250, shove: 0.2, cool: 8500,  hold: 3800 },
+      tide:   { label: "TIDE",   hue: 205, kind: "burst", reach: 0.66, drain: 1150, shove: 2.6, cool: 9000,  hold: 0 },
+      umbra:  { label: "UMBRA",  hue: 282, kind: "zone",  reach: 0.58, drain: 1500, shove: 0.6, cool: 9000,  hold: 3200 }
+    };
+
+    /**
      * The full roster. `playable` tops are the three you pick from; the rest
      * are rivals, gated by `tier` so harder difficulties field nastier ones.
      */
     const ROSTER = [
       {
-        id: "attack", name: "VOLT LANCE", callsign: "VOLT", role: "ATTACK", playable: true, tier: 0,
+        id: "attack", name: "VOLT LANCE", element: "storm", callsign: "VOLT", role: "ATTACK", playable: true, tier: 0,
         blades: 3, sharp: 2.5, skew: 0.36, rIn: 0.54,
         hue: 191, hue2: 168,
         mass: 0.86, radius: 0.158,
@@ -497,7 +516,7 @@ window.plethoraBit = {
         blurb: "Hits hardest of the three. Burns out first."
       },
       {
-        id: "defense", name: "IRON BASTION", callsign: "BASTION", role: "DEFENSE", playable: true, tier: 0,
+        id: "defense", name: "IRON BASTION", element: "fire", callsign: "BASTION", role: "DEFENSE", playable: true, tier: 0,
         blades: 6, sharp: 1.25, skew: -0.13, rIn: 0.73,
         hue: 27, hue2: 47,
         mass: 1.34, radius: 0.171,
@@ -506,7 +525,7 @@ window.plethoraBit = {
         blurb: "Heavy. Shrugs off hits, holds the centre."
       },
       {
-        id: "stamina", name: "PALE ORBIT", callsign: "ORBIT", role: "STAMINA", playable: true, tier: 0,
+        id: "stamina", name: "PALE ORBIT", element: "frost", callsign: "ORBIT", role: "STAMINA", playable: true, tier: 0,
         blades: 8, sharp: 0.92, skew: 0.07, rIn: 0.79,
         hue: 285, hue2: 322,
         mass: 1.0, radius: 0.162,
@@ -517,7 +536,7 @@ window.plethoraBit = {
 
       /* --- rivals, easiest first --- */
       {
-        id: "wisp", name: "WISP", callsign: "WISP", role: "SCOUT", playable: false, tier: 0,
+        id: "wisp", name: "WISP", element: "gale", callsign: "WISP", role: "SCOUT", playable: false, tier: 0,
         blades: 3, sharp: 1.8, skew: 0.22, rIn: 0.62,
         hue: 168, hue2: 150,
         mass: 0.70, radius: 0.146,
@@ -525,7 +544,7 @@ window.plethoraBit = {
         deal: 0.74, take: 1.30, knock: 1.02
       },
       {
-        id: "cinder", name: "CINDER FANG", callsign: "CINDER", role: "ATTACK", playable: false, tier: 0,
+        id: "cinder", name: "CINDER FANG", element: "ember", callsign: "CINDER", role: "ATTACK", playable: false, tier: 0,
         blades: 4, sharp: 2.2, skew: 0.30, rIn: 0.58,
         hue: 8, hue2: 32,
         mass: 0.94, radius: 0.156,
@@ -533,7 +552,7 @@ window.plethoraBit = {
         deal: 1.42, take: 1.10, knock: 1.44
       },
       {
-        id: "crown", name: "HOLLOW CROWN", callsign: "CROWN", role: "BALANCE", playable: false, tier: 1,
+        id: "crown", name: "HOLLOW CROWN", element: "radiant", callsign: "CROWN", role: "BALANCE", playable: false, tier: 1,
         blades: 5, sharp: 1.5, skew: -0.08, rIn: 0.70,
         hue: 44, hue2: 58,
         mass: 1.18, radius: 0.166,
@@ -541,7 +560,7 @@ window.plethoraBit = {
         deal: 1.06, take: 0.82, knock: 1.00
       },
       {
-        id: "riot", name: "RIOT COIL", callsign: "RIOT", role: "CHAOS", playable: false, tier: 1,
+        id: "riot", name: "RIOT COIL", element: "venom", callsign: "RIOT", role: "CHAOS", playable: false, tier: 1,
         blades: 7, sharp: 1.9, skew: 0.44, rIn: 0.64,
         hue: 96, hue2: 76,
         mass: 0.98, radius: 0.160,
@@ -549,7 +568,7 @@ window.plethoraBit = {
         deal: 1.28, take: 1.00, knock: 1.30
       },
       {
-        id: "nullvec", name: "NULL VECTOR", callsign: "NULL", role: "STAMINA", playable: false, tier: 2,
+        id: "nullvec", name: "NULL VECTOR", element: "tide", callsign: "NULL", role: "STAMINA", playable: false, tier: 2,
         blades: 12, sharp: 0.85, skew: 0.03, rIn: 0.84,
         hue: 205, hue2: 190,
         mass: 1.10, radius: 0.164,
@@ -557,7 +576,7 @@ window.plethoraBit = {
         deal: 0.92, take: 0.94, knock: 0.86
       },
       {
-        id: "meridian", name: "BLACK MERIDIAN", callsign: "MERIDIAN", role: "APEX", playable: false, tier: 3,
+        id: "meridian", name: "BLACK MERIDIAN", element: "umbra", callsign: "MERIDIAN", role: "APEX", playable: false, tier: 3,
         blades: 10, sharp: 1.35, skew: -0.20, rIn: 0.76,
         hue: 268, hue2: 300,
         mass: 1.40, radius: 0.174,
@@ -955,6 +974,19 @@ window.plethoraBit = {
       gg.arc(0, 0, floorR * 0.17, 0, TAU);
       gg.stroke();
 
+      // Golden-hour light raking across the bowl from the sun side.
+      gg.save();
+      gg.globalCompositeOperation = "lighter";
+      const warmth = gg.createLinearGradient(rx * 0.75, -rimOuter - lift, -rx * 0.55, rimOuter - lift);
+      warmth.addColorStop(0, "rgba(255,196,128,0.26)");
+      warmth.addColorStop(0.42, "rgba(255,168,104,0.10)");
+      warmth.addColorStop(1, "rgba(255,150,92,0)");
+      gg.fillStyle = warmth;
+      gg.beginPath();
+      gg.arc(0, -lift, rimOuter, 0, TAU);
+      gg.fill();
+      gg.restore();
+
       gg.restore();
     }
 
@@ -994,90 +1026,199 @@ window.plethoraBit = {
       g.restore();
     }
 
+    /** Stable pseudo-random from an index, so the bake never reshuffles. */
+    function hashUnit(i, salt) {
+      const v = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+      return v - Math.floor(v);
+    }
+
+    /**
+     * The garden the stadium stands in, at golden hour. Baked once with the
+     * arena: sky, sun, two hill layers, a tree line, the grass bed and its
+     * tufts. Petals and sway are drawn live on top.
+     */
     function paintBackdrop(gg) {
-      const base = gg.createLinearGradient(0, 0, 0, H);
-      base.addColorStop(0, "#04060e");
-      base.addColorStop(0.42, "#070b18");
-      base.addColorStop(0.72, "#080d1c");
-      base.addColorStop(1, "#030509");
-      gg.fillStyle = base;
-      gg.fillRect(0, 0, W, H);
+      const skyLine = cy - S * 1.02;
 
-      // Haze behind the stadium, as if lit from the floor.
-      const haze = gg.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.62);
-      haze.addColorStop(0, "rgba(40,86,180,0.20)");
-      haze.addColorStop(0.42, "rgba(28,56,130,0.09)");
-      haze.addColorStop(1, "rgba(0,0,0,0)");
-      gg.fillStyle = haze;
-      gg.fillRect(0, 0, W, H);
+      const sky = gg.createLinearGradient(0, 0, 0, Math.max(skyLine, 2));
+      sky.addColorStop(0, "#131d3a");
+      sky.addColorStop(0.38, "#2f4270");
+      sky.addColorStop(0.68, "#6d6a93");
+      sky.addColorStop(0.88, "#c08a6f");
+      sky.addColorStop(1, "#e8ad72");
+      gg.fillStyle = sky;
+      gg.fillRect(0, 0, W, skyLine + 2);
 
-      // Distant gantry lights above and below the bowl, well out of focus.
+      // Low sun sitting behind the stadium.
       gg.save();
       gg.globalCompositeOperation = "lighter";
-      const rows = [
-        { y: cy - S * 1.75, n: 9, r: S * 0.30, a: 0.075 },
-        { y: cy - S * 2.35, n: 7, r: S * 0.22, a: 0.045 },
-        { y: cy + S * 1.85, n: 8, r: S * 0.26, a: 0.05 }
-      ];
-      for (const row of rows) {
-        for (let i = 0; i < row.n; i++) {
-          const x = ((i + 0.5) / row.n) * W;
-          const jitter = Math.sin(i * 12.9898 + row.y) * S * 0.06;
-          const lampGrad = gg.createRadialGradient(x + jitter, row.y, 0, x + jitter, row.y, row.r);
-          lampGrad.addColorStop(0, "rgba(120,175,255," + row.a + ")");
-          lampGrad.addColorStop(1, "rgba(90,140,255,0)");
-          gg.fillStyle = lampGrad;
+      const sunX = cx + W * 0.19;
+      const sunY = skyLine - S * 0.12;
+      const sun = gg.createRadialGradient(sunX, sunY, 0, sunX, sunY, S * 1.5);
+      sun.addColorStop(0, "rgba(255,225,170,0.75)");
+      sun.addColorStop(0.16, "rgba(255,190,120,0.34)");
+      sun.addColorStop(0.5, "rgba(240,150,90,0.12)");
+      sun.addColorStop(1, "rgba(220,120,80,0)");
+      gg.fillStyle = sun;
+      gg.fillRect(0, 0, W, skyLine + 2);
+      gg.restore();
+
+      // Two hill layers, the far one hazier.
+      for (let layer = 0; layer < 2; layer++) {
+        const baseY = skyLine - S * (layer === 0 ? 0.16 : 0.05);
+        const amp = S * (layer === 0 ? 0.13 : 0.09);
+        gg.fillStyle = layer === 0 ? "#4a5570" : "#334450";
+        gg.beginPath();
+        gg.moveTo(-10, skyLine + 4);
+        for (let hx = -10; hx <= W + 10; hx += 8) {
+          const u = hx / Math.max(W, 1);
+          const hy = baseY
+            - Math.sin(u * 3.1 + layer * 1.7) * amp
+            - Math.sin(u * 7.3 + layer * 4.1) * amp * 0.35;
+          gg.lineTo(hx, hy);
+        }
+        gg.lineTo(W + 10, skyLine + 4);
+        gg.closePath();
+        gg.fill();
+      }
+
+      // Tree line along the horizon.
+      for (let i = 0; i < 16; i++) {
+        const tx = (hashUnit(i, 1) * 1.16 - 0.08) * W;
+        const scale = 0.62 + hashUnit(i, 2) * 0.75;
+        const th = S * 0.30 * scale;
+        const ty = skyLine + S * 0.012;
+        const dark = 24 + Math.floor(hashUnit(i, 3) * 14);
+        gg.fillStyle = "rgb(" + Math.round(dark * 0.7) + "," + (dark + 22) + "," + Math.round(dark * 0.85) + ")";
+        gg.fillRect(tx - th * 0.035, ty - th * 0.55, th * 0.07, th * 0.6);
+        for (let blob = 0; blob < 5; blob++) {
+          const bx = tx + (hashUnit(i * 7 + blob, 4) - 0.5) * th * 0.66;
+          const by = ty - th * (0.55 + hashUnit(i * 7 + blob, 5) * 0.42);
+          const br = th * (0.20 + hashUnit(i * 7 + blob, 6) * 0.19);
           gg.beginPath();
-          gg.arc(x + jitter, row.y, row.r, 0, TAU);
+          gg.arc(bx, by, br, 0, TAU);
           gg.fill();
         }
       }
-      gg.restore();
 
-      // A soft pool of light on the floor the stadium stands on.
+      // Grass bed the stadium sits on.
+      const ground = gg.createLinearGradient(0, skyLine, 0, H);
+      ground.addColorStop(0, "#2c4a2b");
+      ground.addColorStop(0.22, "#223d23");
+      ground.addColorStop(0.62, "#162a1a");
+      ground.addColorStop(1, "#0a150f");
+      gg.fillStyle = ground;
+      gg.fillRect(0, skyLine, W, H - skyLine);
+
+      // Warm rim light where the sun catches the grass.
       gg.save();
       gg.globalCompositeOperation = "lighter";
-      const pool = gg.createRadialGradient(cx, cy + S * 0.30, S * 0.2, cx, cy + S * 0.30, S * 2.1);
-      pool.addColorStop(0, "rgba(48,92,190,0.10)");
-      pool.addColorStop(1, "rgba(0,0,0,0)");
-      gg.fillStyle = pool;
-      gg.fillRect(0, 0, W, H);
+      const rimLight = gg.createLinearGradient(0, skyLine, 0, skyLine + S * 0.5);
+      rimLight.addColorStop(0, "rgba(240,170,110,0.30)");
+      rimLight.addColorStop(1, "rgba(230,150,90,0)");
+      gg.fillStyle = rimLight;
+      gg.fillRect(0, skyLine, W, S * 0.5);
+      gg.restore();
+
+      // Tufts, denser and larger toward the bottom of frame.
+      for (let i = 0; i < 260; i++) {
+        const u = hashUnit(i, 7);
+        const v = hashUnit(i, 8);
+        const gx = u * W;
+        const gy = skyLine + Math.pow(v, 0.7) * (H - skyLine);
+        const depth = (gy - skyLine) / Math.max(1, H - skyLine);
+        const gh = S * (0.02 + depth * 0.085) * (0.6 + hashUnit(i, 9) * 0.8);
+        const shade = 30 + Math.floor(depth * 26 + hashUnit(i, 10) * 22);
+        gg.strokeStyle = "rgba(" + Math.round(shade * 0.55) + "," + shade + "," + Math.round(shade * 0.6) + ",0.85)";
+        gg.lineWidth = Math.max(0.7, gh * 0.11);
+        gg.lineCap = "round";
+        const lean = (hashUnit(i, 11) - 0.5) * gh * 0.7;
+        gg.beginPath();
+        gg.moveTo(gx, gy);
+        gg.quadraticCurveTo(gx + lean * 0.4, gy - gh * 0.6, gx + lean, gy - gh);
+        gg.stroke();
+      }
+
+      // Soft shadow the stadium casts on the grass.
+      gg.save();
+      const cast = gg.createRadialGradient(cx, cy + S * 0.28, S * 0.4, cx, cy + S * 0.28, S * 1.9);
+      cast.addColorStop(0, "rgba(0,0,0,0.45)");
+      cast.addColorStop(1, "rgba(0,0,0,0)");
+      gg.fillStyle = cast;
+      gg.fillRect(0, skyLine, W, H - skyLine);
       gg.restore();
     }
 
-    const motes = [];
-    function seedMotes() {
-      motes.length = 0;
-      const n = 46;
-      for (let i = 0; i < n; i++) {
-        motes.push({
+    /* ---------- wind, petals and fronds ---------- */
+
+    let windNow = 0;          // -1..1, slow drift with gusts
+    const petals = [];
+
+    function seedPetals() {
+      petals.length = 0;
+      for (let i = 0; i < 82; i++) {
+        petals.push({
           x: Math.random(), y: Math.random(),
-          r: rand(0.6, 2.4),
-          sp: rand(0.004, 0.017),
-          drift: rand(-0.006, 0.006),
-          a: rand(0.05, 0.26),
-          hue: rand(195, 225)
+          size: rand(2.8, 7.6),
+          fall: rand(0.010, 0.030),
+          roll: rand(-3.2, 3.2),
+          turn: Math.random() * TAU,
+          sway: rand(0.4, 1.5),
+          phase: Math.random() * TAU,
+          tone: rand(-8, 42) + (Math.random() < 0.25 ? 300 : 0),
+          light: rand(66, 90)
         });
       }
     }
 
-    function drawMotes(dt) {
+    /** Petals blow across the frame, carried by the same wind as the fronds. */
+    function drawPetals(dt) {
       g.save();
       g.globalCompositeOperation = "lighter";
-      for (const m of motes) {
-        m.y -= m.sp * dt;
-        m.x += m.drift * dt;
-        if (m.y < -0.05) { m.y = 1.05; m.x = Math.random(); }
-        if (m.x < -0.05) m.x = 1.05;
-        if (m.x > 1.05) m.x = -0.05;
-        g.fillStyle = "hsla(" + m.hue.toFixed(0) + ", 90%, 78%, " + m.a.toFixed(3) + ")";
+      for (const pt of petals) {
+        pt.phase += dt * pt.sway;
+        pt.turn += dt * pt.roll;
+        pt.y += pt.fall * dt;
+        pt.x += (windNow * 0.055 + Math.sin(pt.phase) * 0.012) * dt;
+        if (pt.y > 1.06) { pt.y = -0.06; pt.x = Math.random(); }
+        if (pt.x > 1.08) pt.x = -0.08;
+        if (pt.x < -0.08) pt.x = 1.08;
+
+        g.save();
+        g.translate(pt.x * W, pt.y * H);
+        g.rotate(pt.turn);
+        // Foreshorten as it turns, so each petal flutters rather than slides.
+        g.scale(1, 0.35 + 0.65 * Math.abs(Math.cos(pt.turn * 1.3)));
+        g.fillStyle = "hsla(" + pt.tone.toFixed(0) + ", 82%, " + pt.light.toFixed(0) + "%, 0.92)";
         g.beginPath();
-        g.arc(m.x * W, m.y * H, m.r, 0, TAU);
+        g.ellipse(0, 0, pt.size, pt.size * 0.6, 0, 0, TAU);
         g.fill();
+        g.restore();
       }
       g.restore();
     }
 
+    /** Foreground fronds leaning with the wind, framing the stadium. */
+    function drawFronds(nowSec) {
+      // A shallow fringe of foreground grass along the bottom edge, swaying
+      // with the wind. Kept short on purpose: taller stems read as dark bars
+      // slicing across the stadium.
+      g.save();
+      g.lineCap = "round";
+      for (let i = 0; i < 26; i++) {
+        const bx = (hashUnit(i, 21) * 1.06 - 0.03) * W;
+        const bh = H * (0.045 + hashUnit(i, 22) * 0.085);
+        const bend = (Math.sin(nowSec * 1.05 + i * 0.7) * 0.16 + windNow * 0.42) * bh;
+        const shade = 14 + Math.floor(hashUnit(i, 23) * 16);
+        g.strokeStyle = "rgba(" + Math.round(shade * 0.6) + "," + (shade + 15) + "," + Math.round(shade * 0.7) + ",0.9)";
+        g.lineWidth = Math.max(1.6, bh * 0.075);
+        g.beginPath();
+        g.moveTo(bx, H + 8);
+        g.quadraticCurveTo(bx + bend * 0.4, H - bh * 0.55, bx + bend, H - bh);
+        g.stroke();
+      }
+      g.restore();
+    }
     function bakeArena() {
       const need = { w: W, h: H, s: S };
       if (arenaSurf && arenaMeta.w === need.w && arenaMeta.h === need.h && arenaMeta.s === need.s) return;
@@ -1111,6 +1252,10 @@ window.plethoraBit = {
         decayMul: 1 / k,
         aggMul: 0.85 + k * 0.15,
         focus: Math.random() < 0.55 ? 1 : 0,
+        charge: 0.35,          // 0..1, fills over the element's cooldown
+        castMs: -9999,         // when this top last fired
+        chill: 0,              // slow factor from a frost/venom field
+        burn: 0,               // lingering drain per second
         x: Math.cos(angle) * r,
         y: Math.sin(angle) * r,
         vx: -Math.sin(angle) * 0.75,
@@ -1176,7 +1321,7 @@ window.plethoraBit = {
         // instead of applied as a raw force, so it is self-limiting -- a plain
         // tangential force accelerates without bound and throws the top out.
         const tangential = -ny * t.vx + nx * t.vy;
-        const wantTangential = lerp(0.32, 1.15, sn);
+        const wantTangential = lerp(0.26, 0.88, sn);
         const push = (wantTangential - tangential) * ORBIT_K;
         ax += -ny * push;
         ay += nx * push;
@@ -1197,9 +1342,22 @@ window.plethoraBit = {
           if (score > bestScore) { bestScore = score; target = o; bestD = d; }
         }
         if (target && bestD > 1e-4) {
-          const seek = agg * 1.35 * (0.35 + sn * 0.65);
+          const seek = agg * 1.70 * (0.35 + sn * 0.65);
           ax += ((target.x - t.x) / bestD) * seek;
           ay += ((target.y - t.y) / bestD) * seek;
+        }
+
+        // Player steering overrides the seek: drag and your top drives at the
+        // point you are holding, as hard as its remaining spin allows.
+        if (t.isPlayer && steer.on) {
+          const stx = steer.x - t.x;
+          const sty = steer.y - t.y;
+          const stl = Math.hypot(stx, sty);
+          if (stl > 0.02) {
+            const drive = 3.1 * (0.34 + sn * 0.66);
+            ax += (stx / stl) * drive;
+            ay += (sty / stl) * drive;
+          }
         }
 
         // A dying top wanders drunkenly.
@@ -1211,7 +1369,7 @@ window.plethoraBit = {
         t.vx += ax * dt;
         t.vy += ay * dt;
 
-        const damp = Math.exp(-DRAG * dt);
+        const damp = Math.exp(-(DRAG + t.chill * 2.4) * dt);
         t.vx *= damp;
         t.vy *= damp;
 
@@ -1220,7 +1378,7 @@ window.plethoraBit = {
 
         // Spin decay: a base burn plus what movement costs.
         const speed = Math.hypot(t.vx, t.vy);
-        const burn = (150 + speed * 52 + t.rpm * 0.009) * t.spec.decay * t.decayMul;
+        const burn = (86 + speed * 30 + t.rpm * 0.0050) * t.spec.decay * t.decayMul;
         t.rpm = Math.max(0, t.rpm - burn * dt);
 
         // Visual rotation, in radians/sec, damped so it stays readable.
@@ -1277,6 +1435,141 @@ window.plethoraBit = {
 
     function killWhirr(t) {
       if (t.whirr) { t.whirr.stop(); t.whirr = null; }
+    }
+
+    /* ---------- elemental specials ---------- */
+
+    const novas = [];      // expanding rings from a burst
+    const zones = [];      // lingering fields
+
+    function elementOf(t) {
+      return ELEMENTS[t.spec.element] || ELEMENTS.storm;
+    }
+
+    /** True when a top has a target worth spending a charge on. */
+    function hasQuarry(t, reach) {
+      for (const other of tops) {
+        if (other === t || !other.alive || other.h > 0) continue;
+        if (Math.hypot(other.x - t.x, other.y - t.y) <= reach) return true;
+      }
+      return false;
+    }
+
+    function castSpecial(caster) {
+      if (!caster.alive || caster.h > 0 || caster.charge < 1) return false;
+      const el = elementOf(caster);
+      caster.charge = 0;
+      caster.castMs = battleMs;
+
+      const power = 0.55 + spinNorm(caster) * 0.45;   // a dying top hits softer
+      const hitList = [];
+      for (const other of tops) {
+        if (other === caster || !other.alive || other.h > 0) continue;
+        const dist = Math.hypot(other.x - caster.x, other.y - caster.y);
+        if (dist <= el.reach) hitList.push({ top: other, dist: dist });
+      }
+      hitList.sort((m, n) => m.dist - n.dist);
+
+      if (el.kind === "bolt") {
+        // Forks to the two nearest rivals: big drain, modest shove.
+        for (const hit of hitList.slice(0, 2)) {
+          const victim = hit.top;
+          victim.rpm = Math.max(0, victim.rpm - el.drain * power * victim.takeMul);
+          const bx = victim.x - caster.x, by = victim.y - caster.y;
+          const bl = Math.hypot(bx, by) || 1;
+          victim.vx += (bx / bl) * el.shove * power;
+          victim.vy += (by / bl) * el.shove * power;
+          victim.hitFlash = 1;
+          boltArc(caster, victim, el.hue, 1);
+          sparks((caster.x + victim.x) / 2, (caster.y + victim.y) / 2, 0.9, caster.spec, victim.spec);
+        }
+        sfxSpark(1);
+      } else if (el.kind === "burst") {
+        // Radial nova: everything close gets drained and shoved outward.
+        for (const hit of hitList) {
+          const victim = hit.top;
+          const falloff = 1 - clamp(hit.dist / el.reach, 0, 1);
+          victim.rpm = Math.max(0, victim.rpm - el.drain * power * falloff * victim.takeMul);
+          const bx = victim.x - caster.x, by = victim.y - caster.y;
+          const bl = Math.hypot(bx, by) || 1;
+          victim.vx += (bx / bl) * el.shove * power * falloff;
+          victim.vy += (by / bl) * el.shove * power * falloff;
+          victim.hitFlash = 1;
+          if (el.hold === 0 && el.label === "FIRE") victim.burn = Math.max(victim.burn, 260 * power);
+        }
+        novas.push({ x: caster.x, y: caster.y, r: 0.02, max: el.reach, life: 1, hue: el.hue, power: power });
+        sfxClash(1);
+        shake(15 * power);
+        flash(0.3 * power);
+      } else {
+        // Lingering field centred where it was cast.
+        zones.push({
+          x: caster.x, y: caster.y, r: el.reach, life: 1,
+          ms: el.hold, maxMs: el.hold, hue: el.hue,
+          drain: el.drain, owner: caster, spin: Math.random() * TAU
+        });
+        sfxSpark(0.7);
+      }
+
+      arenaHue = el.hue;
+      arenaGlow = Math.min(1, arenaGlow + 0.85);
+      duckMusic(0.8);
+      if (caster.isPlayer) {
+        haptic("heavy");
+        ctx.platform.milestone("special", { element: el.label });
+      }
+      return true;
+    }
+
+    /** Jagged fork used by bolt-kind specials. */
+    function boltArc(from, to, hue, force) {
+      arcs.push(buildArc(
+        cx + from.x * S, cy + from.y * S * SQUASH,
+        cx + to.x * S, cy + to.y * S * SQUASH,
+        hue, force
+      ));
+    }
+
+    function stepSpecials(dt) {
+      for (const t of tops) {
+        if (!t.alive || t.h > 0) continue;
+        const el = elementOf(t);
+        t.charge = Math.min(1, t.charge + (dt * 1000) / el.cool);
+
+        // Lingering burn from a fire nova.
+        if (t.burn > 0) {
+          t.rpm = Math.max(0, t.rpm - t.burn * dt);
+          t.burn = Math.max(0, t.burn - 90 * dt);
+        }
+        // Chill decays back to normal once out of a field.
+        t.chill = Math.max(0, t.chill - dt * 1.4);
+
+        // Rivals spend a charge whenever someone is in range.
+        if (!t.isPlayer && t.charge >= 1 && hasQuarry(t, el.reach * 0.92)) {
+          castSpecial(t);
+        }
+      }
+
+      for (let i = zones.length - 1; i >= 0; i--) {
+        const z = zones[i];
+        z.ms -= dt * 1000;
+        z.spin += dt * 0.8;
+        z.life = clamp(z.ms / z.maxMs, 0, 1);
+        for (const t of tops) {
+          if (!t.alive || t.h > 0 || t === z.owner) continue;
+          if (Math.hypot(t.x - z.x, t.y - z.y) > z.r) continue;
+          t.rpm = Math.max(0, t.rpm - z.drain * dt * t.takeMul);
+          t.chill = Math.min(1, t.chill + dt * 2.2);
+        }
+        if (z.ms <= 0) zones.splice(i, 1);
+      }
+
+      for (let i = novas.length - 1; i >= 0; i--) {
+        const nv = novas[i];
+        nv.life -= dt * 2.2;
+        nv.r = lerp(nv.r, nv.max, 1 - Math.exp(-11 * dt));
+        if (nv.life <= 0) novas.splice(i, 1);
+      }
     }
 
     function collide(a, b) {
@@ -1444,6 +1737,53 @@ window.plethoraBit = {
         life: 1,
         force: force
       });
+    }
+
+    /**
+     * Jagged arc between two screen points, by midpoint displacement.
+     * Returned rather than pushed so specials can reuse it.
+     */
+    function buildArc(x0, y0, x1, y1, hue, force) {
+      const segs = 9;
+      const pts = [];
+      const spread = S * lerp(0.03, 0.1, force);
+      for (let i = 0; i <= segs; i++) {
+        const f = i / segs;
+        const bow = Math.sin(f * Math.PI);
+        pts.push({
+          x: lerp(x0, x1, f) + rand(-spread, spread) * bow,
+          y: lerp(y0, y1, f) + rand(-spread, spread) * bow
+        });
+      }
+      const branches = [];
+      const forks = force > 0.6 ? 3 : 1;
+      for (let i = 0; i < forks; i++) {
+        const at = Math.floor(rand(2, segs - 1));
+        const from = pts[at];
+        const bp = [{ x: from.x, y: from.y }];
+        const dir = Math.random() * TAU;
+        let bx = from.x;
+        let by = from.y;
+        const steps = Math.floor(rand(2, 5));
+        for (let k = 0; k < steps; k++) {
+          bx += Math.cos(dir + rand(-0.8, 0.8)) * spread * rand(0.6, 1.7);
+          by += Math.sin(dir + rand(-0.8, 0.8)) * spread * rand(0.4, 1.2);
+          bp.push({ x: bx, y: by });
+        }
+        branches.push(bp);
+      }
+      return {
+        pts: pts, branches: branches, life: 1,
+        decay: rand(5.5, 8.5), hue: hue, force: force
+      };
+    }
+
+    function lightning(a, b, force) {
+      arcs.push(buildArc(
+        cx + a.x * S, cy + a.y * S * SQUASH,
+        cx + b.x * S, cy + b.y * S * SQUASH,
+        Math.random() < 0.5 ? a.spec.hue2 : b.spec.hue2, force
+      ));
     }
 
     /** Jagged arc between two tops, built by midpoint displacement. */
@@ -1724,6 +2064,60 @@ window.plethoraBit = {
       g.save();
       g.globalCompositeOperation = "lighter";
 
+      // Lingering elemental fields, drawn under everything else.
+      for (const z of zones) {
+        const za = clamp(z.life, 0, 1);
+        const zx = cx + z.x * S;
+        const zy = cy + z.y * S * SQUASH;
+        const zr = z.r * S;
+        const zg = g.createRadialGradient(zx, zy, zr * 0.15, zx, zy, zr);
+        zg.addColorStop(0, "hsla(" + z.hue + ", 95%, 62%, " + (0.30 * za).toFixed(3) + ")");
+        zg.addColorStop(0.6, "hsla(" + z.hue + ", 95%, 55%, " + (0.16 * za).toFixed(3) + ")");
+        zg.addColorStop(1, "hsla(" + z.hue + ", 95%, 50%, 0)");
+        g.fillStyle = zg;
+        g.beginPath();
+        g.ellipse(zx, zy, zr, zr * SQUASH, 0, 0, TAU);
+        g.fill();
+
+        // Two counter-rotating rings so the field reads as active.
+        for (let ri = 0; ri < 2; ri++) {
+          const rr2 = zr * (0.55 + ri * 0.32);
+          g.strokeStyle = "hsla(" + z.hue + ", 100%, 74%, " + (0.34 * za).toFixed(3) + ")";
+          g.lineWidth = 1.6;
+          g.setLineDash([zr * 0.16, zr * 0.12]);
+          g.lineDashOffset = (ri ? -1 : 1) * z.spin * zr * 0.5;
+          g.beginPath();
+          g.ellipse(zx, zy, rr2, rr2 * SQUASH, 0, 0, TAU);
+          g.stroke();
+        }
+        g.setLineDash([]);
+      }
+
+      // Expanding nova rings.
+      for (const nv of novas) {
+        const na = clamp(nv.life, 0, 1);
+        const nx2 = cx + nv.x * S;
+        const ny2 = cy + nv.y * S * SQUASH;
+        const nr = nv.r * S;
+        g.strokeStyle = "hsla(" + nv.hue + ", 100%, 72%, " + (na * 0.85).toFixed(3) + ")";
+        g.lineWidth = Math.max(1, 12 * na * nv.power);
+        g.beginPath();
+        g.ellipse(nx2, ny2, nr, nr * SQUASH, 0, 0, TAU);
+        g.stroke();
+        g.strokeStyle = "rgba(255,255,255," + (na * 0.7).toFixed(3) + ")";
+        g.lineWidth = Math.max(0.6, 3 * na);
+        g.beginPath();
+        g.ellipse(nx2, ny2, nr * 0.94, nr * 0.94 * SQUASH, 0, 0, TAU);
+        g.stroke();
+        const ng = g.createRadialGradient(nx2, ny2, 0, nx2, ny2, nr);
+        ng.addColorStop(0, "hsla(" + nv.hue + ", 100%, 66%, " + (na * 0.30).toFixed(3) + ")");
+        ng.addColorStop(1, "hsla(" + nv.hue + ", 100%, 60%, 0)");
+        g.fillStyle = ng;
+        g.beginPath();
+        g.ellipse(nx2, ny2, nr, nr * SQUASH, 0, 0, TAU);
+        g.fill();
+      }
+
       for (const w of waves) {
         const a = clamp(w.life, 0, 1);
         g.strokeStyle = "rgba(200,235,255," + (a * 0.5).toFixed(3) + ")";
@@ -1882,7 +2276,10 @@ window.plethoraBit = {
     function drawButtons() {
       // "card" buttons are painted by drawSelect; drawing the generic panel
       // over them would wash out their artwork.
-      for (const b of buttons) if (b.style !== "card" && b.style !== "chip") drawButton(b);
+      for (const b of buttons) {
+        if (b.style === "card" || b.style === "chip" || b.style === "cast") continue;
+        drawButton(b);
+      }
     }
 
     /* ============================================================ *
@@ -2077,6 +2474,9 @@ window.plethoraBit = {
       for (const t of tops) t.h = 0.55 + Math.random() * 0.12;
 
       battleMs = 0;
+      novas.length = 0;
+      zones.length = 0;
+      steer.on = false;
       result = null;
       state = "battle";
       sfxRip(power);
@@ -2212,6 +2612,15 @@ window.plethoraBit = {
           haptic("medium");
           goCharge();
         });
+      } else if (state === "battle") {
+        const castW = clamp(W * 0.46, 150, 210);
+        const castH = clamp(H * 0.078, 54, 70);
+        addButton("cast", "", (W - castW) / 2,
+                  H - safeBottom() - castH - clamp(H * 0.022, 12, 26),
+                  castW, castH, () => {
+          const me = tops.find(t => t.isPlayer);
+          if (me && !castSpecial(me)) haptic("warning");
+        }, "cast");
       } else if (state === "charge") {
         if (spin.denied || (chargeMs > 7000 && !spin.live)) {
           // No usable motion: hand them a swipe ripcord instead.
@@ -2247,6 +2656,10 @@ window.plethoraBit = {
     // Swipe ripcord fallback: pointer speed stands in for angular speed.
     const swipe = { active: false, x: 0, y: 0, t: 0 };
 
+    // Drag anywhere in the stadium during a battle to steer YOUR top toward
+    // that spot. You never control the rivals.
+    const steer = { on: false, x: 0, y: 0 };
+
     function pointerPos(e) {
       // offsetX/offsetY are already canvas-relative. Reading the layout rect
       // instead is rejected by the upload validator, and going through offsets
@@ -2271,6 +2684,12 @@ window.plethoraBit = {
 
       if (state === "intro") { goSelect(); return; }
       if (state === "result" && resultMs > 900) { goCharge(); return; }
+      if (state === "battle") {
+        steer.on = true;
+        steer.x = (p.x - cx) / S;
+        steer.y = (p.y - cy) / (S * SQUASH);
+        return;
+      }
       if (state === "charge") {
         swipe.active = true;
         swipe.x = p.x;
@@ -2280,6 +2699,13 @@ window.plethoraBit = {
     }, { passive: false });
 
     ctx.listen(canvas, "pointermove", e => {
+      if (state === "battle" && steer.on) {
+        e.preventDefault();
+        const sp = pointerPos(e);
+        steer.x = (sp.x - cx) / S;
+        steer.y = (sp.y - cy) / (S * SQUASH);
+        return;
+      }
       if (!swipe.active || state !== "charge") return;
       e.preventDefault();
       const p = pointerPos(e);
@@ -2295,7 +2721,7 @@ window.plethoraBit = {
       swipe.t = 0;
     }, { passive: false });
 
-    const endSwipe = () => { swipe.active = false; };
+    const endSwipe = () => { swipe.active = false; steer.on = false; };
     ctx.listen(canvas, "pointerup", endSwipe);
     ctx.listen(canvas, "pointercancel", endSwipe);
     ctx.listen(canvas, "contextmenu", e => e.preventDefault());
@@ -2659,8 +3085,89 @@ window.plethoraBit = {
         g.restore();
       }
 
+      /* --- steering marker --- */
+      if (steer.on) {
+        const mkx = cx + steer.x * S;
+        const mky = cy + steer.y * S * SQUASH;
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.strokeStyle = "rgba(210,240,255,0.75)";
+        g.lineWidth = 2;
+        const pulse = 0.7 + 0.3 * Math.sin(battleMs / 110);
+        g.beginPath();
+        g.ellipse(mkx, mky, S * 0.055 * pulse, S * 0.055 * pulse * SQUASH, 0, 0, TAU);
+        g.stroke();
+        g.strokeStyle = "rgba(210,240,255,0.35)";
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.ellipse(mkx, mky, S * 0.09, S * 0.09 * SQUASH, 0, 0, TAU);
+        g.stroke();
+        const me2 = tops.find(t => t.isPlayer);
+        if (me2 && me2.alive) {
+          g.strokeStyle = "rgba(190,230,255,0.22)";
+          g.setLineDash([5, 6]);
+          g.beginPath();
+          g.moveTo(cx + me2.x * S, cy + me2.y * S * SQUASH);
+          g.lineTo(mkx, mky);
+          g.stroke();
+          g.setLineDash([]);
+        }
+        g.restore();
+      }
+
+      /* --- special-attack button --- */
+      const castBtn = buttons.find(b => b.id === "cast");
+      const me = tops.find(t => t.isPlayer);
+      if (castBtn && me) {
+        const el = elementOf(me);
+        const ready = me.charge >= 1 && me.alive;
+        g.save();
+        const cg = g.createLinearGradient(castBtn.x, castBtn.y, castBtn.x, castBtn.y + castBtn.h);
+        if (ready) {
+          cg.addColorStop(0, "hsla(" + el.hue + ", 92%, 58%, 0.96)");
+          cg.addColorStop(1, "hsla(" + el.hue + ", 88%, 38%, 0.96)");
+        } else {
+          cg.addColorStop(0, "rgba(16,24,44,0.86)");
+          cg.addColorStop(1, "rgba(10,16,32,0.86)");
+        }
+        g.fillStyle = cg;
+        roundRect(g, castBtn.x, castBtn.y, castBtn.w, castBtn.h, castBtn.h * 0.3);
+        g.fill();
+
+        // Charge fills the button left to right while on cooldown.
+        if (!ready) {
+          g.save();
+          roundRect(g, castBtn.x, castBtn.y, castBtn.w, castBtn.h, castBtn.h * 0.3);
+          g.clip();
+          g.fillStyle = "hsla(" + el.hue + ", 80%, 46%, 0.42)";
+          g.fillRect(castBtn.x, castBtn.y, castBtn.w * clamp(me.charge, 0, 1), castBtn.h);
+          g.restore();
+        }
+
+        g.strokeStyle = ready
+          ? "hsla(" + el.hue + ", 100%, 78%, 0.95)"
+          : "rgba(150,190,240,0.28)";
+        g.lineWidth = ready ? 2.2 : 1.2;
+        roundRect(g, castBtn.x, castBtn.y, castBtn.w, castBtn.h, castBtn.h * 0.3);
+        g.stroke();
+
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        fitFont(el.label, castBtn.w - 26, Math.min(castBtn.h * 0.36, 21), 800);
+        g.fillStyle = ready ? "#07121f" : "rgba(190,215,245,0.78)";
+        g.fillText(el.label, castBtn.x + castBtn.w / 2, castBtn.y + castBtn.h * 0.40);
+
+        g.font = UI.mono(Math.min(castBtn.h * 0.19, 11), 700);
+        g.fillStyle = ready ? "rgba(7,18,31,0.75)" : "rgba(150,185,230,0.6)";
+        g.fillText(ready ? "TAP TO UNLEASH"
+                         : Math.ceil((1 - me.charge) * elementOf(me).cool / 1000) + "s",
+                   castBtn.x + castBtn.w / 2, castBtn.y + castBtn.h * 0.74);
+        g.restore();
+      }
+
       g.save();
       g.textAlign = "left";
+      g.textBaseline = "alphabetic";
       g.font = UI.mono(Math.min(W * 0.028, 11), 800);
       const badgeY = top + 26 + barH + 34;
       g.fillStyle = "hsla(" + difficulty.hue + ", 90%, 72%, 0.9)";
@@ -2879,7 +3386,7 @@ window.plethoraBit = {
       g.fillRect(0, 0, W, H);
 
       const pad = clamp(W * 0.09, 24, 46);
-      let y = safeTop() + clamp(H * 0.1, 70, 120);
+      let y = safeTop() + clamp(H * 0.085, 58, 100);
 
       g.textAlign = "left";
       g.font = UI.font(Math.min(W * 0.062, 26), 800);
@@ -2893,8 +3400,10 @@ window.plethoraBit = {
         ["3", "That number becomes RPM. Launch spin is directly proportional to how hard you ripped."],
         ["4", "A hard wrist flick reads exactly the same as a throw \u2014 you never have to let go."],
         ["5", "Throws are detected too. Freefall shows as AIRBORNE, and the gyro keeps reading in flight."],
-        ["6", "Win by being the last top spinning, or knock the others out of the stadium."],
-        ["7", "No sensor? Swipe fast across the ripcord instead."]
+        ["6", "In the battle, drag anywhere to steer YOUR top. Drive it into the others."],
+        ["7", "Every top has an element. When the bar fills, tap it to unleash the attack."],
+        ["8", "Win by being the last top spinning, or knock the others out of the stadium."],
+        ["9", "No sensor? Swipe fast across the ripcord instead."]
       ];
 
       for (const [n, text] of lines) {
@@ -2902,7 +3411,7 @@ window.plethoraBit = {
         g.fillStyle = "rgba(120,205,255,0.95)";
         g.fillText(n, pad, y);
 
-        g.font = UI.font(Math.min(W * 0.036, 14.5), 500);
+        g.font = UI.font(Math.min(W * 0.034, 13.5), 500);
         g.fillStyle = "rgba(200,222,248,0.92)";
         const words = text.split(" ");
         let line = "";
@@ -2921,7 +3430,7 @@ window.plethoraBit = {
           g.fillText(line, pad + 22, y);
           y += clamp(H * 0.024, 17, 21);
         }
-        y += clamp(H * 0.014, 8, 14);
+        y += clamp(H * 0.011, 6, 11);
       }
       g.restore();
     }
@@ -2930,7 +3439,7 @@ window.plethoraBit = {
       g.save();
       const v = g.createRadialGradient(cx, cy, Math.min(W, H) * 0.32, cx, cy, Math.max(W, H) * 0.78);
       v.addColorStop(0, "rgba(0,0,0,0)");
-      v.addColorStop(1, "rgba(0,0,0,0.62)");
+      v.addColorStop(1, "rgba(6,10,6,0.42)");
       g.fillStyle = v;
       g.fillRect(0, 0, W, H);
       g.restore();
@@ -2951,7 +3460,7 @@ window.plethoraBit = {
       S = Math.min(W * 0.42, H * 0.285);
       spriteCache.clear();
       arenaSurf = null;
-      if (!motes.length) seedMotes();
+      if (!petals.length) seedPetals();
       bakeArena();
       layout();
     }
@@ -2964,6 +3473,10 @@ window.plethoraBit = {
 
       clockSec += dt;
       const nowSec = clockSec;
+      // Slow prevailing wind with an occasional gust.
+      windNow = Math.sin(nowSec * 0.21) * 0.55
+        + Math.sin(nowSec * 0.07 + 1.3) * 0.3
+        + Math.max(0, Math.sin(nowSec * 0.043 - 0.6)) * 0.5;
       introSpin += dt * 1.6;
 
       if (state === "charge") {
@@ -2990,6 +3503,7 @@ window.plethoraBit = {
       if (state === "battle") {
         battleMs += dtMs;
         stepPhysics(dt);
+        stepSpecials(dt);
         const player = tops.find(t => t.isPlayer);
         if (player) ctx.platform.setScore(Math.round(player.rpm));
         checkEnd();
@@ -3015,7 +3529,7 @@ window.plethoraBit = {
 
       drawArena();
       drawArenaSheen(nowSec);
-      drawMotes(dtMs / 16.7);
+      drawPetals(dtMs / 16.7);
       if (state === "intro") drawHero();
       drawTrails();
 
@@ -3036,6 +3550,7 @@ window.plethoraBit = {
         g.restore();
       }
 
+      drawFronds(nowSec);
       drawVignette();
 
       if (state === "intro") drawTitle();
