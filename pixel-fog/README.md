@@ -86,10 +86,34 @@ So the rule is binary, and has no false positives:
 Both were verified in a browser: vigorous mid-screen scrubbing never pages, and
 a swipe on a cleared picture always does.
 
+## Sound
+
+The rub is the whole interaction, and `ctx.music` has no gesture-following
+texture, so that one bed is synthesised with Web Audio — the case the SDK notes
+reserve for "bespoke synthesis". Everything else stays on `ctx.music`.
+
+- **The rub** — a looping noise buffer through a bandpass whose gain *and*
+  cutoff follow how fast the finger is actually moving, plus a quiet lowpassed
+  layer underneath so it reads as weight rather than hiss. Ordinary rubbing sits
+  mid-range; a full scrub (~1100 px/s) opens it all the way. The filter also
+  opens as more of the picture is cleared, so the texture thins out as the
+  photograph comes up. It falls silent within ~90 ms of the finger stopping.
+- **Turning the page** — a short noise sweep, direction-matched: rising when you
+  move forward, falling when you go back.
+- **Tapping a dot** — a brief highpassed click.
+- **Clearing a picture** — four sine partials staggered into a rising shimmer,
+  with `ctx.music.duck()` pulling the bed down underneath it, alongside the
+  existing `success` sting.
+- **Bed** — `ctx.music` `drift` preset, pentatonic, 62 bpm, faded in over 2.4 s.
+
+All of it is built on the first gesture and unlocked with the silent-buffer
+trick, so mobile autoplay rules do not mute it.
+
 ## Contract notes
 
-- Permissions: `backgroundMusic` (a `drift` bed plus tap/success stings),
-  `haptics`, `storage` (which places you have already uncovered).
+- Permissions: `audio` (the synthesised rub bed and cues), `backgroundMusic` (a
+  `drift` bed plus tap/success stings), `haptics`, `storage` (which places you
+  have already uncovered).
 - No dependencies, no packaged assets, no memory channels.
 - The picture is the whole screen. The only chrome is the dot row, a one-line
   hint that fades on first rub, and a small `?`.
@@ -146,3 +170,9 @@ reveal, consecutive frames differ (the mosaic really is animating), vigorous
 horizontal rubbing never pages, a swipe on a cleared picture does, dot jumps
 work, clearing fires `milestone` and `setProgress`, and a mid-session viewport
 change re-layouts — with no runtime errors at any stage.
+
+The audio graph was checked the same way rather than assumed: the context builds
+and reaches `running`, rub gain and filter cutoff both rise with finger speed
+(0.020 → 0.039 and 766 → 1048 Hz across a slow and a fast stroke), both return
+to zero within ~90 ms of release, and the sweep, click and shimmer all fire
+without throwing.

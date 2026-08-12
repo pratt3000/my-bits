@@ -18,6 +18,7 @@
     "reveal"
   ],
   "permissions": [
+    "audio",
     "backgroundMusic",
     "haptics",
     "storage"

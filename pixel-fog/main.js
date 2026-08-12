@@ -1,12 +1,13 @@
 // Pixel Fog — a mobile-first Plethora Bit.
 //
-// Nine views of San Francisco, each one painted procedurally at runtime (the
-// bit runtime blocks remote images and packaged assets, so every "photograph"
-// here is drawn with canvas primitives). Tap a picture to open it, then rub it
-// with a finger: wherever you rub, a living mosaic of that same picture blooms
-// through — pixel blocks that breathe, shimmer, and ride a slow wave of
-// coarseness across the frame. Rub most of it away and the whole picture gives
-// itself over to pixels.
+// Nine places in San Francisco, one per screen, each buried under a living
+// mosaic of itself. Rub the pixels away with a finger and the picture surfaces
+// — and with it one sentence about the place that you almost certainly do not
+// know, painted into the same bake so it is uncovered the same way. Clear one
+// and swipe on to the next.
+//
+// Nothing here is a photograph: the runtime blocks remote images and packaged
+// assets, so all nine views are painted at runtime with canvas primitives.
 //
 // Contract notes that shaped the code:
 //   * document.createElement("canvas") is rejected by the upload validator, so
@@ -17,16 +18,18 @@
 //     positions come from event.offsetX/offsetY, already canvas-relative.
 //     (The validator text-scans the source, so naming that rejected call here
 //     -- even inside a comment -- is itself enough to fail the upload.)
+//   * A local named `ph` initialised from a call is rejected as well. See
+//     README.md; no local in this file is named that.
 
 window.plethoraBit = {
   meta: {
     title: "Pixel Fog",
     runtime: "plethora-bit@2",
     tags: [
-      "art", "photo", "san-francisco", "mosaic", "pixel",
+      "art", "history", "facts", "san-francisco", "mosaic", "pixel",
       "touch", "sensory", "generative", "relaxing", "reveal"
     ],
-    permissions: ["backgroundMusic", "haptics", "storage"]
+    permissions: ["audio", "backgroundMusic", "haptics", "storage"]
   },
 
   async init(ctx) {
@@ -1860,6 +1863,7 @@ window.plethoraBit = {
     let started = false;
     const canMusic = !!(ctx.capabilities && ctx.capabilities.backgroundMusic);
     const canHaptic = !!(ctx.capabilities && ctx.capabilities.haptics);
+    const canAudio = !!(ctx.capabilities && ctx.capabilities.audio);
 
     function haptic(kind) {
       if (canHaptic) { try { ctx.platform.haptic(kind); } catch (_) { /* ignore */ } }
@@ -1868,10 +1872,157 @@ window.plethoraBit = {
       if (!canMusic) return;
       try { ctx.music.sting(name); } catch (_) { /* ignore */ }
     }
+
+    // ---- synthesis -------------------------------------------------------- //
+    // The rub is the whole interaction and ctx.music has no gesture-following
+    // texture, so this one bed is synthesised: looping noise through a bandpass
+    // whose gain and cutoff track how fast the finger is actually moving. It is
+    // all filtered noise — no oscillators — apart from the clearing shimmer.
+
+    let ac = null, master = null, noiseBuf = null, audioDead = false;
+    let rubSrc = null, rubFilter = null, rubGain = null;
+    let bodySrc = null, bodyFilter = null, bodyGain = null;
+
+    function buildAudio() {
+      if (ac || audioDead || !canAudio) return ac;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { audioDead = true; return null; }
+      try { ac = new AC(); } catch (_) { audioDead = true; return null; }
+
+      master = ac.createGain();
+      master.gain.value = 0.9;
+      const comp = ac.createDynamicsCompressor();
+      comp.threshold.value = -18; comp.ratio.value = 3.5;
+      comp.attack.value = 0.004; comp.release.value = 0.25;
+      master.connect(comp);
+      comp.connect(ac.destination);
+
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const nd = noiseBuf.getChannelData(0);
+      for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+      // The rasp you hear directly under the fingertip.
+      rubFilter = ac.createBiquadFilter();
+      rubFilter.type = "bandpass";
+      rubFilter.frequency.value = 900;
+      rubFilter.Q.value = 1.1;
+      rubGain = ac.createGain();
+      rubGain.gain.value = 0;
+      rubSrc = ac.createBufferSource();
+      rubSrc.buffer = noiseBuf; rubSrc.loop = true;
+      rubSrc.connect(rubFilter); rubFilter.connect(rubGain); rubGain.connect(master);
+      try { rubSrc.start(0); } catch (_) { /* ignore */ }
+
+      // A little low body under it, so it reads as weight rather than hiss.
+      bodyFilter = ac.createBiquadFilter();
+      bodyFilter.type = "lowpass";
+      bodyFilter.frequency.value = 320;
+      bodyFilter.Q.value = 0.7;
+      bodyGain = ac.createGain();
+      bodyGain.gain.value = 0;
+      bodySrc = ac.createBufferSource();
+      bodySrc.buffer = noiseBuf; bodySrc.loop = true;
+      bodySrc.connect(bodyFilter); bodyFilter.connect(bodyGain); bodyGain.connect(master);
+      try { bodySrc.start(0); } catch (_) { /* ignore */ }
+
+      ctx.onDestroy(() => { try { ac.close(); } catch (_) { /* ignore */ } });
+      return ac;
+    }
+
+    let resuming = false;
+    function unlockAudio() {
+      if (!buildAudio()) return;
+      if (ac.state !== "running" && !resuming) {
+        resuming = true;
+        let p;
+        try { p = ac.resume(); } catch (_) { resuming = false; }
+        if (p && p.then) p.then(() => { resuming = false; }, () => { resuming = false; });
+        else resuming = false;
+      }
+      try {
+        const s = ac.createBufferSource();
+        s.buffer = ac.createBuffer(1, 1, ac.sampleRate || 22050);
+        s.connect(ac.destination);
+        s.start(0);
+      } catch (_) { /* ignore */ }
+    }
+
+    let rubSpeed = 0;        // smoothed finger speed, CSS px per ms
+    let rubActive = false;
+
+    /** Drive the rub bed. `bright` (0..1) opens the filter as more is cleared,
+     *  so the texture thins out as the picture comes up. */
+    function updateRubAudio(bright) {
+      if (!ac || !rubGain) return;
+      const t = ac.currentTime;
+      const s = clamp(rubSpeed / 1.1, 0, 1);   // ~1100 px/s reads as a full scrub
+      const on = rubActive ? 1 : 0;
+      rubGain.gain.setTargetAtTime(on * (0.012 + 0.16 * s), t, rubActive ? 0.02 : 0.07);
+      bodyGain.gain.setTargetAtTime(on * (0.006 + 0.05 * s), t, rubActive ? 0.03 : 0.09);
+      rubFilter.frequency.setTargetAtTime(620 + 2100 * s + 700 * bright, t, 0.05);
+      rubFilter.Q.setTargetAtTime(1.1 + 1.6 * s, t, 0.08);
+    }
+
+    /** A short filtered-noise sweep for turning to the next place. */
+    function whoosh(dir) {
+      if (!buildAudio() || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const src = ac.createBufferSource();
+      src.buffer = noiseBuf;
+      const bp = ac.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = 1.4;
+      bp.frequency.setValueAtTime(dir > 0 ? 380 : 2000, t);
+      bp.frequency.exponentialRampToValueAtTime(dir > 0 ? 2000 : 380, t + 0.3);
+      const out = ac.createGain();
+      out.gain.setValueAtTime(0.0001, t);
+      out.gain.linearRampToValueAtTime(0.1, t + 0.05);
+      out.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+      src.connect(bp); bp.connect(out); out.connect(master);
+      try { src.start(t); src.stop(t + 0.36); } catch (_) { /* ignore */ }
+    }
+
+    /** A soft click for tapping a dot. */
+    function tick() {
+      if (!buildAudio() || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const src = ac.createBufferSource();
+      src.buffer = noiseBuf;
+      const hp = ac.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 1800;
+      const out = ac.createGain();
+      out.gain.setValueAtTime(0.06, t);
+      out.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+      src.connect(hp); hp.connect(out); out.connect(master);
+      try { src.start(t); src.stop(t + 0.08); } catch (_) { /* ignore */ }
+    }
+
+    /** The picture is clear: a small rising shimmer, four partials staggered. */
+    function shimmer() {
+      if (!buildAudio() || ac.state !== "running") return;
+      const t = ac.currentTime;
+      const partials = [523.25, 659.25, 783.99, 1046.5];
+      for (let i = 0; i < partials.length; i++) {
+        const osc = ac.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = partials[i];
+        const out = ac.createGain();
+        const at = t + i * 0.075;
+        out.gain.setValueAtTime(0.0001, at);
+        out.gain.linearRampToValueAtTime(0.075 - i * 0.011, at + 0.03);
+        out.gain.exponentialRampToValueAtTime(0.0001, at + 1.5);
+        osc.connect(out); out.connect(master);
+        try { osc.start(at); osc.stop(at + 1.6); } catch (_) { /* ignore */ }
+      }
+      if (canMusic) { try { ctx.music.duck(0.35, 900); } catch (_) { /* ignore */ } }
+    }
+
     async function firstGesture() {
       if (started) return;
       started = true;
       ctx.platform.start();
+      unlockAudio();
       if (!canMusic) return;
       try {
         await ctx.music.unlock();
@@ -1922,7 +2073,7 @@ window.plethoraBit = {
         dragX = 0;
         trimPages(index);
         haptic("light");
-        sting("tap");
+        tick();
         ctx.platform.interact({ type: "jump", place: PLACES[index].id });
         syncChrome();
       });
@@ -2055,6 +2206,8 @@ window.plethoraBit = {
           for (const q of gesture.buffer) stampAt(page, q.x, q.y);
           gesture.buffer = null;
           page.everRubbed = true;
+          rubActive = true;
+          gesture.lt = (e.timeStamp || 0);
           syncChrome();
         } else {
           gesture.buffer.push({ x: p.x, y: p.y });
@@ -2082,6 +2235,10 @@ window.plethoraBit = {
         if (n === 0 && dist > 0.5) stampAt(page, p.x, p.y);
 
         const now = e.timeStamp || 0;
+        const gap = Math.max(1, now - (gesture.lt || gesture.t0));
+        rubSpeed = rubSpeed * 0.55 + clamp(dist / gap, 0, 3) * 0.45;
+        rubActive = true;
+        gesture.lt = now;
         if (now - lastInteract > 400) {
           lastInteract = now;
           ctx.platform.interact({ type: "rub", place: PLACES[index].id });
@@ -2095,6 +2252,7 @@ window.plethoraBit = {
     }, { passive: true });
 
     function endGesture(e) {
+      rubActive = false;
       if (!gesture) return;
       const kind = gesture.kind;
       const dx = e ? localPoint(e).x - gesture.x0 : dragX;
@@ -2107,7 +2265,7 @@ window.plethoraBit = {
           const dir = dx < 0 ? 1 : -1;
           slide = { dir: dir, target: dir > 0 ? -L.W : L.W };
           haptic("light");
-          sting("tap");
+          whoosh(dir);
         } else {
           slide = { dir: 0, target: 0 };
         }
@@ -2124,8 +2282,11 @@ window.plethoraBit = {
       gesture = null;
     }
     ctx.listen(canvas, "pointerup", endGesture);
-    ctx.listen(canvas, "pointercancel", () => { gesture = null; if (dragX) slide = { dir: 0, target: 0 }; });
-    ctx.listen(canvas, "lostpointercapture", () => { gesture = null; });
+    ctx.listen(canvas, "pointercancel", () => {
+      gesture = null; rubActive = false;
+      if (dragX) slide = { dir: 0, target: 0 };
+    });
+    ctx.listen(canvas, "lostpointercapture", () => { gesture = null; rubActive = false; });
 
     // ====================================================================== //
     // Rendering                                                              //
@@ -2294,6 +2455,7 @@ window.plethoraBit = {
         page.done = true;
         haptic("success");
         sting("success");
+        shimmer();
         const id = PLACES[page.i].id;
         if (!revealedSet.has(id)) {
           revealedSet.add(id);
@@ -2315,6 +2477,9 @@ window.plethoraBit = {
         }
         if (page.autoFill >= 1) page.revealBox = { x0: 0, y0: 0, x1: L.W, y1: L.H };
       }
+
+      if (!rubActive) rubSpeed *= Math.exp(-dtMs / 90);
+      updateRubAudio(page.ready ? clamp(revealFraction(page) / DONE_AT, 0, 1) : 0);
 
       draw(timeMs);
 
