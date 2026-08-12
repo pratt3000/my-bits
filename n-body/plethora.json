@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "N-Body",
+  "description": "Gravity you can throw. Touch to grow a world — hold longer for more mass — then drag and let go to launch it, with a live trajectory preview showing whether the orbit closes. Every body pulls on every other one, so orbits, captures and slingshots all fall out of the force law rather than being scripted. Bodies that touch merge and keep their combined momentum, and enough mass in one place ignites a star that lights the planets around it. Four systems to seed: a star and its planets, binary stars, a collapsing disc, and two clusters closing.",
+  "tags": [
+    "physics",
+    "space",
+    "sandbox",
+    "toy",
+    "generative",
+    "relaxing",
+    "simulation",
+    "sensory"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": []
+}
