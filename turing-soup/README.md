@@ -25,15 +25,16 @@ demonstration of Turing's 1952 idea that chemistry alone can grow pattern.
 
 - **Drag anywhere** to inject chemical B — structure blooms out of your finger
   and keeps growing after you let go.
-- **Feed/kill pad** (in the *Tune* sheet) steers the two reaction rates live.
-  The pad *is* the phase space: the six preset regimes sit on it as landmarks,
+- **Feed/kill pad** (in the tuning panel, opened with **≡**) steers the two
+  reaction rates live. The pad *is* the phase space: the presets sit on it as
+  landmarks,
   and the marker shows where the dish currently lives. Small moves across it
   morph the whole colony without ever resetting it.
 - **Preset chips** — Coral, Worms, Maze, Solitons, Holes, Amoeba.
 - **Scale** resizes the structures (diffusion rate); **Speed** sets how many
   simulation steps run per frame.
-- **◐** cycles palette, **✳** scatters fresh seeds, **⟲** clears the dish,
-  **♪** toggles sound, **?** explains the rules.
+- **≡** opens the tuning panel, **◐** cycles palette, **✳** scatters fresh
+  seeds, **⟲** clears the dish, **♪** toggles sound, **?** explains the rules.
 
 The grid is toroidal, so growth wraps off every edge instead of hitting a wall.
 Large parts of feed/kill space are lethal, so a dish that goes quiet reseeds
@@ -83,8 +84,9 @@ the documented `ctx` SDK surface:
   timers and music go through `ctx` so the runtime owns cleanup.
 - First frame draws the seeded dish before `ctx.platform.ready()`, so the bit is
   never blank; `ctx.platform.start()` fires on the first real gesture.
-- Controls sit clear of `ctx.safeArea`, and the tuning sheet is collapsed by
-  default so the artwork leads.
+- Controls sit clear of `ctx.safeArea`. The tuning panel is parked fully
+  off-screen until summoned, so nothing but a compact top row ever sits over
+  the artwork.
 
 ## Uploading a draft
 

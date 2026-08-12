@@ -835,8 +835,12 @@ window.plethoraBit = {
     ui.style.userSelect = "none";
     ui.style.overflow = "hidden";
 
+    // Kept separate so toggles can restore it: clearing style.background would
+    // strip it from the inline style and leave a bare blur over the artwork.
+    const GLASS_BG = "rgba(12,12,20,0.42)";
+    const GLASS_ON = "rgba(255,255,255,0.2)";
     const GLASS = "backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);" +
-      "background:rgba(12,12,20,0.42);border:1px solid rgba(255,255,255,0.14);";
+      `background:${GLASS_BG};border:1px solid rgba(255,255,255,0.14);`;
 
     function el(tag, style, parent, text) {
       const n = document.createElement(tag);
@@ -851,14 +855,13 @@ window.plethoraBit = {
       `position:absolute;left:0;right:0;top:0;padding:${(ctx.safeArea?.top || 0) + 10}px 12px 0;` +
       "display:flex;align-items:flex-start;gap:8px;justify-content:space-between;");
 
+    // Just the regime name rides over the artwork; the numbers live in the
+    // sheet, next to the pad that changes them.
     const readout = el("div", GLASS +
-      "pointer-events:auto;border-radius:14px;padding:7px 10px;display:flex;flex-direction:column;gap:2px;" +
-      "min-width:0;box-shadow:0 6px 22px rgba(0,0,0,0.35);", top);
+      "pointer-events:auto;border-radius:14px;padding:8px 11px;min-width:0;" +
+      "box-shadow:0 6px 22px rgba(0,0,0,0.35);", top);
     const regimeName = el("div",
       "font-size:13px;font-weight:650;letter-spacing:0.2px;white-space:nowrap;", readout, "Coral");
-    const regimeNums = el("div",
-      "font-size:10px;opacity:0.62;font-variant-numeric:tabular-nums;letter-spacing:0.2px;white-space:nowrap;",
-      readout, "");
 
     const tools = el("div", "display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;flex:0 0 auto;", top);
 
@@ -884,6 +887,8 @@ window.plethoraBit = {
       });
       return b;
     }
+
+    const tuneBtn = iconButton("≡", "Tune the reaction", () => toggleSheet());
 
     const paletteBtn = iconButton("◐", "Change palette", () => {
       state.palette = (state.palette + 1) % PALETTES.length;
@@ -917,25 +922,28 @@ window.plethoraBit = {
 
     const helpBtn = iconButton("?", "How it works", () => toggleHelp());
 
-    // Bottom sheet: the parameter cockpit, collapsed by default so the art leads.
+    // Tuning sheet: summoned by the ≡ button and otherwise parked completely
+    // off-screen, so nothing sits over the artwork while you are watching it.
     const sheet = el("div", GLASS +
-      "position:absolute;left:8px;right:8px;bottom:0;pointer-events:auto;border-radius:20px 20px 16px 16px;" +
-      `margin-bottom:${(ctx.safeArea?.bottom || 0) + 10}px;padding:6px 12px 12px;` +
-      "box-shadow:0 -8px 30px rgba(0,0,0,0.4);transition:transform .28s cubic-bezier(.3,.8,.4,1);");
+      "position:absolute;left:8px;right:8px;bottom:0;pointer-events:auto;border-radius:20px;" +
+      `margin-bottom:${(ctx.safeArea?.bottom || 0) + 10}px;padding:10px 12px 12px;` +
+      "box-shadow:0 -8px 30px rgba(0,0,0,0.4);" +
+      "transition:transform .3s cubic-bezier(.3,.8,.4,1),opacity .22s ease;");
 
-    const handle = el("div",
-      "pointer-events:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;" +
-      "padding:6px 2px 8px;cursor:pointer;", sheet);
-    el("div", "width:34px;height:4px;border-radius:99px;background:rgba(255,255,255,0.3);", handle);
-    const handleLabel = el("div", "font-size:11px;letter-spacing:0.6px;opacity:0.72;text-transform:uppercase;",
-      handle, "Tune");
-    const chevron = el("div", "font-size:11px;opacity:0.6;transition:transform .28s ease;", handle, "▲");
+    const head = el("div",
+      "display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:8px;", sheet);
+    const headLeft = el("div", "display:flex;align-items:baseline;gap:8px;min-width:0;", head);
+    el("div", "font-size:11px;letter-spacing:0.6px;opacity:0.72;text-transform:uppercase;", headLeft, "Tune");
+    const regimeNums = el("div",
+      "font-size:10px;opacity:0.55;font-variant-numeric:tabular-nums;letter-spacing:0.2px;white-space:nowrap;",
+      headLeft, "");
+    const closeBtn = el("button",
+      "pointer-events:auto;width:28px;height:28px;border-radius:9px;color:inherit;font-size:13px;flex:0 0 auto;" +
+      "display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;" +
+      "border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);", head, "✕");
+    closeBtn.setAttribute("aria-label", "Close the tuning panel");
 
-    // Collapsed state animates max-height rather than a measured offset, so it
-    // is correct on the very first layout pass.
-    const body = el("div",
-      "display:flex;flex-direction:column;gap:10px;overflow:hidden;" +
-      "transition:max-height .3s cubic-bezier(.3,.8,.4,1),opacity .22s ease;", sheet);
+    const body = el("div", "display:flex;flex-direction:column;gap:10px;", sheet);
 
     // Preset chips.
     const chips = el("div",
@@ -1049,18 +1057,23 @@ window.plethoraBit = {
 
     let sheetOpen = !!state.sheet;
     function applySheet() {
-      body.style.maxHeight = sheetOpen ? "340px" : "0px";
-      body.style.opacity = sheetOpen ? "1" : "0";
-      body.style.pointerEvents = sheetOpen ? "auto" : "none";
-      chevron.style.transform = sheetOpen ? "rotate(0deg)" : "rotate(180deg)";
+      // 140% clears the sheet's own height plus its bottom margin, so the
+      // closed state leaves the canvas completely unobstructed.
+      sheet.style.transform = sheetOpen ? "translateY(0)" : "translateY(140%)";
+      sheet.style.opacity = sheetOpen ? "1" : "0";
+      sheet.style.pointerEvents = sheetOpen ? "auto" : "none";
+      tuneBtn.style.background = sheetOpen ? GLASS_ON : GLASS_BG;
     }
-    ctx.listen(handle, "click", (e) => {
-      e.stopPropagation();
-      sheetOpen = !sheetOpen;
+    function toggleSheet(force) {
+      sheetOpen = force != null ? force : !sheetOpen;
       state.sheet = sheetOpen;
       applySheet();
-      buzz("light");
       persist();
+    }
+    ctx.listen(closeBtn, "click", (e) => {
+      e.stopPropagation();
+      buzz("light");
+      toggleSheet(false);
     });
     ctx.listen(sheet, "pointerdown", (e) => e.stopPropagation());
 
@@ -1111,7 +1124,7 @@ window.plethoraBit = {
     const list = el("ul", "margin:0;padding-left:16px;font-size:12.5px;line-height:1.72;opacity:0.9;", helpCard);
     [
       "Drag anywhere to inject chemical B.",
-      "Tune → pad: drag to steer feed (↑) and kill (→).",
+      "≡ opens the tuning panel; drag its pad to steer feed (↑) and kill (→).",
       "Chips jump to classic regimes: coral, worms, maze, solitons, holes, amoeba.",
       "Scale sets how big the structures grow; Speed sets how fast time runs.",
       "◐ swaps the palette, ✳ scatters new seeds, ⟲ clears the dish.",
@@ -1125,7 +1138,7 @@ window.plethoraBit = {
     function toggleHelp(force) {
       helpOpen = force != null ? force : !helpOpen;
       help.style.display = helpOpen ? "flex" : "none";
-      helpBtn.style.background = helpOpen ? "rgba(255,255,255,0.2)" : "";
+      helpBtn.style.background = helpOpen ? GLASS_ON : GLASS_BG;
     }
     ctx.listen(helpClose, "click", (e) => { e.stopPropagation(); toggleHelp(false); buzz("light"); });
     ctx.listen(helpCard, "click", (e) => e.stopPropagation()); // reading it should not close it
