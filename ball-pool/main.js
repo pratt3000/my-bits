@@ -141,6 +141,10 @@ window.plethoraBit = {
     const SIDE_KICK = 0.30;             // tangential kick per unit side spin
     const MIN_SPEED = 42;
     const MAX_SPEED = 430;
+    const STROKE_MS = 95;               // forward stroke before the tip lands
+    const STROKE_FADE = 230;            // follow-through, then withdrawing
+    const CUE_REST = BALL_R + 1.2;      // tip clearance when idle
+    const CUE_CONTACT = BALL_R + 0.04;  // tip just touching the ball
     const MAX_SHOT_MS = 9000;           // hard ceiling so a turn never drags
     const CALM_MS = 5800;               // start bleeding energy after this
 
@@ -193,6 +197,7 @@ window.plethoraBit = {
       winner: null,
       overWhy: "",
       shotMs: 0,
+      stroke: null,
       msg: "",
       msgUntil: 0,
       streak: 0,
@@ -859,26 +864,47 @@ window.plethoraBit = {
       state.shots[state.turn]++;
       unlockAudio();
 
-      const speed = MIN_SPEED + Math.pow(clamp(power, 0, 1), 1.35) * (MAX_SPEED - MIN_SPEED);
+      const p = clamp(power, 0, 1);
+      const speed = MIN_SPEED + Math.pow(p, 1.35) * (MAX_SPEED - MIN_SPEED);
       const dx = Math.cos(ang), dy = Math.sin(ang);
-      cue.vx = dx * speed;
-      cue.vy = dy * speed;
-      cue.spinDirX = dx;
-      cue.spinDirY = dy;
-      cue.spinT = -spinY * 0.85;          // widget y is screen-down: up = follow
-      cue.spinS = spinX * 0.9;
-      cue.spinArmed = false;
-      cue.ang = ang;
 
-      sndCue(power, cue.x);
-      if (shot.isBreak) {
+      // The impulse is held until the tip actually reaches the ball. The frame
+      // loop lands it, so the ball leaves on contact rather than the instant
+      // the finger lifts — which is what made the cue look like it teleported.
+      state.stroke = {
+        t: 0, fired: false,
+        x: cue.x, y: cue.y, ang: ang, power: p,
+        pull: CUE_REST + p * 17,
+        vx: dx * speed, vy: dy * speed,
+        spinT: -spinY * 0.85,             // widget y is screen-down: up = follow
+        spinS: spinX * 0.9,
+        dirX: dx, dirY: dy,
+        isBreak: shot.isBreak
+      };
+      state.phase = "shooting";
+      ctx.platform.interact({ type: "shot", power: Math.round(p * 100) });
+      hideCue();
+    }
+
+    /** The moment the tip lands: the ball goes, and so does the noise. */
+    function landStroke(st) {
+      const cue = state.cue;
+      st.fired = true;
+      cue.vx = st.vx;
+      cue.vy = st.vy;
+      cue.spinDirX = st.dirX;
+      cue.spinDirY = st.dirY;
+      cue.spinT = st.spinT;
+      cue.spinS = st.spinS;
+      cue.spinArmed = false;
+      cue.ang = st.ang;
+
+      sndCue(st.power, cue.x);
+      if (st.isBreak) {
         sndRack();
         try { ctx.music.duck(0.45, 1100); } catch (_) {}
       }
-      haptic(power > 0.7 ? "heavy" : power > 0.35 ? "medium" : "light");
-      state.phase = "shooting";
-      ctx.platform.interact({ type: "shot", power: Math.round(power * 100) });
-      hideCue();
+      haptic(st.power > 0.7 ? "heavy" : st.power > 0.35 ? "medium" : "light");
     }
 
     function message(text, ms) {
@@ -1028,6 +1054,7 @@ window.plethoraBit = {
     }
 
     function resetRack(breaker) {
+      state.stroke = null;
       rack();
       state.open = true;
       state.group = [null, null];
@@ -1143,9 +1170,12 @@ window.plethoraBit = {
         cue.x = PLAY_W / 2 + rnd(-2.2, 2.2);
         cue.y = PLAY_H * 0.8;
       }
+      // A weak player puts the ball down carelessly, but still on the cloth
+      // and not inside another ball — so the nudge only sticks if it is legal.
       if (d.sigma > 0.04) {
-        cue.x = clamp(cue.x + rnd(-3, 3), BALL_R + 0.2, PLAY_W - BALL_R - 0.2);
-        cue.y = clamp(cue.y + rnd(-3, 3), BALL_R + 0.2, PLAY_H - BALL_R - 0.2);
+        const jx = clamp(cue.x + rnd(-3, 3), BALL_R + 0.2, PLAY_W - BALL_R - 0.2);
+        const jy = clamp(cue.y + rnd(-3, 3), BALL_R + 0.2, PLAY_H - BALL_R - 0.2);
+        if (cuePlaceable(jx, jy, false)) { cue.x = jx; cue.y = jy; }
       }
     }
 
@@ -1240,6 +1270,7 @@ window.plethoraBit = {
     }
 
     function endGame(winner, why) {
+      state.stroke = null;
       state.winner = winner;
       state.overWhy = why;
       state.screen = "over";
@@ -2054,22 +2085,21 @@ window.plethoraBit = {
       g.restore();
     }
 
-    /** A real cue: taper, wrap, joint collar, ferrule and tip, plus a shadow. */
-    function drawCueStick(timeMs) {
-      const cue = state.cue;
-      if (!cue || cue.potted || state.screen !== "play") return;
-      const human = state.mode === "pass" || state.turn === 0;
-      if (!human || state.phase !== "aim") return;
-
-      const o = w2s(cue.x, cue.y);
-      const ahead = w2s(cue.x + Math.cos(state.aim), cue.y + Math.sin(state.aim));
+    /**
+     * The cue, anchored so that t = 0 is the leading edge of the leather tip
+     * and t = 1 is the end of the butt. `pull` is the gap from the cue ball's
+     * centre back to that tip, so at rest the tip sits clear of the ball
+     * instead of through it.
+     */
+    function drawCue(wx, wy, ang, pull, alpha) {
+      if (alpha <= 0.02) return;
+      const o = w2s(wx, wy);
+      const ahead = w2s(wx + Math.cos(ang), wy + Math.sin(ang));
       let dx = ahead.x - o.x, dy = ahead.y - o.y;
       const ppi = Math.hypot(dx, dy) || 1;      // screen px per world inch, this way
       dx /= ppi; dy /= ppi;
 
       const lift = hLift(BALL_R);
-      const idle = state.power > 0 ? 0 : Math.sin(timeMs / 760) * 0.3;
-      const pull = BALL_R + 1.2 + state.power * 17 + idle;
       const len = 52;
       const tipX = o.x - dx * pull * ppi, tipY = o.y - dy * pull * ppi - lift;
       const buttX = tipX - dx * len * ppi, buttY = tipY - dy * len * ppi;
@@ -2077,15 +2107,17 @@ window.plethoraBit = {
       const wTip = Math.max(1.1, view.s * 0.30);
       const wButt = Math.max(2.0, view.s * 0.60);
 
+      g.save();
+      g.globalAlpha = alpha;
+
       // Soft shadow on the cloth. Stacked passes rather than one hard copy —
       // a thin stick throws a diffuse shadow, and a crisp one just reads as a
       // second stray line beside the cue.
-      g.save();
-      g.fillStyle = "#000";
       for (let i = 0; i < 3; i++) {
         const spread = 1 + i * 1.7;
         const ox = spread * 0.55, oy = lift * 0.5 + spread;
-        g.globalAlpha = 0.11 - i * 0.025;
+        g.fillStyle = "#000";
+        g.globalAlpha = alpha * (0.11 - i * 0.025);
         g.beginPath();
         g.moveTo(tipX + nx * (wTip + spread) + ox, tipY + ny * (wTip + spread) + oy);
         g.lineTo(buttX + nx * (wButt + spread) + ox, buttY + ny * (wButt + spread) + oy);
@@ -2093,11 +2125,13 @@ window.plethoraBit = {
         g.lineTo(tipX - nx * (wTip + spread) + ox, tipY - ny * (wTip + spread) + oy);
         g.closePath(); g.fill();
       }
-      g.restore();
+      g.globalAlpha = alpha;
 
+      // t runs from the tip back toward the butt, so nothing is ever drawn in
+      // front of the tip and the cue can never overlap the ball.
       function seg(t0, t1, w0, w1, fill) {
-        const x0 = tipX + dx * len * ppi * t0, y0 = tipY + dy * len * ppi * t0;
-        const x1 = tipX + dx * len * ppi * t1, y1 = tipY + dy * len * ppi * t1;
+        const x0 = tipX - dx * len * ppi * t0, y0 = tipY - dy * len * ppi * t0;
+        const x1 = tipX - dx * len * ppi * t1, y1 = tipY - dy * len * ppi * t1;
         g.fillStyle = fill;
         g.beginPath();
         g.moveTo(x0 + nx * w0, y0 + ny * w0);
@@ -2108,27 +2142,26 @@ window.plethoraBit = {
       }
       const w = (t) => lerp(wTip, wButt, t);
 
-      // shaft, wrap and butt, lit across the barrel
       const across = g.createLinearGradient(
         tipX + nx * wButt, tipY + ny * wButt, tipX - nx * wButt, tipY - ny * wButt);
       across.addColorStop(0, "#f6e3bb");
       across.addColorStop(0.34, "#d9b578");
       across.addColorStop(0.72, "#a97c42");
       across.addColorStop(1, "#5d3d1c");
-      seg(-0.03, 0.56, wTip, w(0.56), across);
 
-      const butt = g.createLinearGradient(
+      const buttGrad = g.createLinearGradient(
         tipX + nx * wButt, tipY + ny * wButt, tipX - nx * wButt, tipY - ny * wButt);
-      butt.addColorStop(0, "#4a3324");
-      butt.addColorStop(0.34, "#2f1f14");
-      butt.addColorStop(0.75, "#1d120b");
-      butt.addColorStop(1, "#0d0805");
-      seg(0.6, 1.0, w(0.6), wButt, butt);
+      buttGrad.addColorStop(0, "#4a3324");
+      buttGrad.addColorStop(0.34, "#2f1f14");
+      buttGrad.addColorStop(0.75, "#1d120b");
+      buttGrad.addColorStop(1, "#0d0805");
 
-      seg(0.56, 0.60, w(0.56), w(0.6), "#d8c9a8");     // joint collar
-      seg(0.72, 0.84, w(0.72), w(0.84), "#241a12");    // wrap
-      seg(-0.055, -0.03, wTip * 0.96, wTip, "#f7f3e6"); // ferrule
-      seg(-0.075, -0.055, wTip * 0.9, wTip * 0.96, "#4f7fb8"); // tip
+      seg(0.05, 0.60, w(0.05), w(0.60), across);          // shaft
+      seg(0.60, 1.00, w(0.60), wButt, buttGrad);          // butt
+      seg(0.60, 0.635, w(0.60), w(0.635), "#d8c9a8");     // joint collar
+      seg(0.74, 0.86, w(0.74), w(0.86), "#241a12");       // wrap
+      seg(0.018, 0.05, wTip * 0.97, w(0.05), "#f7f3e6");  // ferrule
+      seg(0.0, 0.018, wTip * 0.9, wTip * 0.97, "#4f7fb8"); // leather tip
 
       // a bright line along the top of the barrel
       g.strokeStyle = "rgba(255,244,214,0.4)";
@@ -2137,6 +2170,42 @@ window.plethoraBit = {
       g.moveTo(tipX + nx * wTip * 0.45, tipY + ny * wTip * 0.45);
       g.lineTo(buttX + nx * wButt * 0.45, buttY + ny * wButt * 0.45);
       g.stroke();
+      g.restore();
+    }
+
+    /** Where the cue is during a stroke, and how solid it still looks. */
+    function strokeFrame(st) {
+      if (st.t < STROKE_MS) {
+        const k = st.t / STROKE_MS;
+        return { pull: lerp(st.pull, CUE_CONTACT, k * k), alpha: 1 };
+      }
+      // A stroke does not stop dead on the ball. It follows through a little,
+      // then comes back out as it fades.
+      const u = clamp((st.t - STROKE_MS) / STROKE_FADE, 0, 1);
+      const through = u < 0.28
+        ? lerp(0, -0.85, u / 0.28)
+        : lerp(-0.85, 7.5, (u - 0.28) / 0.72);
+      return { pull: CUE_CONTACT + through, alpha: 1 - u * u };
+    }
+
+    function drawCueStick(timeMs) {
+      if (state.screen !== "play") return;
+
+      // Mid-stroke the cue is anchored where the ball was struck, not to the
+      // ball itself — the ball has already gone.
+      const st = state.stroke;
+      if (st) {
+        const f = strokeFrame(st);
+        drawCue(st.x, st.y, st.ang, f.pull, f.alpha);
+        return;
+      }
+
+      const cue = state.cue;
+      if (!cue || cue.potted) return;
+      const human = state.mode === "pass" || state.turn === 0;
+      if (!human || state.phase !== "aim") return;
+      const idle = state.power > 0 ? 0 : Math.sin(timeMs / 760) * 0.3;
+      drawCue(cue.x, cue.y, state.aim, CUE_REST + state.power * 17 + idle, 1);
     }
 
     function drawBallInHand(timeMs) {
@@ -2812,6 +2881,13 @@ window.plethoraBit = {
 
       if (state.screen === "play" && state.phase === "shooting") {
         state.shotMs += dtMs;
+
+        const st = state.stroke;
+        if (st) {
+          st.t += dtMs;
+          if (!st.fired && st.t >= STROKE_MS) landStroke(st);
+          if (st.t >= STROKE_MS + STROKE_FADE) state.stroke = null;
+        }
         stepPhysics(dtMs);
 
         // Bleed energy if a rack refuses to settle, so a turn always ends.
@@ -2825,7 +2901,9 @@ window.plethoraBit = {
         if (state.shotMs > MAX_SHOT_MS) {
           for (const b of state.balls) { b.vx = 0; b.vy = 0; }
         }
-        if (!ballsMoving()) {
+        // Not settled until the stroke has landed — before that the table is
+        // still by definition, and resolving would score it as a total miss.
+        if (!state.stroke && !ballsMoving()) {
           state.phase = "aim";
           resolveShot();
           syncHud();
