@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Skip Stop",
+  "description": "A minimalist New York subway map — every line in its real MTA colour, every station a dot, drawn from the MTA's own track geometry, with PATH carrying it across the Hudson into New Jersey. Then a physics lesson hiding inside it: an express train has no higher top speed than the local running beside it on the same trunk, so why does it win? Five real corridors — Lexington Avenue, Queens Boulevard, the Brighton Line — each framed and turned to run up the screen. Read the distance and the stop counts, predict the outcome, then dispatch both trains and watch them run the real track under real kinematics. The result plots both as a distance–time graph, where the local's dwells are the flat steps and the gap between the curves is the whole idea.",
+  "tags": [
+    "map",
+    "newyork",
+    "subway",
+    "physics",
+    "educational",
+    "puzzle",
+    "trains",
+    "geography",
+    "minimal"
+  ],
+  "permissions": [
+    "haptics",
+    "storage",
+    "backgroundMusic"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "run_score": {
+        "label": "Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
