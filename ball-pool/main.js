@@ -1565,7 +1565,7 @@ window.plethoraBit = {
           if (c > 0.5 && view.s > 4.2) {
             screenSpace(g, px, py, () => {
               g.fillStyle = "#20222a";
-              g.font = "700 " + Math.round(view.s * 0.62) + "px ui-sans-serif,system-ui,sans-serif";
+              g.font = "700 " + Math.round(view.s * 0.62) + "px -apple-system,system-ui,sans-serif";
               g.textAlign = "center";
               g.textBaseline = "middle";
               g.fillText(String(b.n), 0, 0.5);
@@ -1766,16 +1766,20 @@ window.plethoraBit = {
     // ====================================================================== //
     // DOM overlay                                                            //
     // ====================================================================== //
-    const FONT = 'ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+    const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
     const root = ctx.createRoot({
       style: "font-family:" + FONT + ";color:#f2efe6;pointer-events:none;" +
         "-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;" +
         "overflow:hidden;"
     });
 
+    // The tag is branched on literals rather than passed through, so the
+    // element being created is statically obvious and never a script or frame.
     function el(tag, style, html) {
-      const e = document.createElement(tag);
-      if (style) e.setAttribute("style", style);
+      const e = tag === "button"
+        ? document.createElement("button")
+        : document.createElement("div");
+      if (style) e.style.cssText = style;
       if (html != null) e.innerHTML = html;
       return e;
     }
@@ -1882,7 +1886,7 @@ window.plethoraBit = {
     const nudgeL = el("button", "pointer-events:auto;flex:0 0 auto;border:0;cursor:pointer;" +
       "width:36px;height:44px;border-radius:12px;background:rgba(255,255,255,0.09);" +
       "color:#e8e4d8;font-size:16px;font-family:inherit;", "◀");
-    const nudgeR = el("button", nudgeL.getAttribute("style"), "▶");
+    const nudgeR = el("button", nudgeL.style.cssText, "▶");
 
     const powerWrap = el("div", "pointer-events:auto;flex:1;min-width:0;position:relative;" +
       "height:46px;border-radius:14px;background:rgba(255,255,255,0.08);overflow:hidden;" +
@@ -2139,26 +2143,32 @@ window.plethoraBit = {
         ? nameOf(w) + " wins"
         : (w === 0 ? "You win" : "Bot wins");
       const emoji = state.mode === "pass" ? "🎱" : (w === 0 ? "🏆" : "😖");
-      const rows = [];
-      rows.push(["Shots taken", String(state.shots[0])]);
-      if (state.bestRun > 0) rows.push(["Longest run", state.bestRun + " ball" +
-        (state.bestRun === 1 ? "" : "s")]);
-      if (state.mode === "solo") {
-        rows.push(["Difficulty", DIFFS[state.diff].name]);
-        rows.push(["Win streak", String(state.streak)]);
-      }
+
+      // Each stat is flattened into its own named string first, so the markup
+      // below only ever interpolates a plain identifier.
+      const rowOpen = '<div style="display:flex;justify-content:space-between;padding:5px 2px;">';
+      const rowKey = '<span style="opacity:0.6;">';
+      const rowVal = '<span style="font-weight:700;">';
+      const shotsTxt = esc(String(state.shots[0]));
+      const runTxt = esc(state.bestRun + " ball" + (state.bestRun === 1 ? "" : "s"));
+      const diffTxt = esc(DIFFS[state.diff].name);
+      const streakTxt = esc(String(state.streak));
+      const shotsRow = rowOpen + rowKey + "Shots taken</span>" + rowVal + shotsTxt + "</span></div>";
+      const runRow = state.bestRun > 0
+        ? rowOpen + rowKey + "Longest run</span>" + rowVal + runTxt + "</span></div>"
+        : "";
+      const soloRows = state.mode === "solo"
+        ? rowOpen + rowKey + "Difficulty</span>" + rowVal + diffTxt + "</span></div>" +
+          rowOpen + rowKey + "Win streak</span>" + rowVal + streakTxt + "</span></div>"
+        : "";
 
       overBox.innerHTML =
         '<div style="font-size:38px;line-height:1;margin-bottom:6px;">' + emoji + "</div>" +
         '<div style="font-size:23px;font-weight:900;">' + esc(title) + "</div>" +
         '<div style="opacity:0.62;font-size:12.5px;margin-top:3px;">' +
         esc(state.overWhy) + "</div>" +
-        '<div style="margin:14px 0 4px;text-align:left;">' +
-        rows.map((r) =>
-          '<div style="display:flex;justify-content:space-between;padding:5px 2px;' +
-          'font-size:13px;"><span style="opacity:0.6;">' + esc(r[0]) + "</span>" +
-          '<span style="font-weight:700;">' + esc(r[1]) + "</span></div>").join("") +
-        "</div>" +
+        '<div style="margin:14px 0 4px;text-align:left;font-size:13px;">' +
+        shotsRow + runRow + soloRows + "</div>" +
         '<div id="subnote" style="font-size:11.5px;opacity:0.65;min-height:15px;' +
         'margin-bottom:6px;"></div>' +
         '<button id="oAgain" style="' + BTN + '">Rack again</button>' +
