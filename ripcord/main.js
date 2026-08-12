@@ -111,9 +111,11 @@ window.plethoraBit = {
     }
 
     function audioResume() {
-      if (audio.ok && audio.ac.state === "suspended") {
-        audio.ac.resume().catch(() => {});
-      }
+      if (!audio.ok || audio.ac.state !== "suspended") return;
+      try {
+        const r = audio.ac.resume();
+        if (r && typeof r.catch === "function") r.catch(() => {});
+      } catch (err) { /* older WebAudio returns nothing */ }
     }
 
     function noiseSource() {
@@ -1554,8 +1556,21 @@ window.plethoraBit = {
     let musicOn = false;
     let launchInfo = null;
 
+    /**
+     * Fire a side-effect call that may be absent, may throw, and may or may
+     * not hand back a promise. On a real device ctx.storage.set() returned
+     * nothing, so a bare .catch() on the result took the whole bit down --
+     * never assume a runtime call is thenable.
+     */
+    function fireAndForget(thunk) {
+      try {
+        const r = thunk();
+        if (r && typeof r.catch === "function") r.catch(() => {});
+      } catch (err) { /* not supported on this runtime */ }
+    }
+
     async function loadSaved() {
-      if (!ctx.capabilities || !ctx.capabilities.storage) return;
+      if (!ctx.capabilities || !ctx.capabilities.storage || !ctx.storage) return;
       try {
         const s = await ctx.storage.get("ripcord");
         if (s && typeof s === "object") {
@@ -1564,23 +1579,31 @@ window.plethoraBit = {
           const pick = ARCHETYPES.find(a => a.id === s.top);
           if (pick) chosen = pick;
         }
-      } catch (err) { /* first run */ }
+      } catch (err) { /* first run, or no storage on this runtime */ }
     }
 
     function save() {
-      if (!ctx.capabilities || !ctx.capabilities.storage) return;
-      ctx.storage.set("ripcord", {
+      if (!ctx.capabilities || !ctx.capabilities.storage || !ctx.storage) return;
+      fireAndForget(() => ctx.storage.set("ripcord", {
         bestRPM: Math.round(bestRPM),
         bestStreak: bestStreak,
         top: chosen.id
-      }).catch(() => {});
+      }));
+    }
+
+    /** Submit to a leaderboard channel without ever letting it break play. */
+    function submitRecord(channel, value, label) {
+      if (!ctx.memory || typeof ctx.memory.record !== "function") return;
+      fireAndForget(() => ctx.memory.record(channel).submit(value, { label: label }));
     }
 
     function startMusic() {
       if (musicOn || !ctx.capabilities || !ctx.capabilities.backgroundMusic) return;
+      if (!ctx.music) return;
       musicOn = true;
+      // unlock() is best-effort and must not prevent the bed from starting.
+      fireAndForget(() => ctx.music.unlock());
       try {
-        ctx.music.unlock().catch(() => {});
         music = ctx.music.play({
           preset: "techno",
           volume: 0.32,
@@ -1634,9 +1657,8 @@ window.plethoraBit = {
       if (rpm > bestRPM) {
         bestRPM = rpm;
         save();
-        ctx.memory.record("launch_rpm")
-          .submit(Math.round(rpm), { label: Math.round(rpm).toLocaleString() + " RPM" })
-          .catch(() => {});
+        submitRecord("launch_rpm", Math.round(rpm),
+          Math.round(rpm).toLocaleString() + " RPM");
       }
 
       spin.window = false;
@@ -1704,9 +1726,7 @@ window.plethoraBit = {
         streak += 1;
         if (streak > bestStreak) {
           bestStreak = streak;
-          ctx.memory.record("win_streak")
-            .submit(bestStreak, { label: bestStreak + " in a row" })
-            .catch(() => {});
+          submitRecord("win_streak", bestStreak, bestStreak + " in a row");
         }
         sting("win");
         haptic("success");

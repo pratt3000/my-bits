@@ -184,6 +184,36 @@ ripcord/
   non-UTF-8 path turns `°` into `Â°` and `—` into `â€"`, which is exactly what
   happened the first time this was rendered in a browser.
 
+### Never assume a runtime call is thenable
+
+On a real device `ctx.storage.set()` returned **nothing** rather than a promise,
+so the `.catch(() => {})` chained onto it threw
+`TypeError: undefined is not an object` and took the whole bit down at the first
+tap on the top-select screen.
+
+Every such call now goes through `fireAndForget()`, which tolerates the method
+being absent, throwing, or returning a non-promise:
+
+```js
+function fireAndForget(thunk) {
+  try {
+    const r = thunk();
+    if (r && typeof r.catch === "function") r.catch(() => {});
+  } catch (err) { /* not supported on this runtime */ }
+}
+```
+
+The reason this reached a device at all is that the test harness mocked every
+API as returning a promise, so the shape mismatch was invisible. It now has two
+degraded-runtime modes, and both are part of the normal check:
+
+- **hostile A** — methods present but returning `undefined` (the observed bug).
+- **hostile B** — `ctx.capabilities` claims support while `ctx.storage`,
+  `ctx.memory`, `ctx.music` and `ctx.motion` are missing entirely.
+
+Reverting the fix makes hostile A fail with the device's exact stack, so the
+regression test is known to bite rather than merely pass.
+
 ### What the upload validator rejects
 
 Inherited from [`cairn`](../cairn), and both still apply:
