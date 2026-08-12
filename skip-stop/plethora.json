@@ -16,9 +16,10 @@
     "minimal"
   ],
   "permissions": [
+    "audio",
+    "backgroundMusic",
     "haptics",
-    "storage",
-    "backgroundMusic"
+    "storage"
   ],
   "dependencies": [],
   "memory": {

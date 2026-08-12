@@ -152,20 +152,46 @@ every line into a dashed one.
 
 ## Sound
 
-A quiet ambient bed starts on the first touch, and **each train rings softly as
-it pulls into a platform**. That is the point of it: down Lexington Avenue the
-local rings nineteen times and the express five, so you hear the difference
-before you see it on the graph. Cues are throttled to 95 ms apart and dropped
-entirely under fast-forward, where the real spacing would collapse into a rattle.
-The express also gets a small cue on arrival, and the run end gets one.
+**Each train rings as it pulls into a platform, pitched by service** — the local
+on C5, the express an octave above on C6. That is the whole point of it: down
+Lexington Avenue the local rings sixteen times to the express's four, so the
+difference is audible before it is on the graph. Cues are throttled to 95 ms
+apart and dropped entirely under fast-forward, where the real spacing collapses
+into a rattle. There are small cues for dispatch, the express's arrival, the
+result and the run's end, and a quiet ambient bed from `ctx.music` underneath.
+
+Every cue is **synthesised in-bit over WebAudio** rather than taken from
+`ctx.music`'s sting set. The first version used the stings and produced no sound
+at all on device. From inside a bit that engine is a black box: each call is
+wrapped and each failure silent, so when nothing comes out there is nothing to
+read, and the whole path was gated behind `ctx.capabilities.backgroundMusic`
+alone. A dozen lines of WebAudio gives exact control of pitch, envelope and
+level, lets the two services ring an octave apart, and — the reason it matters —
+can be **measured**: the harness splices an analyser in front of the destination
+and asserts real peak amplitude, and wraps `createOscillator` to record every
+pitch the bit asks for. "It called something that might make a sound" is not a
+test.
+
+Two things that only showed up under that measurement:
+
+- **A context can report `running` a beat before its clock starts advancing.**
+  An envelope written against `currentTime` while it still reads zero has already
+  elapsed by the time anything would be heard, so the first cue of a session was
+  silently dropped — measured peak 0.0001 against 0.13 for every later cue.
+  Cues now wait for the clock itself rather than the state flag, and give up
+  after ~360 ms and fire anyway rather than swallow one. Every cue is scheduled
+  a 30 ms lead-in ahead of `currentTime` for the same reason.
+- The station cue is throttled on a **shared** timer across both trains, so a
+  frame where both pull in together rings once rather than twice.
 
 The speaker button in the top bar mutes everything and the choice is remembered
-in `ctx.storage`. Audio only starts from a user gesture, and every call is
-wrapped, so a WebView that refuses to play makes no difference to the bit.
+in `ctx.storage`. Audio only ever starts from a user gesture and every call is
+wrapped, so a WebView that refuses to play costs nothing but silence.
 
 `ctx.music`'s handle is deliberately never held: everything needed is on
 `ctx.music` itself, and keeping the returned object is the const-alias shape the
-upload validator rejects (below).
+upload validator rejects (below). `AudioContext` is permission-gated, so the
+manifest declares `audio` alongside `backgroundMusic`.
 
 ## Contract notes
 

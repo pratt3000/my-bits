@@ -41,15 +41,19 @@
  *
  * One finger drags the map and two pinch it; a press only counts as a tap if it
  * barely moved, so panning never names a station by accident. And each train
- * rings as it pulls in: down Lexington Avenue the local rings nineteen times to
- * the express's five, which is the whole lesson before the graph says it.
+ * rings as it pulls in — the local on C5, the express an octave above — so down
+ * Lexington Avenue the local rings sixteen times to the express's four, which is
+ * the whole lesson before the graph says it. Those cues are synthesised here
+ * over WebAudio rather than drawn from ctx.music's stings: that engine is a
+ * black box from inside a bit, every call wrapped and every failure silent, and
+ * an unverifiable cue is worth nothing.
  */
 window.plethoraBit = {
   meta: {
     title: "Skip Stop",
     runtime: "plethora-bit@2",
     tags: ["map", "newyork", "subway", "physics", "educational", "puzzle"],
-    permissions: ["haptics", "storage", "backgroundMusic"]
+    permissions: ["audio", "backgroundMusic", "haptics", "storage"]
   },
 
   async init(ctx) {
@@ -754,23 +758,106 @@ window.plethoraBit = {
     // Feedback                                                               //
     // ====================================================================== //
     const canHaptic = !!ctx.capabilities.haptics;
-    const canAudio = !!ctx.capabilities.backgroundMusic;
-    let audioUnlocked = false, muted = false, bedOn = false, lastTickAt = -1e9;
+    const canAudio = !!ctx.capabilities.audio;
+    const canBed = !!ctx.capabilities.backgroundMusic;
+    let muted = false, bedOn = false, lastTickAt = -1e9;
+
+    // Cues are synthesised here rather than taken from ctx.music's sting set.
+    // That engine is a black box from inside a bit — every call is wrapped and
+    // every failure is silent, so when nothing comes out there is nothing to
+    // read. A dozen lines of WebAudio gives exact control of pitch, envelope and
+    // level, lets the local and the express ring at different pitches, and can
+    // be measured in a test by tapping the graph. The ambient bed still comes
+    // from ctx.music, but nothing important depends on it.
+    let ac = null, acBus = null, acDead = false;
 
     function tap(kind) {
       if (canHaptic) { try { ctx.platform.haptic(kind || "light"); } catch (_) {} }
     }
-    function sting(name) {
-      if (!canAudio || muted || !audioUnlocked) return;
-      try { ignore(ctx.music.sting(name)); } catch (_) {}
-    }
-    // The handle is deliberately not kept: every control we need is on ctx.music
-    // itself, and holding the returned object is the const-alias shape the
-    // upload validator rejects.
-    function startBed() {
-      if (!canAudio || muted || bedOn || !audioUnlocked) return;
+
+    function openAudio() {
+      if (ac || acDead || !canAudio) return;
       try {
-        ignore(ctx.music.play({ preset: "ambient", volume: 0.2, intensity: 0.3, tempo: 84 }));
+        const Maker = window.AudioContext || window.webkitAudioContext;
+        if (!Maker) { acDead = true; return; }
+        ac = new Maker();
+        acBus = ac.createGain();
+        acBus.gain.value = 0.9;
+        acBus.connect(ac.destination);
+      } catch (_) { acDead = true; ac = null; acBus = null; }
+    }
+    /** Browsers start the clock suspended until a real gesture says otherwise. */
+    function wakeAudio() {
+      openAudio();
+      if (!ac) return;
+      try { if (ac.state === "suspended") ignore(ac.resume()); } catch (_) {}
+    }
+
+    /** One struck note: a fast attack, a falling pitch, and a short tail. */
+    function blip(hz, secs, level, shape, delay) {
+      if (muted || !ac || !acBus) return;
+      try {
+        let osc = ac.createOscillator();
+        let env = ac.createGain();
+        // A short lead-in, not currentTime itself: the very first cue lands
+        // while resume() is still in flight, and anything scheduled at the
+        // clock's current value is already in the past by the time it starts.
+        let t0 = ac.currentTime + 0.03 + (delay || 0);
+        osc.type = shape || "sine";
+        osc.frequency.setValueAtTime(hz, t0);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(40, hz * 0.68), t0 + secs);
+        env.gain.setValueAtTime(0.0001, t0);
+        env.gain.exponentialRampToValueAtTime(level, t0 + 0.008);
+        env.gain.exponentialRampToValueAtTime(0.0001, t0 + secs);
+        osc.connect(env);
+        env.connect(acBus);
+        osc.start(t0);
+        osc.stop(t0 + secs + 0.03);
+      } catch (_) {}
+    }
+
+    const CUES = {
+      press:   function () { blip(520, 0.07, 0.13, "sine"); },
+      dispatch: function () { blip(392, 0.10, 0.16, "triangle");
+                              blip(587, 0.14, 0.14, "triangle", 0.07); },
+      // Same note an octave apart: the express is literally the higher one.
+      local:   function () { blip(523, 0.11, 0.15, "sine"); },
+      express: function () { blip(1047, 0.10, 0.13, "sine"); },
+      arrive:  function () { blip(784, 0.09, 0.14, "triangle");
+                             blip(1047, 0.16, 0.12, "triangle", 0.08); },
+      good:    function () { blip(659, 0.11, 0.15, "triangle");
+                             blip(988, 0.20, 0.13, "triangle", 0.09); },
+      meh:     function () { blip(330, 0.16, 0.13, "sine"); },
+      win:     function () { blip(523, 0.13, 0.15, "triangle");
+                             blip(659, 0.13, 0.14, "triangle", 0.10);
+                             blip(784, 0.13, 0.14, "triangle", 0.20);
+                             blip(1047, 0.34, 0.13, "triangle", 0.30); }
+    };
+    function cue(name) {
+      if (muted || !canAudio) return;
+      wakeAudio();
+      const make = CUES[name];
+      if (make) fireWhenReady(make, 0);
+    }
+    /**
+     * The first cue of a session is scheduled while the graph is still waking.
+     * A context can report "running" a beat before its clock starts advancing,
+     * and an envelope written against a clock reading zero has already elapsed
+     * by the time anyone would hear it — which is a cue that silently does
+     * nothing. So wait for the clock itself, not the state flag, and give up
+     * after a few tries and play regardless rather than swallow it.
+     */
+    function fireWhenReady(make, tries) {
+      if (ac && ac.state === "running" && ac.currentTime > 0) { make(); return; }
+      if (tries >= 6 || !ac) { if (ac) make(); return; }
+      ctx.timeout(function () { fireWhenReady(make, tries + 1); }, 60);
+    }
+
+    function startBed() {
+      if (!canBed || muted || bedOn) return;
+      try {
+        ignore(ctx.music.unlock());
+        ignore(ctx.music.play({ preset: "ambient", volume: 0.16, intensity: 0.25, tempo: 84 }));
         bedOn = true;
       } catch (_) { bedOn = false; }
     }
@@ -779,27 +866,27 @@ window.plethoraBit = {
       bedOn = false;
       try { ignore(ctx.music.stop({ fadeOutMs: 420 })); } catch (_) {}
     }
+    /** Called from every first-touch path; browsers only allow audio from one. */
     function unlockAudio() {
-      if (audioUnlocked || !canAudio) return;
-      audioUnlocked = true;
-      try { ignore(ctx.music.unlock()); } catch (_) {}
+      if (muted) return;
+      wakeAudio();
       startBed();
     }
     /**
-     * A soft cue each time a train pulls in. It is the clearest statement the
-     * bit makes: the local ticks nineteen times down Lexington Avenue and the
-     * express five, so the difference is audible before it is on the graph.
-     * Throttled, and dropped entirely under fast-forward, where the real
-     * spacing collapses into a rattle.
+     * A soft cue each time a train pulls in, pitched by service. It is the
+     * clearest statement the bit makes: down Lexington Avenue the local rings
+     * nineteen times to the express's five, so the difference is audible before
+     * it is on the graph. Throttled, and dropped under fast-forward, where the
+     * real spacing collapses into a rattle.
      */
-    function stationTick(nowMs) {
+    function stationTick(nowMs, isExpress) {
       if (fastFwd > 1 || nowMs - lastTickAt < 95) return;
       lastTickAt = nowMs;
-      sting("tap");
+      cue(isExpress ? "express" : "local");
     }
     function renderMute() {
       if (!elMute) return;
-      if (!canAudio) { elMute.style.display = "none"; return; }
+      if (!canAudio && !canBed) { elMute.style.display = "none"; return; }
       elMute.innerHTML = muted ? "&#128263;" : "&#128266;";
       elMute.style.opacity = muted ? "0.5" : "1";
     }
@@ -830,7 +917,7 @@ window.plethoraBit = {
           'Every dot is a station. Tap one to name it.</div>' +
         '<button data-el="go" style="' + BTN + '">Start</button>';
       ctx.listen(panel.querySelector('[data-el="go"]'), "click", () => {
-        unlockAudio(); tap("medium");
+        unlockAudio(); cue("press"); tap("medium");
         ctx.platform.start({ mode: "run" });
         newGame(); startRound();
       });
@@ -906,7 +993,7 @@ window.plethoraBit = {
       ctx.listen(sl, "change", onIn);
       ctx.listen(go, "click", () => {
         if (!committed) return;
-        tap("medium"); sting("tap"); startRace();
+        tap("medium"); cue("dispatch"); startRace();
       });
     }
 
@@ -954,7 +1041,7 @@ window.plethoraBit = {
       results.push({ name: c.n, colour: c.X.c, pts: pts, acc: acc });
       elScore.textContent = String(score);
       tap(pts >= 700 ? "success" : "light");
-      sting(pts >= 700 ? "success" : "tap");
+      cue(pts >= 700 ? "good" : "meh");
 
       const lAvg = (c.L.run.dist / 1000) / (c.L.run.total / 3600);
       const xAvg = (c.X.run.dist / 1000) / (c.X.run.total / 3600);
@@ -1204,7 +1291,7 @@ window.plethoraBit = {
       } catch (_) {}
       ctx.platform.setScore(score);
       ctx.platform.complete({ score: score });
-      tap("success"); sting("win");
+      tap("success"); cue("win");
       renderDone();
       loadBoard(boardScope);
     }
@@ -1335,11 +1422,11 @@ window.plethoraBit = {
         for (const s of [{ leg: c.X, k: "X" }, { leg: c.L, k: "L" }]) {
           const t = Math.min(raceT, s.leg.run.total);
           const standing = runDwelling(s.leg.run, t);
-          if (standing && !dwelt[s.k]) stationTick(timeMs);
+          if (standing && !dwelt[s.k]) stationTick(timeMs, s.k === "X");
           dwelt[s.k] = standing;
           if (!pulled[s.k] && t >= s.leg.run.total) {
             pulled[s.k] = true;
-            if (s.k === "X") sting("coin");
+            if (s.k === "X") cue("arrive");
           }
           const bar = panel.querySelector('[data-el="bar' + s.k + '"]');
           const tally = panel.querySelector('[data-el="st' + s.k + '"]');
@@ -1394,8 +1481,8 @@ window.plethoraBit = {
     if (elMute) {
       ctx.listen(elMute, "click", (e) => {
         e.stopPropagation();
-        unlockAudio();
         setMuted(!muted);
+        if (!muted) { unlockAudio(); cue("press"); }
         tap("light");
       });
     }
