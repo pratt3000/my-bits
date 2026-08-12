@@ -42,6 +42,11 @@ Nothing about a drop is scripted or on a timer. Four rules produce all of it:
   sitting still stops being an option. Every drop carries its own pin jitter, so
   the moment any particular one goes is genuinely unpredictable.
 
+- **The slant comes from the car, not from a dial.** `TUNE.carSpeed` sets how
+  fast the world slides past *and* how hard the air coming over the door
+  pushes the water sideways, because on a real window those are the same fact.
+  Drive faster and the drops lean harder.
+
 - **Small drops slant, fat drops plummet.** Wind pushes on frontal area (`~r²`)
   while gravity pulls on mass (`~r³`), so sideways acceleration falls off as
   `1/r`. Fine mist gets blown right off toward the back of the car; a heavy
@@ -132,6 +137,13 @@ The flat view paints straight into the display canvas rather than through an
 offscreen one, because Chromium accelerates a canvas that is on screen but
 rasterises an offscreen 2D context in software: routing it through one measured
 **1.7 ms → 22.5 ms per frame** for no benefit at all.
+
+The cabin is lit entirely from outside, and the sources sit *outside the
+glass* where the light actually is. A point light hung inside is 20cm from
+whatever it is next to and blows it out; from beyond the pane the falloff
+across the cabin is gentle enough to shade a whole door card. That falloff is
+also the only thing giving axis-aligned slabs a gradient — a directional light
+gives every face of a box one flat tone.
 
 Cabin proportions matter more than cabin detail. Eye height above the cushion
 is what tells you whether you are sitting in a car or kneeling on the floor of

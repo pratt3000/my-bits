@@ -120,9 +120,16 @@ window.plethoraBit = {
       // Sideways acceleration felt by a drop at exactly release size. Wind
       // pushes on frontal area and gravity pulls on mass, so anything smaller
       // gets shoved proportionally harder — see stepDrops.
-      windBase: -34,
-      windGust: 58,
-      windRate: 0.45,
+      // How fast the car is going, in pane widths of near-verge per second.
+      // Everything that should follow from road speed is derived from this:
+      // how quickly the world slides past, and how hard the air coming over
+      // the door is pushing the water sideways.
+      carSpeed: 1,
+      scrollNearAt1: 265,
+      scrollFarAt1: 44,
+      windAt1: -96,
+      windGust: 62,
+      windRate: 0.6,
 
       shedEveryPx: 11,
       coalesceBudget: 150,
@@ -258,8 +265,10 @@ window.plethoraBit = {
       SZ.gather = 52 * s;
       SZ.shedEvery = TUNE.shedEveryPx * 1.9 * s;
       SZ.gravity = TUNE.gravity * 1.9 * s;
-      SZ.windBase = TUNE.windBase * 1.9 * s;
-      SZ.windGust = TUNE.windGust * 1.9 * s;
+      // Air over the glass comes from the car moving, so the sideways push
+      // is the road speed, not a separate dial.
+      SZ.windBase = TUNE.windAt1 * TUNE.carSpeed * 1.9 * s;
+      SZ.windGust = TUNE.windGust * (0.45 + 0.55 * TUNE.carSpeed) * 1.9 * s;
       // Terminal speed is gravity*r^2/friction. Gravity carries one factor of
       // s and r^2 carries two, so friction needs s^2 for speeds to stay
       // pane-relative instead of exploding on a bigger pane.
@@ -1696,11 +1705,12 @@ window.plethoraBit = {
       scene.background = new THREE.Color(0x03050a);
 
       const grain = grainTexture();
-      const trim = mat("#333b4c", 0.95, grain, 3, 3);
-      const card = mat("#3d4658", 0.92, grain, 4, 2);
-      const fabric = mat("#464f64", 1, grain, 5, 3);
-      const dark = mat("#161b25", 0.98, grain, 6, 6);
-      const lining = mat("#374050", 1, grain, 4, 4);
+      const trim = mat("#23262e", 0.78, grain, 3, 3);       // moulded plastic
+      const card = mat("#383d49", 0.9, grain, 4, 2);        // door card
+      const fabric = mat("#3f3e47", 1, grain, 6, 4);        // seat cloth
+      const dark = mat("#17171b", 1, grain, 8, 8);          // carpet
+      const lining = mat("#3c4049", 1, grain, 5, 5);        // headliner, lighter
+      const chrome = mat("#4c5158", 0.55, null, 1, 1);      // handles and vents
 
       const C = CAB;
 
@@ -1718,6 +1728,16 @@ window.plethoraBit = {
       // pane reads as a shape instead of a void.
       slab(C.glassX + 0.015, C.winTop, -C.winZ, C.glassX + 0.06, C.winTop + 0.022, C.winZ,
            mat("#232a36", 0.66));
+
+      // Door furniture. A door card with nothing on it is just a wall: the
+      // pull, the switch pack on the armrest and the speaker grille are what
+      // make the eye accept it as a door.
+      slab(C.glassX + 0.03, C.winBot - 0.15, -0.02, C.glassX + 0.15, C.winBot - 0.09, 0.24, trim);
+      slab(C.glassX + 0.05, C.winBot - 0.135, 0.0, C.glassX + 0.14, C.winBot - 0.1, 0.22, chrome);
+      slab(C.glassX + 0.03, C.winBot - 0.09, -0.14, C.glassX + 0.12, C.winBot - 0.07, -0.02, trim);
+      slab(C.glassX + 0.02, C.winBot - 0.62, -0.1, C.glassX + 0.05, C.winBot - 0.36, 0.16, dark);
+      // Roof grab handle above the far door.
+      slab(C.wallX - 0.16, C.roofY - 0.07, -0.26, C.wallX - 0.05, C.roofY - 0.03, -0.02, trim);
 
       // The pane: world texture, fogged glass and every droplet, all in GL.
       paneMeshW = C.winZ * 2;
@@ -1762,8 +1782,23 @@ window.plethoraBit = {
       slab(C.glassX + 0.05, C.seatY - 0.18, -0.32, C.wallX - 0.05, C.seatY, backZ0 + 0.02, fabric);
       slab(C.glassX + 0.05, C.seatY - 0.16, backZ0, -0.005, -0.02, backZ1, fabric);
       slab(0.035, C.seatY - 0.16, backZ0, C.wallX - 0.05, -0.02, backZ1, fabric);
-      slab(-0.52, -0.02, backZ0 + 0.02, -0.16, 0.24, backZ1 - 0.02, fabric);
-      slab(0.2, -0.02, backZ0 + 0.02, 0.56, 0.24, backZ1 - 0.02, fabric);
+      // Headrests float on posts rather than growing out of the backrest.
+      slab(-0.5, 0.05, backZ0 + 0.03, -0.18, 0.27, backZ1 - 0.03, fabric);
+      slab(0.22, 0.05, backZ0 + 0.03, 0.54, 0.27, backZ1 - 0.03, fabric);
+      for (const sx of [[-0.7, -0.005], [0.035, 0.73]]) {
+        slab(sx[0], -0.2, backZ0 - 0.004, sx[1], -0.176, backZ1, trim);
+        slab(sx[0] + 0.02, C.seatY - 0.16, backZ0 - 0.006, sx[0] + 0.075, -0.02,
+             backZ1, fabric);
+        slab(sx[1] - 0.075, C.seatY - 0.16, backZ0 - 0.006, sx[1] - 0.02, -0.02,
+             backZ1, fabric);
+      }
+      for (const hx of [-0.44, -0.26, 0.28, 0.46]) {
+        slab(hx - 0.012, -0.03, backZ0 + 0.06, hx + 0.012, 0.06, backZ0 + 0.09, chrome);
+      }
+      // Side bolsters and a seam, so the bench is not one flat panel.
+      slab(C.glassX + 0.05, C.seatY - 0.2, -0.3, C.glassX + 0.16, C.seatY + 0.03, backZ0, fabric);
+      slab(C.wallX - 0.16, C.seatY - 0.2, -0.3, C.wallX - 0.05, C.seatY + 0.03, backZ0, fabric);
+      slab(-0.02, C.seatY - 0.19, -0.3, 0.02, C.seatY + 0.005, backZ0, trim);
 
       // Parcel shelf behind the seat, with the rear screen above it.
       slab(C.glassX + 0.05, -0.04, backZ1, C.wallX - 0.05, 0.01, C.backZ - 0.04, card);
@@ -1805,34 +1840,35 @@ window.plethoraBit = {
       // Light. Almost all of it comes through the window, and the sweep light
       // is driven by the same lamps that are sliding past outside — so a lamp
       // crossing the pane washes warm light across the seat beside you.
-      // Light in here is entirely borrowed: sky through the glass above,
-      // black carpet below, and a soft source at each window. Turning away
-      // from the pane has to leave you with something to look at.
-      scene.add(new THREE.HemisphereLight(0x44608c, 0x11172a, 2.1));
-      // The pane is the only real source in here, so a directional light
-      // stands in for it and rakes across everything it can see.
-      const paneLight = new THREE.DirectionalLight(0x9dbde8, 1.5);
-      paneLight.position.set(C.glassX - 1.4, 0.5, 0.2);
-      paneLight.target.position.set(C.wallX, -0.2, 0);
-      scene.add(paneLight);
-      scene.add(paneLight.target);
-      sweepLight = new THREE.PointLight(0xffb478, 0, 9, 2.1);
-      sweepLight.position.set(C.glassX - 1.35, 0.36, 0);
+      // Light in here is entirely borrowed from outside, and the way to make
+      // that read on axis-aligned slabs is falloff. A directional light gives
+      // every face of a box one flat tone; point lights hung in the window
+      // aperture rake across the door and the seat instead, so surfaces get a
+      // gradient and an edge, which is all a dark cabin needs to look like one.
+      scene.add(new THREE.HemisphereLight(0x33486c, 0x141820, 0.85));
+      // The sources sit *outside* the glass, where the light actually is. A
+      // point light hung inside the cabin is 20cm from whatever it is next to
+      // and blows it out; from out there the falloff across the cabin is
+      // gentle enough to shade a whole door card.
+      for (const lz of [-0.34, 0.3]) {
+        const wl = new THREE.PointLight(0xa9c6ef, 5.2, 9, 2);
+        wl.position.set(C.glassX - 1.75, C.winBot + 0.5, lz * 2.4);
+        scene.add(wl);
+      }
+      // The lamp currently crossing the pane, throwing warm light inboard.
+      sweepLight = new THREE.PointLight(0xffb478, 0, 10, 2);
+      sweepLight.position.set(C.glassX - 2, 0.5, 0);
       scene.add(sweepLight);
-      const fill = new THREE.PointLight(0x6b90cc, 1.1, 5.5, 1.8);
-      fill.position.set(C.glassX + 0.25, 0.05, -0.2);
-      scene.add(fill);
-      const rightPane = new THREE.PointLight(0x88a6d4, 1.3, 4.8, 1.8);
-      rightPane.position.set(C.wallX - 0.28, 0.02, 0);
+      const rightPane = new THREE.PointLight(0x8298c4, 4.2, 8, 2);
+      rightPane.position.set(C.wallX + 1.6, C.winBot + 0.45, 0);
       scene.add(rightPane);
-      const rearGlow = new THREE.PointLight(0x9ab6e0, 1.3, 4.4, 1.7);
-      rearGlow.position.set(0, 0.22, C.backZ - 0.16);
+      const rearGlow = new THREE.PointLight(0x93aed8, 3.6, 8, 2);
+      rearGlow.position.set(0, 0.3, C.backZ + 1.5);
       scene.add(rearGlow);
-      // Footwell strip. Cars really do have this, and without it the whole
-      // lower half of the cabin is an unreadable black field once you turn
-      // away from the window.
-      const footwell = new THREE.PointLight(0xffab68, 0.9, 2.2, 2);
-      footwell.position.set(0.18, C.floorY + 0.28, -0.34);
+      // Footwell strip. Cars really do have this, and it keeps the bottom of
+      // the cabin from falling into an unreadable black field.
+      const footwell = new THREE.PointLight(0xffab68, 0.7, 1.5, 2);
+      footwell.position.set(0.18, C.floorY + 0.3, -0.34);
       scene.add(footwell);
 
       camera = new THREE.PerspectiveCamera(68, ctx.width / ctx.height, 0.02, 40);
@@ -1882,9 +1918,9 @@ window.plethoraBit = {
         u = ((u % 1) + 1) % 1;
         // Brightest when the lamp is square-on to the window.
         const w = Math.max(0, 1 - Math.abs(u - 0.5) * 2.4) * nearLamps[i].a;
-        if (w > best) { best = w; bestZ = (u - 0.5) * 3.2; }
+        if (w > best) { best = w; bestZ = (u - 0.5) * 5.5; }
       }
-      sweepLight.intensity = best * 3.4;
+      sweepLight.intensity = best * 8;
       sweepLight.position.z = bestZ;
     }
 
@@ -2665,8 +2701,8 @@ window.plethoraBit = {
       else if (avgDt < 19 && lensBudget < TUNE.maxLens) lensBudget++;
 
       // The car is moving. Near things slide past faster than far things.
-      scrollFar = (scrollFar + dt * 17 * SZ.s) % G.w;
-      scrollNear = (scrollNear + dt * 56 * SZ.s) % G.w;
+      scrollFar = (scrollFar + dt * TUNE.scrollFarAt1 * TUNE.carSpeed * SZ.s) % G.w;
+      scrollNear = (scrollNear + dt * TUNE.scrollNearAt1 * TUNE.carSpeed * SZ.s) % G.w;
 
       stepHead(dt);
       healMist(dt);
