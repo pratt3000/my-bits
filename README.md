@@ -16,6 +16,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ones-and-zeros/`](ones-and-zeros)     | Conway's Game of Life in colour — cells born as 1s, fading to 0s when they die. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`ball-pool/`](ball-pool)               | Eight-ball pool — aim, spin, and break against a bot, or pass the phone.    |
 
 ## Layout convention
 
