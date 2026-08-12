@@ -1,8 +1,18 @@
 # Ripcord
 
 Spin your phone. The gyroscope reads how fast you spun it, and your top launches
-at an RPM directly proportional to that number. Then it fights two rivals in a
-bowl stadium until one top is left spinning.
+at an RPM directly proportional to that number. Then it fights two or three
+rivals in a bowl stadium until one top is left spinning.
+
+## First rip
+
+The rip is a physical gesture, and a still diagram does not explain a wrist
+snap. Before the first launch — once, remembered in storage, and reachable
+afterwards from `?` — a coach screen shows a phone actually performing the
+motion on a 1.9 s loop: wind back, whip through, settle, with motion arcs that
+brighten and an arrow head that leads the sweep. Four lines say it plainly:
+hold it flat, snap your wrist hard, faster snap means faster spin, and you never
+have to let go.
 
 ## The measurement
 
@@ -58,20 +68,37 @@ where consumer gyros saturate, and the floor means even a limp flick fields a
 viable top. Both numbers stay on screen — the measurement and what it became —
 so the relationship is legible rather than a hidden curve.
 
+## Difficulty
+
+Four tiers. `rpmMul` sets how hard rivals launch, `skill` sharpens their stats
+(dealing more, taking less, lasting longer), and the top two tiers put a **third
+rival** in the stadium.
+
+| | Rivals | Pool | A perfect rip wins |
+| --- | --- | --- | --- |
+| 🟢 **Rookie** | 2 | the gentlest tops | ~100% |
+| 🔵 **Pro** | 2 | + Hollow Crown, Riot Coil | ~85% |
+| 🟠 **Champion** | 3 | + Null Vector | ~80% |
+| 🟣 **Legend** | 3 | + Black Meridian | ~50% |
+
+The streak leaderboard is weighted by tier (×1, ×2, ×4, ×7) and stores the
+*score*, not the raw streak — otherwise a Rookie run would be re-weighted as if
+it had been earned on Legend.
+
 ## Does spinning harder actually win?
 
 It has to, or the mechanic is decorative. Measured by running the real physics
-headlessly, 40 battles per cell:
+headlessly, 30 battles per cell, playing Volt Lance:
 
-| phone °/s | launch RPM | Attack | Defense | Stamina |
-| --------: | ---------: | -----: | ------: | ------: |
-| 250 | 3,200 | 3% | 5% | 3% |
-| 450 | 4,140 | 18% | 15% | 23% |
-| 650 | 5,980 | 50% | 33% | 43% |
-| 850 | 7,820 | 50% | 50% | 70% |
-| 1100 | 10,120 | 75% | 70% | 93% |
-| 1400 | 12,880 | 98% | 88% | 100% |
-| 1800 | 14,000 | 95% | 98% | 100% |
+| phone °/s | launch RPM | Rookie | Pro | Champion | Legend |
+| --------: | ---------: | -----: | --: | -------: | -----: |
+| 250 | 3,200 | 20% | 0% | 3% | 0% |
+| 450 | 4,140 | 43% | 13% | 10% | 0% |
+| 650 | 5,980 | 77% | 37% | 20% | 13% |
+| 850 | 7,820 | 77% | 43% | 30% | 20% |
+| 1100 | 10,120 | 83% | 77% | 70% | 23% |
+| 1400 | 12,880 | 100% | 90% | 87% | 53% |
+| 1800 | 14,000 | 100% | 77% | 80% | 43% |
 
 Getting there took reversing two things that made the curve run backwards:
 
@@ -88,11 +115,16 @@ is divided by a gyroscopic stability term (`0.5 + spinNorm * 1.15`), and spin
 drain is a **ratio** (`(sa/sb)^0.75`) rather than a narrow lerp, so a 2:1 spin
 lead is a 2.8× drain advantage instead of 1.4×.
 
-Stamina remains the most forgiving pick — it saturates a step earlier than the
-other two. Two earlier attempts to fix that by shaving its stats did nothing,
-because the cause was structural, not numeric: opponents were drawn from *the
-other two* archetypes, so choosing Stamina was the only way never to face the
-hardest matchup. Opponents are now drawn from all three.
+Two balance problems turned out to be structural rather than numeric, and both
+resisted several rounds of stat-shaving before the real cause was found:
+
+- **Stamina looked strictly strongest.** Rivals were drawn from *the other two*
+  archetypes, so picking Stamina was the one way never to face a Stamina top —
+  which is the hardest matchup. Rivals now come from the whole roster.
+- **Three rivals were unsurvivable.** With threat-weighted targeting every one
+  of them converged on the leader at once, which is an unrecoverable dogpile.
+  Each rival now rolls a `focus` flag: some play the leader, the rest go for
+  whoever is nearest.
 
 ## The tops
 
@@ -101,11 +133,25 @@ angle warped by `skew` so the blades sweep back rather than sitting radially
 symmetric. That asymmetry is what reads as forged metal instead of a flower, and
 it shows which way the top is turning.
 
+**Yours to pick:**
+
 | | Blades | Character |
 | --- | --- | --- |
 | ⚡ **Volt Lance** | 3 | Attack. Hits hardest, burns out first, wins by ejection. |
 | 🛡 **Iron Bastion** | 6 | Defense. Heavy, takes 40% less drain, hard to move. |
 | 🌀 **Pale Orbit** | 8 | Stamina. Outlasts everything, fragile in an exchange. |
+
+**Rivals**, unlocked by tier — they also turn up as opponents, so a mirror match
+is possible:
+
+| | Blades | Tier | Character |
+| --- | --- | --- | --- |
+| **Wisp** | 3 | Rookie | Light and quick, but folds when hit. |
+| **Cinder Fang** | 4 | Rookie | A cheaper Volt Lance. Still bites. |
+| **Hollow Crown** | 5 | Pro | Balanced, heavy, no weakness to exploit. |
+| **Riot Coil** | 7 | Pro | The most aggressive thing in the roster. |
+| **Null Vector** | 12 | Champion | Barely decays. Wins by simply still being there. |
+| **Black Meridian** | 10 | Legend | Apex: heavy, hits hard, shrugs off almost everything. |
 
 Each is baked once into two `OffscreenCanvas` sprites: a crisp one, and a
 **blur** built by drawing the blade 26 times through one blade-pitch of
@@ -118,6 +164,22 @@ with the body.
 As spin drops, the top leans off its tip by `(1 - spinNorm)²` and precesses,
 and its projected squash oscillates. That is the wobble a real top does as it
 dies, and it is the clearest read on who is losing.
+
+## The stadium
+
+Drawn as a real bowl rather than a flat disc. The rim opening sits slightly
+above the floor, so the crescent between them reads as the far wall you are
+looking down into — that offset is most of what sells the depth. On top of it:
+a machined rim with brushed banding, tick marks and twelve inset lamps; vertical
+flutes down the wall; an energy ring at the lip; ambient occlusion where the
+floor meets the wall; and a floor of concentric rings, radial spokes and launch
+chevrons.
+
+All of that bakes once to an `OffscreenCanvas`, along with the hall it stands in
+— a haze behind the bowl, out-of-focus gantry lights above and below, and a pool
+of light on the ground. Live on top: two soft sheens rotating at different
+rates, a colour wash that flares on impact in the hue of whatever just clashed,
+drifting motes for depth, and each top's reflection mirrored in the floor.
 
 ## Physics
 

@@ -18,7 +18,7 @@ window.plethoraBit = {
      * ============================================================ */
 
     const TAU = Math.PI * 2;
-    const SQUASH = 0.60;          // pseudo-3D vertical compression
+    const SQUASH = 0.66;          // pseudo-3D vertical compression
     const RING_OUT_R = 1.235;     // world radius past which a top is out
     const BOWL_K = 2.45;          // restoring accel toward centre, per unit r
     const WALL_R = 0.95;          // where the stadium lip starts to bite
@@ -454,9 +454,13 @@ window.plethoraBit = {
      * 4. Archetypes and sprite baking
      * ============================================================ */
 
-    const ARCHETYPES = [
+    /**
+     * The full roster. `playable` tops are the three you pick from; the rest
+     * are rivals, gated by `tier` so harder difficulties field nastier ones.
+     */
+    const ROSTER = [
       {
-        id: "attack", name: "VOLT LANCE", role: "ATTACK",
+        id: "attack", name: "VOLT LANCE", short: "VOLT", role: "ATTACK", playable: true, tier: 0,
         blades: 3, sharp: 2.5, skew: 0.36, rIn: 0.54,
         hue: 191, hue2: 168,
         mass: 0.86, radius: 0.158,
@@ -465,7 +469,7 @@ window.plethoraBit = {
         blurb: "Hits hardest of the three. Burns out first."
       },
       {
-        id: "defense", name: "IRON BASTION", role: "DEFENSE",
+        id: "defense", name: "IRON BASTION", short: "BASTION", role: "DEFENSE", playable: true, tier: 0,
         blades: 6, sharp: 1.25, skew: -0.13, rIn: 0.73,
         hue: 27, hue2: 47,
         mass: 1.34, radius: 0.171,
@@ -474,13 +478,92 @@ window.plethoraBit = {
         blurb: "Heavy. Shrugs off hits, holds the centre."
       },
       {
-        id: "stamina", name: "PALE ORBIT", role: "STAMINA",
+        id: "stamina", name: "PALE ORBIT", short: "ORBIT", role: "STAMINA", playable: true, tier: 0,
         blades: 8, sharp: 0.92, skew: 0.07, rIn: 0.79,
         hue: 285, hue2: 322,
         mass: 1.0, radius: 0.162,
         decay: 0.90, aggression: 0.44,
         deal: 0.78, take: 1.22, knock: 0.90,
         blurb: "Outlasts everything. Fragile in a clash."
+      },
+
+      /* --- rivals, easiest first --- */
+      {
+        id: "wisp", name: "WISP", short: "WISP", role: "SCOUT", playable: false, tier: 0,
+        blades: 3, sharp: 1.8, skew: 0.22, rIn: 0.62,
+        hue: 168, hue2: 150,
+        mass: 0.70, radius: 0.146,
+        decay: 1.16, aggression: 0.62,
+        deal: 0.74, take: 1.30, knock: 1.02
+      },
+      {
+        id: "cinder", name: "CINDER FANG", short: "CINDER", role: "ATTACK", playable: false, tier: 0,
+        blades: 4, sharp: 2.2, skew: 0.30, rIn: 0.58,
+        hue: 8, hue2: 32,
+        mass: 0.94, radius: 0.156,
+        decay: 1.08, aggression: 0.95,
+        deal: 1.42, take: 1.10, knock: 1.44
+      },
+      {
+        id: "crown", name: "HOLLOW CROWN", short: "CROWN", role: "BALANCE", playable: false, tier: 1,
+        blades: 5, sharp: 1.5, skew: -0.08, rIn: 0.70,
+        hue: 44, hue2: 58,
+        mass: 1.18, radius: 0.166,
+        decay: 0.94, aggression: 0.55,
+        deal: 1.06, take: 0.82, knock: 1.00
+      },
+      {
+        id: "riot", name: "RIOT COIL", short: "RIOT", role: "CHAOS", playable: false, tier: 1,
+        blades: 7, sharp: 1.9, skew: 0.44, rIn: 0.64,
+        hue: 96, hue2: 76,
+        mass: 0.98, radius: 0.160,
+        decay: 1.02, aggression: 1.15,
+        deal: 1.28, take: 1.00, knock: 1.30
+      },
+      {
+        id: "nullvec", name: "NULL VECTOR", short: "NULL", role: "STAMINA", playable: false, tier: 2,
+        blades: 12, sharp: 0.85, skew: 0.03, rIn: 0.84,
+        hue: 205, hue2: 190,
+        mass: 1.10, radius: 0.164,
+        decay: 0.74, aggression: 0.38,
+        deal: 0.92, take: 0.94, knock: 0.86
+      },
+      {
+        id: "meridian", name: "BLACK MERIDIAN", short: "MERIDIAN", role: "APEX", playable: false, tier: 3,
+        blades: 10, sharp: 1.35, skew: -0.20, rIn: 0.76,
+        hue: 268, hue2: 300,
+        mass: 1.40, radius: 0.174,
+        decay: 0.82, aggression: 0.80,
+        deal: 1.34, take: 0.66, knock: 1.20
+      }
+    ];
+
+    const ARCHETYPES = ROSTER.filter(t => t.playable);
+
+    /**
+     * Difficulty ladder. `rpmMul` sets how hard rivals launch, `skill` sharpens
+     * their stats, `opps` adds a third top to the stadium at the top two tiers.
+     */
+    const DIFFICULTIES = [
+      {
+        id: "rookie", name: "ROOKIE", weight: 1, opps: 2, rpmMul: 0.86,
+        skill: 0.92, maxTier: 0, hue: 158,
+        blurb: "Two soft rivals. Learn the rip."
+      },
+      {
+        id: "pro", name: "PRO", weight: 2, opps: 2, rpmMul: 1.04,
+        skill: 1.04, maxTier: 1, hue: 200,
+        blurb: "Two real rivals that fight back."
+      },
+      {
+        id: "champion", name: "CHAMPION", weight: 4, opps: 3, rpmMul: 0.92,
+        skill: 1.11, maxTier: 2, hue: 40,
+        blurb: "Three rivals, and they are quick."
+      },
+      {
+        id: "legend", name: "LEGEND", weight: 7, opps: 3, rpmMul: 1.01,
+        skill: 1.22, maxTier: 3, hue: 320,
+        blurb: "Three apex tops. Rip perfectly or lose."
       }
     ];
 
@@ -660,111 +743,354 @@ window.plethoraBit = {
     let arenaSurf = null;
     let arenaMeta = { w: 0, h: 0, s: 0 };
 
+    /**
+     * The stadium. Drawn as a real bowl rather than a flat disc: the rim
+     * opening sits slightly above the floor, so the crescent between them
+     * reads as the far wall you are looking down into.
+     *
+     * Everything here is baked once; only the sheen and impact light are live.
+     */
     function paintArena(gg, scale, sc) {
       const rx = scale;
+      const lift = rx * 0.17;          // rim opening offset, in squashed units
 
-      // Outer glow pool.
-      const halo = gg.createRadialGradient(0, 0, rx * 0.4, 0, 0, rx * 1.72);
-      halo.addColorStop(0, "rgba(80,140,255,0.16)");
-      halo.addColorStop(0.55, "rgba(50,80,190,0.07)");
+      /* --- environment glow behind the whole stadium --- */
+      gg.save();
+      gg.scale(1, SQUASH);
+      const halo = gg.createRadialGradient(0, -lift, rx * 0.3, 0, -lift, rx * 2.0);
+      halo.addColorStop(0, "rgba(70,130,255,0.20)");
+      halo.addColorStop(0.45, "rgba(48,86,200,0.09)");
       halo.addColorStop(1, "rgba(0,0,0,0)");
       gg.fillStyle = halo;
-      gg.save();
-      gg.scale(1, SQUASH);
       gg.beginPath();
-      gg.arc(0, 0, rx * 1.72, 0, TAU);
+      gg.arc(0, -lift, rx * 2.0, 0, TAU);
       gg.fill();
-      gg.restore();
 
-      // Rim: a wide machined ring around the bowl.
-      gg.save();
-      gg.scale(1, SQUASH);
-      const rimGrad = gg.createLinearGradient(0, -rx * 1.3, 0, rx * 1.3);
-      rimGrad.addColorStop(0, "#2b3550");
-      rimGrad.addColorStop(0.4, "#141a2a");
-      rimGrad.addColorStop(0.62, "#1d2438");
-      rimGrad.addColorStop(1, "#39456a");
+      /* --- outer rim band --- */
+      const rimOuter = rx * 1.34;
+      const rimInner = rx * 1.13;
+      const rimGrad = gg.createLinearGradient(0, -rimOuter - lift, 0, rimOuter - lift);
+      rimGrad.addColorStop(0, "#4a5878");
+      rimGrad.addColorStop(0.22, "#222a42");
+      rimGrad.addColorStop(0.5, "#141a2c");
+      rimGrad.addColorStop(0.78, "#1b2338");
+      rimGrad.addColorStop(1, "#55638a");
       gg.fillStyle = rimGrad;
       gg.beginPath();
-      gg.arc(0, 0, rx * 1.30, 0, TAU);
+      gg.arc(0, -lift, rimOuter, 0, TAU);
       gg.fill();
 
-      // Hazard ticks around the rim.
-      for (let i = 0; i < 72; i++) {
-        const a = (i / 72) * TAU;
-        const long = i % 6 === 0;
-        const r0 = rx * (long ? 1.19 : 1.23);
-        const r1 = rx * 1.285;
-        gg.strokeStyle = long ? "rgba(150,190,255,0.42)" : "rgba(110,140,200,0.18)";
-        gg.lineWidth = long ? sc * 1.8 : sc * 1;
+      // Brushed-metal banding around the rim.
+      gg.save();
+      gg.beginPath();
+      gg.arc(0, -lift, rimOuter, 0, TAU);
+      gg.arc(0, -lift, rimInner, 0, TAU, true);
+      gg.clip("evenodd");
+      for (let i = 0; i < 130; i++) {
+        const a = (i / 130) * TAU;
+        gg.strokeStyle = "rgba(190,220,255," + (0.012 + 0.03 * Math.abs(Math.sin(a * 3))).toFixed(3) + ")";
+        gg.lineWidth = sc * 1.2;
         gg.beginPath();
-        gg.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
-        gg.lineTo(Math.cos(a) * r1, Math.sin(a) * r1);
+        gg.moveTo(Math.cos(a) * rimInner, Math.sin(a) * rimInner - lift);
+        gg.lineTo(Math.cos(a) * rimOuter, Math.sin(a) * rimOuter - lift);
+        gg.stroke();
+      }
+      gg.restore();
+
+      // Bevel highlight on the outer edge and a shadow under it.
+      gg.strokeStyle = "rgba(180,215,255,0.30)";
+      gg.lineWidth = sc * 1.6;
+      gg.beginPath();
+      gg.arc(0, -lift, rimOuter - sc * 1, 0, TAU);
+      gg.stroke();
+
+      // Tick marks, long every sixth.
+      for (let i = 0; i < 84; i++) {
+        const a = (i / 84) * TAU;
+        const long = i % 6 === 0;
+        const r0 = rx * (long ? 1.17 : 1.22);
+        const r1 = rx * 1.30;
+        gg.strokeStyle = long ? "rgba(165,205,255,0.5)" : "rgba(120,150,205,0.2)";
+        gg.lineWidth = long ? sc * 2 : sc * 1;
+        gg.beginPath();
+        gg.moveTo(Math.cos(a) * r0, Math.sin(a) * r0 - lift);
+        gg.lineTo(Math.cos(a) * r1, Math.sin(a) * r1 - lift);
         gg.stroke();
       }
 
-      // Energy ring at the lip.
-      gg.strokeStyle = "rgba(120,190,255,0.55)";
-      gg.lineWidth = sc * 2.2;
-      gg.beginPath();
-      gg.arc(0, 0, rx * 1.155, 0, TAU);
-      gg.stroke();
-      gg.strokeStyle = "rgba(190,230,255,0.30)";
-      gg.lineWidth = sc * 0.9;
-      gg.beginPath();
-      gg.arc(0, 0, rx * 1.135, 0, TAU);
-      gg.stroke();
+      // Accent lamps set into the rim.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU + 0.12;
+        const lr = rx * 1.235;
+        const lx = Math.cos(a) * lr;
+        const ly = Math.sin(a) * lr - lift;
+        const lamp = gg.createRadialGradient(lx, ly, 0, lx, ly, rx * 0.055);
+        lamp.addColorStop(0, "rgba(190,235,255,0.85)");
+        lamp.addColorStop(0.4, "rgba(110,190,255,0.35)");
+        lamp.addColorStop(1, "rgba(90,160,255,0)");
+        gg.fillStyle = lamp;
+        gg.beginPath();
+        gg.arc(lx, ly, rx * 0.055, 0, TAU);
+        gg.fill();
+      }
 
-      // Bowl interior. Darker toward the bottom so it reads concave, with a
-      // lit far wall.
-      const bowl = gg.createRadialGradient(0, -rx * 0.22, rx * 0.05, 0, 0, rx * 1.16);
-      bowl.addColorStop(0, "#080c18");
-      bowl.addColorStop(0.42, "#0c1226");
-      bowl.addColorStop(0.78, "#141d3c");
-      bowl.addColorStop(1, "#233158");
-      gg.fillStyle = bowl;
+      /* --- the bowl wall --- */
+      // Lit at the far side, falling into shadow at the near lip. This is what
+      // makes the stadium read as a dish rather than a painted circle.
+      const wall = gg.createLinearGradient(0, -rimInner - lift, 0, rimInner - lift);
+      wall.addColorStop(0, "#33456f");
+      wall.addColorStop(0.30, "#20304f");
+      wall.addColorStop(0.62, "#111a30");
+      wall.addColorStop(1, "#0a1020");
+      gg.fillStyle = wall;
       gg.beginPath();
-      gg.arc(0, 0, rx * 1.14, 0, TAU);
+      gg.arc(0, -lift, rimInner, 0, TAU);
       gg.fill();
 
-      // Concentric floor rings.
-      for (let i = 1; i <= 6; i++) {
-        const r = rx * (i / 6) * 1.05;
-        gg.strokeStyle = "rgba(120,165,255," + (0.13 - i * 0.012).toFixed(3) + ")";
-        gg.lineWidth = sc * 1;
+      // Vertical flutes down the wall.
+      gg.save();
+      gg.beginPath();
+      gg.arc(0, -lift, rimInner, 0, TAU);
+      gg.clip();
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * TAU;
+        gg.strokeStyle = "rgba(140,180,240,0.05)";
+        gg.lineWidth = sc * 1.4;
+        gg.beginPath();
+        gg.moveTo(Math.cos(a) * rx * 0.95, Math.sin(a) * rx * 0.95);
+        gg.lineTo(Math.cos(a) * rimInner, Math.sin(a) * rimInner - lift);
+        gg.stroke();
+      }
+      gg.restore();
+
+      // Energy ring around the lip.
+      gg.strokeStyle = "rgba(125,195,255,0.55)";
+      gg.lineWidth = sc * 2.4;
+      gg.beginPath();
+      gg.arc(0, -lift, rimInner - sc * 2, 0, TAU);
+      gg.stroke();
+      gg.strokeStyle = "rgba(205,238,255,0.28)";
+      gg.lineWidth = sc * 1;
+      gg.beginPath();
+      gg.arc(0, -lift, rimInner - sc * 5, 0, TAU);
+      gg.stroke();
+
+      /* --- the floor --- */
+      const floorR = rx * 1.02;
+      const floor = gg.createRadialGradient(0, -rx * 0.24, rx * 0.04, 0, 0, floorR);
+      floor.addColorStop(0, "#0d1830");
+      floor.addColorStop(0.45, "#0a1226");
+      floor.addColorStop(0.82, "#0d1730");
+      floor.addColorStop(1, "#16223f");
+      gg.fillStyle = floor;
+      gg.beginPath();
+      gg.arc(0, 0, floorR, 0, TAU);
+      gg.fill();
+
+      // Ambient occlusion where the floor meets the wall.
+      const ao = gg.createRadialGradient(0, 0, floorR * 0.72, 0, 0, floorR);
+      ao.addColorStop(0, "rgba(0,0,0,0)");
+      ao.addColorStop(1, "rgba(0,0,0,0.55)");
+      gg.fillStyle = ao;
+      gg.beginPath();
+      gg.arc(0, 0, floorR, 0, TAU);
+      gg.fill();
+
+      // Tech grid on the floor: concentric rings and radial spokes.
+      gg.save();
+      gg.beginPath();
+      gg.arc(0, 0, floorR, 0, TAU);
+      gg.clip();
+
+      for (let i = 1; i <= 7; i++) {
+        const r = floorR * (i / 7);
+        gg.strokeStyle = "rgba(120,170,255," + (0.115 - i * 0.011).toFixed(3) + ")";
+        gg.lineWidth = sc * (i % 2 === 0 ? 1.4 : 0.8);
         gg.beginPath();
         gg.arc(0, 0, r, 0, TAU);
         gg.stroke();
       }
-
-      // Radial guide spokes.
-      for (let i = 0; i < 12; i++) {
-        const a = (i / 12) * TAU;
-        gg.strokeStyle = "rgba(120,165,255,0.07)";
-        gg.lineWidth = sc * 1;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * TAU;
+        gg.strokeStyle = "rgba(120,170,255," + (i % 2 ? 0.045 : 0.085) + ")";
+        gg.lineWidth = sc * (i % 2 ? 0.7 : 1.1);
         gg.beginPath();
-        gg.moveTo(Math.cos(a) * rx * 0.16, Math.sin(a) * rx * 0.16);
-        gg.lineTo(Math.cos(a) * rx * 1.08, Math.sin(a) * rx * 1.08);
+        gg.moveTo(Math.cos(a) * floorR * 0.13, Math.sin(a) * floorR * 0.13);
+        gg.lineTo(Math.cos(a) * floorR, Math.sin(a) * floorR);
         gg.stroke();
       }
 
-      // Centre sink.
-      const sink = gg.createRadialGradient(0, 0, 0, 0, 0, rx * 0.3);
-      sink.addColorStop(0, "rgba(90,150,255,0.20)");
-      sink.addColorStop(0.6, "rgba(50,90,190,0.06)");
+      // Four launch chevrons, like a real stadium floor.
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + Math.PI / 4;
+        gg.save();
+        gg.rotate(a);
+        gg.strokeStyle = "rgba(150,200,255,0.16)";
+        gg.lineWidth = sc * 2;
+        gg.lineJoin = "round";
+        for (let k = 0; k < 2; k++) {
+          const rr = floorR * (0.60 + k * 0.09);
+          gg.beginPath();
+          gg.moveTo(-floorR * 0.10, rr);
+          gg.lineTo(0, rr - floorR * 0.07);
+          gg.lineTo(floorR * 0.10, rr);
+          gg.stroke();
+        }
+        gg.restore();
+      }
+      gg.restore();
+
+      // Centre sink: the low point of the bowl.
+      const sink = gg.createRadialGradient(0, 0, 0, 0, 0, floorR * 0.34);
+      sink.addColorStop(0, "rgba(80,150,255,0.26)");
+      sink.addColorStop(0.45, "rgba(50,95,200,0.09)");
       sink.addColorStop(1, "rgba(0,0,0,0)");
       gg.fillStyle = sink;
       gg.beginPath();
-      gg.arc(0, 0, rx * 0.3, 0, TAU);
+      gg.arc(0, 0, floorR * 0.34, 0, TAU);
       gg.fill();
 
-      gg.strokeStyle = "rgba(150,200,255,0.28)";
-      gg.lineWidth = sc * 1.4;
+      gg.strokeStyle = "rgba(160,210,255,0.34)";
+      gg.lineWidth = sc * 1.5;
       gg.beginPath();
-      gg.arc(0, 0, rx * 0.1, 0, TAU);
+      gg.arc(0, 0, floorR * 0.105, 0, TAU);
+      gg.stroke();
+      gg.strokeStyle = "rgba(160,210,255,0.16)";
+      gg.lineWidth = sc * 1;
+      gg.beginPath();
+      gg.arc(0, 0, floorR * 0.17, 0, TAU);
       gg.stroke();
 
       gg.restore();
+    }
+
+    /**
+     * Live arena lighting: a slow sheen sweeping the floor, and a colour wash
+     * that flares on impact. Cheap enough to run every frame over the bake.
+     */
+    function drawArenaLive(timeSec) {
+      g.save();
+      g.translate(cx, cy);
+      g.scale(1, SQUASH);
+      g.globalCompositeOperation = "lighter";
+
+      const floorR = S * 1.02;
+      g.beginPath();
+      g.arc(0, 0, floorR, 0, TAU);
+      g.clip();
+
+      // Two soft sheens rotating at different rates.
+      for (let i = 0; i < 2; i++) {
+        const a = timeSec * (0.28 + i * 0.14) + i * 2.1;
+        const sheen = g.createLinearGradient(
+          Math.cos(a) * -floorR, Math.sin(a) * -floorR,
+          Math.cos(a) * floorR, Math.sin(a) * floorR
+        );
+        sheen.addColorStop(0, "rgba(90,160,255,0)");
+        sheen.addColorStop(0.5, "rgba(110,180,255," + (0.05 - i * 0.018).toFixed(3) + ")");
+        sheen.addColorStop(1, "rgba(90,160,255,0)");
+        g.fillStyle = sheen;
+        g.fillRect(-floorR, -floorR, floorR * 2, floorR * 2);
+      }
+
+      // Impact wash, tinted by whatever last clashed.
+      if (arenaGlow > 0.01) {
+        const wash = g.createRadialGradient(0, 0, 0, 0, 0, floorR);
+        wash.addColorStop(0, "hsla(" + arenaHue + ", 95%, 65%, " + (arenaGlow * 0.26).toFixed(3) + ")");
+        wash.addColorStop(1, "hsla(" + arenaHue + ", 95%, 60%, 0)");
+        g.fillStyle = wash;
+        g.fillRect(-floorR, -floorR, floorR * 2, floorR * 2);
+      }
+      g.restore();
+    }
+
+    /**
+     * The hall the stadium sits in. Without this the arena floats on flat
+     * black and the screen reads as empty rather than atmospheric.
+     */
+    function paintBackdrop(gg) {
+      const base = gg.createLinearGradient(0, 0, 0, H);
+      base.addColorStop(0, "#04060e");
+      base.addColorStop(0.42, "#070b18");
+      base.addColorStop(0.72, "#080d1c");
+      base.addColorStop(1, "#030509");
+      gg.fillStyle = base;
+      gg.fillRect(0, 0, W, H);
+
+      // Haze behind the stadium, as if lit from the floor.
+      const haze = gg.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.62);
+      haze.addColorStop(0, "rgba(40,86,180,0.20)");
+      haze.addColorStop(0.42, "rgba(28,56,130,0.09)");
+      haze.addColorStop(1, "rgba(0,0,0,0)");
+      gg.fillStyle = haze;
+      gg.fillRect(0, 0, W, H);
+
+      // Distant gantry lights above and below the bowl, well out of focus.
+      gg.save();
+      gg.globalCompositeOperation = "lighter";
+      const rows = [
+        { y: cy - S * 1.75, n: 9, r: S * 0.30, a: 0.075 },
+        { y: cy - S * 2.35, n: 7, r: S * 0.22, a: 0.045 },
+        { y: cy + S * 1.85, n: 8, r: S * 0.26, a: 0.05 }
+      ];
+      for (const row of rows) {
+        for (let i = 0; i < row.n; i++) {
+          const x = ((i + 0.5) / row.n) * W;
+          const jitter = Math.sin(i * 12.9898 + row.y) * S * 0.06;
+          const gl = gg.createRadialGradient(x + jitter, row.y, 0, x + jitter, row.y, row.r);
+          gl.addColorStop(0, "rgba(120,175,255," + row.a + ")");
+          gl.addColorStop(1, "rgba(90,140,255,0)");
+          gg.fillStyle = gl;
+          gg.beginPath();
+          gg.arc(x + jitter, row.y, row.r, 0, TAU);
+          gg.fill();
+        }
+      }
+      gg.restore();
+
+      // A soft pool of light on the floor the stadium stands on.
+      gg.save();
+      gg.globalCompositeOperation = "lighter";
+      const pool = gg.createRadialGradient(cx, cy + S * 0.30, S * 0.2, cx, cy + S * 0.30, S * 2.1);
+      pool.addColorStop(0, "rgba(48,92,190,0.10)");
+      pool.addColorStop(1, "rgba(0,0,0,0)");
+      gg.fillStyle = pool;
+      gg.fillRect(0, 0, W, H);
+      gg.restore();
+    }
+
+    /** Slow motes drifting through the hall light, for depth. */
+    const motes = [];
+    function seedMotes() {
+      motes.length = 0;
+      const n = 46;
+      for (let i = 0; i < n; i++) {
+        motes.push({
+          x: Math.random(), y: Math.random(),
+          r: rand(0.6, 2.4),
+          sp: rand(0.004, 0.017),
+          drift: rand(-0.006, 0.006),
+          a: rand(0.05, 0.26),
+          hue: rand(195, 225)
+        });
+      }
+    }
+
+    function drawMotes(dt) {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      for (const m of motes) {
+        m.y -= m.sp * dt;
+        m.x += m.drift * dt;
+        if (m.y < -0.05) { m.y = 1.05; m.x = Math.random(); }
+        if (m.x < -0.05) m.x = 1.05;
+        if (m.x > 1.05) m.x = -0.05;
+        g.fillStyle = "hsla(" + m.hue.toFixed(0) + ", 90%, 78%, " + m.a.toFixed(3) + ")";
+        g.beginPath();
+        g.arc(m.x * W, m.y * H, m.r, 0, TAU);
+        g.fill();
+      }
+      g.restore();
     }
 
     function bakeArena() {
@@ -776,6 +1102,7 @@ window.plethoraBit = {
       if (!surf) { arenaSurf = null; return; }
       const gg = surf.getContext("2d");
       gg.scale(sc, sc);
+      paintBackdrop(gg);
       gg.translate(cx, cy);
       paintArena(gg, S, 1);
       arenaSurf = surf;
@@ -789,10 +1116,16 @@ window.plethoraBit = {
     let battleMs = 0;
     let lastHitMs = 0;
 
-    function makeTop(spec, rpm, angle, isPlayer, label) {
+    function makeTop(spec, rpm, angle, isPlayer, label, skill) {
       const r = 0.86;
+      const k = skill || 1;
       return {
         spec: spec,
+        dealMul: k,
+        takeMul: 1 / k,
+        decayMul: 1 / k,
+        aggMul: 0.85 + k * 0.15,
+        focus: Math.random() < 0.55 ? 1 : 0,
         x: Math.cos(angle) * r,
         y: Math.sin(angle) * r,
         vx: -Math.sin(angle) * 0.75,
@@ -868,14 +1201,14 @@ window.plethoraBit = {
         // and letting the aggressive ones wreck each other, which made
         // passivity the dominant strategy. Ganging up on the leader also means
         // a monster launch has to survive being the target.
-        const agg = t.spec.aggression;
+        const agg = t.spec.aggression * t.aggMul;
         let target = null;
         let bestD = 0;
         let bestScore = -Infinity;
         for (const o of live) {
           if (o === t || o.h > 0) continue;
           const d = Math.hypot(o.x - t.x, o.y - t.y);
-          const score = spinNorm(o) * 1.7 - d * 0.55;
+          const score = spinNorm(o) * 1.7 * t.focus - d * 0.55;
           if (score > bestScore) { bestScore = score; target = o; bestD = d; }
         }
         if (target && bestD > 1e-4) {
@@ -902,7 +1235,7 @@ window.plethoraBit = {
 
         // Spin decay: a base burn plus what movement costs.
         const speed = Math.hypot(t.vx, t.vy);
-        const burn = (150 + speed * 52 + t.rpm * 0.009) * t.spec.decay;
+        const burn = (150 + speed * 52 + t.rpm * 0.009) * t.spec.decay * t.decayMul;
         t.rpm = Math.max(0, t.rpm - burn * dt);
 
         // Visual rotation, in radians/sec, damped so it stays readable.
@@ -1009,8 +1342,8 @@ window.plethoraBit = {
       const advA = Math.pow(clamp(sa / sb, 0.2, 5), 0.75);
 
       const baseDrain = impact * 430;
-      const drainB = baseDrain * a.spec.deal * b.spec.take * advA;
-      const drainA = baseDrain * b.spec.deal * a.spec.take / advA;
+      const drainB = baseDrain * a.spec.deal * a.dealMul * b.spec.take * b.takeMul * advA;
+      const drainA = baseDrain * b.spec.deal * b.dealMul * a.spec.take * a.takeMul / advA;
       a.rpm = Math.max(0, a.rpm - drainA);
       b.rpm = Math.max(0, b.rpm - drainB);
 
@@ -1024,6 +1357,8 @@ window.plethoraBit = {
         const my = (a.y + b.y) / 2;
         sparks(mx, my, force, a.spec, b.spec);
         shockwave(mx, my, force);
+        arenaHue = (Math.random() < 0.5 ? a.spec : b.spec).hue2;
+        arenaGlow = Math.min(1, arenaGlow + force * 0.9);
         sfxClash(force);
         shake(force * 17);
         if (force > 0.34) {
@@ -1048,6 +1383,8 @@ window.plethoraBit = {
     const waves = [];
     let shakeAmt = 0;
     let flashAmt = 0;
+    let arenaGlow = 0;      // impact wash strength
+    let arenaHue = 200;     // colour of the last clash
 
     function shake(v) { shakeAmt = Math.min(26, shakeAmt + v); }
     function flash(v) { flashAmt = Math.min(0.75, flashAmt + v); }
@@ -1191,6 +1528,7 @@ window.plethoraBit = {
       }
       shakeAmt *= Math.exp(-7 * dt);
       flashAmt *= Math.exp(-6.5 * dt);
+      arenaGlow *= Math.exp(-3.4 * dt);
     }
 
     /* ============================================================ *
@@ -1203,12 +1541,34 @@ window.plethoraBit = {
       const R = t.spec.radius * S;
       const sn = spinNorm(t);
 
+      // Reflection in the floor, mirrored about the contact point and fading
+      // with distance. Cheap, and it does most of the work of making the bowl
+      // read as a polished surface.
+      const spr0 = getSprites(t.spec, R);
+      if (!spr0.live && t.h < 0.25) {
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.globalAlpha = 0.10 * (1 - t.h * 4) * (0.35 + sn * 0.65);
+        g.translate(cx + t.x * S, cy + t.y * S * SQUASH);
+        g.scale(1, -SQUASH * 0.62);
+        g.rotate(-t.theta);
+        g.drawImage(spr0.blur, -spr0.size / 2, -spr0.size / 2, spr0.size, spr0.size);
+        g.restore();
+      }
+
       // Contact shadow.
       g.save();
-      g.globalAlpha = clamp(0.5 - t.h * 0.5, 0.08, 0.5);
-      g.fillStyle = "rgba(0,0,0,0.62)";
+      g.globalAlpha = clamp(0.62 - t.h * 0.6, 0.08, 0.62);
+      const shR = R * 1.22 * (1 + t.h * 0.5);
+      const shX = cx + t.x * S;
+      const shY = cy + t.y * S * SQUASH;
+      const sh = g.createRadialGradient(shX, shY, 0, shX, shY, shR);
+      sh.addColorStop(0, "rgba(0,0,0,0.72)");
+      sh.addColorStop(0.58, "rgba(0,0,0,0.38)");
+      sh.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = sh;
       g.beginPath();
-      g.ellipse(cx + t.x * S, cy + t.y * S * SQUASH, R * (1 + t.h * 0.5), R * SQUASH * (1 + t.h * 0.5), 0, 0, TAU);
+      g.ellipse(shX, shY, shR, shR * SQUASH, 0, 0, TAU);
       g.fill();
       g.restore();
 
@@ -1216,7 +1576,7 @@ window.plethoraBit = {
       g.save();
       g.globalCompositeOperation = "lighter";
       const pool = g.createRadialGradient(sx, sy, 0, sx, sy, R * 2.6);
-      pool.addColorStop(0, "hsla(" + t.spec.hue2 + ", 95%, 60%, " + (0.20 * (0.3 + sn * 0.7)).toFixed(3) + ")");
+      pool.addColorStop(0, "hsla(" + t.spec.hue2 + ", 95%, 60%, " + (0.12 * (0.3 + sn * 0.7)).toFixed(3) + ")");
       pool.addColorStop(1, "hsla(" + t.spec.hue2 + ", 95%, 60%, 0)");
       g.fillStyle = pool;
       g.beginPath();
@@ -1232,7 +1592,7 @@ window.plethoraBit = {
       const persp = clamp(SQUASH + wob * 0.3 * Math.sin(t.wobblePhase * 0.9), 0.32, 0.95);
 
       const spr = getSprites(t.spec, R);
-      const blurMix = clamp((t.rpm - 1200) / 6200, 0, 1);
+      const blurMix = clamp((t.rpm - 1200) / 6200, 0, 0.70);
 
       g.save();
       g.translate(sx + px, sy + py);
@@ -1248,12 +1608,10 @@ window.plethoraBit = {
         g.save();
         g.scale(1, persp / 1);
         g.rotate(t.theta);
-        if (blurMix < 0.98) {
-          g.globalAlpha = 1 - blurMix;
-          g.drawImage(spr.sharp, -half, -half, spr.size, spr.size);
-        }
+        g.globalAlpha = 1 - blurMix * 0.72;
+        g.drawImage(spr.sharp, -half, -half, spr.size, spr.size);
         if (blurMix > 0.02) {
-          g.globalAlpha = blurMix;
+          g.globalAlpha = blurMix * 0.85;
           g.drawImage(spr.blur, -half, -half, spr.size, spr.size);
         }
         g.globalAlpha = 1;
@@ -1267,7 +1625,7 @@ window.plethoraBit = {
       g.ellipse(0, 0, R, R * persp, 0, 0, TAU);
       g.clip();
       const spec = g.createLinearGradient(-R, -R * persp, R * 0.5, R * persp);
-      spec.addColorStop(0, "rgba(255,255,255,0.30)");
+      spec.addColorStop(0, "rgba(255,255,255,0.22)");
       spec.addColorStop(0.35, "rgba(255,255,255,0.05)");
       spec.addColorStop(1, "rgba(255,255,255,0)");
       g.fillStyle = spec;
@@ -1317,9 +1675,13 @@ window.plethoraBit = {
       const sy = cy - S * 0.05;
 
       g.save();
-      g.fillStyle = "rgba(0,0,0,0.55)";
+      const hsh = g.createRadialGradient(sx, cy + S * 0.02, 0, sx, cy + S * 0.02, R * 1.25);
+      hsh.addColorStop(0, "rgba(0,0,0,0.62)");
+      hsh.addColorStop(0.55, "rgba(0,0,0,0.34)");
+      hsh.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = hsh;
       g.beginPath();
-      g.ellipse(sx, cy + S * 0.02, R * 1.05, R * 1.05 * SQUASH, 0, 0, TAU);
+      g.ellipse(sx, cy + S * 0.02, R * 1.25, R * 1.25 * SQUASH, 0, 0, TAU);
       g.fill();
       g.restore();
 
@@ -1535,7 +1897,7 @@ window.plethoraBit = {
     function drawButtons() {
       // "card" buttons are painted by drawSelect; drawing the generic panel
       // over them would wash out their artwork.
-      for (const b of buttons) if (b.style !== "card") drawButton(b);
+      for (const b of buttons) if (b.style !== "card" && b.style !== "chip") drawButton(b);
     }
 
     /* ============================================================ *
@@ -1544,6 +1906,10 @@ window.plethoraBit = {
 
     let state = "intro";
     let chosen = ARCHETYPES[0];
+    let difficulty = DIFFICULTIES[0];
+    let coachSeen = false;
+    let showCoach = false;
+    let coachMs = 0;
     let introSpin = 0;
     let result = null;
     let resultMs = 0;
@@ -1551,7 +1917,7 @@ window.plethoraBit = {
     let showHelp = false;
     let bestRPM = 0;
     let streak = 0;
-    let bestStreak = 0;
+    let bestScore = 0;
     let music = null;
     let musicOn = false;
     let launchInfo = null;
@@ -1562,6 +1928,8 @@ window.plethoraBit = {
      * nothing, so a bare .catch() on the result took the whole bit down --
      * never assume a runtime call is thenable.
      */
+    function titleCase(t) { return t.charAt(0) + t.slice(1).toLowerCase(); }
+
     function fireAndForget(thunk) {
       try {
         const r = thunk();
@@ -1575,7 +1943,10 @@ window.plethoraBit = {
         const s = await ctx.storage.get("ripcord");
         if (s && typeof s === "object") {
           bestRPM = Number(s.bestRPM) || 0;
-          bestStreak = Number(s.bestStreak) || 0;
+          bestScore = Number(s.bestScore) || 0;
+          coachSeen = !!s.coachSeen;
+          const diff = DIFFICULTIES.find(d => d.id === s.difficulty);
+          if (diff) difficulty = diff;
           const pick = ARCHETYPES.find(a => a.id === s.top);
           if (pick) chosen = pick;
         }
@@ -1586,8 +1957,10 @@ window.plethoraBit = {
       if (!ctx.capabilities || !ctx.capabilities.storage || !ctx.storage) return;
       fireAndForget(() => ctx.storage.set("ripcord", {
         bestRPM: Math.round(bestRPM),
-        bestStreak: bestStreak,
-        top: chosen.id
+        bestScore: bestScore,
+        top: chosen.id,
+        difficulty: difficulty.id,
+        coachSeen: coachSeen
       }));
     }
 
@@ -1636,7 +2009,18 @@ window.plethoraBit = {
       layout();
     }
 
-    async function goCharge() {
+    /** First time through, teach the rip before asking for one. */
+    function goCharge() {
+      if (!coachSeen) {
+        showCoach = true;
+        coachMs = 0;
+        layout();
+        return;
+      }
+      beginCharge();
+    }
+
+    async function beginCharge() {
       state = "charge";
       chargeMs = 0;
       spin.now = 0;
@@ -1670,37 +2054,43 @@ window.plethoraBit = {
         airMs: spin.bestAirMs
       };
 
-      // Draw opponents from all three archetypes, the player's included.
-      // Fielding only the *other* two made the choice unfair: picking Stamina
-      // was the one way to never face a Stamina top, which is exactly the
-      // hardest matchup, so it read as strictly the strongest pick.
-      const shuffled = ARCHETYPES.slice();
+      // Rival field. The pool is every top at or below the difficulty's tier,
+      // the playable three included -- fielding only the *other* archetypes
+      // made picking Stamina the one way to never face a Stamina top, which is
+      // the hardest matchup, so it read as strictly the strongest choice.
+      const diff = difficulty;
+      const pool = ROSTER.filter(t => t.tier <= diff.maxTier);
+      const shuffled = pool.slice();
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         const tmp = shuffled[i];
         shuffled[i] = shuffled[j];
         shuffled[j] = tmp;
       }
-      const oppSpecs = [shuffled[0], shuffled[1]];
+      // Bias the top tier toward the nastiest tops available.
+      if (diff.maxTier >= 2) {
+        shuffled.sort((a, b) => (b.tier - a.tier) * (Math.random() < 0.62 ? 1 : -1));
+      }
 
       tops = [];
-      tops.push(makeTop(chosen, rpm, -Math.PI / 2, true, "YOU"));
-      for (let i = 0; i < 2; i++) {
-        const spec = oppSpecs[i % oppSpecs.length];
-        // Opponents scale off the rip, so how hard you spun is the dominant
-        // term in whether you can win -- the whole point of the mechanic. The
-        // elite roll seeds the occasional monster, so a huge rip is a strong
-        // favourite rather than a formality.
+      tops.push(makeTop(chosen, rpm, -Math.PI / 2, true, "YOU", 1));
+      const n = diff.opps;
+      for (let i = 0; i < n; i++) {
+        const spec = shuffled[i % shuffled.length];
+        // Rivals scale off the rip, so how hard you spun is the dominant term
+        // in whether you can win -- the whole point of the mechanic. The
+        // variance roll seeds the occasional monster (and the occasional weak
+        // field), so a huge rip is a strong favourite rather than a formality.
         const roll = Math.random();
         const variance = roll < 0.26 ? rand(1.15, 1.45)
           : roll > 0.78 ? rand(0.60, 0.84)
           : 1;
         const oppRPM = clamp(
-          lerp(3600, 9200, Math.random()) * (0.72 + power * 0.5) * variance,
+          lerp(3600, 9200, Math.random()) * (0.72 + power * 0.5) * variance * diff.rpmMul,
           MIN_RPM, MAX_RPM
         );
-        const ang = -Math.PI / 2 + (i === 0 ? TAU / 3 : -TAU / 3);
-        tops.push(makeTop(spec, oppRPM, ang, false, spec.name));
+        const ang = -Math.PI / 2 + ((i + 1) / (n + 1)) * TAU;
+        tops.push(makeTop(spec, oppRPM, ang, false, spec.name, diff.skill));
       }
       for (const t of tops) t.h = 0.55 + Math.random() * 0.12;
 
@@ -1724,9 +2114,13 @@ window.plethoraBit = {
       for (const t of tops) killWhirr(t);
       if (win) {
         streak += 1;
-        if (streak > bestStreak) {
-          bestStreak = streak;
-          submitRecord("win_streak", bestStreak, bestStreak + " in a row");
+        // Weighted by difficulty, so a Rookie streak cannot outrank a
+        // Legend one. Tracked as the score itself, not the raw streak, or
+        // re-weighting an old Rookie run would inflate it.
+        const score = streak * difficulty.weight;
+        if (score > bestScore) {
+          bestScore = score;
+          submitRecord("win_streak", score, streak + " on " + titleCase(difficulty.name));
         }
         sting("win");
         haptic("success");
@@ -1768,6 +2162,16 @@ window.plethoraBit = {
       const bh = clamp(H * 0.068, 46, 60);
       const bottom = H - safeBottom() - bh - clamp(H * 0.035, 16, 34);
 
+      if (showCoach) {
+        addButton("coachgo", "GOT IT \u2014 LET'S RIP", (W - bw) / 2, bottom, bw, bh, () => {
+          showCoach = false;
+          coachSeen = true;
+          save();
+          beginCharge();
+        });
+        return;
+      }
+
       if (showHelp) {
         addButton("close", "GOT IT", (W - bw) / 2, bottom, bw, bh, () => {
           showHelp = false;
@@ -1789,9 +2193,15 @@ window.plethoraBit = {
           goSelect();
         });
       } else if (state === "select") {
-        const cardH = clamp(H * 0.11, 74, 104);
-        const gap = clamp(H * 0.018, 8, 16);
-        const top = cy - (cardH * 3 + gap * 2) / 2 + clamp(H * 0.03, 10, 30);
+        // Cards, then a difficulty row, then the launch button -- one screen,
+        // so choosing a tier never costs an extra step.
+        const cardH = clamp(H * 0.105, 70, 98);
+        const gap = clamp(H * 0.016, 7, 14);
+        const chipH = clamp(H * 0.058, 40, 52);
+        const blockH = cardH * 3 + gap * 2 + chipH + bh + clamp(H * 0.075, 44, 74);
+        const top = clamp(cy - blockH / 2 + clamp(H * 0.05, 18, 42),
+                          safeTop() + clamp(H * 0.11, 78, 118), H);
+
         for (let i = 0; i < ARCHETYPES.length; i++) {
           const a = ARCHETYPES[i];
           const y = top + i * (cardH + gap);
@@ -1799,9 +2209,27 @@ window.plethoraBit = {
             chosen = a;
             save();
             haptic("light");
-            goCharge();
+            layout();
           }, "card");
         }
+
+        const chipY = top + 3 * (cardH + gap) + clamp(H * 0.035, 22, 38);
+        const chipGap = 7;
+        const chipW = (W * 0.84 - chipGap * 3) / 4;
+        for (let i = 0; i < DIFFICULTIES.length; i++) {
+          const d = DIFFICULTIES[i];
+          addButton("diff_" + d.id, "", W * 0.08 + i * (chipW + chipGap), chipY, chipW, chipH, () => {
+            difficulty = d;
+            save();
+            haptic("light");
+            layout();
+          }, "chip");
+        }
+
+        addButton("go", "RIP", (W - bw) / 2, chipY + chipH + clamp(H * 0.028, 16, 30), bw, bh, () => {
+          haptic("medium");
+          goCharge();
+        });
       } else if (state === "charge") {
         if (spin.denied || (chargeMs > 7000 && !spin.live)) {
           // No usable motion: hand them a swipe ripcord instead.
@@ -1979,6 +2407,61 @@ window.plethoraBit = {
         g.fillText(a.blurb, tx, b.y + b.h * 0.82);
         g.restore();
       }
+
+      /* --- difficulty row --- */
+      const chips = buttons.filter(b => b.style === "chip");
+      if (!chips.length) return;
+
+      g.save();
+      g.textAlign = "left";
+      g.font = UI.mono(Math.min(W * 0.028, 11), 800);
+      g.fillStyle = "rgba(150,190,235,0.7)";
+      g.fillText("DIFFICULTY", W * 0.08, chips[0].y - clamp(H * 0.014, 9, 15));
+
+      for (const b of chips) {
+        const d = DIFFICULTIES.find(x => "diff_" + x.id === b.id);
+        if (!d) continue;
+        const on = d.id === difficulty.id;
+
+        const grad = g.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
+        grad.addColorStop(0, "hsla(" + d.hue + ", 70%, " + (on ? 34 : 15) + "%, " + (on ? 0.98 : 0.55) + ")");
+        grad.addColorStop(1, "hsla(" + d.hue + ", 65%, " + (on ? 20 : 9) + "%, " + (on ? 0.98 : 0.5) + ")");
+        g.fillStyle = grad;
+        roundRect(g, b.x, b.y, b.w, b.h, 12);
+        g.fill();
+        g.strokeStyle = on
+          ? "hsla(" + d.hue + ", 95%, 70%, 0.95)"
+          : "rgba(140,180,235,0.20)";
+        g.lineWidth = on ? 2 : 1.1;
+        g.stroke();
+
+        // Difficulty reads as filled pips, so the ladder is visible at a glance.
+        const pips = DIFFICULTIES.indexOf(d) + 1;
+        const pipR = Math.max(1.6, b.w * 0.026);
+        const pipGap = pipR * 2.9;
+        const px0 = b.x + b.w / 2 - (pipGap * (DIFFICULTIES.length - 1)) / 2;
+        for (let k = 0; k < DIFFICULTIES.length; k++) {
+          g.beginPath();
+          g.arc(px0 + k * pipGap, b.y + b.h * 0.70, pipR, 0, TAU);
+          g.fillStyle = k < pips
+            ? (on ? "hsla(" + d.hue + ", 95%, 76%, 0.98)" : "rgba(160,195,240,0.55)")
+            : "rgba(255,255,255,0.11)";
+          g.fill();
+        }
+
+        g.textAlign = "center";
+        fitFont(d.name, b.w - 8, Math.min(b.h * 0.28, 13), 800);
+        g.fillStyle = on ? "#f2f8ff" : "rgba(196,216,242,0.72)";
+        g.fillText(d.name, b.x + b.w / 2, b.y + b.h * 0.42);
+      }
+
+      // One line describing the selected tier.
+      g.textAlign = "center";
+      const last = chips[chips.length - 1];
+      fitFont(difficulty.blurb, W * 0.84, Math.min(W * 0.033, 13), 500);
+      g.fillStyle = "hsla(" + difficulty.hue + ", 85%, 74%, 0.92)";
+      g.fillText(difficulty.blurb, cx, last.y + last.h + clamp(H * 0.021, 14, 22));
+      g.restore();
     }
 
     function drawGauge() {
@@ -2144,22 +2627,29 @@ window.plethoraBit = {
     function drawBattleHud() {
       const pad = clamp(W * 0.045, 14, 26);
       const top = safeTop() + clamp(H * 0.012, 6, 16);
-      const barW = (W - pad * 2 - 16 - 62) / 3;
+      const n = Math.max(1, tops.length);
+      // Column count is however many tops are in the stadium -- three rivals at
+      // the top tiers means four columns, and the right-hand one must stay
+      // clear of the help button.
+      const gapX = n > 3 ? 6 : 8;
+      const barW = (W - pad * 2 - gapX * (n - 1) - 62) / n;
       const barH = clamp(H * 0.008, 5, 8);
+      const nameSize = Math.min(W * (n > 3 ? 0.024 : 0.027), 10.5);
+      const numSize = Math.min(W * (n > 3 ? 0.023 : 0.026), 10);
 
       for (let i = 0; i < tops.length; i++) {
         const t = tops[i];
-        const x = pad + i * (barW + 8);
+        const x = pad + i * (barW + gapX);
         const y = top + 26;
 
         g.save();
         g.textAlign = "left";
         g.textBaseline = "alphabetic";
-        g.font = UI.mono(Math.min(W * 0.027, 10.5), 800);
         g.fillStyle = t.alive
           ? "hsla(" + t.spec.hue2 + ", 95%, 75%, 0.95)"
           : "rgba(120,140,170,0.5)";
-        const name = t.isPlayer ? "YOU" : t.spec.name;
+        const name = t.isPlayer ? "YOU" : (t.spec.short || t.spec.name);
+        fitFont(name, barW, nameSize, 800, true);
         g.fillText(name, x, y - 7);
 
         g.fillStyle = "rgba(255,255,255,0.08)";
@@ -2175,25 +2665,30 @@ window.plethoraBit = {
           roundRect(g, x, y, Math.max(barH, barW * frac), barH, barH / 2);
           g.fill();
 
-          g.font = UI.mono(Math.min(W * 0.026, 10), 700);
+          g.font = UI.mono(numSize, 700);
           g.fillStyle = "rgba(200,225,255,0.7)";
           g.fillText(Math.round(t.rpm).toLocaleString(), x, y + barH + 12);
         } else {
-          g.font = UI.mono(Math.min(W * 0.026, 10), 700);
+          const dead = t.out ? "RING OUT" : "SPUN OUT";
+          fitFont(dead, barW, numSize, 700, true);
           g.fillStyle = "rgba(255,120,140,0.75)";
-          g.fillText(t.out ? "RING OUT" : "SPUN OUT", x, y + barH + 12);
+          g.fillText(dead, x, y + barH + 12);
         }
         g.restore();
       }
 
+      g.save();
+      g.textAlign = "left";
+      g.font = UI.mono(Math.min(W * 0.028, 11), 800);
+      const badgeY = top + 26 + barH + 34;
+      g.fillStyle = "hsla(" + difficulty.hue + ", 90%, 72%, 0.9)";
+      g.fillText(difficulty.name, pad, badgeY);
       if (streak > 0) {
-        g.save();
-        g.textAlign = "left";
-        g.font = UI.mono(Math.min(W * 0.03, 12), 800);
+        const dw = g.measureText(difficulty.name).width;
         g.fillStyle = "rgba(255,215,120,0.9)";
-        g.fillText("STREAK " + streak, pad, top + 26 + barH + 34);
-        g.restore();
+        g.fillText("STREAK " + streak, pad + dw + 14, badgeY);
       }
+      g.restore();
     }
 
     function drawResult() {
@@ -2242,6 +2737,160 @@ window.plethoraBit = {
           g.fillStyle = "rgba(255,205,120,0.85)";
           g.fillText("AIRBORNE " + (launchInfo.airMs / 1000).toFixed(2) + "s", cx, y + 18);
         }
+      }
+      g.restore();
+    }
+
+    /**
+     * Shown once, before the very first rip. A still diagram does not explain
+     * a wrist snap, so the phone actually performs the motion on a loop.
+     */
+    function drawCoach() {
+      g.save();
+      g.fillStyle = "#040916";
+      g.fillRect(0, 0, W, H);
+
+      const t = coachMs / 1000;
+      // One snap per 1.9s: wind back slowly, whip through, settle.
+      const cycle = (t % 1.9) / 1.9;
+      let turn;
+      if (cycle < 0.34) turn = -0.30 * (cycle / 0.34);
+      else if (cycle < 0.52) turn = lerp(-0.30, 1.65, easeOut((cycle - 0.34) / 0.18));
+      else turn = 1.65 * Math.exp(-(cycle - 0.52) * 7) * Math.cos((cycle - 0.52) * 26);
+      const whipping = cycle >= 0.34 && cycle < 0.62;
+
+      g.textAlign = "center";
+      const headY = safeTop() + clamp(H * 0.085, 62, 96);
+      g.font = UI.font(Math.min(W * 0.082, 35), 800);
+      g.fillStyle = "#eef6ff";
+      g.fillText("HOW TO RIP", cx, headY);
+
+      fitFont("Your phone is the ripcord.", W * 0.84, Math.min(W * 0.042, 17), 600);
+      g.fillStyle = "rgba(170,205,245,0.9)";
+      g.fillText("Your phone is the ripcord.", cx, headY + clamp(W * 0.07, 26, 34));
+
+      /* --- the animated phone --- */
+      const px = cx;
+      const py = cy - clamp(H * 0.10, 34, 96);
+      const ph = clamp(Math.min(W * 0.40, H * 0.20), 108, 190);
+      const pw = ph * 0.49;
+
+      // Motion arcs sweeping through the turn.
+      g.save();
+      g.translate(px, py);
+      g.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 3; i++) {
+        const r = ph * (0.62 + i * 0.17);
+        const a0 = -0.35;
+        const a1 = a0 + turn;
+        const alpha = (whipping ? 0.80 : 0.26) * (1 - i * 0.22);
+        g.strokeStyle = "rgba(130,205,255," + alpha.toFixed(3) + ")";
+        g.lineWidth = (whipping ? 7 : 3) - i * 0.7;
+        g.lineCap = "round";
+        g.beginPath();
+        g.arc(0, 0, r, Math.min(a0, a1) - Math.PI / 2, Math.max(a0, a1) - Math.PI / 2);
+        g.stroke();
+
+        // Arrow head at the leading edge of the sweep.
+        if (whipping) {
+          const ah = Math.max(a0, a1) - Math.PI / 2;
+          const hx = Math.cos(ah) * r;
+          const hy = Math.sin(ah) * r;
+          g.fillStyle = "rgba(190,235,255," + (alpha * 1.6).toFixed(3) + ")";
+          g.save();
+          g.translate(hx, hy);
+          g.rotate(ah + Math.PI / 2);
+          const ah2 = ph * 0.075;
+          g.beginPath();
+          g.moveTo(0, -ah2);
+          g.lineTo(ah2 * 0.85, ah2 * 0.6);
+          g.lineTo(-ah2 * 0.85, ah2 * 0.6);
+          g.closePath();
+          g.fill();
+          g.restore();
+        }
+      }
+      g.restore();
+
+      // The phone itself.
+      g.save();
+      g.translate(px, py);
+      g.rotate(turn);
+
+      g.fillStyle = "rgba(0,0,0,0.5)";
+      roundRect(g, -pw / 2 + 3, -ph / 2 + 5, pw, ph, pw * 0.20);
+      g.fill();
+
+      const body = g.createLinearGradient(-pw / 2, -ph / 2, pw / 2, ph / 2);
+      body.addColorStop(0, "#2b3450");
+      body.addColorStop(0.5, "#151c2e");
+      body.addColorStop(1, "#333e5e");
+      g.fillStyle = body;
+      roundRect(g, -pw / 2, -ph / 2, pw, ph, pw * 0.20);
+      g.fill();
+      g.strokeStyle = "rgba(160,200,255,0.55)";
+      g.lineWidth = 1.6;
+      g.stroke();
+
+      // Screen, lit brighter through the whip.
+      const scr = g.createLinearGradient(0, -ph / 2, 0, ph / 2);
+      const lit = whipping ? 1 : 0.55;
+      scr.addColorStop(0, "rgba(120,205,255," + (0.55 * lit).toFixed(2) + ")");
+      scr.addColorStop(1, "rgba(60,120,255," + (0.30 * lit).toFixed(2) + ")");
+      g.fillStyle = scr;
+      roundRect(g, -pw / 2 + pw * 0.11, -ph / 2 + pw * 0.15, pw * 0.78, ph - pw * 0.30, pw * 0.11);
+      g.fill();
+
+      // A little top spinning on the screen.
+      g.save();
+      g.translate(0, ph * 0.02);
+      g.rotate(-turn + introSpin * 3);
+      const spr = getSprites(chosen, pw * 0.26);
+      if (spr.live) {
+        paintTop(g, chosen, pw * 0.26, 0.9);
+      } else {
+        g.drawImage(spr.blur, -spr.size / 2, -spr.size / 2, spr.size, spr.size);
+      }
+      g.restore();
+      g.restore();
+
+      // Label the motion so the diagram is unambiguous.
+      g.textAlign = "center";
+      g.font = UI.mono(Math.min(W * 0.034, 13.5), 800);
+      g.fillStyle = whipping ? "rgba(190,240,255,0.95)" : "rgba(130,175,225,0.55)";
+      g.fillText(whipping ? "SNAP!" : "wind up", px, py + ph * 0.72);
+
+      /* --- the words --- */
+      const lines = [
+        ["1", "Hold it flat, like a paper plane."],
+        ["2", "Snap your wrist hard \u2014 jerk the phone round fast, then stop."],
+        ["3", "The faster that snap, the faster your top spins."],
+        ["4", "You never have to let go. Throwing it works, but is not needed."]
+      ];
+      let y = py + ph * 0.72 + clamp(H * 0.055, 34, 66);
+      const pad = clamp(W * 0.09, 24, 44);
+      g.textAlign = "left";
+      for (const [n, text] of lines) {
+        g.font = UI.mono(Math.min(W * 0.033, 13), 800);
+        g.fillStyle = "rgba(120,205,255,0.95)";
+        g.fillText(n, pad, y);
+
+        g.font = UI.font(Math.min(W * 0.037, 15), 500);
+        g.fillStyle = "rgba(206,226,250,0.94)";
+        const maxW = W - pad * 2 - 22;
+        let line = "";
+        for (const word of text.split(" ")) {
+          const test = line ? line + " " + word : word;
+          if (g.measureText(test).width > maxW && line) {
+            g.fillText(line, pad + 22, y);
+            y += clamp(H * 0.024, 17, 22);
+            line = word;
+          } else {
+            line = test;
+          }
+        }
+        if (line) { g.fillText(line, pad + 22, y); y += clamp(H * 0.024, 17, 22); }
+        y += clamp(H * 0.013, 7, 13);
       }
       g.restore();
     }
@@ -2320,18 +2969,23 @@ window.plethoraBit = {
       W = nw;
       H = nh;
       cx = W / 2;
-      cy = H * 0.52;
-      S = Math.min(W * 0.405, H * 0.315);
+      cy = H * 0.54;
+      S = Math.min(W * 0.42, H * 0.285);
       spriteCache.clear();
       arenaSurf = null;
+      if (!motes.length) seedMotes();
       bakeArena();
       layout();
     }
+
+    let clockSec = 0;
 
     function frame(dtMs) {
       const dt = clamp(dtMs / 1000, 0, 1 / 24);
       resize();
 
+      clockSec += dt;
+      const timeSec = clockSec;
       introSpin += dt * 1.6;
 
       if (state === "charge") {
@@ -2366,6 +3020,7 @@ window.plethoraBit = {
       }
 
       if (state === "result") resultMs += dtMs;
+      if (showCoach) coachMs += dtMs;
 
       stepFx(dt);
 
@@ -2375,15 +3030,15 @@ window.plethoraBit = {
         g.translate(rand(-shakeAmt, shakeAmt), rand(-shakeAmt, shakeAmt) * SQUASH);
       }
 
-      // Backdrop.
-      const bg = g.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, "#05070f");
-      bg.addColorStop(0.55, "#070c1c");
-      bg.addColorStop(1, "#03050c");
-      g.fillStyle = bg;
-      g.fillRect(-40, -40, W + 80, H + 80);
+      if (!arenaSurf) {
+        // No OffscreenCanvas: paint a plain ground so nothing shows through.
+        g.fillStyle = "#05070f";
+        g.fillRect(-40, -40, W + 80, H + 80);
+      }
 
       drawArena();
+      drawMotes(dtMs / 16.7);
+      drawArenaLive(timeSec);
       if (state === "intro") drawHero();
       drawTrails();
 
@@ -2412,7 +3067,8 @@ window.plethoraBit = {
       else if (state === "battle") drawBattleHud();
       else if (state === "result") { drawBattleHud(); drawResult(); }
 
-      if (showHelp) drawHelp();
+      if (showCoach) drawCoach();
+      else if (showHelp) drawHelp();
       drawButtons();
     }
 
@@ -2422,8 +3078,8 @@ window.plethoraBit = {
 
     await loadSaved();
     resize();
-    cy = H * 0.52;
-    S = Math.min(W * 0.405, H * 0.315);
+    cy = H * 0.54;
+    S = Math.min(W * 0.42, H * 0.285);
     bakeArena();
     layout();
 
