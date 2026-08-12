@@ -517,17 +517,91 @@ window.plethoraBit = {
 
       let w = 0, h = 0;
       let A = null, B = null, A2 = null, B2 = null;
-      let img = null, buf = null, off = null, offCtx = null;
+      // The grid is upscaled straight into one ImageData sized to the canvas
+      // backing store — putImageData ignores the transform, so no second
+      // canvas is needed and none may be created outside the ctx surfaces.
+      let img = null, buf = null, xMap = null, dw = 0, dh = 0;
+      let cell = null;
+      const lutR = new Float32Array(256);
+      const lutG = new Float32Array(256);
+      const lutB = new Float32Array(256);
+      let lutFor = -1;
 
       function allocate(nw, nh) {
         w = nw; h = nh;
         A = new Float32Array(w * h); B = new Float32Array(w * h);
         A2 = new Float32Array(w * h); B2 = new Float32Array(w * h);
-        off = document.createElement("canvas");
-        off.width = w; off.height = h;
-        offCtx = off.getContext("2d");
-        img = offCtx.createImageData(w, h);
+        cell = new Uint32Array(w * h);
+        dw = 0; // force the output buffer and x-map to be rebuilt for this grid
+        sizeOutput();
+      }
+
+      // Run the fallback at CSS resolution: the per-pixel loop is JavaScript,
+      // and a soft upscale costs far less than a DPR-sized buffer.
+      function sizeOutput() {
+        const nw = Math.max(1, Math.round(ctx.width));
+        const nh = Math.max(1, Math.round(ctx.height));
+        if (nw === dw && nh === dh && img) return;
+        dw = nw; dh = nh;
+        if (c2.width !== dw || c2.height !== dh) {
+          c2.width = dw;
+          c2.height = dh;
+        }
+        img = g2.createImageData(dw, dh);
         buf = new Uint32Array(img.data.buffer);
+        xMap = new Int32Array(dw);
+        for (let x = 0; x < dw; x++) xMap[x] = Math.min(w - 1, (x * w / dw) | 0);
+      }
+
+      // Ramp lookup shared with the shader's palette(): sampling it by index
+      // keeps the per-cell shading free of trigonometry.
+      function buildLut() {
+        const pal = PALETTES[state.palette];
+        for (let i = 0; i < 256; i++) {
+          const t = i / 255;
+          lutR[i] = pal.a[0] + pal.b[0] * Math.cos(6.2832 * (pal.c[0] * t + pal.d[0]));
+          lutG[i] = pal.a[1] + pal.b[1] * Math.cos(6.2832 * (pal.c[1] * t + pal.d[1]));
+          lutB[i] = pal.a[2] + pal.b[2] * Math.cos(6.2832 * (pal.c[2] * t + pal.d[2]));
+        }
+        lutFor = state.palette;
+      }
+
+      function smoothstep(e0, e1, x) {
+        const t = clamp01((x - e0) / (e1 - e0));
+        return t * t * (3 - 2 * t);
+      }
+
+      // Shade at grid resolution — a few thousand cells — then the upscale is
+      // a plain copy. Mirrors the display shader minus the specular term.
+      function shade() {
+        const pal = PALETTES[state.palette];
+        const g0 = pal.ground[0], g1 = pal.ground[1], g2c = pal.ground[2];
+        for (let y = 0; y < h; y++) {
+          const up = ((y - 1 + h) % h) * w;
+          const dn = ((y + 1) % h) * w;
+          const row = y * w;
+          for (let x = 0; x < w; x++) {
+            const i = row + x;
+            const b = B[i];
+            const hh = smoothstep(0.015, 0.32, b);
+            const gx = (B[row + ((x + 1) % w)] - B[row + ((x - 1 + w) % w)]) * 0.5;
+            const gy = (B[up + x] - B[dn + x]) * 0.5; // +y points up the screen
+            const nx = -gx * 26, ny = -gy * 26;
+            const inv = 1 / Math.sqrt(nx * nx + ny * ny + 1);
+            const dif = Math.max(0, (nx * -0.42 + ny * 0.66 + 0.62) * inv);
+
+            let t = hh * 0.72 + Math.sqrt(gx * gx + gy * gy) * 1.6;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            const li = (t * 255) | 0;
+            const lit = 0.26 + 0.9 * dif;
+            const mixv = smoothstep(0, 0.1, b) * 0.92 + 0.08;
+
+            const r = clamp255((g0 + (lutR[li] * lit - g0) * mixv) * 255);
+            const g = clamp255((g1 + (lutG[li] * lit - g1) * mixv) * 255);
+            const bl = clamp255((g2c + (lutB[li] * lit - g2c) * mixv) * 255);
+            cell[i] = (255 << 24) | (bl << 16) | (g << 8) | r;
+          }
+        }
       }
 
       function idx(x, y) {
@@ -584,16 +658,15 @@ window.plethoraBit = {
         },
 
         render() {
-          const pal = PALETTES[state.palette];
-          for (let i = 0; i < w * h; i++) {
-            const t = Math.min(1, B[i] * 3.2);
-            const r = clamp255((pal.ground[0] + (pal.a[0] + pal.b[0] * Math.cos(6.2832 * (t + pal.d[0]))) * t) * 255);
-            const g = clamp255((pal.ground[1] + (pal.a[1] + pal.b[1] * Math.cos(6.2832 * (t + pal.d[1]))) * t) * 255);
-            const b = clamp255((pal.ground[2] + (pal.a[2] + pal.b[2] * Math.cos(6.2832 * (t + pal.d[2]))) * t) * 255);
-            buf[i] = (255 << 24) | (b << 16) | (g << 8) | r;
+          sizeOutput();
+          if (lutFor !== state.palette) buildLut();
+          shade();
+          for (let y = 0; y < dh; y++) {
+            const row = Math.min(h - 1, (y * h / dh) | 0) * w;
+            const out = y * dw;
+            for (let x = 0; x < dw; x++) buf[out + x] = cell[row + xMap[x]];
           }
-          offCtx.putImageData(img, 0, 0);
-          g2.drawImage(off, 0, 0, ctx.width, ctx.height);
+          g2.putImageData(img, 0, 0);
         },
 
         measure() {
