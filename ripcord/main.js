@@ -489,6 +489,122 @@ window.plethoraBit = {
      *   burst - radial nova, drain and a hard shove that scales with range
      *   zone  - a lingering field that drains and slows whatever stands in it
      */
+    /* ---------------- the forge ---------------- */
+
+    /**
+     * Abilities are built from parts. Rivals carry fixed loadouts (below);
+     * you can run a preset or spend a budget of sparks on your own.
+     *
+     * Core and element are free -- they pick the shape and the colour. The
+     * budget goes on how hard it hits, how far it reaches, how often it comes
+     * back, and up to two riders. Six sparks buys one savage power OR a pair
+     * of cheaper riders, which is the whole trade.
+     */
+    const FORGE_BUDGET = 6;
+
+    const FORGE = {
+      core: [
+        { id: "bolt",  label: "BOLT",  cost: 0, blurb: "forks to the two nearest" },
+        { id: "burst", label: "NOVA",  cost: 0, blurb: "radial blast, falls off with range" },
+        { id: "zone",  label: "FIELD", cost: 0, blurb: "lingering pool that drains and slows" }
+      ],
+      element: [
+        { id: "storm", label: "STORM", hue: 196 },
+        { id: "fire",  label: "FIRE",  hue: 20 },
+        { id: "frost", label: "FROST", hue: 188 },
+        { id: "gale",  label: "GALE",  hue: 150 },
+        { id: "venom", label: "VENOM", hue: 92 },
+        { id: "tide",  label: "TIDE",  hue: 205 }
+      ],
+      power: [
+        { id: "light",  label: "LIGHT",  cost: 0, drain: 820,  shove: 1.0 },
+        { id: "heavy",  label: "HEAVY",  cost: 2, drain: 1450, shove: 1.9 },
+        { id: "savage", label: "SAVAGE", cost: 4, drain: 2150, shove: 2.7 }
+      ],
+      reach: [
+        { id: "near", label: "NEAR", cost: 0, reach: 0.44 },
+        { id: "mid",  label: "MID",  cost: 1, reach: 0.60 },
+        { id: "far",  label: "FAR",  cost: 2, reach: 0.80 }
+      ],
+      charge: [
+        { id: "slow",   label: "SLOW",   cost: 0, cool: 12500 },
+        { id: "steady", label: "STEADY", cost: 1, cool: 9000 },
+        { id: "rapid",  label: "RAPID",  cost: 3, cool: 6000 }
+      ],
+      rider: [
+        { id: "burn",   label: "BURN",   cost: 2, blurb: "leaves a burn ticking" },
+        { id: "chill",  label: "CHILL",  cost: 2, blurb: "drags the target down" },
+        { id: "launch", label: "LAUNCH", cost: 2, blurb: "much harder shove" },
+        { id: "siphon", label: "SIPHON", cost: 3, blurb: "returns spin to you" },
+        { id: "pierce", label: "PIERCE", cost: 2, blurb: "ignores their defence" }
+      ]
+    };
+
+    function forgePart(slot, id) {
+      const list = FORGE[slot];
+      for (const part of list) if (part.id === id) return part;
+      return list[0];
+    }
+
+    /** What a loadout costs in sparks. Core and element are free. */
+    function forgeCost(build) {
+      let spent = forgePart("power", build.power).cost
+        + forgePart("reach", build.reach).cost
+        + forgePart("charge", build.charge).cost;
+      for (const rid of build.riders) spent += forgePart("rider", rid).cost;
+      return spent;
+    }
+
+    /** Turn a loadout into the runtime shape castSpecial expects. */
+    function resolveBuild(build) {
+      const core = forgePart("core", build.core);
+      const elem = forgePart("element", build.element);
+      const pow = forgePart("power", build.power);
+      const rng = forgePart("reach", build.reach);
+      const chg = forgePart("charge", build.charge);
+      const riders = build.riders.slice();
+      return {
+        label: elem.label,
+        hue: elem.hue,
+        kind: core.id,
+        reach: rng.reach,
+        drain: pow.drain * (core.id === "zone" ? 0.72 : 1),
+        shove: pow.shove * (riders.indexOf("launch") >= 0 ? 2.3 : 1) * (core.id === "zone" ? 0.2 : 1),
+        cool: chg.cool,
+        hold: core.id === "zone" ? 3400 : 0,
+        riders: riders
+      };
+    }
+
+    /** Ready-made loadouts for anyone who does not want to build one. */
+    const ABILITY_PRESETS = [
+      {
+        id: "wildfire", name: "WILDFIRE",
+        build: { core: "burst", element: "fire", power: "heavy", reach: "mid", charge: "steady", riders: ["burn"] }
+      },
+      {
+        id: "stormbreaker", name: "STORMBREAKER",
+        build: { core: "bolt", element: "storm", power: "savage", reach: "mid", charge: "slow", riders: [] }
+      },
+      {
+        id: "glacier", name: "GLACIER",
+        build: { core: "zone", element: "frost", power: "light", reach: "near", charge: "steady", riders: ["chill", "siphon"] }
+      }
+    ];
+
+    function cloneBuild(b) {
+      return {
+        core: b.core, element: b.element, power: b.power,
+        reach: b.reach, charge: b.charge, riders: b.riders.slice()
+      };
+    }
+
+    // The ability you actually take into the stadium. Starts on a preset; the
+    // forge edits this directly. Declared after the presets it reads from.
+    let myBuild = cloneBuild(ABILITY_PRESETS[0].build);
+    let showForge = false;
+    let forgeMs = 0;
+
     const ELEMENTS = {
       storm:  { label: "STORM",  hue: 196, kind: "bolt",  reach: 0.70, drain: 1450, shove: 1.1, cool: 8500,  hold: 0 },
       fire:   { label: "FIRE",   hue: 20,  kind: "burst", reach: 0.56, drain: 1600, shove: 2.4, cool: 9500,  hold: 0 },
@@ -1443,7 +1559,10 @@ window.plethoraBit = {
     const zones = [];      // lingering fields
 
     function elementOf(t) {
-      return ELEMENTS[t.spec.element] || ELEMENTS.storm;
+      if (t.isPlayer) return resolveBuild(myBuild);
+      const native = ELEMENTS[t.spec.element] || ELEMENTS.storm;
+      if (!native.riders) native.riders = [];
+      return native;
     }
 
     /** True when a top has a target worth spending a charge on. */
@@ -1470,11 +1589,24 @@ window.plethoraBit = {
       }
       hitList.sort((m, n) => m.dist - n.dist);
 
+      const riders = el.riders || [];
+      const pierces = riders.indexOf("pierce") >= 0;
+      const burns = riders.indexOf("burn") >= 0;
+      const chills = riders.indexOf("chill") >= 0;
+      const siphons = riders.indexOf("siphon") >= 0;
+      // PIERCE ignores the target's defence entirely.
+      const soak = victim => (pierces ? 1 : victim.takeMul);
+      let siphoned = 0;
+
       if (el.kind === "bolt") {
         // Forks to the two nearest rivals: big drain, modest shove.
         for (const hit of hitList.slice(0, 2)) {
           const victim = hit.top;
-          victim.rpm = Math.max(0, victim.rpm - el.drain * power * victim.takeMul);
+          const dealt = el.drain * power * soak(victim);
+          siphoned += dealt;
+          victim.rpm = Math.max(0, victim.rpm - dealt);
+          if (burns) victim.burn = Math.max(victim.burn, 240 * power);
+          if (chills) victim.chill = Math.min(1, victim.chill + 0.75);
           const bx = victim.x - caster.x, by = victim.y - caster.y;
           const bl = Math.hypot(bx, by) || 1;
           victim.vx += (bx / bl) * el.shove * power;
@@ -1489,13 +1621,17 @@ window.plethoraBit = {
         for (const hit of hitList) {
           const victim = hit.top;
           const falloff = 1 - clamp(hit.dist / el.reach, 0, 1);
-          victim.rpm = Math.max(0, victim.rpm - el.drain * power * falloff * victim.takeMul);
+          const dealt = el.drain * power * falloff * soak(victim);
+          siphoned += dealt;
+          victim.rpm = Math.max(0, victim.rpm - dealt);
+          if (burns) victim.burn = Math.max(victim.burn, 240 * power * falloff);
+          if (chills) victim.chill = Math.min(1, victim.chill + 0.7 * falloff);
           const bx = victim.x - caster.x, by = victim.y - caster.y;
           const bl = Math.hypot(bx, by) || 1;
           victim.vx += (bx / bl) * el.shove * power * falloff;
           victim.vy += (by / bl) * el.shove * power * falloff;
           victim.hitFlash = 1;
-          if (el.hold === 0 && el.label === "FIRE") victim.burn = Math.max(victim.burn, 260 * power);
+          if (el.label === "FIRE") victim.burn = Math.max(victim.burn, 260 * power * falloff);
         }
         novas.push({ x: caster.x, y: caster.y, r: 0.02, max: el.reach, life: 1, hue: el.hue, power: power });
         sfxClash(1);
@@ -1506,9 +1642,15 @@ window.plethoraBit = {
         zones.push({
           x: caster.x, y: caster.y, r: el.reach, life: 1,
           ms: el.hold, maxMs: el.hold, hue: el.hue,
-          drain: el.drain, owner: caster, spin: Math.random() * TAU
+          drain: el.drain, owner: caster, spin: Math.random() * TAU,
+          burns: burns, pierces: pierces, siphons: siphons
         });
         sfxSpark(0.7);
+      }
+
+      // SIPHON returns a slice of everything the cast drained.
+      if (siphons && siphoned > 0) {
+        caster.rpm = Math.min(MAX_RPM, caster.rpm + siphoned * 0.34);
       }
 
       arenaHue = el.hue;
@@ -1558,8 +1700,13 @@ window.plethoraBit = {
         for (const t of tops) {
           if (!t.alive || t.h > 0 || t === z.owner) continue;
           if (Math.hypot(t.x - z.x, t.y - z.y) > z.r) continue;
-          t.rpm = Math.max(0, t.rpm - z.drain * dt * t.takeMul);
+          const tick = z.drain * dt * (z.pierces ? 1 : t.takeMul);
+          t.rpm = Math.max(0, t.rpm - tick);
           t.chill = Math.min(1, t.chill + dt * 2.2);
+          if (z.burns) t.burn = Math.max(t.burn, 150);
+          if (z.siphons && z.owner.alive) {
+            z.owner.rpm = Math.min(MAX_RPM, z.owner.rpm + tick * 0.30);
+          }
         }
         if (z.ms <= 0) zones.splice(i, 1);
       }
@@ -2277,7 +2424,8 @@ window.plethoraBit = {
       // "card" buttons are painted by drawSelect; drawing the generic panel
       // over them would wash out their artwork.
       for (const b of buttons) {
-        if (b.style === "card" || b.style === "chip" || b.style === "cast") continue;
+        if (b.style === "card" || b.style === "chip" || b.style === "cast"
+            || b.style === "forge" || b.style === "ability") continue;
         drawButton(b);
       }
     }
@@ -2341,7 +2489,8 @@ window.plethoraBit = {
         bestScore: bestScore,
         top: chosen.id,
         difficulty: difficulty.id,
-        coachSeen: coachSeen
+        coachSeen: coachSeen,
+        build: myBuild
       }));
     }
 
@@ -2544,6 +2693,77 @@ window.plethoraBit = {
       const bh = clamp(H * 0.068, 46, 60);
       const bottom = H - safeBottom() - bh - clamp(H * 0.035, 16, 34);
 
+      if (showForge) {
+        const rowH = clamp(H * 0.052, 36, 48);
+        const gapY = clamp(H * 0.0135, 8, 13);
+        const listX = W * 0.055;
+        const listW = W * 0.89;
+        let ry = safeTop() + clamp(H * 0.135, 96, 150);
+
+        // Three presets across the top.
+        const preW = (listW - 12) / 3;
+        for (let i = 0; i < ABILITY_PRESETS.length; i++) {
+          const pre = ABILITY_PRESETS[i];
+          addButton("pre_" + pre.id, "", listX + i * (preW + 6), ry, preW, rowH, () => {
+            myBuild = cloneBuild(pre.build);
+            save();
+            haptic("light");
+            layout();
+          }, "forge");
+        }
+        ry += rowH + gapY * 2.1;
+
+        // One row per slot.
+        const slots = [
+          ["core", FORGE.core], ["element", FORGE.element], ["power", FORGE.power],
+          ["reach", FORGE.reach], ["charge", FORGE.charge], ["rider", FORGE.rider]
+        ];
+        for (const [slot, parts] of slots) {
+          const cellGap = 5;
+          const cellW = (listW - cellGap * (parts.length - 1)) / parts.length;
+          for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            addButton("fg_" + slot + "_" + part.id, "",
+                      listX + i * (cellW + cellGap), ry, cellW, rowH, () => {
+              haptic("light");
+              if (slot === "rider") {
+                const at = myBuild.riders.indexOf(part.id);
+                if (at >= 0) myBuild.riders.splice(at, 1);
+                else if (myBuild.riders.length < 2) myBuild.riders.push(part.id);
+                else { myBuild.riders.shift(); myBuild.riders.push(part.id); }
+              } else {
+                myBuild[slot] = part.id;
+              }
+              // Never let a build exceed the budget: drop riders, then ease
+              // the expensive slots, until it fits again.
+              let guard = 0;
+              while (forgeCost(myBuild) > FORGE_BUDGET && guard++ < 12) {
+                if (myBuild.riders.length && slot !== "rider") myBuild.riders.pop();
+                else if (myBuild.riders.length > 1) myBuild.riders.shift();
+                else if (slot !== "charge" && myBuild.charge === "rapid") myBuild.charge = "steady";
+                else if (slot !== "power" && myBuild.power === "savage") myBuild.power = "heavy";
+                else if (slot !== "reach" && myBuild.reach === "far") myBuild.reach = "mid";
+                else if (slot !== "charge" && myBuild.charge === "steady") myBuild.charge = "slow";
+                else if (slot !== "power" && myBuild.power === "heavy") myBuild.power = "light";
+                else if (slot !== "reach" && myBuild.reach === "mid") myBuild.reach = "near";
+                else if (myBuild.riders.length) myBuild.riders.pop();
+                else break;
+              }
+              save();
+              layout();
+            }, "forge");
+          }
+          ry += rowH + gapY;
+        }
+
+        addButton("forgedone", "DONE", (W - bw) / 2, bottom, bw, bh, () => {
+          showForge = false;
+          save();
+          layout();
+        });
+        return;
+      }
+
       if (showCoach) {
         addButton("coachgo", "GOT IT \u2014 RIP IT", (W - bw) / 2, bottom, bw, bh, () => {
           showCoach = false;
@@ -2580,7 +2800,7 @@ window.plethoraBit = {
         const cardH = clamp(H * 0.105, 70, 98);
         const gap = clamp(H * 0.016, 7, 14);
         const chipH = clamp(H * 0.058, 40, 52);
-        const blockH = cardH * 3 + gap * 2 + chipH + bh + clamp(H * 0.075, 44, 74);
+        const blockH = cardH * 3 + gap * 2 + chipH + clamp(H * 0.058, 40, 52) + bh + clamp(H * 0.13, 78, 128);
         const top = clamp(cy - blockH / 2 + clamp(H * 0.05, 18, 42),
                           safeTop() + clamp(H * 0.11, 78, 118), H);
 
@@ -2608,7 +2828,16 @@ window.plethoraBit = {
           }, "chip");
         }
 
-        addButton("go", "RIP", (W - bw) / 2, chipY + chipH + clamp(H * 0.028, 16, 30), bw, bh, () => {
+        const abilityY = chipY + chipH + clamp(H * 0.030, 18, 32);
+        const abilityH = clamp(H * 0.058, 40, 52);
+        addButton("forge", "", W * 0.08, abilityY, W * 0.84, abilityH, () => {
+          showForge = true;
+          forgeMs = 0;
+          haptic("light");
+          layout();
+        }, "ability");
+
+        addButton("go", "RIP", (W - bw) / 2, abilityY + abilityH + clamp(H * 0.024, 14, 26), bw, bh, () => {
           haptic("medium");
           goCharge();
         });
@@ -2861,6 +3090,47 @@ window.plethoraBit = {
         fitFont(d.name, b.w - 8, Math.min(b.h * 0.28, 13), 800);
         g.fillStyle = on ? "#f2f8ff" : "rgba(196,216,242,0.72)";
         g.fillText(d.name, b.x + b.w / 2, b.y + b.h * 0.42);
+      }
+
+      // The ability row: what you are taking in, and a way into the forge.
+      const abilityBtn = buttons.find(b => b.style === "ability");
+      if (abilityBtn) {
+        const built = resolveBuild(myBuild);
+        g.save();
+        g.fillStyle = "rgba(13,20,36,0.9)";
+        roundRect(g, abilityBtn.x, abilityBtn.y, abilityBtn.w, abilityBtn.h, 13);
+        g.fill();
+        g.strokeStyle = "hsla(" + built.hue + ", 90%, 62%, 0.55)";
+        g.lineWidth = 1.4;
+        g.stroke();
+
+        // Element swatch.
+        const swR = abilityBtn.h * 0.28;
+        const swX = abilityBtn.x + abilityBtn.h * 0.42;
+        const swY = abilityBtn.y + abilityBtn.h / 2;
+        const swg = g.createRadialGradient(swX, swY, 0, swX, swY, swR);
+        swg.addColorStop(0, "hsla(" + built.hue + ", 100%, 76%, 1)");
+        swg.addColorStop(1, "hsla(" + built.hue + ", 95%, 44%, 1)");
+        g.fillStyle = swg;
+        g.beginPath();
+        g.arc(swX, swY, swR, 0, TAU);
+        g.fill();
+
+        g.textAlign = "left";
+        const ax = abilityBtn.x + abilityBtn.h * 0.82;
+        g.font = UI.mono(Math.min(abilityBtn.h * 0.21, 9.5), 800);
+        g.fillStyle = "rgba(150,190,235,0.7)";
+        g.fillText("ABILITY", ax, abilityBtn.y + abilityBtn.h * 0.36);
+        fitFont(buildName(myBuild), abilityBtn.w - (ax - abilityBtn.x) - 68,
+                Math.min(abilityBtn.h * 0.3, 14), 800);
+        g.fillStyle = "#eef5ff";
+        g.fillText(buildName(myBuild), ax, abilityBtn.y + abilityBtn.h * 0.74);
+
+        g.textAlign = "right";
+        g.font = UI.mono(Math.min(abilityBtn.h * 0.24, 11), 800);
+        g.fillStyle = "hsla(" + built.hue + ", 95%, 72%, 0.95)";
+        g.fillText("FORGE >", abilityBtn.x + abilityBtn.w - 14, abilityBtn.y + abilityBtn.h * 0.6);
+        g.restore();
       }
 
       // One line describing the selected tier.
@@ -3380,6 +3650,158 @@ window.plethoraBit = {
       g.restore();
     }
 
+    /** Short human name for the current loadout, e.g. "SAVAGE STORM BOLT". */
+    function buildName(build) {
+      return forgePart("power", build.power).label + " " +
+             forgePart("element", build.element).label + " " +
+             forgePart("core", build.core).label;
+    }
+
+    /**
+     * The forge. Three presets on top, then one row per slot. Core and element
+     * are free; the sparks go on power, reach, charge and up to two riders,
+     * which is where the one-strong-versus-two-cheap choice lives.
+     */
+    function drawForge() {
+      g.save();
+      g.fillStyle = "#070d18";
+      g.fillRect(0, 0, W, H);
+
+      const spent = forgeCost(myBuild);
+      const left = FORGE_BUDGET - spent;
+      const resolved = resolveBuild(myBuild);
+
+      g.textAlign = "center";
+      const headY = safeTop() + clamp(H * 0.055, 40, 66);
+      g.font = UI.font(Math.min(W * 0.068, 29), 800);
+      g.fillStyle = "#eef6ff";
+      g.fillText("FORGE", cx, headY);
+
+      // Sparks remaining, as pips.
+      const pipR = Math.max(3, W * 0.011);
+      const pipStep = pipR * 3.1;
+      const pipX = cx - (pipStep * (FORGE_BUDGET - 1)) / 2;
+      const pipY = headY + clamp(H * 0.026, 17, 26);
+      for (let i = 0; i < FORGE_BUDGET; i++) {
+        g.beginPath();
+        g.arc(pipX + i * pipStep, pipY, pipR, 0, TAU);
+        g.fillStyle = i < left ? "hsla(48, 100%, 66%, 0.98)" : "rgba(255,255,255,0.13)";
+        g.fill();
+      }
+      g.font = UI.mono(Math.min(W * 0.029, 11.5), 700);
+      g.fillStyle = "rgba(160,196,236,0.85)";
+      g.fillText(left + " SPARK" + (left === 1 ? "" : "S") + " LEFT", cx, pipY + clamp(H * 0.026, 17, 25));
+
+      const slotOf = id => id.slice(3, id.indexOf("_", 3));
+      const partOf = id => id.slice(id.indexOf("_", 3) + 1);
+
+      for (const b of buttons) {
+        if (b.style !== "forge") continue;
+
+        /* --- preset buttons --- */
+        if (b.id.indexOf("pre_") === 0) {
+          const pre = ABILITY_PRESETS.find(x => "pre_" + x.id === b.id);
+          if (!pre) continue;
+          const on = JSON.stringify(pre.build) === JSON.stringify(myBuild);
+          const hue = forgePart("element", pre.build.element).hue;
+          g.fillStyle = on ? "hsla(" + hue + ", 70%, 26%, 0.95)" : "rgba(16,24,42,0.9)";
+          roundRect(g, b.x, b.y, b.w, b.h, 11);
+          g.fill();
+          g.strokeStyle = on ? "hsla(" + hue + ", 95%, 68%, 0.95)" : "rgba(140,180,235,0.22)";
+          g.lineWidth = on ? 1.9 : 1;
+          g.stroke();
+          g.textAlign = "center";
+          fitFont(pre.name, b.w - 8, Math.min(b.h * 0.30, 12.5), 800);
+          g.fillStyle = on ? "#f2f8ff" : "rgba(190,214,244,0.8)";
+          g.fillText(pre.name, b.x + b.w / 2, b.y + b.h * 0.62);
+          continue;
+        }
+
+        /* --- slot chips --- */
+        const slot = slotOf(b.id);
+        const part = forgePart(slot, partOf(b.id));
+        const isRider = slot === "rider";
+        const chosen = isRider
+          ? myBuild.riders.indexOf(part.id) >= 0
+          : myBuild[slot] === part.id;
+        // Grey out anything the remaining sparks cannot cover.
+        const extra = isRider
+          ? part.cost
+          : part.cost - forgePart(slot, myBuild[slot]).cost;
+        const affordable = chosen || extra <= left;
+        const hue = slot === "element" ? part.hue : 205;
+
+        g.fillStyle = chosen
+          ? "hsla(" + hue + ", 68%, 30%, 0.95)"
+          : (affordable ? "rgba(15,23,40,0.9)" : "rgba(11,16,28,0.75)");
+        roundRect(g, b.x, b.y, b.w, b.h, 10);
+        g.fill();
+        g.strokeStyle = chosen
+          ? "hsla(" + hue + ", 95%, 70%, 0.95)"
+          : (affordable ? "rgba(140,180,235,0.20)" : "rgba(120,150,190,0.08)");
+        g.lineWidth = chosen ? 1.9 : 1;
+        g.stroke();
+
+        g.textAlign = "center";
+        const alpha = affordable ? 1 : 0.34;
+        fitFont(part.label, b.w - 7, Math.min(b.h * 0.30, 12), 800);
+        g.fillStyle = chosen
+          ? "rgba(244,250,255," + alpha + ")"
+          : "rgba(188,212,242," + (alpha * 0.85).toFixed(2) + ")";
+        g.fillText(part.label, b.x + b.w / 2, b.y + b.h * (part.cost > 0 ? 0.44 : 0.6));
+
+        if (part.cost > 0) {
+          const dotR = Math.max(1.7, b.w * 0.022);
+          const dotStep = dotR * 3;
+          const dotX = b.x + b.w / 2 - (dotStep * (part.cost - 1)) / 2;
+          const dotY = b.y + b.h * 0.73;
+          g.fillStyle = "rgba(255,206,110," + (affordable ? 0.95 : 0.3) + ")";
+          for (let k = 0; k < part.cost; k++) {
+            g.beginPath();
+            g.arc(dotX + k * dotStep, dotY, dotR, 0, TAU);
+            g.fill();
+          }
+        }
+      }
+
+      /* --- slot labels down the left --- */
+      const rowIds = ["core", "element", "power", "reach", "charge", "rider"];
+      g.textAlign = "left";
+      for (const slot of rowIds) {
+        const first = buttons.find(b => b.style === "forge" && b.id.indexOf("fg_" + slot + "_") === 0);
+        if (!first) continue;
+        g.font = UI.mono(Math.min(W * 0.024, 9.5), 800);
+        g.fillStyle = "rgba(140,178,222,0.62)";
+        g.fillText(slot === "rider" ? "RIDERS (UP TO 2)" : slot.toUpperCase(),
+                   W * 0.055, first.y - 4);
+      }
+
+      /* --- live preview of what you have built --- */
+      const done = buttons.find(b => b.id === "forgedone");
+      if (done) {
+        const py2 = done.y - clamp(H * 0.062, 44, 66);
+        g.textAlign = "center";
+        fitFont(buildName(myBuild), W * 0.86, Math.min(W * 0.048, 20), 800);
+        const ng = g.createLinearGradient(cx - W * 0.4, 0, cx + W * 0.4, 0);
+        ng.addColorStop(0, "hsla(" + resolved.hue + ", 95%, 74%, 1)");
+        ng.addColorStop(1, "hsla(" + ((resolved.hue + 40) % 360) + ", 95%, 68%, 1)");
+        g.fillStyle = ng;
+        g.fillText(buildName(myBuild), cx, py2);
+
+        const bits = [
+          Math.round(resolved.drain) + " drain",
+          (resolved.cool / 1000).toFixed(1) + "s cooldown",
+          myBuild.riders.length
+            ? myBuild.riders.map(r => forgePart("rider", r).label.toLowerCase()).join(" + ")
+            : "no riders"
+        ];
+        fitFont(bits.join("  .  "), W * 0.9, Math.min(W * 0.029, 11.5), 700, true);
+        g.fillStyle = "rgba(158,192,232,0.85)";
+        g.fillText(bits.join("  .  "), cx, py2 + clamp(H * 0.026, 17, 26));
+      }
+      g.restore();
+    }
+
     function drawHelp() {
       g.save();
       g.fillStyle = "#040916";
@@ -3402,8 +3824,9 @@ window.plethoraBit = {
         ["5", "Throws are detected too. Freefall shows as AIRBORNE, and the gyro keeps reading in flight."],
         ["6", "In the battle, drag anywhere to steer YOUR top. Drive it into the others."],
         ["7", "Every top has an element. When the bar fills, tap it to unleash the attack."],
-        ["8", "Win by being the last top spinning, or knock the others out of the stadium."],
-        ["9", "No sensor? Swipe fast across the ripcord instead."]
+        ["8", "Tap ABILITY on the select screen to forge your own: pick a shape, an element, and spend six sparks on power, reach, cooldown and up to two riders."],
+        ["9", "Win by being the last top spinning, or knock the others out of the stadium."],
+        ["10", "No sensor? Swipe fast across the ripcord instead."]
       ];
 
       for (const [n, text] of lines) {
@@ -3513,6 +3936,7 @@ window.plethoraBit = {
 
       if (state === "result") resultMs += dtMs;
       if (showCoach) coachMs += dtMs;
+      if (showForge) forgeMs += dtMs;
 
       stepFx(dt);
 
@@ -3559,7 +3983,8 @@ window.plethoraBit = {
       else if (state === "battle") drawBattleHud();
       else if (state === "result") { drawBattleHud(); drawResult(); }
 
-      if (showCoach) drawCoach();
+      if (showForge) drawForge();
+      else if (showCoach) drawCoach();
       else if (showHelp) drawHelp();
       drawButtons();
     }

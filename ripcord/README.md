@@ -176,6 +176,60 @@ Roughly **+4 points on average and ~+15 at the strongest rips**, and pure noise
 at weak ones — a feeble launch dies before the bar ever fills. The special is
 worth using without deciding the match, which is the intent.
 
+## The forge
+
+Presets are one tap; the forge is for anyone who wants to build the thing
+themselves. Both live behind the **ABILITY** row on the select screen.
+
+**Six sparks.** Core and element are free — they choose the shape and the
+colour. Everything else costs, and the budget is what makes the choice real:
+
+| Slot | Options (cost in sparks) |
+| --- | --- |
+| **Core** | Bolt · Nova · Field — all free |
+| **Element** | Storm · Fire · Frost · Gale · Venom · Tide — all free |
+| **Power** | Light (0) · Heavy (2) · **Savage (4)** |
+| **Reach** | Near (0) · Mid (1) · Far (2) |
+| **Charge** | Slow (0) · Steady (1) · **Rapid (3)** |
+| **Riders** | up to two of Burn (2) · Chill (2) · Launch (2) · Siphon (3) · Pierce (2) |
+
+Six sparks buys **one savage power, or a pair of cheaper riders** — not both.
+That is the whole trade. Anything you cannot afford greys out live as you
+spend, and picking something expensive quietly eases the cheapest slots back
+rather than refusing the tap, so the build is always legal and you are never
+stuck in a dead end.
+
+Riders are not flavour:
+
+| Rider | Effect |
+| --- | --- |
+| **Burn** | leaves damage ticking after the hit |
+| **Chill** | heavy drag on the target's movement |
+| **Launch** | 2.3× shove — a ring-out tool |
+| **Siphon** | returns 34% of everything drained to you |
+| **Pierce** | ignores the target's defence entirely |
+
+Three presets are all legal six-spark builds, so they double as worked examples:
+**Wildfire** (heavy fire nova, mid, steady, burn), **Stormbreaker** (savage
+storm bolt, mid, slow — everything in one punch), and **Glacier** (light frost
+field, near, steady, chill + siphon — the two-cheap-riders end of the trade).
+
+Loadouts persist, and are rebuilt through the part table on load so an unknown
+or stale part id falls back to a valid one instead of breaking the bit.
+
+**Is any build broken?** Measured on Legend, using the special, 22 battles per
+cell:
+
+| Build | at 650 °/s | at 1100 °/s | at 1800 °/s |
+| --- | ---: | ---: | ---: |
+| Wildfire (preset) | 5% | 27% | 41% |
+| Savage bolt + Pierce | 14% | 32% | 64% |
+| Light / Far / Rapid (spam) | 5% | 23% | 50% |
+
+Averages land 22–28%. Savage+Pierce is the strongest at a perfect rip, which is
+the glass cannon behaving as intended; the spread elsewhere is inside sampling
+noise. No build walks the ladder.
+
 ## Steering
 
 Drag anywhere in the stadium and your top drives at that point, at a strength
