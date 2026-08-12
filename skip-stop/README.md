@@ -85,10 +85,45 @@ would time on a platform. The premise is stated on screen in every round rather
 than buried, because the whole lesson depends on both trains sharing it.
 
 Rounds ask for one of three predictions — the express's running time, the minutes
-it saves, or its average speed — scored on relative accuracy, squared, out of
-1000. Lexington Avenue always opens, because a 20-stop local against a 6-stop
-express is the clearest statement of the idea; the other four are drawn from the
-remaining corridors, so the run varies.
+it saves, or its average speed. Lexington Avenue always opens, because a 20-stop
+local against a 6-stop express is the clearest statement of the idea; the other
+four are drawn from the remaining corridors, so the run varies.
+
+## Scoring, and the leaderboard
+
+Points are how close you were, nothing else:
+
+```
+tol  = max(truth × 0.6, 3 min)      # or max(truth × 0.5, 12 km/h) for speed
+acc  = clamp(1 − |guess − truth| / tol, 0, 1)
+pts  = round(1000 × acc^1.5)
+```
+
+Exact is 1000, so a run tops out at 5000. The tolerance is proportional to the
+answer but **floored**, because some answers are small: a corridor where the
+express saves two and a half minutes should not demand you land inside ninety
+seconds when a twenty-minute answer gets a wide margin. The `^1.5` curve keeps
+near-misses worth having — 10% off is still 761 — while falling away fast enough
+that a wild guess is worth nothing. Each round's closeness is also drawn as one
+of five bars on the final screen, so you can see where the run was won.
+
+Dispatch stays disabled until the slider is moved. The control's midpoint sits
+close enough to the true express time to be worth around 700 points on its own,
+and a leaderboard should not pay out for leaving it alone.
+
+The total goes to the `run_score` record channel — global and following, all-time,
+best per user — and the finish screen renders that board in place rather than
+only submitting to it: top five, your own row highlighted, and pulled in below
+the fold with a `···` divider if you placed outside the top five.
+
+The shape of a leaderboard response is not pinned down anywhere in the agent
+contract, and there is no worked example of `leaderboard()` to copy, so the
+reader accepts entries under `entries` / `rows` / `items` / `leaderboard` /
+`results` / `scores` or a bare array, at the top level or nested under `data`,
+and reads each row's name, value and "is this me" flag through a list of
+plausible field names. Anything it cannot recognise degrades to a quiet "Scores
+are not available right now" instead of a broken panel. All four states —
+loading, populated, empty, unavailable — are exercised in the harness.
 
 ## Contract notes
 

@@ -32,6 +32,12 @@
  * (accelerate 1.0 m/s², cruise 72 km/h, brake 1.1 m/s², 30 s dwell) and the
  * result plots them as a distance–time graph, where the local's dwells are the
  * flat steps and the gap between the curves is the whole idea.
+ *
+ * A round is worth up to 1000 points, purely by how close the prediction landed
+ * inside a tolerance that scales with the answer but is floored, so corridors
+ * with small answers are not brutal. Five rounds go to the global board at the
+ * end, which the finish screen renders in place — top five, your row picked out,
+ * and pulled up from below if you placed outside it.
  */
 window.plethoraBit = {
   meta: {
@@ -620,6 +626,10 @@ window.plethoraBit = {
       else fitPoints(SUB_PTS, 10, 0, immediate);
     }
     function setPanelHeight(h) {
+      // Never let a tall panel squeeze the map out of existence on a short
+      // screen; the leaderboard trims its row count to whatever survives.
+      const room = H - (SA.top + 30) - SA.bottom - 150;
+      h = Math.round(clamp(h, 110, Math.max(150, room)));
       if (h === panelH) return;
       panelH = h;
       layout();
@@ -633,6 +643,8 @@ window.plethoraBit = {
     let state = "intro";
     let order = [], roundIx = 0, score = 0, best = 0;
     let guess = 0, qType = 0, raceT = 0, raceScale = 1, raceDone = false, fastFwd = 1;
+    let results = [];                       // one { name, colour, pts, acc } per round
+    let boardScope = "global", boardState = "idle", boardRows = null, beatBest = false;
 
     const QUESTIONS = [
       { k: "time", ask: (c) => "How long does the " + c.X.r + " take?", unit: "min" },
@@ -650,6 +662,23 @@ window.plethoraBit = {
       return [10, 80];
     }
 
+    /**
+     * How far off you may be before a round is worth nothing. Proportional to
+     * the answer, but floored, because some answers are small: a corridor where
+     * the express only saves two and a half minutes should not demand you land
+     * inside ninety seconds when a twenty-minute answer gets a wide margin.
+     */
+    function tolerance(k, truth) {
+      if (k === "speed") return Math.max(truth * 0.5, 12);
+      return Math.max(truth * 0.6, 3);
+    }
+    /** Closeness, 0..1, and the points it is worth. Exact is 1000. */
+    function scoreGuess(k, truth, said) {
+      const tol = tolerance(k, truth);
+      const acc = clamp(1 - Math.abs(said - truth) / tol, 0, 1);
+      return { acc: acc, pts: Math.round(1000 * Math.pow(acc, 1.5)) };
+    }
+
     function newGame() {
       // Lexington always opens: four tracks, a 20-stop local, a 6-stop express.
       // It is the clearest statement of the idea. The rest vary run to run.
@@ -660,7 +689,7 @@ window.plethoraBit = {
         const t = rest[i]; rest[i] = rest[j]; rest[j] = t;
       }
       order = [0].concat(rest.slice(0, ROUNDS - 1));
-      roundIx = 0; score = 0;
+      roundIx = 0; score = 0; results = [];
     }
 
     // ====================================================================== //
@@ -749,18 +778,32 @@ window.plethoraBit = {
         '</div>' +
         '<input data-el="sl" type="range" min="' + rng[0] + '" max="' + rng[1] + '" value="' +
           guess + '" step="1" style="pointer-events:auto;width:100%;margin:9px 0 0;height:26px;">' +
-        '<button data-el="go" style="' + BTN + 'margin-top:6px;">Dispatch</button>';
+        '<button data-el="go" style="' + BTN + 'margin-top:6px;opacity:0.45;">' +
+          'Set your guess</button>';
 
       const sl = panel.querySelector('[data-el="sl"]');
       const val = panel.querySelector('[data-el="val"]');
+      const go = panel.querySelector('[data-el="go"]');
+      // The slider has to be moved before a train will go. Its midpoint sits
+      // close enough to the true express time to be worth real points, and a
+      // leaderboard should not reward leaving the control alone.
+      let committed = false;
+      go.disabled = true;
       const onIn = () => {
         guess = +sl.value;
         val.innerHTML = guess + '<span style="font-size:11px;color:#98A0A9;font-weight:500;"> ' +
           q.unit + '</span>';
+        if (!committed) {
+          committed = true;
+          go.disabled = false;
+          go.style.opacity = "1";
+          go.textContent = "Dispatch";
+        }
       };
       ctx.listen(sl, "input", onIn);
       ctx.listen(sl, "change", onIn);
-      ctx.listen(panel.querySelector('[data-el="go"]'), "click", () => {
+      ctx.listen(go, "click", () => {
+        if (!committed) return;
         tap("medium"); sting("tap"); startRace();
       });
     }
@@ -801,9 +844,11 @@ window.plethoraBit = {
       const c = focus;
       const q = QUESTIONS[qType];
       const truth = trueAnswer(c, q.k);
-      const acc = Math.max(0, 1 - Math.abs(guess - truth) / Math.max(1e-6, truth));
-      const pts = Math.round(1000 * acc * acc);
+      const graded = scoreGuess(q.k, truth, guess);
+      const acc = graded.acc, pts = graded.pts;
+      const off = Math.abs(guess - truth);
       score += pts;
+      results.push({ name: c.n, colour: c.X.c, pts: pts, acc: acc });
       elScore.textContent = String(score);
       tap(pts >= 700 ? "success" : "light");
       sting(pts >= 700 ? "success" : "tap");
@@ -820,8 +865,10 @@ window.plethoraBit = {
           '<div style="font-size:13.5px;font-weight:700;font-family:' + MONO + ';">+' + pts +
           '</div>' +
         '</div>' +
-        '<div style="margin-top:3px;font-size:11.5px;color:#98A0A9;">You said ' + guess + ' ' +
-          q.unit + ' &middot; it was ' + truth.toFixed(1) + '</div>' +
+        '<div style="margin-top:3px;font-size:11.5px;color:#98A0A9;">You said ' + guess +
+          ' &middot; it was ' + truth.toFixed(1) + ' ' + q.unit +
+          (off < 0.05 ? ' &middot; exactly right'
+                      : ' &middot; off by ' + off.toFixed(1)) + '</div>' +
         graphSVG(c) +
         '<div style="display:flex;gap:10px;margin-top:9px;">' +
           statCol(c.X, xAvg, true) + statCol(c.L, lAvg, false) +
@@ -885,14 +932,167 @@ window.plethoraBit = {
           ' min</span></div>';
     }
 
+    // ---------------------------------------------------------- leaderboard
+    /**
+     * The contract does not pin down the shape of a leaderboard response, so
+     * every field is read through a list of plausible names and anything
+     * unrecognised degrades to a quiet "not available" line rather than a
+     * broken panel. Rank, name and a printable value are all the board needs.
+     */
+    function pickName(row) {
+      const who = row.user || row.profile || row.player || row.account;
+      if (typeof who === "string" && who) return who;
+      if (who && typeof who === "object") {
+        const inner = who.displayName || who.display_name || who.name ||
+                      who.username || who.handle;
+        if (inner) return inner;
+      }
+      return row.displayName || row.display_name || row.name || row.username ||
+             row.handle || "Anonymous";
+    }
+    function readBoard(res) {
+      const src = res && res.data ? res.data : res;
+      if (!src) return null;
+      const rows = Array.isArray(src) ? src
+        : (src.entries || src.rows || src.items || src.leaderboard ||
+           src.results || src.scores || null);
+      if (!Array.isArray(rows)) return null;
+      return rows.map(function (row, i) {
+        const raw = row.value !== undefined ? row.value
+          : row.score !== undefined ? row.score
+          : row.total !== undefined ? row.total : null;
+        return {
+          rank: row.rank || row.position || row.place || i + 1,
+          name: pickName(row),
+          shown: row.label || row.formatted || row.displayValue || row.display_value ||
+                 (raw === null ? "" : String(raw)),
+          me: !!(row.isSelf || row.self || row.isMe || row.me || row.you ||
+                 row.isViewer || row.viewer)
+        };
+      });
+    }
+    async function loadBoard(scope) {
+      boardScope = scope;
+      boardState = "loading";
+      boardRows = null;
+      renderDone();
+      try {
+        const res = await ctx.memory.record("run_score")
+          .leaderboard({ scope: scope, period: "all_time" });
+        boardRows = readBoard(res);
+        boardState = boardRows && boardRows.length ? "ok" : "empty";
+      } catch (_) {
+        boardState = "error";
+      }
+      renderDone();
+    }
+
+    function boardNote(text) {
+      return '<div style="padding:14px 0;text-align:center;font-size:11.5px;color:#B4BBC2;">' +
+        esc(text) + '</div>';
+    }
+    function boardRow(row, faded) {
+      return '<div style="display:flex;align-items:center;gap:9px;padding:4px 7px;' +
+        'border-radius:7px;' + (row.me ? 'background:#F1F4F7;' : '') +
+        (faded ? 'opacity:0.55;' : '') + '">' +
+        '<span style="font-family:' + MONO + ';font-size:11px;color:#B4BBC2;width:20px;">' +
+          row.rank + '</span>' +
+        '<span style="flex:1;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;' +
+          'white-space:nowrap;' + (row.me ? 'font-weight:700;' : '') + '">' +
+          esc(row.me ? "You" : row.name) + '</span>' +
+        '<span style="font-family:' + MONO + ';font-size:12px;font-weight:700;">' +
+          esc(row.shown) + '</span>' +
+      '</div>';
+    }
+    function boardHTML(rowsFit) {
+      const tab = (scope, label) =>
+        '<button data-el="tab-' + scope + '" style="pointer-events:auto;border:none;' +
+        'cursor:pointer;font-family:' + FONT + ';font-size:11px;font-weight:600;' +
+        'padding:5px 11px;border-radius:99px;' +
+        (boardScope === scope ? 'background:#11151A;color:#fff;'
+                              : 'background:#EEF1F4;color:#6B747E;') + '">' + label + '</button>';
+      let body;
+      if (boardState === "error") body = boardNote("Scores are not available right now.");
+      else if (boardState === "empty") {
+        body = boardNote(boardScope === "following"
+          ? "Nobody you follow has run this yet."
+          : "No scores yet — yours is the first.");
+      } else if (boardState !== "ok" || !boardRows || !boardRows.length) {
+        // "idle" lands here too: the panel paints once before the fetch starts.
+        body = boardNote("Loading scores…");
+      } else {
+        const top = boardRows.slice(0, rowsFit);
+        let html = top.map(function (r) { return boardRow(r, false); }).join("");
+        let mineShown = false;
+        for (const r of top) if (r.me) mineShown = true;
+        if (!mineShown) {
+          for (const r of boardRows) {
+            if (r.me) {
+              html += '<div style="text-align:center;font-size:10px;color:#D3D8DD;' +
+                      'line-height:0.9;">&middot;&middot;&middot;</div>' + boardRow(r, false);
+              break;
+            }
+          }
+        }
+        body = html;
+      }
+      return '<div style="display:flex;gap:6px;margin-top:11px;">' +
+          tab("global", "Everyone") + tab("following", "Following") + '</div>' +
+        '<div style="margin-top:6px;">' + body + '</div>';
+    }
+
+    /** Five bars, one per round, each filled by how close that guess landed. */
+    function roundStrip() {
+      let html = '<div style="display:flex;gap:5px;margin-top:9px;">';
+      for (let i = 0; i < ROUNDS; i++) {
+        const r = results[i];
+        html += '<div style="flex:1;height:5px;border-radius:3px;background:#EEF1F4;' +
+          'overflow:hidden;"><div style="height:100%;width:' +
+          (r ? Math.round(r.acc * 100) : 0) + '%;background:' +
+          (r ? r.colour : "#EEF1F4") + ';"></div></div>';
+      }
+      return html + '</div>';
+    }
+
+    function renderDone() {
+      if (state !== "done") return;
+      const rowsFit = clamp(Math.floor((panelH - 208) / 25), 1, 5);
+      panel.innerHTML =
+        '<div style="display:flex;align-items:flex-end;justify-content:space-between;">' +
+          '<div>' +
+            '<div style="font-size:11px;letter-spacing:1.4px;text-transform:uppercase;' +
+              'color:#98A0A9;font-weight:600;">Final</div>' +
+            '<div style="font-size:32px;font-weight:700;font-family:' + MONO + ';' +
+              'letter-spacing:-1px;line-height:1.05;">' + score + '</div>' +
+          '</div>' +
+          '<div style="font-size:11.5px;color:#98A0A9;text-align:right;padding-bottom:3px;">' +
+            (beatBest ? "New personal best" : "Best " + best) + '</div>' +
+        '</div>' +
+        roundStrip() +
+        boardHTML(rowsFit) +
+        '<button data-el="go" style="' + BTN + 'margin-top:10px;">Run it again</button>';
+
+      const tabG = panel.querySelector('[data-el="tab-global"]');
+      const tabF = panel.querySelector('[data-el="tab-following"]');
+      if (tabG) ctx.listen(tabG, "click", () => {
+        if (boardScope !== "global") { tap("light"); loadBoard("global"); }
+      });
+      if (tabF) ctx.listen(tabF, "click", () => {
+        if (boardScope !== "following") { tap("light"); loadBoard("following"); }
+      });
+      ctx.listen(panel.querySelector('[data-el="go"]'), "click", () => {
+        tap("medium"); newGame(); startRound();
+      });
+    }
+
     function showDone() {
       state = "done";
       focus = null;
-      setPanelHeight(252);
+      setPanelHeight(360);
       reframe(false);
       elRound.textContent = "Complete";
-      const isBest = score > best;
-      if (isBest) {
+      beatBest = score > best;
+      if (beatBest) {
         best = score;
         if (ctx.capabilities.storage) { try { ctx.storage.set("best", best); } catch (_) {} }
       }
@@ -902,21 +1102,8 @@ window.plethoraBit = {
       ctx.platform.setScore(score);
       ctx.platform.complete({ score: score });
       tap("success"); sting("win");
-
-      panel.innerHTML =
-        '<div style="font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:#98A0A9;' +
-          'font-weight:600;">Final</div>' +
-        '<div style="font-size:34px;font-weight:700;font-family:' + MONO + ';letter-spacing:-1px;' +
-          'margin-top:2px;">' + score + '</div>' +
-        '<div style="margin-top:2px;font-size:12px;color:#98A0A9;">' +
-          (isBest ? "New personal best" : "Best " + best) + '</div>' +
-        '<div style="margin-top:10px;font-size:12.5px;line-height:1.45;color:#4A535C;">' +
-          'A stop costs a train far more than the half minute it stands still — it gives up ' +
-          'every bit of speed it had, then spends track buying it back.</div>' +
-        '<button data-el="go" style="' + BTN + '">Run it again</button>';
-      ctx.listen(panel.querySelector('[data-el="go"]'), "click", () => {
-        tap("medium"); newGame(); startRound();
-      });
+      renderDone();
+      loadBoard(boardScope);
     }
 
     // ====================================================================== //
