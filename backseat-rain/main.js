@@ -70,7 +70,7 @@
  */
 window.plethoraBit = {
   meta: {
-    title: "Backseat Rain",
+    title: "Window Seat",
     runtime: "plethora-bit@2",
     tags: [
       "rain",
@@ -125,9 +125,12 @@ window.plethoraBit = {
       // Everything that should follow from road speed is derived from this:
       // how quickly the world slides past, and how hard the air coming over
       // the door is pushing the water sideways.
+      // Weather, not road speed — the room is standing still. The wind is
+      // what leans the drops; the drift is just the world outside not being
+      // a photograph.
       carSpeed: 1,
-      scrollNearAt1: 265,
-      scrollFarAt1: 44,
+      scrollNearAt1: 17,
+      scrollFarAt1: 5,
       windAt1: -96,
       windGust: 62,
       windRate: 0.6,
@@ -1628,15 +1631,19 @@ window.plethoraBit = {
     // above the cushion is what tells you whether you are sitting in a car or
     // kneeling on the floor of one, and the sill has to sit about a forearm
     // above the seat or the whole cabin reads as a toy.
+    // A room, not a car. The pane keeps its place and its aspect so none of
+    // the glass code cares, and everything else is built around it.
     const CAB = {
       glassX: -0.75,                 // window plane
       winZ: 0.46, winTop: 0.40, winBot: -0.24,
-      wallX: 0.78, floorY: -0.98, roofY: 0.56,
-      seatY: -0.62,                  // top of the cushion you are sitting on
-      frontZ: -1.05, backZ: 0.88,
+      wallX: -0.8,                   // the wall the window is in
+      backX: 2.7,                    // the far wall, behind you
+      floorY: -1.12, roofY: 1.05,
+      seatY: -0.62,                  // top of the window seat you are on
+      frontZ: -2.0, backZ: 2.0,
       // Far enough back that the pane's full width fits the narrow horizontal
-      // field a portrait screen gives you, and high enough above the cushion
-      // to be a person rather than a camera on a tripod.
+      // field a portrait screen gives you, and at the height of someone
+      // sitting on the seat rather than a camera on a tripod.
       eye: [0.17, 0.05, 0.02]
     };
 
@@ -1647,7 +1654,7 @@ window.plethoraBit = {
     // Three's camera looks down -Z; the window is on -X. Turning +90 degrees
     // about Y maps forward onto -X, so that is where a head starts.
     const YAW0 = Math.PI / 2;
-    const YAW_RANGE = 1.78;
+    const YAW_RANGE = 2.5;
     let yaw = YAW0, pitch = 0, yawTarget = YAW0, pitchTarget = 0;
     let texClock = 0;
 
@@ -1785,9 +1792,9 @@ window.plethoraBit = {
       if (!cv) return null;
       const c = cv.getContext("2d");
       const g = c.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, "#39404f");        // headliner bounce, overhead
-      g.addColorStop(0.5, "#141922");
-      g.addColorStop(1, "#06070b");        // carpet, underfoot
+      g.addColorStop(0, "#3a3129");        // warm ceiling bounce
+      g.addColorStop(0.5, "#2a221c");
+      g.addColorStop(1, "#171210");        // floorboards, underfoot
       c.fillStyle = g;
       c.fillRect(0, 0, w, h);
 
@@ -1801,9 +1808,9 @@ window.plethoraBit = {
           c.fillRect(0, 0, w, h);
         }
       };
-      band(0, w * 0.32, "#c2d8f5", "#54708f");        // the pane beside you
-      band(w * 0.5, w * 0.2, "#7d94b4", "#37455c");    // the far door
-      band(w * 0.78, w * 0.16, "#6f86a8", "#2f3c50");  // rear screen
+      band(0, w * 0.3, "#9fb8d8", "#41536b");         // the cold window
+      band(w * 0.46, w * 0.26, "#c9955c", "#5c4330");  // the lamp, warm
+      band(w * 0.8, w * 0.2, "#a9773f", "#453022");    // candle and string lights
 
       const t = new THREE.CanvasTexture(cv);
       t.mapping = THREE.EquirectangularReflectionMapping;
@@ -1834,53 +1841,65 @@ window.plethoraBit = {
         }
       }
 
-      const grain = grainTexture();
-      const trim = mat("#30343d", 0.78, grain, 3, 3);       // moulded plastic
-      const card = mat("#454b58", 0.9, grain, 4, 2);        // door card
-      const fabric = mat("#55545f", 1, grain, 6, 4);        // seat cloth
-      const dark = mat("#212126", 1, grain, 8, 8);          // carpet
-      const lining = mat("#4e525c", 1, grain, 5, 5);        // headliner, lighter
-      const chrome = mat("#5a6069", 0.5, null, 1, 1);      // handles and vents
-
       const C = CAB;
+      const grain = grainTexture();
+      const wall = mat("#584f45", 1, grain, 6, 6);          // warm plaster
+      const wood = mat("#6d4c33", 0.72, grain, 4, 4);       // sill, shelves
+      const woodDark = mat("#4a3423", 0.7, grain, 3, 3);
+      const cloth = mat("#8e7c67", 1, grain, 7, 5);         // cushions
+      const cream = mat("#b0a08b", 1, grain, 6, 6);         // curtains
+      const rugMat = mat("#7d5546", 1, grain, 9, 6);
+      const metal = mat("#5c5349", 0.42, null, 1, 1);
+      const ceramic = mat("#9c968a", 0.45, null, 1, 1);
+      const leaf = mat("#3d5730", 0.9, null, 1, 1);
+      const floorMat = mat("#54402d", 0.62, grain, 14, 10);
 
-      // Left door: the window aperture is the gap between these four slabs.
-      slab(C.glassX - 0.06, C.floorY, C.frontZ, C.glassX + 0.03, C.winBot, C.backZ, card);
-      slab(C.glassX - 0.06, C.winTop, C.frontZ, C.glassX + 0.03, C.roofY, C.backZ, lining);
-      slab(C.glassX - 0.06, C.winBot, C.frontZ, C.glassX + 0.03, C.winTop, -C.winZ, trim);
-      slab(C.glassX - 0.06, C.winBot, C.winZ, C.glassX + 0.03, C.winTop, C.backZ, trim);
+      function cyl(x, y, z, rt, rb, h, material, rx) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 14), material);
+        m.position.set(x, y, z);
+        if (rx) m.rotation.x = rx;
+        scene.add(m);
+        return m;
+      }
+      function ball(x, y, z, r, material) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), material);
+        m.position.set(x, y, z);
+        scene.add(m);
+        return m;
+      }
+      function glow(color, intensity) {
+        return new THREE.MeshStandardMaterial({
+          color: new THREE.Color(color), emissive: new THREE.Color(color),
+          emissiveIntensity: intensity, roughness: 0.5
+        });
+      }
 
-      // Armrest and the sill lip the drops arrive at.
-      soft(C.glassX + 0.02, C.winBot - 0.16, -0.16, C.glassX + 0.13, C.winBot - 0.07, 0.3,
-           0.03, trim, "y");
-      slab(C.glassX + 0.02, C.winBot - 0.02, -C.winZ, C.glassX + 0.07, C.winBot, C.winZ,
-           mat("#1c222c", 0.72));
-      // A brighter lip along the top of the aperture, so the frame above the
-      // pane reads as a shape instead of a void.
-      slab(C.glassX + 0.015, C.winTop, -C.winZ, C.glassX + 0.06, C.winTop + 0.022, C.winZ,
-           mat("#232a36", 0.66));
+      // ---- shell -------------------------------------------------------
+      slab(C.wallX - 0.14, C.floorY, C.frontZ, C.wallX, C.roofY, C.backZ, wall);   // window wall
+      slab(C.backX, C.floorY, C.frontZ, C.backX + 0.14, C.roofY, C.backZ, wall);
+      slab(C.wallX, C.floorY, C.frontZ - 0.14, C.backX, C.roofY, C.frontZ, wall);
+      slab(C.wallX, C.floorY, C.backZ, C.backX, C.roofY, C.backZ + 0.14, wall);
+      slab(C.wallX, C.floorY - 0.12, C.frontZ, C.backX, C.floorY, C.backZ, floorMat);
+      slab(C.wallX, C.roofY, C.frontZ, C.backX, C.roofY + 0.12, C.backZ,
+           mat("#635a4e", 1, grain, 8, 8));
 
-      // Door furniture. A door card with nothing on it is just a wall: the
-      // pull, the switch pack on the armrest and the speaker grille are what
-      // make the eye accept it as a door.
-      soft(C.glassX + 0.03, C.winBot - 0.15, -0.02, C.glassX + 0.15, C.winBot - 0.09, 0.24,
-           0.022, trim, "y");
-      slab(C.glassX + 0.05, C.winBot - 0.135, 0.0, C.glassX + 0.14, C.winBot - 0.1, 0.22, chrome);
-      slab(C.glassX + 0.03, C.winBot - 0.09, -0.14, C.glassX + 0.12, C.winBot - 0.07, -0.02, trim);
-      slab(C.glassX + 0.02, C.winBot - 0.62, -0.1, C.glassX + 0.05, C.winBot - 0.36, 0.16, dark);
-      // Roof grab handle above the far door.
-      soft(C.wallX - 0.16, C.roofY - 0.07, -0.26, C.wallX - 0.05, C.roofY - 0.03, -0.02,
-           0.014, trim, "z");
+      // ---- the window: a recess in a thick wall, with a deep sill ------
+      const rIn = C.wallX - 0.14, rOut = C.wallX + 0.05;
+      slab(rIn, C.winTop, -C.winZ - 0.09, rOut, C.winTop + 0.09, C.winZ + 0.09, wood);
+      slab(rIn, C.winBot - 0.05, -C.winZ - 0.09, rOut, C.winBot, C.winZ + 0.09, wood);
+      slab(rIn, C.winBot, -C.winZ - 0.09, rOut, C.winTop, -C.winZ, wood);
+      slab(rIn, C.winBot, C.winZ, rOut, C.winTop, C.winZ + 0.09, wood);
+      // The sill you can put things on.
+      soft(rOut - 0.02, C.winBot - 0.06, -C.winZ - 0.12, rOut + 0.22, C.winBot,
+           C.winZ + 0.12, 0.018, wood, "y");
 
-      // The pane: world texture, fogged glass and every droplet, all in GL.
+      // ---- the pane ----------------------------------------------------
       paneMeshW = C.winZ * 2;
       const paneGroup = buildPaneGL(paneMeshW, C.winTop - C.winBot);
       if (!paneGroup) return false;
       paneGroup.position.set(C.glassX, (C.winTop + C.winBot) / 2, 0);
-      paneGroup.rotation.y = Math.PI / 2;   // faces +X, into the cabin
+      paneGroup.rotation.y = Math.PI / 2;
       scene.add(paneGroup);
-      // An invisible plane on the same spot, purely so a touch can be
-      // raycast onto the glass and turned back into pane coordinates.
       glassMesh = new THREE.Mesh(
         new THREE.PlaneGeometry(paneMeshW, C.winTop - C.winBot),
         new THREE.MeshBasicMaterial({ visible: false })
@@ -1889,123 +1908,116 @@ window.plethoraBit = {
       glassMesh.rotation.y = Math.PI / 2;
       scene.add(glassMesh);
 
-      // Right door, with its own window onto the same weather.
-      slab(C.wallX - 0.03, C.floorY, C.frontZ, C.wallX + 0.06, C.winBot, C.backZ, card);
-      slab(C.wallX - 0.03, C.winTop, C.frontZ, C.wallX + 0.06, C.roofY, C.backZ, lining);
-      slab(C.wallX - 0.03, C.winBot, C.frontZ, C.wallX + 0.06, C.winTop, -C.winZ, trim);
-      slab(C.wallX - 0.03, C.winBot, C.winZ, C.wallX + 0.06, C.winTop, C.backZ, trim);
-      const farGlass = makeStripTexture(blurFar);
-      const far = new THREE.Mesh(
-        new THREE.PlaneGeometry(C.winZ * 2, C.winTop - C.winBot),
-        new THREE.MeshBasicMaterial({ map: farGlass, opacity: 0.5, transparent: true })
-      );
-      far.position.set(C.wallX - 0.04, (C.winTop + C.winBot) / 2, 0);
-      far.rotation.y = -Math.PI / 2;
-      scene.add(far);
-
-      // Shell.
-      slab(C.glassX, C.floorY - 0.05, C.frontZ, C.wallX, C.floorY, C.backZ, dark);
-      slab(C.glassX, C.roofY, C.frontZ, C.wallX, C.roofY + 0.06, C.backZ, lining);
-
-      // Rear bench. You are sitting on it with your back against it, so the
-      // backrest is right behind your shoulder, not across the cabin — and it
-      // is two seats with a gap rather than one slab, because a single flat
-      // panel is what you see when you turn round otherwise.
-      const backZ0 = 0.3, backZ1 = 0.46;
-      soft(C.glassX + 0.05, C.seatY - 0.18, -0.32, C.wallX - 0.05, C.seatY, backZ0 + 0.02,
-           0.07, fabric, "y");
-      soft(C.glassX + 0.05, C.seatY - 0.16, backZ0, -0.005, -0.02, backZ1, 0.07, fabric, "z");
-      soft(0.035, C.seatY - 0.16, backZ0, C.wallX - 0.05, -0.02, backZ1, 0.07, fabric, "z");
-      // Headrests float on posts rather than growing out of the backrest.
-      soft(-0.5, 0.05, backZ0 + 0.03, -0.18, 0.27, backZ1 - 0.03, 0.055, fabric, "z");
-      soft(0.22, 0.05, backZ0 + 0.03, 0.54, 0.27, backZ1 - 0.03, 0.055, fabric, "z");
-      for (const sx of [[-0.7, -0.005], [0.035, 0.73]]) {
-        slab(sx[0], -0.2, backZ0 - 0.004, sx[1], -0.176, backZ1, trim);
-        slab(sx[0] + 0.02, C.seatY - 0.16, backZ0 - 0.006, sx[0] + 0.075, -0.02,
-             backZ1, fabric);
-        slab(sx[1] - 0.075, C.seatY - 0.16, backZ0 - 0.006, sx[1] - 0.02, -0.02,
-             backZ1, fabric);
+      // ---- curtains ----------------------------------------------------
+      // Folds are the whole trick: one flat panel reads as card, six narrow
+      // rounded ones side by side read as cloth hanging.
+      cyl(C.wallX + 0.16, C.winTop + 0.2, 0, 0.014, 0.014, C.winZ * 2 + 0.5, metal,
+          Math.PI / 2);
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 6; i++) {
+          const z = side * (C.winZ + 0.04 + i * 0.062);
+          const d = 0.05 + (i % 2) * 0.03;
+          soft(C.wallX + 0.1, C.floorY + 0.12, z - 0.032, C.wallX + 0.1 + d,
+               C.winTop + 0.17, z + 0.032, 0.028, i % 2 ? cream : cloth, "z");
+        }
       }
-      for (const hx of [-0.44, -0.26, 0.28, 0.46]) {
-        slab(hx - 0.012, -0.03, backZ0 + 0.06, hx + 0.012, 0.06, backZ0 + 0.09, chrome);
+
+      // ---- string lights along the top of the window -------------------
+      const bulbMat = glow("#ffcf92", 1.5);
+      for (let i = 0; i < 15; i++) {
+        const t = i / 14;
+        const z = (t - 0.5) * (C.winZ * 2 + 0.2);
+        const sag = Math.sin(t * Math.PI) * 0.05;
+        ball(C.wallX + 0.09, C.winTop + 0.11 - sag, z, 0.0055, bulbMat);
       }
-      // Side bolsters and a seam, so the bench is not one flat panel.
-      soft(C.glassX + 0.05, C.seatY - 0.2, -0.3, C.glassX + 0.16, C.seatY + 0.03, backZ0,
-           0.045, fabric, "x");
-      soft(C.wallX - 0.16, C.seatY - 0.2, -0.3, C.wallX - 0.05, C.seatY + 0.03, backZ0,
-           0.045, fabric, "x");
-      slab(-0.02, C.seatY - 0.19, -0.3, 0.02, C.seatY + 0.005, backZ0, trim);
+      for (const z of [-0.34, 0, 0.34]) {
+        const b = new THREE.PointLight(0xffbe78, 0.16, 1.1, 2);
+        b.position.set(C.wallX + 0.16, C.winTop + 0.1, z);
+        scene.add(b);
+      }
 
-      // Parcel shelf behind the seat, with the rear screen above it.
-      slab(C.glassX + 0.05, -0.04, backZ1, C.wallX - 0.05, 0.01, C.backZ - 0.04, card);
+      // ---- window seat you are sitting on ------------------------------
+      soft(C.wallX + 0.06, C.seatY - 0.3, -0.78, 0.5, C.seatY, 0.78, 0.06, cloth, "y");
+      for (const z of [-0.46, 0.02, 0.5]) {
+        soft(C.wallX + 0.08, C.seatY, z - 0.2, C.wallX + 0.28, C.seatY + 0.2, z + 0.2,
+             0.06, cloth, "z");
+      }
 
-      // Front seats ahead of you, and the glow of the windscreen past them.
-      soft(-0.64, C.seatY - 0.2, C.frontZ + 0.16, -0.12, 0.0, C.frontZ + 0.32, 0.075, fabric, "z");
-      soft(0.18, C.seatY - 0.2, C.frontZ + 0.16, 0.7, 0.0, C.frontZ + 0.32, 0.075, fabric, "z");
-      soft(-0.55, 0.0, C.frontZ + 0.19, -0.21, 0.24, C.frontZ + 0.29, 0.05, fabric, "z");
-      soft(0.27, 0.0, C.frontZ + 0.19, 0.61, 0.24, C.frontZ + 0.29, 0.05, fabric, "z");
+      // ---- things on the sill ------------------------------------------
+      cyl(rOut + 0.09, C.winBot + 0.045, -0.26, 0.042, 0.038, 0.09, ceramic);
+      cyl(rOut + 0.09, C.winBot + 0.075, 0.22, 0.05, 0.04, 0.06, mat("#8a6a4a", 0.7));
+      for (let i = 0; i < 9; i++) {
+        ball(rOut + 0.09 + rr(-0.05, 0.05), C.winBot + 0.115 + rr(0, 0.075),
+             0.22 + rr(-0.05, 0.05), rr(0.012, 0.024), leaf);
+      }
+      cyl(rOut + 0.1, C.winBot + 0.05, 0.44, 0.026, 0.026, 0.1, mat("#d8cbb4", 0.5));
+      ball(rOut + 0.1, C.winBot + 0.105, 0.44, 0.011, glow("#ffb765", 1.8));
+      const flame = new THREE.PointLight(0xffa356, 0.35, 0.9, 2);
+      flame.position.set(rOut + 0.1, C.winBot + 0.13, 0.44);
+      scene.add(flame);
 
-      const screen = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.5, 0.46),
-        new THREE.MeshBasicMaterial({ map: makeStripTexture(blurFar), opacity: 0.75,
-                                      transparent: true })
-      );
-      screen.position.set(0, 0.16, C.frontZ + 0.02);
-      scene.add(screen);
+      // ---- bookshelf on one side --------------------------------------
+      const BZ = C.backZ - 0.2;
+      const BOOK = ["#8c4a3a", "#3f5a6b", "#7a6a3c", "#5c4470", "#3f6b52",
+                    "#96603a", "#4a4f6b", "#7d3f4c"];
+      slab(0.25, C.floorY, BZ, 1.75, C.floorY + 1.15, BZ + 0.24, woodDark);
+      for (let sh = 0; sh < 3; sh++) {
+        const y = C.floorY + 0.1 + sh * 0.36;
+        slab(0.27, y, BZ + 0.01, 1.73, y + 0.03, BZ + 0.23, wood);
+        let bx = 0.32;
+        while (bx < 1.66) {
+          const bw = rr(0.022, 0.05), bh = rr(0.17, 0.29);
+          slab(bx, y + 0.03, BZ + 0.04, bx + bw, y + 0.03 + bh, BZ + 0.2,
+               mat(BOOK[ri(0, BOOK.length - 1)], 0.85, grain, 1, 2));
+          bx += bw + rr(0.002, 0.012);
+        }
+      }
 
-      // Rear window behind your shoulder.
-      const rear = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.3, 0.4),
-        new THREE.MeshBasicMaterial({ map: makeStripTexture(blurNear), opacity: 0.42,
-                                      transparent: true })
-      );
-      rear.position.set(0, 0.22, C.backZ - 0.02);
-      rear.rotation.y = Math.PI;
-      scene.add(rear);
+      // ---- desk and lamp on the other side ----------------------------
+      const DZ = C.frontZ + 0.22;
+      soft(0.3, C.floorY + 0.66, DZ, 1.6, C.floorY + 0.71, DZ + 0.5, 0.012, wood, "y");
+      for (const lx of [0.36, 1.5]) {
+        for (const lz of [DZ + 0.05, DZ + 0.44]) {
+          slab(lx - 0.02, C.floorY, lz - 0.02, lx + 0.02, C.floorY + 0.66, lz + 0.02, woodDark);
+        }
+      }
+      cyl(0.55, C.floorY + 0.74, DZ + 0.24, 0.05, 0.07, 0.06, metal);
+      cyl(0.55, C.floorY + 0.87, DZ + 0.24, 0.012, 0.012, 0.22, metal);
+      cyl(0.55, C.floorY + 1.02, DZ + 0.24, 0.07, 0.11, 0.13, glow("#e8bb84", 0.75));
+      const lamp2 = new THREE.PointLight(0xffb06a, 1.5, 3.0, 2);
+      lamp2.position.set(0.55, C.floorY + 0.99, DZ + 0.24);
+      scene.add(lamp2);
+      // A couple of books left open on the desk.
+      slab(1.0, C.floorY + 0.71, DZ + 0.14, 1.24, C.floorY + 0.74, DZ + 0.34,
+           mat("#8c4a3a", 0.85));
+      slab(1.02, C.floorY + 0.74, DZ + 0.16, 1.22, C.floorY + 0.762, DZ + 0.32,
+           mat("#cfc4ad", 0.9));
 
-      // Seat belt off the pillar behind the window.
-      const belt = new THREE.Mesh(
-        new THREE.BoxGeometry(0.012, 1.0, 0.05),
-        mat("#12151c", 1)
-      );
-      belt.position.set(C.glassX + 0.12, 0.0, C.winZ + 0.1);
-      belt.rotation.x = 0.24;
-      belt.rotation.z = -0.12;
-      scene.add(belt);
+      // ---- rug and pictures -------------------------------------------
+      soft(0.1, C.floorY, -0.9, 1.9, C.floorY + 0.012, 0.9, 0.06, rugMat, "y");
+      for (const pz of [-0.55, 0.05, 0.62]) {
+        const ph = rr(0.2, 0.34), pw = rr(0.16, 0.26);
+        slab(C.backX - 0.03, 0.1, pz - pw / 2, C.backX - 0.01, 0.1 + ph, pz + pw / 2, wood);
+        slab(C.backX - 0.035, 0.12, pz - pw / 2 + 0.02, C.backX - 0.031, 0.08 + ph,
+             pz + pw / 2 - 0.02, mat("#9aa3ab", 0.8));
+      }
 
-      // Light. Almost all of it comes through the window, and the sweep light
-      // is driven by the same lamps that are sliding past outside — so a lamp
-      // crossing the pane washes warm light across the seat beside you.
-      // Light in here is entirely borrowed from outside, and the way to make
-      // that read on axis-aligned slabs is falloff. A directional light gives
-      // every face of a box one flat tone; point lights hung in the window
-      // aperture rake across the door and the seat instead, so surfaces get a
-      // gradient and an edge, which is all a dark cabin needs to look like one.
-      scene.add(new THREE.HemisphereLight(0x33486c, 0x141820, 0.28));
-      // The sources sit *outside* the glass, where the light actually is. A
-      // point light hung inside the cabin is 20cm from whatever it is next to
-      // and blows it out; from out there the falloff across the cabin is
-      // gentle enough to shade a whole door card.
-      for (const lz of [-0.34, 0.3]) {
-        const wl = new THREE.PointLight(0xa9c6ef, 2.6, 9, 2);
-        wl.position.set(C.glassX - 1.75, C.winBot + 0.5, lz * 2.4);
+      // The room is lit warm from inside and cold from the window, and the
+      // env map carries most of it. These are the two sources you can point at.
+      scene.add(new THREE.HemisphereLight(0x4a3c30, 0x140f0c, 0.35));
+      for (const lz of [-0.32, 0.3]) {
+        const wl = new THREE.PointLight(0xaac6ee, 1.5, 4.5, 2);
+        wl.position.set(C.glassX - 1.5, C.winBot + 0.55, lz * 2.2);
         scene.add(wl);
       }
-      // The lamp currently crossing the pane, throwing warm light inboard.
-      sweepLight = new THREE.PointLight(0xffb478, 0, 10, 2);
-      sweepLight.position.set(C.glassX - 2, 0.5, 0);
+      // Headlights of something going past outside, thrown across the ceiling.
+      sweepLight = new THREE.PointLight(0xffc48a, 0, 9, 2);
+      sweepLight.position.set(C.glassX - 2.2, 0.55, 0);
       scene.add(sweepLight);
-      const rightPane = new THREE.PointLight(0x8298c4, 1.6, 8, 2);
-      rightPane.position.set(C.wallX + 1.6, C.winBot + 0.45, 0);
-      scene.add(rightPane);
-      const rearGlow = new THREE.PointLight(0x93aed8, 1.4, 8, 2);
-      rearGlow.position.set(0, 0.3, C.backZ + 1.5);
-      scene.add(rearGlow);
-      // Footwell strip. Cars really do have this, and it keeps the bottom of
-      // the cabin from falling into an unreadable black field.
-      const footwell = new THREE.PointLight(0xffab68, 0.7, 1.5, 2);
-      footwell.position.set(0.18, C.floorY + 0.3, -0.34);
-      scene.add(footwell);
+      // Bounce off the floorboards, so the room is not lit only from above.
+      const bounce = new THREE.PointLight(0xc98a4e, 0.7, 3.4, 2);
+      bounce.position.set(1.0, C.floorY + 0.35, 0.1);
+      scene.add(bounce);
 
       camera = new THREE.PerspectiveCamera(68, ctx.width / ctx.height, 0.02, 40);
       camera.position.set(C.eye[0], C.eye[1], C.eye[2]);
@@ -2061,7 +2073,7 @@ window.plethoraBit = {
         const w = Math.max(0, 1 - Math.abs(u - 0.5) * 2.4) * nearLamps[i].a;
         if (w > best) { best = w; bestZ = (u - 0.5) * 5.5; }
       }
-      sweepLight.intensity = best * 8;
+      sweepLight.intensity = best * 5;
       sweepLight.position.z = bestZ;
     }
 
@@ -2100,6 +2112,36 @@ window.plethoraBit = {
     let soundOn = true;
     let voices = 0;
 
+    let brownBuf = null, rumbleGain = null, rainLP = null;
+
+    // Rain is not hiss. Band-passed white noise up at 2.6k is static, which is
+    // what the first version sounded like. Rain is broadband and weighted low,
+    // and heard through a closed window it is weighted lower still — so the bed
+    // is pink noise rolled off around 1.4k, with brown noise underneath for the
+    // room itself. The individual taps on the glass sit on top of that.
+    function fillPink(data) {
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < data.length; i++) {
+        const w = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + w * 0.0555179;
+        b1 = 0.99332 * b1 + w * 0.0750759;
+        b2 = 0.969 * b2 + w * 0.153852;
+        b3 = 0.8665 * b3 + w * 0.3104856;
+        b4 = 0.55 * b4 + w * 0.5329522;
+        b5 = -0.7616 * b5 - w * 0.016898;
+        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.16;
+        b6 = w * 0.115926;
+      }
+    }
+
+    function fillBrown(data) {
+      let last = 0;
+      for (let i = 0; i < data.length; i++) {
+        last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+        data[i] = last * 3.2;
+      }
+    }
+
     function buildAudio() {
       if (ac || audioDead) return ac;
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -2108,35 +2150,59 @@ window.plethoraBit = {
 
       master = ac.createGain();
       master.gain.value = soundOn ? 0.9 : 0;
+      // Gentle and slow. A fast compressor pumps on every drop tap, which is
+      // the opposite of restful.
       const comp = ac.createDynamicsCompressor();
-      comp.threshold.value = -18; comp.ratio.value = 3;
-      comp.attack.value = 0.004; comp.release.value = 0.28;
-      master.connect(comp);
-      comp.connect(ac.destination);
+      comp.threshold.value = -20; comp.ratio.value = 2.2;
+      comp.attack.value = 0.02; comp.release.value = 0.5;
+      // Nothing above 6k belongs in this: it is all glass, cloth and water.
+      const air = ac.createBiquadFilter();
+      air.type = "lowpass"; air.frequency.value = 6200; air.Q.value = 0.6;
+      master.connect(comp); comp.connect(air); air.connect(ac.destination);
 
-      noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 2), ac.sampleRate);
-      const nd = noiseBuf.getChannelData(0);
-      for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      const sr = ac.sampleRate;
+      noiseBuf = ac.createBuffer(1, Math.floor(sr * 3), sr);
+      fillPink(noiseBuf.getChannelData(0));
+      brownBuf = ac.createBuffer(1, Math.floor(sr * 4), sr);
+      fillBrown(brownBuf.getChannelData(0));
 
-      const hiss = ac.createBiquadFilter();
-      hiss.type = "bandpass";
-      hiss.frequency.value = 2600;
-      hiss.Q.value = 0.55;
+      // The rain itself, on the other side of the glass.
+      rainLP = ac.createBiquadFilter();
+      rainLP.type = "lowpass";
+      rainLP.frequency.value = 1400;
+      rainLP.Q.value = 0.7;
+      const body = ac.createBiquadFilter();
+      body.type = "peaking";
+      body.frequency.value = 620; body.Q.value = 0.8; body.gain.value = 4;
       rainGain = ac.createGain();
-      rainGain.gain.value = 0.05;
+      rainGain.gain.value = 0.16;
       const rainSrc = ac.createBufferSource();
       rainSrc.buffer = noiseBuf; rainSrc.loop = true;
-      rainSrc.connect(hiss); hiss.connect(rainGain); rainGain.connect(master);
+      rainSrc.connect(rainLP); rainLP.connect(body); body.connect(rainGain);
+      rainGain.connect(master);
       try { rainSrc.start(0); } catch (_) {}
 
+      // The room you are sitting in. You only notice it if it stops.
+      const rumbleLP = ac.createBiquadFilter();
+      rumbleLP.type = "lowpass"; rumbleLP.frequency.value = 190;
+      rumbleGain = ac.createGain();
+      rumbleGain.gain.value = 0.09;
+      const rumbleSrc = ac.createBufferSource();
+      rumbleSrc.buffer = brownBuf; rumbleSrc.loop = true;
+      rumbleSrc.connect(rumbleLP); rumbleLP.connect(rumbleGain);
+      rumbleGain.connect(master);
+      try { rumbleSrc.start(0); } catch (_) {}
+
+      // Weather outside, breathing slowly. Kept well under the rain so it
+      // reads as depth rather than as a gale.
       windFilter = ac.createBiquadFilter();
       windFilter.type = "bandpass";
-      windFilter.frequency.value = 330;
-      windFilter.Q.value = 0.85;
+      windFilter.frequency.value = 420;
+      windFilter.Q.value = 0.5;
       windGain = ac.createGain();
-      windGain.gain.value = 0.05;
+      windGain.gain.value = 0.02;
       const windSrc = ac.createBufferSource();
-      windSrc.buffer = noiseBuf; windSrc.loop = true;
+      windSrc.buffer = brownBuf; windSrc.loop = true;
       windSrc.connect(windFilter); windFilter.connect(windGain); windGain.connect(master);
       try { windSrc.start(0); } catch (_) {}
 
@@ -2172,20 +2238,26 @@ window.plethoraBit = {
     function tickImpact() {
       if (!ac || !soundOn || ac.state !== "running") return;
       const t = ac.currentTime;
-      if (t - lastImpact < 0.022) return;
+      if (t - lastImpact < 0.03) return;
       lastImpact = t;
       const v = noiseVoice();
       if (!v) return;
+      // A drop landing on glass is a soft, low, resonant tap — not a click.
+      // The pitch spread is what stops a steady shower turning into a rattle.
       const bp = ac.createBiquadFilter();
       bp.type = "bandpass";
-      bp.frequency.value = 1500 + Math.random() * 4200;
-      bp.Q.value = 1.4 + Math.random() * 2.2;
+      bp.frequency.value = 420 + Math.random() * Math.random() * 1900;
+      bp.Q.value = 2.2 + Math.random() * 4;
+      const soften = ac.createBiquadFilter();
+      soften.type = "lowpass";
+      soften.frequency.value = 2600;
       const gn = ac.createGain();
+      const peak = 0.012 + Math.random() * 0.03;
       gn.gain.setValueAtTime(0.0001, t);
-      gn.gain.exponentialRampToValueAtTime(0.018 + Math.random() * 0.026, t + 0.002);
-      gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.02 + Math.random() * 0.04);
-      v.src.connect(bp); bp.connect(gn); gn.connect(master);
-      try { v.src.start(t, v.off); v.src.stop(t + 0.09); } catch (_) { voices--; }
+      gn.gain.exponentialRampToValueAtTime(peak, t + 0.004);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.05 + Math.random() * 0.11);
+      v.src.connect(bp); bp.connect(soften); soften.connect(gn); gn.connect(master);
+      try { v.src.start(t, v.off); v.src.stop(t + 0.2); } catch (_) { voices--; }
     }
 
     // Two drops becoming one. A wet, pitched blip — bigger merge, lower note.
@@ -2226,12 +2298,12 @@ window.plethoraBit = {
       if (!v) return;
       const bp = ac.createBiquadFilter();
       bp.type = "bandpass";
-      bp.frequency.setValueAtTime(2600, t);
-      bp.frequency.exponentialRampToValueAtTime(700, t + 0.26);
-      bp.Q.value = 1.1;
+      bp.frequency.setValueAtTime(1300, t);
+      bp.frequency.exponentialRampToValueAtTime(420, t + 0.3);
+      bp.Q.value = 0.9;
       const gn = ac.createGain();
       gn.gain.setValueAtTime(0.0001, t);
-      gn.gain.exponentialRampToValueAtTime(0.03, t + 0.02);
+      gn.gain.exponentialRampToValueAtTime(0.02, t + 0.04);
       gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
       v.src.connect(bp); bp.connect(gn); gn.connect(master);
       try { v.src.start(t, v.off); v.src.stop(t + 0.34); } catch (_) { voices--; }
@@ -2256,12 +2328,12 @@ window.plethoraBit = {
       try {
         await ctx.music.unlock();
         musicHandle = await ctx.music.play({
-          preset: "drift",
+          preset: "cozy",
           scale: "pentatonic",
-          volume: 0.22,
+          volume: 0.18,
           intensity: 0.18,
           density: 0.24,
-          tempo: 58,
+          tempo: 52,
           fadeInMs: 4200
         });
         if (!soundOn && musicHandle) musicHandle.pause();
@@ -2543,11 +2615,11 @@ window.plethoraBit = {
       "box-shadow:0 18px 50px rgba(0,0,0,.55);"
     );
     card.appendChild(
-      divEl("font-size:17px;font-weight:600;margin-bottom:4px;letter-spacing:.01em;", "Backseat Rain")
+      divEl("font-size:17px;font-weight:600;margin-bottom:4px;letter-spacing:.01em;", "Window Seat")
     );
     card.appendChild(
       divEl("font-size:12.5px;color:rgba(190,208,234,.6);margin-bottom:12px;",
-            "Rain on the window on the drive home.")
+            "A room, a window seat, and weather outside.")
     );
     const list = document.createElement("ul");
     list.setAttribute(
@@ -2560,7 +2632,7 @@ window.plethoraBit = {
       "Three drops get coloured rings. Tap one to back it.",
       "Drag the glass to sweep loose beads into one heavy drop, then let go.",
       "Drop it in your racer's path and your racer swallows it and speeds up.",
-      "Drag the seat or the door to look around the car.",
+      "Drag the room to look around — the shelves, the lamp, the seat.",
       "First drop down to the sill wins. Win in a row to build a streak."
     ];
     for (let i = 0; i < STEPS.length; i++) {
@@ -2862,11 +2934,13 @@ window.plethoraBit = {
 
       // Rain and wind beds ride the same gusts that are slanting the drops.
       if (ac && rainGain && ac.state === "running") {
-        const gust = 0.5 + 0.5 * Math.sin(windPhase * 0.8);
+        // Slow, shallow breathing. Anything faster stops being restful.
+        const gust = 0.5 + 0.5 * Math.sin(windPhase * 0.45);
         try {
-          rainGain.gain.setTargetAtTime(0.04 + gust * 0.028, ac.currentTime, 0.5);
-          windGain.gain.setTargetAtTime(0.032 + gust * 0.042, ac.currentTime, 0.7);
-          windFilter.frequency.setTargetAtTime(300 + gust * 190, ac.currentTime, 0.9);
+          rainGain.gain.setTargetAtTime(0.14 + gust * 0.05, ac.currentTime, 1.2);
+          rainLP.frequency.setTargetAtTime(1150 + gust * 550, ac.currentTime, 1.4);
+          windGain.gain.setTargetAtTime(0.014 + gust * 0.026, ac.currentTime, 1.6);
+          windFilter.frequency.setTargetAtTime(340 + gust * 200, ac.currentTime, 1.8);
         } catch (_) {}
       }
 
