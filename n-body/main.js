@@ -325,7 +325,7 @@ window.plethoraBit = {
     // force law does not care which way is up). G is tuned so a planet 180px
     // out from a 1600-mass star takes about ten seconds to come round, which
     // is roughly the slowest orbit that still reads as motion on a phone.
-    const G = 1400;
+    const G = 2200;
     const DT = 1 / 150;            // fixed physics step
     const MAX_SUB = 5;             // substep ceiling, stops the death spiral
     const MIN_MASS = 5;
@@ -333,9 +333,8 @@ window.plethoraBit = {
     const IGNITE_MASS = 850;       // above this a body lights up
     const MAX_BODIES = 170;
     const CULL_RADIUS = 2600;      // world units from the system's centre
-    const MERGE_FACTOR = 0.86;     // fraction of touching radii that merges
-    const FLICK = 0.42;            // finger px/s -> world px/s
-    const MAX_LAUNCH = 430;
+    const MERGE_FACTOR = 0.72;     // fraction of touching radii that merges
+    const MAX_LAUNCH = 1200;       // final safety clamp; aiming clamps well below
 
     const radiusFor = (m) => 2.95 * Math.cbrt(m);
 
@@ -797,7 +796,7 @@ window.plethoraBit = {
     // ====================================================================== //
     function addFlash(x, y, r, energy, color) {
       flashes.push({ x, y, r0: r, r: r, t: 0, life: 0.34 + 0.4 * energy, energy, color });
-      if (flashes.length > 40) flashes.shift();
+      if (flashes.length > 16) flashes.shift();
     }
 
     function addSparks(x, y, small, big, energy) {
@@ -850,7 +849,7 @@ window.plethoraBit = {
         const rms = mass > 0 ? Math.sqrt(ex / mass) : 0;
         const extent = Math.max(160, rms * 2.1 + 90);
         cam.tx = sysX; cam.ty = sysY;
-        cam.tz = clamp(Math.min(W, H) * 0.5 / extent, 0.42, 1);
+        cam.tz = clamp(Math.min(W, H) * 0.5 / extent, 0.62, 1);
       }
       const k = 1 - Math.pow(0.001, dt * 0.5);
       cam.x = lerp(cam.x, cam.tx, k);
@@ -867,10 +866,21 @@ window.plethoraBit = {
     // Input                                                                  //
     // ====================================================================== //
     /**
-     * One nursery per finger. The body grows while held and follows the
-     * finger, so releasing hands it the finger's own velocity — you throw a
-     * world the way you would throw anything else. Release velocity comes from
-     * a smoothed estimate, because raw per-event deltas on a phone are noise.
+     * Placing a world happens in two beats, and the finger never covers either.
+     *
+     *   press and hold   the world appears under your finger and gains mass
+     *   drag outward     mass locks, the world stays put, and you aim
+     *
+     * The first version threw on the finger's own velocity, which was the
+     * mistake: it made the trajectory preview useless. You could not study the
+     * preview and then release, because holding still to look sets the velocity
+     * to zero. Aiming has to be a *static* quantity you can sit and adjust.
+     *
+     * Speed is quoted as a multiple of the local circular-orbit speed rather
+     * than in pixels per second, so a drag of AIM_REF puts the world into a
+     * circular orbit wherever you happen to be standing. That is the whole fix
+     * for "hard to spin planets around stuff": orbit is the default outcome of
+     * an ordinary drag instead of a lucky one.
      *
      * Nurseries are kept in *screen* space and converted to world space when
      * read. The camera drifts while you hold, and a world-space nursery would
@@ -879,18 +889,88 @@ window.plethoraBit = {
     const nurseries = new Map();
     let started = false;
 
-    /** World-space position and launch velocity for a held nursery. */
+    const AIM_REF = 96;          // drag in screen px that means "circular orbit"
+    const AIM_MAX_MULT = 2.4;    // hardest throw, as a multiple of circular speed
+    const AIM_LOCK = 13;         // drag in screen px that locks mass and starts aiming
+    const FREE_SCALE = 1.7;      // world px/s per screen px, with nothing to orbit
+    const SNAP_COS = 0.975;      // ~13 degrees of tangent
+    const SNAP_SPEED = 0.13;     // and within 13% of circular
+
+    /**
+     * The body that sets the orbital scale where a world is being placed —
+     * strongest pull, not simply the heaviest, so a binary or a cluster hands
+     * back whichever star actually governs that spot. Anything not clearly
+     * heavier than the world being placed is ignored; two comparable masses do
+     * not have a "circular orbit" worth quoting.
+     */
+    function attractorFor(x, y, mass) {
+      let best = null, bestPull = 0;
+      for (let i = 0; i < bodies.length; i++) {
+        const b = bodies[i];
+        if (b.mass < mass * 4) continue;
+        const dx = b.x - x, dy = b.y - y;
+        const pull = b.mass / Math.max(1, dx * dx + dy * dy);
+        if (pull > bestPull) { bestPull = pull; best = b; }
+      }
+      return best;
+    }
+
+    /**
+     * Everything the aim needs: where the world will start, how fast, whether
+     * that orbit is bound, and whether it has snapped to a clean circle.
+     * Velocities are built in the attractor's frame, so aiming still works
+     * around a star that is itself moving.
+     */
     function nurseryState(n) {
-      const p = toWorld(n.sx, n.sy);
-      let vx = (n.vsx / cam.zoom) * FLICK;
-      let vy = (n.vsy / cam.zoom) * FLICK;
-      const sp = Math.hypot(vx, vy);
-      if (sp > MAX_LAUNCH) { vx = vx / sp * MAX_LAUNCH; vy = vy / sp * MAX_LAUNCH; }
-      return { x: p.x, y: p.y, vx, vy };
+      const p = toWorld(n.ox, n.oy);
+      const a = attractorFor(p.x, p.y, n.mass);
+      const out = {
+        x: p.x, y: p.y,
+        vx: a ? a.vx : 0, vy: a ? a.vy : 0,
+        len: 0, vc: 0, bound: false, snapped: false, attractor: a
+      };
+
+      const dxs = n.fx - n.ox, dys = n.fy - n.oy;
+      const len = Math.hypot(dxs, dys);
+      out.len = len;
+      if (len > 0.001) {
+        const dirx = dxs / len, diry = dys / len;
+        if (a) {
+          const rx = p.x - a.x, ry = p.y - a.y;
+          const r = Math.max(a.r * 1.5, Math.hypot(rx, ry));
+          const vc = out.vc = Math.sqrt(G * a.mass / r);
+          const sp = vc * clamp(len / AIM_REF, 0, AIM_MAX_MULT);
+          // Tangent, turned to whichever way round the player is aiming.
+          let tx = -ry / r, ty = rx / r;
+          if (tx * dirx + ty * diry < 0) { tx = -tx; ty = -ty; }
+          if (tx * dirx + ty * diry > SNAP_COS && Math.abs(sp - vc) / vc < SNAP_SPEED) {
+            out.snapped = true;
+            out.vx = a.vx + tx * vc; out.vy = a.vy + ty * vc;
+          } else {
+            out.vx = a.vx + dirx * sp; out.vy = a.vy + diry * sp;
+          }
+        } else {
+          const sp = len * FREE_SCALE;
+          out.vx = dirx * sp; out.vy = diry * sp;
+        }
+      }
+
+      // Two-body specific orbital energy. Negative means it comes back, which
+      // is the one thing worth telling the player before they let go.
+      if (a) {
+        const rx = p.x - a.x, ry = p.y - a.y;
+        const r = Math.max(a.r * 1.5, Math.hypot(rx, ry));
+        const vrx = out.vx - a.vx, vry = out.vy - a.vy;
+        out.bound = 0.5 * (vrx * vrx + vry * vry) - G * a.mass / r < 0;
+      }
+
+      const sp = Math.hypot(out.vx, out.vy);
+      if (sp > MAX_LAUNCH) { out.vx = out.vx / sp * MAX_LAUNCH; out.vy = out.vy / sp * MAX_LAUNCH; }
+      return out;
     }
 
     function massAt(heldSec) {
-      const t = 1 - Math.exp(-heldSec / 1.15);
+      const t = 1 - Math.exp(-heldSec / 1.05);
       return MIN_MASS + (MAX_SPAWN_MASS - MIN_MASS) * Math.pow(t, 1.5);
     }
 
@@ -919,8 +999,8 @@ window.plethoraBit = {
       const p = localPoint(e);
       try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
       nurseries.set(e.pointerId, {
-        sx: p.x, sy: p.y, vsx: 0, vsy: 0,
-        held: 0, mass: MIN_MASS,
+        ox: p.x, oy: p.y, fx: p.x, fy: p.y,
+        held: 0, mass: MIN_MASS, locked: false,
         seed: Math.random() * 1000
       });
       haptic("light");
@@ -932,15 +1012,16 @@ window.plethoraBit = {
       if (!n) return;
       e.preventDefault();
       const p = localPoint(e);
-      const dt = Math.max(0.008, lastFrameDt);
-      // Exponential smoothing on the finger velocity: fast enough to feel
-      // direct, slow enough that a single jittery sample cannot launch a body.
-      const ivx = (p.x - n.sx) / dt, ivy = (p.y - n.sy) / dt;
-      n.vsx = lerp(n.vsx, ivx, 0.35);
-      n.vsy = lerp(n.vsy, ivy, 0.35);
-      n.sx = p.x; n.sy = p.y;
+      n.fx = p.x; n.fy = p.y;
+      if (!n.locked && Math.hypot(p.x - n.ox, p.y - n.oy) > AIM_LOCK) {
+        // Mass stops growing the moment aiming starts. Otherwise a careful aim
+        // silently buys you a heavier world than a careless one.
+        n.locked = true;
+        haptic("light");
+      }
     }, { passive: false });
 
+    let lastSnap = false;
     function release(e) {
       const n = nurseries.get(e.pointerId);
       if (!n) return;
@@ -951,8 +1032,13 @@ window.plethoraBit = {
       b.seed = n.seed;
       bodies.push(b);
       sfxSpawn(n.mass);
-      haptic("light");
-      try { ctx.platform.interact({ type: "spawn", mass: Math.round(n.mass) }); } catch (_) {}
+      haptic(s.snapped ? "success" : "light");
+      try {
+        ctx.platform.interact({
+          type: "spawn", mass: Math.round(n.mass),
+          orbit: s.snapped ? "circular" : s.bound ? "bound" : "open"
+        });
+      } catch (_) {}
     }
 
     ctx.listen(canvas, "pointerup", (e) => { e.preventDefault(); release(e); }, { passive: false });
@@ -961,16 +1047,17 @@ window.plethoraBit = {
     }, { passive: false });
 
     /**
-     * Where the held body would go if released now. Integrated as a test
+     * Where the held world would go if released now. Integrated as a test
      * particle in the current field — it does not pull back, which is exactly
-     * the approximation the player is making in their head anyway.
+     * the approximation the player is making in their head anyway. Long enough
+     * to show more than a full orbit at the default scale.
      */
     function predict(s) {
-      const steps = clamp(Math.round(3200 / Math.max(1, bodies.length)), 70, 260);
+      const steps = clamp(Math.round(6000 / Math.max(1, bodies.length)), 90, 420);
       const dt = 1 / 40;
       let x = s.x, y = s.y, vx = s.vx, vy = s.vy;
       const pts = [x, y];
-      for (let s = 0; s < steps; s++) {
+      for (let k = 0; k < steps; k++) {
         let axs = 0, ays = 0;
         for (let i = 0; i < bodies.length; i++) {
           const b = bodies[i];
@@ -1023,7 +1110,7 @@ window.plethoraBit = {
         name: "A star and its planets",
         build() {
           const list = [];
-          const star = new Body(W / 2, H / 2, 0, 0, rnd(1500, 2100));
+          const star = new Body(W / 2, H / 2, 0, 0, rnd(2500, 3200));
           list.push(star);
           const n = rndInt(4, 6);
           const span = Math.min(W, H);
@@ -1038,7 +1125,7 @@ window.plethoraBit = {
         name: "Binary stars",
         build() {
           const list = [];
-          const m = rnd(900, 1400), sep = Math.min(W, H) * 0.2;
+          const m = rnd(1500, 2100), sep = Math.min(W, H) * 0.2;
           // Each star orbits the barycentre, so the pair is stable on its own.
           const v = Math.sqrt(G * m / (2 * sep));
           const a = new Body(W / 2 - sep, H / 2, 0, -v, m);
@@ -1055,7 +1142,7 @@ window.plethoraBit = {
         name: "A collapsing disc",
         build() {
           const list = [];
-          const star = new Body(W / 2, H / 2, 0, 0, rnd(1300, 1800));
+          const star = new Body(W / 2, H / 2, 0, 0, rnd(2300, 2900));
           list.push(star);
           const n = 42;
           const span = Math.min(W, H);
@@ -1079,7 +1166,7 @@ window.plethoraBit = {
             const cxp = W / 2 + side * span * 0.36;
             const cyp = H / 2 - side * span * 0.22;
             const bulk = -side * rnd(24, 44);
-            const core = new Body(cxp, cyp, bulk, side * 12, rnd(340, 620));
+            const core = new Body(cxp, cyp, bulk, side * 12, rnd(520, 900));
             list.push(core);
             for (let i = 0; i < 12; i++) {
               const r = span * rnd(0.04, 0.14);
@@ -1130,7 +1217,7 @@ window.plethoraBit = {
         'padding:0 30px;pointer-events:none;font-family:' + FONT + ';font-size:14px;' +
         'color:rgba(214,232,255,0.86);letter-spacing:0.3px;line-height:1.7;' +
         'text-shadow:0 2px 12px rgba(0,0,0,0.9);transition:opacity 0.8s;">' +
-        'Touch to grow a world<br>Drag to throw it' +
+        'Hold to grow a world<br>Drag out to set its orbit' +
       '</div>' +
       '<div data-el="toast" style="position:absolute;left:0;right:0;top:' + (ctx.safeArea.top + 62) +
         'px;text-align:center;pointer-events:none;font-family:' + FONT + ';font-size:12.5px;' +
@@ -1168,8 +1255,10 @@ window.plethoraBit = {
           'border:1px solid rgba(120,170,230,0.18);">' +
           '<div style="font-size:18px;font-weight:650;letter-spacing:0.3px;margin-bottom:14px;">N-Body</div>' +
           '<ul style="margin:0;padding-left:20px;">' +
-            '<li><b>Touch</b> anywhere to start growing a world. Hold longer for more mass.</li>' +
-            '<li><b>Drag</b> and let go to throw it — the dotted line predicts where it goes.</li>' +
+            '<li><b>Press and hold</b> anywhere — a world appears and gains mass for as long as you hold.</li>' +
+            '<li><b>Drag outward</b> to aim. Mass locks, and the line shows where it will go.</li>' +
+            '<li>The <b>first tick</b> on the aim line is a circular orbit; snap to it and the path turns gold. Past the <b>second tick</b> it escapes for good.</li>' +
+            '<li>A <b>solid</b> path comes back. A <b>dashed</b> one is leaving.</li>' +
             '<li>Every body pulls on every other one. Orbits, slingshots and captures all come out of that.</li>' +
             '<li>Bodies that touch <b>merge</b> and keep their combined momentum.</li>' +
             '<li>Enough mass in one place <b>ignites a star</b>, which then lights the planets around it.</li>' +
@@ -1267,7 +1356,10 @@ window.plethoraBit = {
       // A halo smaller than a pixel or two still costs a full additive blit.
       const gl = (isStar || R * cam.zoom > 1.8) ? glowSprite(b.palette[0]) : null;
       if (gl) {
-        const gr = R * (isStar ? 4.4 : 2.2) * scale * (1 + flare * 0.7);
+        // Bounded on screen, not just in world units: a runaway merge makes a
+        // star whose proportional halo covers most of the display, and a blit
+        // that size in 'lighter' costs more than everything else combined.
+        const gr = Math.min(R * (isStar ? 4.4 : 2.2) * scale * (1 + flare * 0.7), 170 / cam.zoom);
         g.globalCompositeOperation = "lighter";
         g.globalAlpha = clamp((isStar ? 0.42 : 0.2) + flare * 0.4, 0, 1) * alpha;
         g.drawImage(gl, b.x - gr, b.y - gr, gr * 2, gr * 2);
@@ -1329,14 +1421,23 @@ window.plethoraBit = {
     function drawNursery(n, timeMs) {
       const r = radiusFor(n.mass);
       const s = nurseryState(n);
-      // Predicted path, so aiming is a decision rather than a guess.
+      const z = cam.zoom;
+
+      // The predicted path is the whole point of aiming statically, so it says
+      // outright whether this throw comes back: bright and solid when the orbit
+      // is bound, dim and dashed when it is on its way out.
       const pts = predict(s);
       if (pts.length > 4) {
         g.save();
-        g.setLineDash([6 / cam.zoom, 7 / cam.zoom]);
-        g.lineDashOffset = -timeMs * 0.02;
-        g.strokeStyle = "rgba(190,220,255,0.42)";
-        g.lineWidth = 1.4 / cam.zoom;
+        if (!s.bound) {
+          g.setLineDash([6 / z, 7 / z]);
+          g.lineDashOffset = -timeMs * 0.02;
+          g.strokeStyle = "rgba(180,205,238,0.46)";
+          g.lineWidth = 1.3 / z;
+        } else {
+          g.strokeStyle = s.snapped ? "rgba(255,232,176,0.8)" : "rgba(188,226,255,0.62)";
+          g.lineWidth = (s.snapped ? 2 : 1.6) / z;
+        }
         g.beginPath();
         g.moveTo(pts[0], pts[1]);
         for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
@@ -1344,10 +1445,39 @@ window.plethoraBit = {
         g.restore();
       }
 
-      const gl = glowSprite("#bcd8ff");
+      // Aim line, with the circular-orbit and escape speeds marked on it. Those
+      // two ticks are the entire control scheme made visible: drag to the first
+      // for a circle, past the second to leave for good.
+      if (s.len > 2 && s.attractor) {
+        const fw = toWorld(n.fx, n.fy);
+        const dx = fw.x - s.x, dy = fw.y - s.y;
+        const L = Math.hypot(dx, dy) || 1;
+        const ux = dx / L, uy = dy / L;
+
+        g.strokeStyle = "rgba(170,200,238,0.3)";
+        g.lineWidth = 1.2 / z;
+        g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(fw.x, fw.y); g.stroke();
+
+        const tick = (screenLen, color, big) => {
+          const d = screenLen / z;
+          const tx = s.x + ux * d, ty = s.y + uy * d;
+          const h = (big ? 9 : 6) / z;
+          g.strokeStyle = color;
+          g.lineWidth = (big ? 2.4 : 1.6) / z;
+          g.beginPath();
+          g.moveTo(tx + uy * h, ty - ux * h);
+          g.lineTo(tx - uy * h, ty + ux * h);
+          g.stroke();
+        };
+        const pulse = 0.65 + Math.sin(timeMs * 0.008) * 0.35;
+        tick(AIM_REF, s.snapped ? "rgba(255,226,150," + pulse + ")" : "rgba(214,236,255,0.75)", s.snapped);
+        tick(AIM_REF * Math.SQRT2, "rgba(255,178,150,0.5)", false);
+      }
+
+      const gl = glowSprite(s.snapped ? "#ffe6b0" : "#bcd8ff");
       if (gl) {
         g.globalCompositeOperation = "lighter";
-        g.globalAlpha = 0.32;
+        g.globalAlpha = s.snapped ? 0.45 : 0.32;
         const gr = r * 3;
         g.drawImage(gl, s.x - gr, s.y - gr, gr * 2, gr * 2);
         g.globalCompositeOperation = "source-over";
@@ -1356,31 +1486,20 @@ window.plethoraBit = {
       g.fillStyle = "rgba(226,240,255,0.92)";
       g.beginPath(); g.arc(s.x, s.y, r, 0, TAU); g.fill();
 
-      // Mass ring: fills as the world grows, pulses when it tops out.
+      // Mass ring: fills while you hold, and goes quiet once aiming locks it.
       const t = clamp((n.mass - MIN_MASS) / (MAX_SPAWN_MASS - MIN_MASS), 0, 1);
-      const rr = r + 9 / cam.zoom;
-      g.strokeStyle = "rgba(150,195,255,0.28)";
-      g.lineWidth = 2 / cam.zoom;
+      const rr = r + 9 / z;
+      g.strokeStyle = "rgba(150,195,255,0.26)";
+      g.lineWidth = 2 / z;
       g.beginPath(); g.arc(s.x, s.y, rr, 0, TAU); g.stroke();
-      g.strokeStyle = t > 0.985
-        ? "rgba(255,236,190," + (0.7 + Math.sin(timeMs * 0.012) * 0.3) + ")"
-        : "rgba(214,236,255,0.95)";
+      g.strokeStyle = n.locked
+        ? "rgba(190,214,240,0.5)"
+        : t > 0.985
+          ? "rgba(255,236,190," + (0.7 + Math.sin(timeMs * 0.012) * 0.3) + ")"
+          : "rgba(214,236,255,0.95)";
       g.beginPath();
       g.arc(s.x, s.y, rr, -Math.PI / 2, -Math.PI / 2 + TAU * t);
       g.stroke();
-
-      // Throw vector.
-      const sp = Math.hypot(s.vx, s.vy);
-      if (sp > 12) {
-        const a = Math.atan2(s.vy, s.vx);
-        const len = Math.min(sp * 0.35, 120) / cam.zoom + r;
-        g.strokeStyle = "rgba(190,220,255,0.6)";
-        g.lineWidth = 2 / cam.zoom;
-        g.beginPath();
-        g.moveTo(s.x, s.y);
-        g.lineTo(s.x + Math.cos(a) * len, s.y + Math.sin(a) * len);
-        g.stroke();
-      }
     }
 
     function render(timeMs) {
@@ -1414,10 +1533,10 @@ window.plethoraBit = {
       g.globalCompositeOperation = "lighter";
       for (const f of flashes) {
         const k = 1 - f.t / f.life;
-        const gl = glowSprite(f.color);
+        const gl = f.energy > 0.12 ? glowSprite(f.color) : null;
         if (gl) {
           g.globalAlpha = k * k * (0.45 + 0.5 * f.energy);
-          const gr = f.r * 1.5;
+          const gr = f.r * 1.1;
           g.drawImage(gl, f.x - gr, f.y - gr, gr * 2, gr * 2);
         }
         g.globalAlpha = k * k * 0.7;
