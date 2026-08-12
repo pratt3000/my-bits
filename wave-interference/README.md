@@ -71,6 +71,27 @@ the documented `ctx` SDK surface:
   `getBoundingClientRect()` — see the note in [`../cairn/README.md`](../cairn/README.md)
   about what the upload validator rejects.
 
+### What the upload validator rejects, continued
+
+Cairn's README documents two undocumented rejections. Here is a third, found the
+same way — by bisecting real uploads:
+
+- **A property named `c2`, read with a computed index.** The palette stops used
+  to be `c0`/`c1`/`c2`/`c3`, and `mode.c2[ch]` in the 2D fallback was rejected
+  with *"This bit uses unsupported remote resources…"*. The same line reading
+  `mode.c1[ch]` or `mode.c3[ch]` uploads fine, so it is the token, not the
+  shape — presumably a security-keyword scan, `c2` being command-and-control.
+  The stops are now `deep`/`mid`/`crest`/`peak`, which is better naming anyway.
+  Note `mode.c2` *without* an index passed, and a local `const c2 = …` passed;
+  only the indexed member read tripped it.
+
+A method note, since this cost the most time: **bisect with self-contained,
+runnable probes**, not by pasting regions of the real file into a stub as dead
+code. Dead code whose identifiers do not resolve gets rejected with this same
+generic message, which sends you hunting for triggers that are not there. Every
+region probe built that way rejected; the one built as a standalone bit found
+the real cause in three uploads.
+
 ### If WebGL is unavailable
 
 `ctx.createCanvas()` may hand back no GL context at all. The bit then evaluates

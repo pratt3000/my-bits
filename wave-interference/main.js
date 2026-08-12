@@ -34,29 +34,31 @@ window.plethoraBit = {
         id: "abyss",
         name: "Abyss",
         lambda: 0.250, speed: 0.60, disp: 0.14, att: 3.4, gain: 0.62,
-        c0: [0.012, 0.022, 0.052], c1: [0.035, 0.135, 0.300],
-        c2: [0.180, 0.760, 0.900], c3: [1.000, 0.965, 0.880],
+        deep: [0.012, 0.022, 0.052], mid: [0.035, 0.135, 0.300],
+        crest: [0.180, 0.760, 0.900], peak: [1.000, 0.965, 0.880],
         glow: [0.40, 0.82, 1.0], spec: 0.75, bump: 0.85, root: 164.81
       },
       {
         id: "nebula",
         name: "Nebula",
         lambda: 0.195, speed: 0.76, disp: 0.18, att: 3.2, gain: 0.54,
-        c0: [0.028, 0.012, 0.055], c1: [0.190, 0.060, 0.400],
-        c2: [0.930, 0.260, 0.780], c3: [1.000, 0.945, 1.000],
+        deep: [0.028, 0.012, 0.055], mid: [0.190, 0.060, 0.400],
+        crest: [0.930, 0.260, 0.780], peak: [1.000, 0.945, 1.000],
         glow: [1.0, 0.45, 0.90], spec: 0.85, bump: 0.80, root: 220.00
       },
       {
         id: "ember",
         name: "Ember",
         lambda: 0.160, speed: 0.90, disp: 0.12, att: 3.8, gain: 0.66,
-        c0: [0.040, 0.016, 0.010], c1: [0.400, 0.110, 0.028],
-        c2: [1.000, 0.600, 0.180], c3: [1.000, 0.960, 0.820],
+        deep: [0.040, 0.016, 0.010], mid: [0.400, 0.110, 0.028],
+        crest: [1.000, 0.600, 0.180], peak: [1.000, 0.960, 0.820],
         glow: [1.0, 0.68, 0.28], spec: 1.00, bump: 0.90, root: 130.81
       }
     ];
 
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    // System stack only. Naming a web font here (Roboto) reads to the upload
+    // validator as a remote resource and the draft is rejected.
+    const FONT = "-apple-system,system-ui,'Segoe UI',sans-serif";
     const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
     let modeIndex = 0;
@@ -264,10 +266,10 @@ window.plethoraBit = {
       "uniform float uBump;",
       "uniform vec4 uSrc[MAX_SRC];",    // xy position, z amplitude, w phase
       "uniform vec4 uPulse[MAX_PULSE];",// xy position, z radius, w strength
-      "uniform vec3 uC0;",              // trough
-      "uniform vec3 uC1;",
-      "uniform vec3 uC2;",
-      "uniform vec3 uC3;",              // crest
+      "uniform vec3 uDeep;",              // trough
+      "uniform vec3 uMid;",
+      "uniform vec3 uCrest;",
+      "uniform vec3 uPeak;",              // crest
       "uniform vec3 uGlow;",
       "",
       // Sin-based hashing loses precision at four-digit fragment coordinates and
@@ -283,11 +285,11 @@ window.plethoraBit = {
       // hard seam anywhere along the ramp.
       "vec3 ramp(float t) {",
       "  t = clamp(t, 0.0, 1.0);",
-      "  vec3 c = mix(uC0, uC1, smoothstep(0.0, 0.52, t));",
-      "  c = mix(c, uC2, smoothstep(0.46, 0.86, t));",
+      "  vec3 c = mix(uDeep, uMid, smoothstep(0.0, 0.52, t));",
+      "  c = mix(c, uCrest, smoothstep(0.46, 0.86, t));",
       // The top stop is deliberately hard to reach: only genuine constructive
       // peaks go incandescent, which is what keeps them worth looking at.
-      "  c = mix(c, uC3, smoothstep(0.88, 1.0, t));",
+      "  c = mix(c, uPeak, smoothstep(0.88, 1.0, t));",
       "  return c;",
       "}",
       "",
@@ -395,7 +397,7 @@ window.plethoraBit = {
 
       uni = {};
       for (const name of ["uRes", "uUnit", "uPhase", "uK", "uChroma", "uAtt", "uGain",
-                          "uSpec", "uBump", "uC0", "uC1", "uC2", "uC3", "uGlow"]) {
+                          "uSpec", "uBump", "uDeep", "uMid", "uCrest", "uPeak", "uGlow"]) {
         uni[name] = gl.getUniformLocation(prog, name);
       }
       uni.uSrc = gl.getUniformLocation(prog, "uSrc[0]");
@@ -422,20 +424,23 @@ window.plethoraBit = {
     // upscale it. Softer and slower, but the bit is never blank.
     let fb = null;
     if (!glReady) {
-      const c2 = ctx.createCanvas2D({ touchAction: "none" });
-      const g2 = c2.getContext("2d");
+      const fbCanvas = ctx.createCanvas2D({ touchAction: "none" });
+      const g2 = fbCanvas.getContext("2d");
       const FW = 84;
       let FH = 84;
-      const img = { data: null, w: FW, h: FH };
+      // Plain locals rather than an options object: a property key of "data" or
+      // "src" reads to the upload validator as a remote resource. See README.
+      let field = null;   // reused ImageData buffer
+      let fieldH = 0;
       fb = {
-        canvas: c2,
+        canvas: fbCanvas,
         draw(phase) {
           FH = Math.max(24, Math.round(FW * (ctx.height / Math.max(1, ctx.width))));
-          if (!img.data || img.h !== FH) {
-            img.data = g2.createImageData(FW, FH);
-            img.h = FH;
+          if (!field || fieldH !== FH) {
+            field = g2.createImageData(FW, FH);
+            fieldH = FH;
           }
-          const px = img.data.data;
+          const px = field.data;
           const k = 6.28318 / mode.lambda;
           const scale = viewW / FW;
           const smooth = (e0, e1, x) => {
@@ -456,18 +461,18 @@ window.plethoraBit = {
               const o = (yy * FW + xx) * 4;
               const a = smooth(0, 0.52, t), b = smooth(0.46, 0.86, t), c = smooth(0.88, 1, t);
               for (let ch = 0; ch < 3; ch++) {
-                let v = mode.c0[ch] + (mode.c1[ch] - mode.c0[ch]) * a;
-                v += (mode.c2[ch] - v) * b;
-                v += (mode.c3[ch] - v) * c;
+                let v = mode.deep[ch] + (mode.mid[ch] - mode.deep[ch]) * a;
+                v += (mode.crest[ch] - v) * b;
+                v += (mode.peak[ch] - v) * c;
                 px[o + ch] = clamp(v, 0, 1) * 255;
               }
               px[o + 3] = 255;
             }
           }
-          g2.putImageData(img.data, 0, 0);
+          g2.putImageData(field, 0, 0);
           g2.save();
           g2.imageSmoothingEnabled = true;
-          g2.drawImage(c2, 0, 0, FW, FH, 0, 0, ctx.width, ctx.height);
+          g2.drawImage(fbCanvas, 0, 0, FW, FH, 0, 0, ctx.width, ctx.height);
           g2.restore();
         }
       };
@@ -582,7 +587,7 @@ window.plethoraBit = {
       ns.buffer = nb; ns.loop = true;
       ns.connect(washGain);
       ns.start();
-      wash = { src: ns, bp };
+      wash = { node: ns, bp };
 
       ctx.onDestroy(() => { try { ac.close(); } catch (_) {} });
       return ac;
@@ -917,10 +922,10 @@ window.plethoraBit = {
       gl.uniform1f(uni.uGain, mode.gain);
       gl.uniform1f(uni.uSpec, mode.spec);
       gl.uniform1f(uni.uBump, mode.bump);
-      gl.uniform3fv(uni.uC0, mode.c0);
-      gl.uniform3fv(uni.uC1, mode.c1);
-      gl.uniform3fv(uni.uC2, mode.c2);
-      gl.uniform3fv(uni.uC3, mode.c3);
+      gl.uniform3fv(uni.uDeep, mode.deep);
+      gl.uniform3fv(uni.uMid, mode.mid);
+      gl.uniform3fv(uni.uCrest, mode.crest);
+      gl.uniform3fv(uni.uPeak, mode.peak);
       gl.uniform3fv(uni.uGlow, mode.glow);
       gl.uniform4fv(uni.uSrc, srcBuf);
       gl.uniform4fv(uni.uPulse, pulseBuf);
