@@ -2099,27 +2099,48 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------- *
      * Audio
      *
-     * Rain is not a texture, it is a count. What the ear identifies as rain is
-     * thousands of separate impacts a second, and no amount of filtering noise
-     * produces that: filtered noise has a flat envelope and rain's envelope is
-     * nothing but spikes. Every layer here is therefore built out of actual
-     * droplet impacts rather than out of shaped hiss.
+     * Three things have to be true at once or it is not rain.
      *
-     * One droplet is two events. A very short broadband smack as it flattens
-     * against the glass, and then a damped ring that *rises* in pitch as it
-     * dies, because the pocket of air the impact traps shrinks as it collapses.
-     * That upward bend is the cue that says water rather than tick — it is why
-     * a drip in a sink goes "plink" and a fingernail on the same sink does not.
+     * It is dark. Rain heard from inside is a wall, a shut window and a couple
+     * of metres of air away, and every one of those takes the top off it. The
+     * energy lives under about 1.5 kHz. Anything crisp enough to be described
+     * as a click is already wrong, and a dense field of small bright ticks is
+     * the sound of frying, not of weather.
+     *
+     * Water does not ring. It splats — the impact spreads and slows within a
+     * millisecond or two, so the top end leaves first. Every impact here is
+     * noise poured into a gentle lowpass whose cutoff falls as the sound dies,
+     * and nothing has a Q high enough to hold a pitch. The one exception is the
+     * drip, which is genuinely pitched, and is rare for that reason: a field of
+     * pitched drips is a cave.
+     *
+     * It breathes. Rain does not fall at a constant rate and a bed that does
+     * sounds like a machine, so the loops carry their own swells and lulls, and
+     * the gusts on screen move the level, the roll-off and the rate of impacts
+     * together.
      *
      * Thousands of live nodes a second is not possible, so the dense layers are
-     * baked once: a palette of grains synthesised properly, then stamped into
-     * looping buffers at random offsets, anything overhanging the end wrapping
-     * to the front so the loop is seamless by construction rather than by
-     * crossfade. The two loops are deliberately mismatched lengths, so their
+     * baked once into looping buffers: a palette of grains synthesised
+     * properly, then stamped at random offsets, anything overhanging the end
+     * wrapping to the front so the loop is seamless by construction rather than
+     * by crossfade. The two loops are deliberately mismatched lengths so their
      * combination does not repeat on any period you could sit through. Only the
-     * near taps — the dozen a second you can actually pick out individually —
-     * are live, so they can be panned across the pane and ride the gusts.
+     * near taps and the drips are live, because they are the few a second you
+     * can actually pick out individually.
      * ---------------------------------------------------------------- */
+
+    // The mix, in one place. Every one of these was arrived at by recording the
+    // output and measuring it, so they are worth keeping where they can be
+    // compared against each other rather than scattered through the graph.
+    const RAIN = {
+      farRate: 900,                    // grains a second per channel, far wash
+      farRms: 0.19, farGain: 0.68, farGust: 0.22,
+      farLP: 1250, farLPGust: 700,
+      midRate: 30, midRms: 0.1, midGain: 0.42, midGust: 0.2, midLP: 2600,
+      tapBus: 0.3, tapLP: 2600,        // a pane in a frame is a damped thing
+      tapRate: 4, tapRateGust: 7,
+      hiss: 0.03, spray: 0.022, rumble: 0.028
+    };
 
     let ac = null, master = null, noiseBuf = null, audioDead = false;
     let rainGain = null, windGain = null, windFilter = null;
@@ -2128,39 +2149,65 @@ window.plethoraBit = {
     let voices = 0;
 
     let rumbleGain = null, rainLP = null, midGain = null, tapBus = null;
-    let tapBufs = null;
+    let tapBufs = null, dripBufs = null;
 
-    // One droplet impact. `size` 0 is fine spray, 1 is a fat drop.
+    // One droplet impact. `size` 0 is fine spray, 1 is a fat drop; `bright`
+    // shifts the whole thing up or down the spectrum, which is how distance
+    // gets spelled.
     //
-    // Not a note — a tick with a pitch centre. Two resonators struck by the
-    // same very short burst of noise: a broad bright one for the smack of the
-    // drop flattening out, and under it a narrower, lower one that only really
-    // speaks for the fat drops, because a big drop has a body and a speck does
-    // not. Both are deliberately low-Q. A high-Q resonator rings, and a ringing
-    // impact is a marimba; rain is the sound of something that stops dead.
-    //
-    // The body bends up a shade as it dies — the pocket of air the impact
-    // trapped is collapsing — and that bend is the difference between water and
-    // a fingernail. A little of it reads as wet. A lot of it reads as a cartoon.
-    function renderGrain(sr, size, bend) {
-      const tickF = lerp(6200, 1700, size), tickQ = 3 + size * 3;
-      const bodyF = lerp(2400, 360, size), bodyQ = 8 + size * 24;
-      const bodyG = size * size * 1.7;
-      const tau = bodyQ / (Math.PI * bodyF);
-      const len = Math.max(24, Math.min(Math.ceil(tau * 5 * sr), (sr * 0.25) | 0));
+    // The excitation is noise under an envelope rather than a burst followed by
+    // silence: a burst into a filter is a click, and rain contains no clicks.
+    function renderGrain(sr, size, bright, cut) {
+      const f0 = lerp(2900, 760, size) * bright;   // cutoff at the moment of impact
+      const f1 = lerp(560, 150, size) * bright;    // and where it has fallen to
+      const tau = lerp(0.0045, 0.034, size);
+      const len = Math.max(24, Math.min(Math.ceil(tau * (cut || 5) * sr), (sr * 0.4) | 0));
       const out = new Float32Array(len);
-      const burst = Math.max(2, Math.ceil(sr * (0.00035 + size * 0.0008)));
       const top = sr * 0.42;
-      const ft = 2 * Math.sin(Math.PI * Math.min(tickF, top) / sr);
-      const qt = 1 / tickQ, qb = 1 / bodyQ;
+      const q = 1.25;                              // damped. A ring is a marimba.
       const dec = Math.exp(-1 / (tau * sr));
-      let l1 = 0, b1 = 0, l2 = 0, b2 = 0, e = 1, peak = 1e-6;
+      // A drop lands fast but not instantly: it has to flatten before it is
+      // loud. Starting at full amplitude on sample zero makes the onset a step,
+      // and a step is broadband no matter how gently the noise inside it is
+      // filtered — which is how a bed of soft splats ends up ticking.
+      const atk = Math.max(3, Math.ceil(sr * 0.0006 * (0.5 + size)));
+      let low = 0, band = 0, e = 1, peak = 1e-6;
       for (let i = 0; i < len; i++) {
-        const x = i < burst ? (Math.random() * 2 - 1) : 0;
-        const h1 = x - l1 - qt * b1; b1 += ft * h1; l1 += ft * b1;
-        const fb = 2 * Math.sin(Math.PI * Math.min(bodyF * (1 + bend * (1 - e)), top) / sr);
-        const h2 = x - l2 - qb * b2; b2 += fb * h2; l2 += fb * b2;
-        const s = b1 * 1.6 + b2 * bodyG + x * 0.45;
+        const f = 2 * Math.sin(Math.PI * Math.min(f1 + (f0 - f1) * e, top) / sr);
+        const x = (Math.random() * 2 - 1) * e * e;
+        const h = x - low - q * band;
+        band += f * h; low += f * band;
+        const s = i < atk ? low * (0.5 - 0.5 * Math.cos(Math.PI * i / atk)) : low;
+        out[i] = s;
+        const a = s < 0 ? -s : s;
+        if (a > peak) peak = a;
+        e *= dec;
+      }
+      const k = 1 / peak;
+      for (let i = 0; i < len; i++) out[i] *= k;
+      return out;
+    }
+
+    // A drip, off the eaves or off the sill. This one *is* pitched: a drop
+    // falling into standing water traps a bubble, and the bubble's note climbs
+    // as it collapses. It is the most recognisable water sound there is, which
+    // is exactly why there are only about one every two seconds.
+    function renderDrip(sr, size) {
+      const f0 = lerp(1500, 430, size);
+      const bend = 0.45 + Math.random() * 0.65;
+      const tau = lerp(0.011, 0.030, size);
+      const len = Math.ceil(tau * 5 * sr);
+      const out = new Float32Array(len);
+      const tw = 2 * Math.PI / sr;
+      const dec = Math.exp(-1 / (tau * sr));
+      const nz = Math.ceil(sr * 0.0015);
+      const atk = Math.ceil(sr * 0.0005);
+      let ph = 0, e = 1, peak = 1e-6;
+      for (let i = 0; i < len; i++) {
+        ph += tw * f0 * (1 + bend * (1 - e));
+        let s = Math.sin(ph) * e;
+        if (i < nz) s += (Math.random() * 2 - 1) * 0.3 * (1 - i / nz);
+        if (i < atk) s *= 0.5 - 0.5 * Math.cos(Math.PI * i / atk);
         out[i] = s;
         const a = s < 0 ? -s : s;
         if (a > peak) peak = a;
@@ -2173,12 +2220,11 @@ window.plethoraBit = {
 
     // A spread of impacts to stamp from. Sizes are squared across the palette
     // so the small end — which is most of real rain — gets most of the entries.
-    function buildPalette(sr, count) {
+    function buildPalette(sr, count, bright, cut) {
       const pal = [];
       for (let i = 0; i < count; i++) {
         const size = Math.pow(i / (count - 1), 2);
-        pal.push({ w: renderGrain(sr, size, 0.05 + Math.random() * 0.16),
-                   g: lerp(0.15, 1, size) });
+        pal.push({ w: renderGrain(sr, size, bright, cut), g: lerp(0.2, 1, size) });
       }
       return pal;
     }
@@ -2187,30 +2233,56 @@ window.plethoraBit = {
     // pulls the size distribution small, below 1 pushes it large. Channels are
     // stamped independently, so a stereo bed is decorrelated and sounds like
     // weather around you rather than a mono source in front of you.
-    function bakeBed(sr, seconds, channels, perSec, pal, bias, lo, hi) {
+    function bakeBed(sr, seconds, channels, perSec, pal, bias, lo, hi, rms) {
       const n = Math.floor(sr * seconds);
       const buf = ac.createBuffer(channels, n, sr);
       const count = Math.round(seconds * perSec);
-      let peak = 1e-6;
+
+      // Where the grains land is decided by a slow curve rather than by a flat
+      // random, so the loop arrives with swells and lulls already in it. Whole
+      // numbers of cycles per loop, or the seam would be a step in the weather.
+      const cyc = [], phs = [];
+      for (const hz of [0.11, 0.29, 0.53]) {
+        cyc.push(Math.max(1, Math.round(hz * seconds)));
+        phs.push(Math.random() * 6.2832);
+      }
+      const dens = (u) => {
+        let v = 0;
+        for (let i = 0; i < cyc.length; i++) v += Math.sin(u * 6.2832 * cyc[i] + phs[i]);
+        return 0.42 + 0.58 * (v / cyc.length * 0.5 + 0.5);
+      };
+
       for (let c = 0; c < channels; c++) {
         const out = buf.getChannelData(c);
         for (let k = 0; k < count; k++) {
+          let u = Math.random();
+          for (let t = 0; t < 5 && Math.random() > dens(u); t++) u = Math.random();
           const p = pal[Math.min(pal.length - 1,
             Math.floor(Math.pow(Math.random(), bias) * pal.length))];
           const w = p.w;
           const amp = p.g * (lo + Math.random() * (hi - lo)) *
                       (Math.random() < 0.5 ? -1 : 1);
-          const at = Math.floor(Math.random() * n);
+          const at = Math.floor(u * n);
           const head = Math.min(w.length, n - at);
           for (let i = 0; i < head; i++) out[at + i] += w[i] * amp;
           for (let i = head; i < w.length; i++) out[i - head] += w[i] * amp;
         }
-        for (let i = 0; i < n; i++) { const a = out[i] < 0 ? -out[i] : out[i]; if (a > peak) peak = a; }
       }
-      const k = 0.92 / peak;
+
+      // Levelled on energy, not on the single loudest sample. Peak-normalising
+      // lets one lucky pile-up of grains decide the level of the whole loop,
+      // and what comes out is quiet static with occasional clicks — which is
+      // exactly what the previous version of this sounded like. A soft ceiling
+      // takes the pile-ups instead, and adds a little density on the way.
+      let sum = 0;
       for (let c = 0; c < channels; c++) {
-        const out = buf.getChannelData(c);
-        for (let i = 0; i < n; i++) out[i] *= k;
+        const o = buf.getChannelData(c);
+        for (let i = 0; i < n; i++) sum += o[i] * o[i];
+      }
+      const k = rms / Math.sqrt(sum / (n * channels) || 1);
+      for (let c = 0; c < channels; c++) {
+        const o = buf.getChannelData(c);
+        for (let i = 0; i < n; i++) o[i] = Math.tanh(o[i] * k * 1.7) / 1.7;
       }
       return buf;
     }
@@ -2221,9 +2293,9 @@ window.plethoraBit = {
       return src;
     }
 
-    // The finest spray does not resolve into separate impacts at any distance,
-    // so a little pink noise sits under the grains as a floor. It is support,
-    // not the sound — it was the whole sound once and that is what was wrong.
+    // The finest spray never resolves into separate impacts at any distance, so
+    // a little pink noise sits under the grains as a floor. Support, not the
+    // sound — it was the whole sound once and that is what was wrong with it.
     function fillPink(data) {
       let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
       for (let i = 0; i < data.length; i++) {
@@ -2260,10 +2332,9 @@ window.plethoraBit = {
       const comp = ac.createDynamicsCompressor();
       comp.threshold.value = -16; comp.ratio.value = 2;
       comp.attack.value = 0.02; comp.release.value = 0.45;
-      // A ceiling, but a high one: the smack at the front of a drop is where
-      // its "on glass" quality lives, and rolling that off leaves only mush.
+      // A closed window is a low-pass filter and this is where it goes.
       const air = ac.createBiquadFilter();
-      air.type = "lowpass"; air.frequency.value = 9000; air.Q.value = 0.6;
+      air.type = "lowpass"; air.frequency.value = 5200; air.Q.value = 0.5;
       // Nothing down there is rain, and on a phone speaker it is not even
       // audible — it just eats the headroom the impacts need.
       const sub = ac.createBiquadFilter();
@@ -2272,26 +2343,28 @@ window.plethoraBit = {
       sub.connect(ac.destination);
 
       const sr = ac.sampleRate;
-      const pal = buildPalette(sr, 56);
 
-      // The sheet of it, out beyond the glass: dense, small, and rolled off,
-      // because that is what a closed window does to rain.
-      const far = bakeBed(sr, 5.77, 2, 900, pal, 1.7, 0.3, 1);
+      // The sheet of it, out past the glass. Dark, small, and dense enough that
+      // the individual impacts stop being individual and become the wash.
+      const farPal = buildPalette(sr, 48, 1, 3.4);
+      const far = bakeBed(sr, 5.77, 2, RAIN.farRate, farPal, 1.8, 0.4, 1, RAIN.farRms);
       rainLP = ac.createBiquadFilter();
-      rainLP.type = "lowpass"; rainLP.frequency.value = 2600; rainLP.Q.value = 0.6;
+      rainLP.type = "lowpass"; rainLP.frequency.value = RAIN.farLP; rainLP.Q.value = 0.5;
       rainGain = ac.createGain();
-      rainGain.gain.value = 0.6;
+      rainGain.gain.value = RAIN.farGain;
       const farSrc = loopSource(far);
       farSrc.connect(rainLP); rainLP.connect(rainGain); rainGain.connect(master);
       try { farSrc.start(0); } catch (_) {}
 
-      // Nearer, fatter, sparser: rain off the sill and the ledge outside. A
-      // different loop length from the sheet, so the pair never lines up.
-      const mid = bakeBed(sr, 4.13, 2, 22, pal, 0.5, 0.5, 1);
+      // Nearer and fatter: rain off the sill and the ledge outside, close
+      // enough that you can still hear them land one at a time. A different
+      // loop length from the sheet, so the pair never lines up.
+      const nearPal = buildPalette(sr, 40, 1.25, 4.5);
+      const mid = bakeBed(sr, 4.13, 2, RAIN.midRate, nearPal, 0.55, 0.5, 1, RAIN.midRms);
       const midLP = ac.createBiquadFilter();
-      midLP.type = "lowpass"; midLP.frequency.value = 4200; midLP.Q.value = 0.5;
+      midLP.type = "lowpass"; midLP.frequency.value = RAIN.midLP; midLP.Q.value = 0.5;
       midGain = ac.createGain();
-      midGain.gain.value = 0.5;
+      midGain.gain.value = RAIN.midGain;
       const midSrc = loopSource(mid);
       midSrc.connect(midLP); midLP.connect(midGain); midGain.connect(master);
       try { midSrc.start(0); } catch (_) {}
@@ -2302,18 +2375,29 @@ window.plethoraBit = {
       fillBrown(brownBuf.getChannelData(0));
 
       const hissLP = ac.createBiquadFilter();
-      hissLP.type = "lowpass"; hissLP.frequency.value = 900; hissLP.Q.value = 0.5;
+      hissLP.type = "lowpass"; hissLP.frequency.value = 780; hissLP.Q.value = 0.5;
       const hissGain = ac.createGain();
-      hissGain.gain.value = 0.03;
+      hissGain.gain.value = RAIN.hiss;
       const hissSrc = loopSource(noiseBuf);
       hissSrc.connect(hissLP); hissLP.connect(hissGain); hissGain.connect(master);
       try { hissSrc.start(0); } catch (_) {}
+
+      // Splash. Every impact throws a fine spray that never resolves into
+      // anything, and it lives an octave or two above the impacts themselves —
+      // so the top of real rain is quietly busy rather than empty.
+      const sprayHP = ac.createBiquadFilter();
+      sprayHP.type = "highpass"; sprayHP.frequency.value = 1800; sprayHP.Q.value = 0.5;
+      const sprayGain = ac.createGain();
+      sprayGain.gain.value = RAIN.spray;
+      const spraySrc = loopSource(noiseBuf);
+      spraySrc.connect(sprayHP); sprayHP.connect(sprayGain); sprayGain.connect(master);
+      try { spraySrc.start(1.37); } catch (_) {}
 
       // The room you are sitting in. You only notice it if it stops.
       const rumbleLP = ac.createBiquadFilter();
       rumbleLP.type = "lowpass"; rumbleLP.frequency.value = 190;
       rumbleGain = ac.createGain();
-      rumbleGain.gain.value = 0.028;
+      rumbleGain.gain.value = RAIN.rumble;
       const rumbleSrc = loopSource(brownBuf);
       rumbleSrc.connect(rumbleLP); rumbleLP.connect(rumbleGain);
       rumbleGain.connect(master);
@@ -2331,22 +2415,34 @@ window.plethoraBit = {
       windSrc.connect(windFilter); windFilter.connect(windGain); windGain.connect(master);
       try { windSrc.start(0); } catch (_) {}
 
-      // The taps on the pane itself get their own bus so they stay in front of
-      // the beds instead of being averaged into them.
+      // Taps on the pane itself get their own bus so they stay in front of the
+      // beds instead of being averaged into them.
+      // Rain on a pane is softer and duller than memory says: the glass is
+      // stiff, the frame damps it, and you are on the wrong side of it. Left
+      // bright, these were the loudest thing in the mix and read as something
+      // tapping rather than as weather.
       tapBus = ac.createGain();
-      tapBus.gain.value = 1;
-      tapBus.connect(master);
+      tapBus.gain.value = RAIN.tapBus;
+      const tapLP = ac.createBiquadFilter();
+      tapLP.type = "lowpass"; tapLP.frequency.value = RAIN.tapLP; tapLP.Q.value = 0.5;
+      tapBus.connect(tapLP); tapLP.connect(master);
 
+      // The pane is glass, not pavement, so these are duller and fatter than
+      // anything in the sheet — but they are the only unfiltered thing here,
+      // and that contrast is what says the window is right beside you.
       tapBufs = [];
-      for (let i = 0; i < 12; i++) {
-        const w = renderGrain(sr, 0.14 + (i / 11) * 0.7, 0.06 + Math.random() * 0.16);
-        const b = ac.createBuffer(1, w.length, sr);
-        b.getChannelData(0).set(w);
-        tapBufs.push(b);
-      }
+      for (let i = 0; i < 12; i++) tapBufs.push(bufOf(sr, renderGrain(sr, 0.36 + (i / 11) * 0.6, 0.95)));
+      dripBufs = [];
+      for (let i = 0; i < 6; i++) dripBufs.push(bufOf(sr, renderDrip(sr, i / 5)));
 
       ctx.onDestroy(() => { try { ac.close(); } catch (_) {} });
       return ac;
+    }
+
+    function bufOf(sr, w) {
+      const b = ac.createBuffer(1, w.length, sr);
+      b.getChannelData(0).set(w);
+      return b;
     }
 
     let resuming = false;
@@ -2371,22 +2467,21 @@ window.plethoraBit = {
       return { src, off: Math.random() * 1.6 };
     }
 
-    // One drop hitting the pane, right by your ear. Played back off the baked
-    // grains rather than resynthesised, so it costs a node: rate below 1 drops
-    // the pitch and stretches the decay together, which is exactly what a
-    // bigger drop does, so one control covers the whole size range.
-    function playTap(t) {
-      const big = Math.random() * Math.random();
+    // One thing landing, at time `t`. Played back off the baked grains rather
+    // than resynthesised, so it costs a node: rate below 1 drops the pitch and
+    // stretches the decay together, which is what a bigger drop does, so one
+    // control covers the whole size range.
+    function oneShot(bufs, t, gain, rate, spread) {
       const src = ac.createBufferSource();
-      src.buffer = tapBufs[(Math.random() * tapBufs.length) | 0];
-      src.playbackRate.value = lerp(1.6, 0.6, big) * (0.92 + Math.random() * 0.16);
+      src.buffer = bufs[(Math.random() * bufs.length) | 0];
+      src.playbackRate.value = rate;
       const gn = ac.createGain();
-      gn.gain.value = (0.05 + big * 0.2) * (0.65 + Math.random() * 0.7);
+      gn.gain.value = gain;
       src.connect(gn);
-      // Spread across the glass. Narrow, because the pane is right in front.
+      // Spread across the glass.
       if (ac.createStereoPanner) {
         const pan = ac.createStereoPanner();
-        pan.pan.value = (Math.random() * 2 - 1) * 0.62;
+        pan.pan.value = (Math.random() * 2 - 1) * spread;
         gn.connect(pan); pan.connect(tapBus);
       } else {
         gn.connect(tapBus);
@@ -2398,16 +2493,24 @@ window.plethoraBit = {
     // exponential, not fixed. Scheduling a horizon ahead in audio time rather
     // than one per frame is what keeps a shower from inheriting the frame rate
     // as a rhythm.
-    let nextTap = 0, tapRate = 13;
+    let nextTap = 0, nextDrip = 0, tapRate = RAIN.tapRate;
     function scheduleTaps() {
       if (!ac || !soundOn || !tapBufs || ac.state !== "running") return;
-      const now = ac.currentTime;
+      const now = ac.currentTime, horizon = now + 0.3;
       if (nextTap < now) nextTap = now + 0.02;
-      const horizon = now + 0.3;
+      if (nextDrip < now) nextDrip = now + 0.4 + Math.random();
       let guard = 0;
-      while (nextTap < horizon && guard++ < 40) {
-        playTap(nextTap);
+      while (nextTap < horizon && guard++ < 30) {
+        const big = Math.random() * Math.random();
+        oneShot(tapBufs, nextTap, (0.05 + big * 0.16) * (0.6 + Math.random() * 0.8),
+                lerp(1.35, 0.62, big) * (0.92 + Math.random() * 0.16), 0.62);
         nextTap += -Math.log(1 - Math.random()) / tapRate;
+      }
+      guard = 0;
+      while (nextDrip < horizon && guard++ < 4) {
+        oneShot(dripBufs, nextDrip, 0.02 + Math.random() * 0.045,
+                0.75 + Math.random() * 0.6, 0.85);
+        nextDrip += 1.1 + Math.random() * 3.4;
       }
     }
 
@@ -3088,12 +3191,15 @@ window.plethoraBit = {
       // more than any amount of detail in a steady one.
       if (ac && rainGain && ac.state === "running") {
         // Slow, shallow breathing. Anything faster stops being restful.
-        const gust = 0.5 + 0.5 * Math.sin(windPhase * 0.45);
-        tapRate = 9 + gust * 11;
+        // Two rates that do not divide into each other, so the weather never
+        // repeats the same swell twice in a row.
+        const gust = 0.5 + 0.29 * Math.sin(windPhase * 0.45) +
+                           0.21 * Math.sin(windPhase * 0.163 + 1.7);
+        tapRate = RAIN.tapRate + gust * RAIN.tapRateGust;
         try {
-          rainGain.gain.setTargetAtTime(0.54 + gust * 0.2, ac.currentTime, 1.2);
-          rainLP.frequency.setTargetAtTime(2200 + gust * 1000, ac.currentTime, 1.4);
-          midGain.gain.setTargetAtTime(0.44 + gust * 0.18, ac.currentTime, 1.5);
+          rainGain.gain.setTargetAtTime(RAIN.farGain + gust * RAIN.farGust, ac.currentTime, 1.2);
+          rainLP.frequency.setTargetAtTime(RAIN.farLP + gust * RAIN.farLPGust, ac.currentTime, 1.4);
+          midGain.gain.setTargetAtTime(RAIN.midGain + gust * RAIN.midGust, ac.currentTime, 1.5);
           windGain.gain.setTargetAtTime(0.01 + gust * 0.018, ac.currentTime, 1.6);
           windFilter.frequency.setTargetAtTime(340 + gust * 200, ac.currentTime, 1.8);
         } catch (_) {}

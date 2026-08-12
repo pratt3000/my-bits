@@ -114,51 +114,69 @@ still a drop.
 
 ## Why the rain is made of drops, not of noise
 
-Rain is not a texture, it is a count. What the ear identifies as rain is
-thousands of separate impacts a second, and no amount of filtering noise
-produces that: filtered noise has a flat envelope and rain's envelope is nothing
-but spikes. Two earlier versions of this bit shaped noise — first band-passed
-white, then pink rolled off low — and both read as *hiss*, because that is what
-they were. Every layer is now built out of synthesised droplet impacts instead.
+Three things have to be true at once or it is not rain, and getting each of them
+wrong in turn is how this bit arrived at the version that ships.
 
-One droplet is a tick with a pitch centre, not a note. Two resonators are struck
-by the same very short burst of noise: a broad, bright one for the smack of the
-drop flattening out, and under it a narrower, lower one that only really speaks
-for the fat drops, because a big drop has a body and a speck does not. Both are
-deliberately low-Q — a high-Q resonator rings, and a ringing impact is a
-marimba. The body bends up a shade as it dies, which is the pocket of air the
-impact trapped collapsing, and it is the difference between water and a
-fingernail. A little of that bend reads as wet; a lot of it reads as a cartoon,
-and the first attempt at this had fifty milliseconds of audible glissando on
-every drop.
+**It is dark.** Rain heard from inside is a wall, a shut window and a couple of
+metres of air away, and every one of those takes the top off it. The energy
+lives under about 1.5 kHz. The first two attempts here shaped noise — band-passed
+white, then pink rolled off low — and read as hiss, because that is what they
+were. The third rebuilt every layer out of synthesised impacts and read as
+*frying*, because a dense field of small bright ticks at a 2.7 kHz centroid is
+the sound of a pan, not of weather. What ships measures 1.2–1.4 kHz.
+
+**Water does not ring.** It splats: the impact spreads and slows within a
+millisecond or two, so the top end leaves first. Every impact is noise poured
+into a gentle lowpass whose cutoff falls as the sound dies, and nothing has a Q
+high enough to hold a pitch — the struck-resonator version was crisper and
+completely wrong. Onsets are ramped over about half a millisecond too, because
+an envelope that starts at full amplitude on sample zero is a step, and a step
+is broadband no matter how gently the noise inside it is filtered. That one
+detail was the difference between soft splats and an audible tick on every drop.
+
+The single exception is the **drip** — a drop falling into standing water traps a
+bubble, and the bubble's note climbs as it collapses. It is the most recognisable
+water sound there is, which is exactly why there is only one every few seconds.
+A field of them is a cave.
+
+**It breathes.** Rain does not fall at a constant rate, so where the grains land
+in each loop is decided by a slow curve rather than a flat random, and the loops
+arrive with swells and lulls already in them. Whole numbers of cycles per loop,
+or the seam would be a step in the weather. On top of that the gusts on screen
+move the bed levels, the roll-off *and* the rate of impacts together, on two
+periods that do not divide into each other.
 
 Thousands of live nodes a second is not possible, so the dense layers are baked
-once at unlock (about 60 ms): a palette of 56 grains, then stamped into looping
-buffers at random offsets, anything overhanging the end wrapping to the front so
-the loop is seamless by construction rather than by crossfade. The two loops are
-5.77 s and 4.13 s, deliberately mismatched, so their combination does not repeat
-on any period you could sit through. Channels are stamped independently, which
-is why the bed is decorrelated and sounds like weather around you rather than a
-mono source in front of you.
+once at unlock (about 70 ms): palettes of grains, stamped into looping buffers at
+random offsets, anything overhanging the end wrapping to the front so the loop is
+seamless by construction rather than by crossfade. The two loops are 5.77 s and
+4.13 s, deliberately mismatched, so their combination does not repeat on any
+period you could sit through. Channels are stamped independently, which is why
+the bed is decorrelated and sounds like weather around you rather than a mono
+source in front of you.
 
-- **The sheet of it**, out beyond the glass: 900 impacts a second per channel,
-  weighted small, rolled off around 2.5 kHz because that is what a closed window
-  does to rain.
-- **Nearer and fatter**, off the sill and the ledge outside: sparse, low, and on
-  the other loop length.
-- **The taps on the pane itself** are the only live layer, because they are the
-  dozen a second you can actually pick out individually. Gaps between them are
-  exponential rather than fixed, and scheduled a horizon ahead in audio time, so
-  a shower never inherits the frame rate as a rhythm. Each one is panned across
-  the glass, and playback rate below 1 drops the pitch and stretches the decay
-  together — which is exactly what a bigger drop does, so one control covers the
-  whole size range.
-- Under all of it, a little pink noise for the spray that never resolves into
-  separate impacts, and the room itself, which you only notice if it stops.
+- **The sheet of it**, out past the glass: 900 impacts a second per channel,
+  weighted small, rolled off around 1.3 kHz because that is what a closed window
+  does to rain. Dense enough that the impacts stop being individual and become
+  the wash.
+- **Nearer and fatter**, off the sill and the ledge outside, close enough to hear
+  land one at a time, on the other loop length.
+- **The taps on the pane itself** are live, because they are the few a second you
+  can pick out individually. Gaps between them are exponential rather than fixed
+  and scheduled a horizon ahead in audio time, so a shower never inherits the
+  frame rate as a rhythm. Each is panned across the glass, and playback rate
+  below 1 drops the pitch and stretches the decay together — which is what a
+  bigger drop does, so one control covers the whole size range. They are damped
+  hard: a pane is stiff, its frame absorbs, and you are on the wrong side of it.
+  Left bright they were the loudest thing in the mix and read as something
+  *tapping* rather than as weather.
+- **Splash**, which never resolves into anything and lives an octave or two above
+  the impacts, so the top of it is quietly busy rather than empty.
+- Under all of it, the room, which you only notice if it stops.
 
-Gusts move the bed levels, the roll-off *and* how fast the pane is being hit, so
-a squall you can hear arrive rides the same wind that is slanting the drops on
-screen. Merges are pitched by size — the bigger the merge, the lower the blip.
+The whole mix lives in one `RAIN` table rather than scattered through the graph,
+because every number in it was arrived at by recording the output and measuring
+it, and they only mean anything next to each other.
 
 ## Two views, one simulation
 
@@ -277,15 +295,16 @@ Driven in headless Chromium against a stub of the `ctx` surface, at
   not leaking.
 
 The audio is verified by recording rather than by assertion. A test subclasses
-`AudioContext` and shadows `destination` with a node feeding a
-`ScriptProcessor`, so what is measured is the shipped signal path and not a copy
-of the synthesis code. Over 20 seconds: peak 0.72, RMS 0.055, **crest factor
-13.1**, envelope flutter 0.53 against roughly 0.11 for steady filtered noise,
-**about 100 resolvable impacts a second**, spectral centroid 2.7 kHz, and
-inter-channel correlation **0.019** — which is the number that says the bed is
-genuinely two independent stampings rather than one signal sent to both ears.
-The same capture writes a WAV, because a spectrogram is evidence and listening
-is proof.
+`AudioContext` and shadows `destination` with a node feeding a `ScriptProcessor`,
+so what is measured is the shipped signal path and not a copy of the synthesis
+code. The same capture writes a WAV and a spectrogram, which is how the frying
+and the per-drop tick were both caught — neither was audible in a number, and
+both were obvious in a picture. Over 12 seconds: peak 0.65, RMS 0.134, spectral
+centroid **1.23 kHz**, crest factor **4.9** (the struck-resonator version that
+sounded like a pan measured 13.1 at 2.7 kHz), envelope flutter 0.35 against
+roughly 0.11 for steady filtered noise, and inter-channel correlation **−0.009**
+— which is the number that says the bed is genuinely two independent stampings
+rather than one signal sent to both ears.
 
 One caveat on the room's numbers: headless Chromium rasterises WebGL in software
 (SwiftShader), so wall-clock frame rate there is not informative. A CPU profile
