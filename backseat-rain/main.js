@@ -2133,13 +2133,16 @@ window.plethoraBit = {
     // output and measuring it, so they are worth keeping where they can be
     // compared against each other rather than scattered through the graph.
     const RAIN = {
-      farRate: 900,                    // grains a second per channel, far wash
-      farRms: 0.19, farGain: 0.68, farGust: 0.22,
-      farLP: 1250, farLPGust: 700,
-      midRate: 30, midRms: 0.1, midGain: 0.42, midGust: 0.2, midLP: 2600,
-      tapBus: 0.3, tapLP: 2600,        // a pane in a frame is a damped thing
+      farRate: 420,                    // grains a second per channel, far wash
+      farRms: 0.19, farGain: 0.62, farGust: 0.18,
+      farLP: 3400, farLPGust: 1400, farTilt: -7,
+      farLayers: [1, 0.911, 1.087],    // rates that do not divide into each other
+      midRate: 16, midRms: 0.1, midGain: 0.4, midGust: 0.18, midLP: 3200,
+      midLayers: [1, 0.83],
+      tapBus: 0.3, tapLP: 3000,        // a pane in a frame is a damped thing
       tapRate: 4, tapRateGust: 7,
-      hiss: 0.03, spray: 0.022, rumble: 0.028
+      spray: 0.075,                    // the airy top. Smooth, never transient.
+      hiss: 0.02, rumble: 0.026, wet: 0.32
     };
 
     let ac = null, master = null, noiseBuf = null, audioDead = false;
@@ -2287,6 +2290,50 @@ window.plethoraBit = {
       return buf;
     }
 
+    // A loop of noise repeats, and the ear is unnervingly good at hearing that:
+    // a few passes of a six-second bed and the pattern inside it becomes
+    // obvious, which is the moment it stops being weather and starts being a
+    // file. Playing the same buffer several times over at rates that do not
+    // divide into each other fixes it for nothing — the sum only comes back
+    // around on the product of the rates, which is never — and it multiplies
+    // the density on the way, so the bake can be a third of the size.
+    function layers(buf, rates, dest) {
+      const g = 1 / Math.sqrt(rates.length);
+      for (let i = 0; i < rates.length; i++) {
+        const src = ac.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        src.playbackRate.value = rates[i];
+        const gn = ac.createGain();
+        gn.gain.value = g;
+        src.connect(gn); gn.connect(dest);
+        try { src.start(0, (i * 1.93) % buf.duration); }
+        catch (_) { try { src.start(0); } catch (_) {} }
+      }
+    }
+
+    // Rain outside is a field hundreds of metres across, and none of it arrives
+    // dry. Exponentially decaying noise is a crude impulse response and a
+    // perfectly good one at this length: short and dark, so it reads as the
+    // space on the other side of the glass rather than as a hall. The wash does
+    // not need it — being thousands of overlapping events, it is already
+    // diffuse — but a single tap on the pane with no tail on it sounds like a
+    // sample, and that is most of what "synthetic" means.
+    function makeIR(sr, secs) {
+      const n = Math.floor(sr * secs);
+      const b = ac.createBuffer(2, n, sr);
+      const pre = Math.floor(sr * 0.006);
+      for (let c = 0; c < 2; c++) {
+        const d = b.getChannelData(c);
+        let lp = 0;
+        for (let i = pre; i < n; i++) {
+          const e = Math.pow(1 - (i - pre) / (n - pre), 2.4);
+          lp += ((Math.random() * 2 - 1) * e - lp) * 0.4;
+          d[i] = lp;
+        }
+      }
+      return b;
+    }
+
     function loopSource(buf) {
       const src = ac.createBufferSource();
       src.buffer = buf; src.loop = true;
@@ -2334,7 +2381,7 @@ window.plethoraBit = {
       comp.attack.value = 0.02; comp.release.value = 0.45;
       // A closed window is a low-pass filter and this is where it goes.
       const air = ac.createBiquadFilter();
-      air.type = "lowpass"; air.frequency.value = 5200; air.Q.value = 0.5;
+      air.type = "lowpass"; air.frequency.value = 10000; air.Q.value = 0.5;
       // Nothing down there is rain, and on a phone speaker it is not even
       // audible — it just eats the headroom the impacts need.
       const sub = ac.createBiquadFilter();
@@ -2348,13 +2395,18 @@ window.plethoraBit = {
       // the individual impacts stop being individual and become the wash.
       const farPal = buildPalette(sr, 48, 1, 3.4);
       const far = bakeBed(sr, 5.77, 2, RAIN.farRate, farPal, 1.8, 0.4, 1, RAIN.farRms);
+      // A shelf, not a cliff. Rolling the whole thing off steeply at 1.2k to
+      // kill a brightness problem put a blanket over it instead: real rain
+      // keeps a gentle tilt right up to the top of hearing, it just leans low.
       rainLP = ac.createBiquadFilter();
-      rainLP.type = "lowpass"; rainLP.frequency.value = RAIN.farLP; rainLP.Q.value = 0.5;
+      rainLP.type = "lowpass"; rainLP.frequency.value = RAIN.farLP; rainLP.Q.value = 0.4;
+      const farTilt = ac.createBiquadFilter();
+      farTilt.type = "highshelf";
+      farTilt.frequency.value = 1800; farTilt.gain.value = RAIN.farTilt;
       rainGain = ac.createGain();
       rainGain.gain.value = RAIN.farGain;
-      const farSrc = loopSource(far);
-      farSrc.connect(rainLP); rainLP.connect(rainGain); rainGain.connect(master);
-      try { farSrc.start(0); } catch (_) {}
+      layers(far, RAIN.farLayers, rainLP);
+      rainLP.connect(farTilt); farTilt.connect(rainGain); rainGain.connect(master);
 
       // Nearer and fatter: rain off the sill and the ledge outside, close
       // enough that you can still hear them land one at a time. A different
@@ -2365,9 +2417,8 @@ window.plethoraBit = {
       midLP.type = "lowpass"; midLP.frequency.value = RAIN.midLP; midLP.Q.value = 0.5;
       midGain = ac.createGain();
       midGain.gain.value = RAIN.midGain;
-      const midSrc = loopSource(mid);
-      midSrc.connect(midLP); midLP.connect(midGain); midGain.connect(master);
-      try { midSrc.start(0); } catch (_) {}
+      layers(mid, RAIN.midLayers, midLP);
+      midLP.connect(midGain); midGain.connect(master);
 
       noiseBuf = ac.createBuffer(1, Math.floor(sr * 3), sr);
       fillPink(noiseBuf.getChannelData(0));
@@ -2382,16 +2433,22 @@ window.plethoraBit = {
       hissSrc.connect(hissLP); hissLP.connect(hissGain); hissGain.connect(master);
       try { hissSrc.start(0); } catch (_) {}
 
-      // Splash. Every impact throws a fine spray that never resolves into
-      // anything, and it lives an octave or two above the impacts themselves —
-      // so the top of real rain is quietly busy rather than empty.
+      // Splash — and this is the layer the whole thing was missing. Every
+      // impact throws a fine spray, and there are so many of them that the top
+      // of rain is a continuous airy sheet with no events in it at all. It has
+      // to be *smooth*: the moment individual bright things poke through up
+      // there it stops being rain and starts being a frying pan. So the one
+      // layer here that is honestly just noise is the one that has to be.
       const sprayHP = ac.createBiquadFilter();
-      sprayHP.type = "highpass"; sprayHP.frequency.value = 1800; sprayHP.Q.value = 0.5;
+      sprayHP.type = "highpass"; sprayHP.frequency.value = 1600; sprayHP.Q.value = 0.5;
+      const sprayLP = ac.createBiquadFilter();
+      sprayLP.type = "lowpass"; sprayLP.frequency.value = 9000; sprayLP.Q.value = 0.4;
       const sprayGain = ac.createGain();
       sprayGain.gain.value = RAIN.spray;
       const spraySrc = loopSource(noiseBuf);
-      spraySrc.connect(sprayHP); sprayHP.connect(sprayGain); sprayGain.connect(master);
-      try { spraySrc.start(1.37); } catch (_) {}
+      spraySrc.connect(sprayHP); sprayHP.connect(sprayLP);
+      sprayLP.connect(sprayGain); sprayGain.connect(master);
+      try { spraySrc.start(0, 1.37); } catch (_) { try { spraySrc.start(0); } catch (_) {} }
 
       // The room you are sitting in. You only notice it if it stops.
       const rumbleLP = ac.createBiquadFilter();
@@ -2426,6 +2483,13 @@ window.plethoraBit = {
       const tapLP = ac.createBiquadFilter();
       tapLP.type = "lowpass"; tapLP.frequency.value = RAIN.tapLP; tapLP.Q.value = 0.5;
       tapBus.connect(tapLP); tapLP.connect(master);
+
+      const verb = ac.createConvolver();
+      verb.buffer = makeIR(sr, 0.42);
+      const wet = ac.createGain();
+      wet.gain.value = RAIN.wet;
+      tapLP.connect(verb); midGain.connect(verb);
+      verb.connect(wet); wet.connect(master);
 
       // The pane is glass, not pavement, so these are duller and fatter than
       // anything in the sheet — but they are the only unfiltered thing here,

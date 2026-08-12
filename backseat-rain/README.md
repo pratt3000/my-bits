@@ -146,33 +146,40 @@ or the seam would be a step in the weather. On top of that the gusts on screen
 move the bed levels, the roll-off *and* the rate of impacts together, on two
 periods that do not divide into each other.
 
-Thousands of live nodes a second is not possible, so the dense layers are baked
-once at unlock (about 70 ms): palettes of grains, stamped into looping buffers at
-random offsets, anything overhanging the end wrapping to the front so the loop is
-seamless by construction rather than by crossfade. The two loops are 5.77 s and
-4.13 s, deliberately mismatched, so their combination does not repeat on any
-period you could sit through. Channels are stamped independently, which is why
-the bed is decorrelated and sounds like weather around you rather than a mono
-source in front of you.
+**It is a sheet, not a stream of events.** Rain's top end — the "shhh" — is a
+continuous airy wash of splash that never resolves into anything, because there
+are so many tiny splashes that none of them is separately audible. Rolling the
+whole thing off steeply at 1.2 kHz to kill a brightness problem threw that away
+and put a blanket over everything. So the tilt is now a shelf rather than a
+cliff, it runs to the top of hearing, and there is one layer here that is
+honestly just noise — and it has to be, because the moment individual bright
+things poke through up there it stops being rain and becomes a frying pan again.
 
-- **The sheet of it**, out past the glass: 900 impacts a second per channel,
-  weighted small, rolled off around 1.3 kHz because that is what a closed window
-  does to rain. Dense enough that the impacts stop being individual and become
-  the wash.
-- **Nearer and fatter**, off the sill and the ledge outside, close enough to hear
-  land one at a time, on the other loop length.
-- **The taps on the pane itself** are live, because they are the few a second you
-  can pick out individually. Gaps between them are exponential rather than fixed
-  and scheduled a horizon ahead in audio time, so a shower never inherits the
-  frame rate as a rhythm. Each is panned across the glass, and playback rate
-  below 1 drops the pitch and stretches the decay together — which is what a
-  bigger drop does, so one control covers the whole size range. They are damped
-  hard: a pane is stiff, its frame absorbs, and you are on the wrong side of it.
-  Left bright they were the loudest thing in the mix and read as something
-  *tapping* rather than as weather.
-- **Splash**, which never resolves into anything and lives an octave or two above
-  the impacts, so the top of it is quietly busy rather than empty.
-- Under all of it, the room, which you only notice if it stops.
+**Nothing arrives dry.** Rain outside is a field hundreds of metres across, and
+the room has its own tail. Exponentially decaying noise is a crude impulse
+response and a perfectly good one at 0.42 s: short and dark, so it reads as the
+space on the other side of the glass rather than as a hall. The wash does not
+need it, being thousands of overlapping events and therefore already diffuse,
+but a single tap on the pane with no tail on it sounds like a sample — and that
+is most of what "synthetic" means.
+
+**And it never repeats.** A loop of noise repeats, and the ear is unnervingly
+good at hearing that: a few passes of a six-second bed and the pattern inside it
+becomes obvious, which is the moment it stops being weather and starts being a
+file. The fix costs nothing — each bed is played back several times over at
+rates that do not divide into each other (1, 0.911, 1.087), so the sum only
+comes around on the product of the rates, and the bake can be a third of the
+size because the layers multiply the density. Measured over 34 seconds, the
+envelope autocorrelation at every lag a buffer could repeat on is **≤ 0.09**,
+which is the same as the correlation at an arbitrary lag: there is no period in
+it to find.
+
+Thousands of live nodes a second is not possible, so the dense layers are baked
+once at unlock (about 40 ms): palettes of grains, stamped into looping buffers at
+random offsets, anything overhanging the end wrapping to the front so the loop is
+seamless by construction rather than by crossfade. Channels are stamped
+independently, which is why the bed is decorrelated and sounds like weather
+around you rather than a mono source in front of you.
 
 The whole mix lives in one `RAIN` table rather than scattered through the graph,
 because every number in it was arrived at by recording the output and measuring
@@ -300,9 +307,9 @@ so what is measured is the shipped signal path and not a copy of the synthesis
 code. The same capture writes a WAV and a spectrogram, which is how the frying
 and the per-drop tick were both caught — neither was audible in a number, and
 both were obvious in a picture. Over 12 seconds: peak 0.65, RMS 0.134, spectral
-centroid **1.23 kHz**, crest factor **4.9** (the struck-resonator version that
-sounded like a pan measured 13.1 at 2.7 kHz), envelope flutter 0.35 against
-roughly 0.11 for steady filtered noise, and inter-channel correlation **−0.009**
+centroid **1.7 kHz**, crest factor **5.0** (the struck-resonator version that
+sounded like a pan measured 13.1 at 2.7 kHz), envelope flutter 0.31 against
+roughly 0.11 for steady filtered noise, and inter-channel correlation **0.01**
 — which is the number that says the bed is genuinely two independent stampings
 rather than one signal sent to both ears.
 
