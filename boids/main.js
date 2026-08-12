@@ -51,20 +51,25 @@ window.plethoraBit = {
     // to a flat fill. Fading with destination-out avoids the residue floor you
     // get from repeatedly alpha-blending a dark colour over itself, and it means
     // the gradient below stays a true gradient instead of banding.
-    ctx.createRoot({
-      style: {
-        background:
-          "radial-gradient(90% 45% at 50% 106%, rgba(255,146,86,0.17), rgba(255,146,86,0) 68%)," +
-          "radial-gradient(130% 95% at 50% 4%, #16204a 0%, #0b1029 40%, #05070f 76%, #02030a 100%)"
-      }
-    });
+    //
+    // Style both roots by mutating the returned elements. A `style` object
+    // passed to createRoot does nothing, and that failure is vicious: the UI
+    // root keeps pointer-events:auto, becomes a transparent sheet over the
+    // canvas, and swallows every touch while the simulation carries on looking
+    // perfectly healthy.
+    const sky = ctx.createRoot();
+    sky.style.background =
+      "radial-gradient(90% 45% at 50% 106%, rgba(255,146,86,0.17), rgba(255,146,86,0) 68%)," +
+      "radial-gradient(130% 95% at 50% 4%, #16204a 0%, #0b1029 40%, #05070f 76%, #02030a 100%)";
 
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
+    canvas.style.touchAction = "none"; // belt and braces; the option is enough on device
     const g = canvas.getContext("2d");
     g.lineCap = "round";
     g.lineJoin = "round";
 
-    const ui = ctx.createRoot({ style: { pointerEvents: "none" } });
+    const ui = ctx.createRoot({ touchAction: "none" });
+    ui.style.pointerEvents = "none"; // let touches through to the canvas below
 
     // ---- world scale -------------------------------------------------------
     let W = ctx.width;
@@ -721,6 +726,16 @@ window.plethoraBit = {
     // validator, and offset* skips a forced reflow per move anyway.
     let started = false;
 
+    // offsetX/offsetY are already canvas-relative, but they are only meaningful
+    // when the event actually landed on the canvas. Fall back to client
+    // coordinates rather than silently steering the flock to the wrong place.
+    function localX(event) {
+      return typeof event.offsetX === "number" ? event.offsetX : event.clientX;
+    }
+    function localY(event) {
+      return typeof event.offsetY === "number" ? event.offsetY : event.clientY;
+    }
+
     function onDown(event) {
       event.preventDefault();
       if (!started) {
@@ -732,9 +747,11 @@ window.plethoraBit = {
       }
       Wind.resume();
       try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
-      pointers.set(event.pointerId, { x: event.offsetX, y: event.offsetY });
+      const x = localX(event);
+      const y = localY(event);
+      pointers.set(event.pointerId, { x, y });
       if (mode === MODE_PREDATOR) {
-        startle(event.offsetX, event.offsetY, TOUCH_R * 1.5, MAX_SPEED * 0.5);
+        startle(x, y, TOUCH_R * 1.5, MAX_SPEED * 0.5);
         try { ctx.music.duck(0.32, 700); } catch (_) {}
       }
       ctx.platform.haptic("light");
@@ -745,8 +762,8 @@ window.plethoraBit = {
       const p = pointers.get(event.pointerId);
       if (!p) return;
       event.preventDefault();
-      p.x = event.offsetX;
-      p.y = event.offsetY;
+      p.x = localX(event);
+      p.y = localY(event);
     }
 
     function onUp(event) {

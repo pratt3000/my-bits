@@ -93,6 +93,13 @@ the whole thing judder.
 
 - No dependencies, no packaged assets (`maxAssets` is 0). Sky, birds, colour and
   the wind bed are all generated at runtime.
+- **`ctx.createRoot({ style })` does nothing.** `touchAction` and `className`
+  are read; a `style` object is not. Set root styles by mutating the returned
+  element, the way every other bit here does. This one cost a round trip to
+  device: the UI root kept `pointer-events: auto`, so it sat over the canvas as
+  a full-screen transparent sheet and swallowed every touch. The flock still
+  simulated, drifted and startled itself perfectly happily — it just could not
+  see a finger, and nothing errored.
 - `document.createElement` is only ever called with a **literal** `"div"` or
   `"button"`. A computed tag can't be statically shown not to be a canvas or
   script, and the upload validator rejects it.
