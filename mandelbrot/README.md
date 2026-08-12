@@ -161,13 +161,32 @@ mandelbrot/
   bit falls back to a plain 2D canvas with a JS escape-time renderer,
   progressive by rows, capped at 10¹² magnification. Blockier and shallower,
   fully playable, never blank.
-- Pointer events throughout, using `offsetX`/`offsetY` — canvas-relative
-  already, and they avoid the forced reflow (and the validator rejection) that
-  `getBoundingClientRect()` brings.
-- `touch-action: none` is set both through `ctx.createCanvas` and directly on
-  the element. Without it the browser claims the gesture for its own scrolling
-  and cancels the pointer stream mid-pinch — confirmed by driving trusted touch
-  events at the bit, where every gesture silently did nothing until it was set.
+- **Touch events drive the gestures; pointer events only drive mouse and pen.**
+  This started as pointer-events-only, which worked perfectly in a desktop
+  browser and did not pinch on a phone. iOS reserves the two-finger pinch for
+  zooming the page and takes it regardless of `touch-action`, firing
+  `pointercancel` at the first finger as the second one lands — so the bit was
+  left holding one live pointer and quietly fell back to panning. Only
+  `preventDefault()` on a raw `touchmove` (plus swallowing the iOS-only
+  `gesture*` events) actually stops it. On a touch device the pointer handlers
+  ignore `pointerType === "touch"` so nothing is handled twice, and a stray
+  `pointercancel` can no longer tear down a gesture the touch path owns.
+- Gesture state is reconciled against `event.touches` on every touch event
+  rather than trusting `touchend` to arrive. One swallowed release would
+  otherwise leave a phantom finger behind, after which a one-finger drag reads
+  as a pinch against a finger that is not there.
+- Touch coordinates need the canvas origin, and `getBoundingClientRect()` is
+  rejected by the validator, so the origin is learned from any pointer event
+  (which carries both `offsetX` and `clientX`) and assumed to be the viewport
+  corner until one arrives.
+- **Interaction timing runs on the wall clock, not accumulated frame time.**
+  `dt` is clamped for the smoothing filters, and a deep frame can take 100ms+,
+  so a timer fed by `dt` runs slow exactly when the renderer is busiest:
+  press-and-hold measured out at nearly a second at 8fps instead of the 260ms
+  it asks for. Tap detection has no duration test at all — event timestamps are
+  processing times, so a genuine 80ms tap can arrive looking like a 300ms
+  press. A tap is simply "went down and came up without moving or becoming a
+  listen".
 - `document.createElement` is only ever called with a literal `"div"` or
   `"button"`; the validator rejects a computed tag. The minimap bakes through
   `OffscreenCanvas`, with a drawn silhouette as the fallback.

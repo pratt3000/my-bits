@@ -1192,6 +1192,11 @@ window.plethoraBit = {
 
     // Literal tag names only: the upload validator rejects a computed
     // document.createElement, since it cannot see what is being made.
+    // The runtime owns this element, so do not rely on the style option alone
+    // having been honoured: a root that eats pointer events would swallow every
+    // gesture before the canvas ever sees it.
+    ui.style.pointerEvents = "none";
+
     function el(tag, style, text) {
       const node = tag === "button" ? document.createElement("button")
                                     : document.createElement("div");
@@ -1339,11 +1344,11 @@ window.plethoraBit = {
       whiteSpace: "nowrap"
     }, "");
     ui.appendChild(toastNode);
-    let toastTimer = 0;
+    let toastUntil = 0;
     function toast(msg) {
       toastNode.textContent = msg;
       toastNode.style.opacity = "1";
-      toastTimer = 1400;
+      toastUntil = Date.now() + 1400;
     }
 
     // Instructions
@@ -1459,7 +1464,7 @@ window.plethoraBit = {
     // ====================================================================== //
     const pointers = new Map();
     let lastPinch = null;
-    let holdTimer = 0;
+    let holdUntil = 0;   // wall-clock deadline, not a frame counter
     let listening = false;
     let listenPoint = null;
     let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
@@ -1467,27 +1472,33 @@ window.plethoraBit = {
     let zoomVel = 0;
     let flight = null;
 
-    // Pointer coordinates are converted to GL space (y up) on the way in, so
-    // every bit of view maths below matches the shader's frame.
-    const evX = (e) => e.offsetX;
-    const evY = (e) => ctx.height - e.offsetY;
+    // Two paths into one state machine.
+    //
+    // Touch events are the primary path, for a specific reason: iOS reserves
+    // the two-finger pinch for zooming the page and takes it no matter what
+    // touch-action says, firing pointercancel and leaving the bit holding one
+    // dead finger. preventDefault on a raw touchmove is the only thing that
+    // reliably stops it. Pointer events still drive mouse and pen, and on a
+    // touch device they are ignored for touch so nothing is handled twice.
+    const HAS_TOUCH = ("ontouchstart" in window);
 
-    function onDown(e) {
-      e.preventDefault();
-      audioBoot();
-      if (!started) { started = true; ctx.platform.start(); }
-      cancelFlight();
-      try { inputSurface.setPointerCapture(e.pointerId); } catch (err) { /* not captured */ }
-      const x = evX(e), y = evY(e);
-      pointers.set(e.pointerId, { x, y, x0: x, y0: y, t0: Date.now(), moved: false });
-      if (pointers.size === 1) {
-        holdTimer = 260;
-      } else {
-        holdTimer = 0;
-        if (listening) endListen();
-        lastPinch = pinchState();
+    // A Touch carries only client coordinates, and getBoundingClientRect is
+    // rejected by the upload validator, so the canvas origin is learned from
+    // any pointer event (which carries both offset and client) and assumed to
+    // be the viewport corner until one arrives — right for a full-bleed bit.
+    let originX = 0, originY = 0;
+    let lastSingle = null;
+
+    function learnOrigin(e) {
+      if (typeof e.offsetX === "number" && typeof e.clientX === "number") {
+        originX = e.clientX - e.offsetX;
+        originY = e.clientY - e.offsetY;
       }
     }
+
+    // Everything below works in GL space (y up) to match the shader's frame.
+    const touchX = (t) => t.clientX - originX;
+    const touchY = (t) => ctx.height - (t.clientY - originY);
 
     function pinchState() {
       const pts = [...pointers.values()];
@@ -1501,23 +1512,78 @@ window.plethoraBit = {
       };
     }
 
-    function onMove(e) {
-      const p = pointers.get(e.pointerId);
-      if (!p) return;
-      e.preventDefault();
-      const x = evX(e), y = evY(e);
-      const dx = x - p.x, dy = y - p.y;
+    function beginInput() {
+      audioBoot();
+      if (!started) { started = true; ctx.platform.start(); }
+      cancelFlight();
+    }
+
+    function addPointer(id, x, y) {
+      pointers.set(id, { x, y, x0: x, y0: y, t0: Date.now(), moved: false });
+      if (pointers.size === 1) {
+        holdUntil = Date.now() + 260;
+        lastSingle = { x, y };
+      } else {
+        holdUntil = 0;
+        if (listening) endListen();
+      }
+      lastPinch = pinchState();
+    }
+
+    function movePointer(id, x, y) {
+      const p = pointers.get(id);
+      if (!p) return false;
       p.x = x; p.y = y;
       if (Math.hypot(x - p.x0, y - p.y0) > 9) p.moved = true;
+      return true;
+    }
 
+    function dropPointer(id) {
+      const p = pointers.get(id);
+      pointers.delete(id);
+      if (listening && pointers.size === 0) endListen();
+      lastPinch = pinchState();
+      // Re-anchor on whatever is still down, so lifting one finger out of a
+      // pinch does not read as a huge pan on the next move.
+      const rest = [...pointers.values()][0];
+      lastSingle = rest ? { x: rest.x, y: rest.y } : null;
+      if (pointers.size < 2) zoomVel = 0;
+      if (!p) return;
+      holdUntil = 0;
+      // A tap is "went down and came up without moving or becoming a listen".
+      // There is deliberately no duration test: event timestamps here are
+      // processing times, so while a deep frame resolves a genuine 80ms tap can
+      // arrive looking like a 300ms press. Anything held long enough to matter
+      // has already turned into listen mode, which excludes it here.
+      if (!p.moved && !listening) {
+        const now = Date.now();
+        if (now - lastTapTime < 500 && Math.hypot(p.x - lastTapX, p.y - lastTapY) < 48) {
+          lastTapTime = 0;
+          startFlight(p.x, p.y, 4.5, 520);
+          ctx.platform.haptic("medium");
+          ctx.platform.interact({ type: "double_tap_zoom" });
+        } else {
+          lastTapTime = now;
+          lastTapX = p.x; lastTapY = p.y;
+        }
+      }
+    }
+
+    // Driven from the current pointer set rather than per-event deltas, so the
+    // touch path (which can move several fingers in one event) and the pointer
+    // path (one at a time) end up in exactly the same place.
+    function applyGesture() {
       if (listening && pointers.size === 1) {
-        setListenPoint(x, y);
+        const p = [...pointers.values()][0];
+        setListenPoint(p.x, p.y);
         return;
       }
       if (pointers.size === 1) {
+        const p = [...pointers.values()][0];
         if (p.moved) {
-          holdTimer = 0;
-          panPixels(dx, dy, W, H);
+          holdUntil = 0;
+          if (lastSingle) panPixels(p.x - lastSingle.x, p.y - lastSingle.y, W, H);
+          lastSingle = { x: p.x, y: p.y };
           render.dirty = true;
         }
       } else if (pointers.size >= 2) {
@@ -1541,28 +1607,80 @@ window.plethoraBit = {
       }
     }
 
-    function onUp(e) {
-      const p = pointers.get(e.pointerId);
-      pointers.delete(e.pointerId);
-      try { inputSurface.releasePointerCapture(e.pointerId); } catch (err) { /* fine */ }
-      if (listening && pointers.size === 0) endListen();
-      lastPinch = pinchState();
-      if (pointers.size < 2) zoomVel = 0;
-      if (!p) return;
-      holdTimer = 0;
-      const dt = Date.now() - p.t0;
-      if (!p.moved && dt < 300 && !listening) {
-        const now = Date.now();
-        if (now - lastTapTime < 320 && Math.hypot(p.x - lastTapX, p.y - lastTapY) < 44) {
-          lastTapTime = 0;
-          startFlight(p.x, p.y, 4.5, 520);
-          ctx.platform.haptic("medium");
-          ctx.platform.interact({ type: "double_tap_zoom" });
-        } else {
-          lastTapTime = now;
-          lastTapX = p.x; lastTapY = p.y;
-        }
+    // e.touches is the authoritative list of what is actually down. Trusting
+    // only touchend to remove fingers means one missed or swallowed event
+    // leaves a phantom pointer behind, and from then on a one-finger drag
+    // looks like a pinch against a finger that is not there. Reconciling on
+    // every event makes the gesture state self-healing.
+    function reconcile(e) {
+      if (pointers.size === 0) return;
+      const live = new Set();
+      for (let i = 0; i < e.touches.length; i++) live.add(e.touches[i].identifier);
+      let dropped = false;
+      for (const id of [...pointers.keys()]) {
+        if (!live.has(id)) { pointers.delete(id); dropped = true; }
       }
+      if (dropped) {
+        lastPinch = pinchState();
+        const rest = [...pointers.values()][0];
+        lastSingle = rest ? { x: rest.x, y: rest.y } : null;
+        if (pointers.size === 0 && listening) endListen();
+      }
+    }
+
+    function onTouchStart(e) {
+      e.preventDefault();
+      beginInput();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        addPointer(t.identifier, touchX(t), touchY(t));
+      }
+      reconcile(e);
+      // addPointer sized the gesture before reconcile pruned it, so settle the
+      // hold timer against the count that is actually real.
+      if (pointers.size > 1) holdUntil = 0;
+      lastPinch = pinchState();
+    }
+
+    function onTouchMove(e) {
+      e.preventDefault();
+      reconcile(e);
+      let moved = false;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (movePointer(t.identifier, touchX(t), touchY(t))) moved = true;
+      }
+      if (moved) applyGesture();
+    }
+
+    function onTouchEnd(e) {
+      if (e.cancelable) e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        dropPointer(e.changedTouches[i].identifier);
+      }
+    }
+
+    function onDown(e) {
+      learnOrigin(e);
+      if (HAS_TOUCH && e.pointerType === "touch") return;
+      e.preventDefault();
+      beginInput();
+      try { inputSurface.setPointerCapture(e.pointerId); } catch (err) { /* not captured */ }
+      addPointer(e.pointerId, e.offsetX, ctx.height - e.offsetY);
+    }
+
+    function onMove(e) {
+      if (HAS_TOUCH && e.pointerType === "touch") return;
+      if (!pointers.has(e.pointerId)) return;
+      e.preventDefault();
+      movePointer(e.pointerId, e.offsetX, ctx.height - e.offsetY);
+      applyGesture();
+    }
+
+    function onUp(e) {
+      if (HAS_TOUCH && e.pointerType === "touch") return;
+      try { inputSurface.releasePointerCapture(e.pointerId); } catch (err) { /* fine */ }
+      dropPointer(e.pointerId);
     }
 
     function beginListen() {
@@ -1590,16 +1708,25 @@ window.plethoraBit = {
       playOrbitVoice(cx, cy, px, W);
     }
 
+    ctx.listen(inputSurface, "touchstart", onTouchStart, { passive: false });
+    ctx.listen(inputSurface, "touchmove", onTouchMove, { passive: false });
+    ctx.listen(inputSurface, "touchend", onTouchEnd, { passive: false });
+    ctx.listen(inputSurface, "touchcancel", onTouchEnd, { passive: false });
     ctx.listen(inputSurface, "pointerdown", onDown, { passive: false });
     ctx.listen(inputSurface, "pointermove", onMove, { passive: false });
     ctx.listen(inputSurface, "pointerup", onUp);
     ctx.listen(inputSurface, "pointercancel", onUp);
+    // iOS-only pinch gesture events. Swallowing these stops Safari scaling the
+    // whole page out from under the bit; harmless everywhere else.
+    ctx.listen(inputSurface, "gesturestart", (e) => e.preventDefault(), { passive: false });
+    ctx.listen(inputSurface, "gesturechange", (e) => e.preventDefault(), { passive: false });
+    ctx.listen(inputSurface, "gestureend", (e) => e.preventDefault(), { passive: false });
     // Desktop courtesy; phones never see it.
     ctx.listen(inputSurface, "wheel", (e) => {
       e.preventDefault();
       audioBoot();
       cancelFlight();
-      zoomAbout(evX(e), ctx.height - e.offsetY, Math.pow(2, -e.deltaY * 0.0022), W, H);
+      zoomAbout(e.offsetX, ctx.height - e.offsetY, Math.pow(2, -e.deltaY * 0.0022), W, H);
       render.dirty = true;
     }, { passive: false });
 
@@ -1608,7 +1735,7 @@ window.plethoraBit = {
     // ====================================================================== //
     function startFlight(px, py, factor, ms, target) {
       flight = {
-        px, py, factor, ms, t: 0,
+        px, py, factor, ms, t0: Date.now(),
         target: target || null,
         fromSpan: view.span,
         fromCx: view.cx, fromCy: view.cy
@@ -1627,7 +1754,7 @@ window.plethoraBit = {
       const ty = { h: t.cy[0], l: t.cy[1] };
       const targetSpan = BASE_SPAN / Math.pow(2, t.level);
       flight = {
-        t: 0,
+        t0: Date.now(),
         ms: 5200,
         tour: true,
         fromCx: view.cx, fromCy: view.cy, fromSpan: view.span,
@@ -1640,8 +1767,7 @@ window.plethoraBit = {
 
     function stepFlight(dt) {
       if (!flight) return;
-      flight.t += dt;
-      const u = clamp(flight.t / flight.ms, 0, 1);
+      const u = clamp((Date.now() - flight.t0) / flight.ms, 0, 1);
       if (flight.tour) {
         // Interpolate the centre linearly but the span geometrically: constant
         // apparent zoom speed is what makes a dive feel smooth rather than
@@ -1773,13 +1899,18 @@ window.plethoraBit = {
       dt = Math.min(dt || 16, 64);
       frameAvg = lerp(frameAvg, dt, 0.08);
 
-      if (holdTimer > 0) {
-        holdTimer -= dt;
-        if (holdTimer <= 0 && pointers.size === 1) beginListen();
+      // Wall clock, not accumulated frame time. dt is clamped for the sake of
+      // the smoothing filters, and a deep frame can take 100ms+, so a timer fed
+      // by dt runs slow exactly when the renderer is busy — press-and-hold
+      // needed nearly a second at 8fps instead of the 260ms it asks for.
+      const nowMs = Date.now();
+      if (holdUntil && nowMs >= holdUntil) {
+        holdUntil = 0;
+        if (pointers.size === 1) beginListen();
       }
-      if (toastTimer > 0) {
-        toastTimer -= dt;
-        if (toastTimer <= 0) toastNode.style.opacity = "0";
+      if (toastUntil && nowMs >= toastUntil) {
+        toastUntil = 0;
+        toastNode.style.opacity = "0";
       }
 
       stepFlight(dt);
