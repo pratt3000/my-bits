@@ -26,13 +26,13 @@ and clear the arena before the clock runs out.
 | 2 | Kitchen & Dining | Easy | 4 | 3:15 | 26×18 | Pot rack, wine rack, sill herbs, cabinet-top perch |
 | 3 | Master Bedroom | Medium | 5 | 4:00 | 28×20 | Wardrobes, **hanging-clothes decoys**, laundry basket |
 | 4 | Toy Store | Hard | 6 | 5:00 | 32×22 | **Two floors**, running toy train, balloon-camo air hider |
-| 5 | Art Museum | Very Hard | 7 | 6:00 | 36×24 | Statue garden, reliefs in paintings, **ceiling & floating hiders** |
+| 5 | Art Museum | Very Hard | 7 | 5:30 | 36×24 | Statue garden, a gold living-statue decoy, ceiling beams/spotlights, **two ceiling clingers + a floater** |
 
-Hiders use seven poses — stand, crouch, **sit on furniture, lie flat, curl
-into a ball, pancake against walls, and press flush INTO paintings as a
-"relief"** (no side-visible gap) — in two body builds (**hard-edged boxy or
-soft ellipsoid**) with widely randomized proportions, so no two silhouettes
-match. Later arenas hide in the air: a hider bobbing among toy-store
+Hiders use eleven poses — stand, crouch, sit, lie flat, ball, wall-flat,
+flush "relief" inside paintings, **plank (reads as a low bench), spread-eagle
+star, headstand (eyes at the bottom!), and a casual crossed-ankle lean** — in
+two body builds (boxy or soft ellipsoid) with tiny-to-giant size rolls, so
+no two silhouettes match. Later arenas hide in the air: a hider bobbing among toy-store
 balloons, one floating among the museum's suspended sculptures, one clinging
 to the museum ceiling, and ball-poses on top of shelves, cabinets and
 wardrobes. Every arena also contains **humanoid decoys**
@@ -51,6 +51,9 @@ Arenas unlock in order: clearing arena *N* unlocks arena *N+1* (persisted).
 
 - Completion time is the ranked metric (faster = better); score =
   `found × 250 + remaining-time bonus`, reported via `ctx.platform.setScore`.
+- Wrong accusations cost **6s on arena 1 up to 12s on the museum**; the
+  proximity giggle also gets quieter and rarer on harder arenas, blinks
+  near-vanish, and idle sway drops to almost nothing.
 - **Platform leaderboards only** — Plethora already knows the player, so
   wins auto-submit to five `memory.records` channels (`living_room`,
   `kitchen`, `bedroom`, `toy_store`, `museum`; `duration_ms` / `asc` /
