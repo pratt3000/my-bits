@@ -643,9 +643,15 @@ window.plethoraBit = {
     // 8. Procedural texture / surface-material factory. Camouflage works by
     //    giving hiders material clones of the exact surface they lean on.
     // =====================================================================
+    // Offscreen pattern painting. The runtime owns every DOM canvas
+    // (ctx.createCanvas* are display surfaces), so texture bakes use
+    // OffscreenCanvas; without it we return null and surfaces fall back to
+    // their flat base color — plainer camouflage, never a blank room.
+    const CAN_BAKE = typeof OffscreenCanvas === "function";
     function paint(size, fn) {
-      const c = document.createElement("canvas");
-      c.width = c.height = size;
+      if (!CAN_BAKE) return null;
+      let c = null;
+      try { c = new OffscreenCanvas(size, size); } catch (_) { return null; }
       fn(c.getContext("2d"), size);
       return c;
     }
@@ -732,16 +738,20 @@ window.plethoraBit = {
       t.repeat.set(Math.max(0.25, uRep), Math.max(0.25, vRep));
       return t;
     }
-    // Shared furniture material (cached per surface+size bucket).
+    // Shared furniture material (cached per surface+size bucket). When a
+    // pattern canvas exists the material stays white and the map carries the
+    // color; otherwise the surface's flat color is used.
     function matFor(key, w, h) {
       const s = world.mats[key];
       const ck = key + "|" + (w).toFixed(1) + "|" + (h).toFixed(1);
       if (world.matCache[ck]) return world.matCache[ck];
-      const m = new THREE.MeshLambertMaterial({ color: s.color != null ? s.color : 0xffffff });
+      const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
       if (s.canvas) {
         const t = texFrom(s.canvas, w * s.density, h * s.density);
         if (s.anim) world.animTex.push(t);
         m.map = t;
+      } else {
+        m.color.setHex(s.color != null ? s.color : 0xffffff);
       }
       world.matCache[ck] = m;
       return m;
@@ -955,16 +965,16 @@ window.plethoraBit = {
 
     function buildLivingRoom() {
       surf("wallCream", { color: 0xe8dcc8 });
-      surf("wallAccent", { canvas: P.stripes("#c96f4a", "#b45f3e", 8, false), density: 0.55, color: 0xffffff });
-      surf("floorWood", { canvas: P.wood("#8a6642", "#6f5230"), density: 0.4, color: 0xffffff });
-      surf("rug", { canvas: P.dots("#6d4380", "#8f5ba6", 6, 0.24), density: 0.7, color: 0xffffff });
-      surf("sofaBlue", { canvas: P.noise("#3f6ea8", 0.07), density: 0.9, color: 0xffffff });
-      surf("sofaTan", { canvas: P.noise("#c9a06a", 0.07), density: 0.9, color: 0xffffff });
-      surf("shelfWood", { canvas: P.wood("#6b4a2e", "#563a21"), density: 0.7, color: 0xffffff });
+      surf("wallAccent", { canvas: P.stripes("#c96f4a", "#b45f3e", 8, false), density: 0.55, color: 0xc96f4a });
+      surf("floorWood", { canvas: P.wood("#8a6642", "#6f5230"), density: 0.4, color: 0x8a6642 });
+      surf("rug", { canvas: P.dots("#6d4380", "#8f5ba6", 6, 0.24), density: 0.7, color: 0x6d4380 });
+      surf("sofaBlue", { canvas: P.noise("#3f6ea8", 0.07), density: 0.9, color: 0x3f6ea8 });
+      surf("sofaTan", { canvas: P.noise("#c9a06a", 0.07), density: 0.9, color: 0xc9a06a });
+      surf("shelfWood", { canvas: P.wood("#6b4a2e", "#563a21"), density: 0.7, color: 0x6b4a2e });
       surf("tvBlack", { color: 0x1c1c22 });
-      surf("plantGreen", { canvas: P.noise("#3e7d3a", 0.1), density: 1.1, color: 0xffffff });
+      surf("plantGreen", { canvas: P.noise("#3e7d3a", 0.1), density: 1.1, color: 0x3e7d3a });
       surf("lampShade", { color: 0xe8d9a8 });
-      surf("curtain", { canvas: P.stripes("#7d9ec4", "#6b8db4", 6, false), density: 0.8, color: 0xffffff });
+      surf("curtain", { canvas: P.stripes("#7d9ec4", "#6b8db4", 6, false), density: 0.8, color: 0x7d9ec4 });
 
       shell(22, 16, 3.5, "floorWood", ["wallAccent", "wallCream", "wallCream", "wallCream"], 0xf2ece0);
       PL("rug", 6.5, 4.5, 0, 0.02, 1, -Math.PI / 2, 0, {});
@@ -1029,16 +1039,16 @@ window.plethoraBit = {
     }
 
     function buildKitchen() {
-      surf("wallTile", { canvas: P.checker("#dfe8ea", "#c6d3d8", 10), density: 1.1, color: 0xffffff });
+      surf("wallTile", { canvas: P.checker("#dfe8ea", "#c6d3d8", 10), density: 1.1, color: 0xdfe8ea });
       surf("wallPaint", { color: 0xeef0e2 });
-      surf("floorTile", { canvas: P.checker("#b9b0a2", "#a59b8c", 8), density: 0.55, color: 0xffffff });
+      surf("floorTile", { canvas: P.checker("#b9b0a2", "#a59b8c", 8), density: 0.55, color: 0xb9b0a2 });
       surf("counterTop", { color: 0xd8d8d2 });
-      surf("cabinetBlue", { canvas: P.noise("#4a6f8a", 0.05), density: 0.8, color: 0xffffff });
-      surf("fridgeSteel", { canvas: P.noise("#b8bec4", 0.05), density: 0.9, color: 0xffffff });
-      surf("tableWood", { canvas: P.wood("#9a6b3f", "#82552b"), density: 0.6, color: 0xffffff });
+      surf("cabinetBlue", { canvas: P.noise("#4a6f8a", 0.05), density: 0.8, color: 0x4a6f8a });
+      surf("fridgeSteel", { canvas: P.noise("#b8bec4", 0.05), density: 0.9, color: 0xb8bec4 });
+      surf("tableWood", { canvas: P.wood("#9a6b3f", "#82552b"), density: 0.6, color: 0x9a6b3f });
       surf("chairRed", { color: 0xa83c34 });
       surf("ovenBlack", { color: 0x26262a });
-      surf("pantryWood", { canvas: P.wood("#6b4a2e", "#563a21"), density: 0.7, color: 0xffffff });
+      surf("pantryWood", { canvas: P.wood("#6b4a2e", "#563a21"), density: 0.7, color: 0x6b4a2e });
 
       shell(22, 16, 3.5, "floorTile", ["wallTile", "wallPaint", "wallPaint", "wallPaint"], 0xf0f2e8);
 
@@ -1101,16 +1111,16 @@ window.plethoraBit = {
 
     function buildBedroom() {
       surf("wallRose", { color: 0xd8b8b0 });
-      surf("wallPaper", { canvas: P.dots("#cfc3de", "#b3a2cc", 7, 0.2), density: 1.2, color: 0xffffff });
-      surf("carpet", { canvas: P.noise("#9a8f9c", 0.05), density: 0.8, color: 0xffffff });
-      surf("duvet", { canvas: P.checker("#7d9ec4", "#6b8db4", 6), density: 0.9, color: 0xffffff });
-      surf("bedWood", { canvas: P.wood("#7a5838", "#644728"), density: 0.6, color: 0xffffff });
+      surf("wallPaper", { canvas: P.dots("#cfc3de", "#b3a2cc", 7, 0.2), density: 1.2, color: 0xcfc3de });
+      surf("carpet", { canvas: P.noise("#9a8f9c", 0.05), density: 0.8, color: 0x9a8f9c });
+      surf("duvet", { canvas: P.checker("#7d9ec4", "#6b8db4", 6), density: 0.9, color: 0x7d9ec4 });
+      surf("bedWood", { canvas: P.wood("#7a5838", "#644728"), density: 0.6, color: 0x7a5838 });
       surf("pillow", { color: 0xf0ead8 });
-      surf("wardrobe", { canvas: P.wood("#5f4630", "#4c3722"), density: 0.65, color: 0xffffff });
-      surf("curtainB", { canvas: P.stripes("#c98ba0", "#b87890", 6, false), density: 0.85, color: 0xffffff });
-      surf("vanity", { canvas: P.wood("#b08a5c", "#997344"), density: 0.7, color: 0xffffff });
+      surf("wardrobe", { canvas: P.wood("#5f4630", "#4c3722"), density: 0.65, color: 0x5f4630 });
+      surf("curtainB", { canvas: P.stripes("#c98ba0", "#b87890", 6, false), density: 0.85, color: 0xc98ba0 });
+      surf("vanity", { canvas: P.wood("#b08a5c", "#997344"), density: 0.7, color: 0xb08a5c });
       surf("dresser", { color: 0x4a8a8c });
-      surf("rugOval", { canvas: P.dots("#8c5a4a", "#a5705c", 6, 0.25), density: 0.8, color: 0xffffff });
+      surf("rugOval", { canvas: P.dots("#8c5a4a", "#a5705c", 6, 0.25), density: 0.8, color: 0x8c5a4a });
 
       shell(22, 17, 3.6, "carpet", ["wallPaper", "wallRose", "wallRose", "wallRose"], 0xefe6e2);
 
@@ -1169,19 +1179,19 @@ window.plethoraBit = {
     function buildToyStore() {
       const MEZZ = 3.1;
       surf("wallSky", { color: 0xcfe8f4 });
-      surf("wallRainbow", { canvas: P.rainbow(["#e05252", "#e8a23c", "#e8d43c", "#52b05e", "#4a7fd0", "#8f5ba6"]), density: 0.4, color: 0xffffff });
-      surf("floorCheck", { canvas: P.checker("#f2e6c8", "#e5d0a2", 8), density: 0.55, color: 0xffffff });
+      surf("wallRainbow", { canvas: P.rainbow(["#e05252", "#e8a23c", "#e8d43c", "#52b05e", "#4a7fd0", "#8f5ba6"]), density: 0.4, color: 0xe8a23c });
+      surf("floorCheck", { canvas: P.checker("#f2e6c8", "#e5d0a2", 8), density: 0.55, color: 0xf2e6c8 });
       surf("mezzPink", { color: 0xd8788c });
       surf("shelfRed", { color: 0xc94f44 });
       surf("shelfBlue", { color: 0x3f6ea8 });
       surf("shelfYellow", { color: 0xe0b23c });
       surf("shelfGreen", { color: 0x4f9a55 });
-      surf("boxKraft", { canvas: P.noise("#b58a54", 0.07), density: 0.9, color: 0xffffff });
-      surf("teddyBrown", { canvas: P.noise("#8a5c38", 0.1), density: 1.3, color: 0xffffff });
-      surf("teddyPink", { canvas: P.noise("#d888a8", 0.1), density: 1.3, color: 0xffffff });
-      surf("ballPit", { canvas: P.dots("#3f6ea8", "#ffd25e", 5, 0.3), density: 1.4, color: 0xffffff });
+      surf("boxKraft", { canvas: P.noise("#b58a54", 0.07), density: 0.9, color: 0xb58a54 });
+      surf("teddyBrown", { canvas: P.noise("#8a5c38", 0.1), density: 1.3, color: 0x8a5c38 });
+      surf("teddyPink", { canvas: P.noise("#d888a8", 0.1), density: 1.3, color: 0xd888a8 });
+      surf("ballPit", { canvas: P.dots("#3f6ea8", "#ffd25e", 5, 0.3), density: 1.4, color: 0x3f6ea8 });
       surf("counterPurple", { color: 0x7a4a8c });
-      surf("stairWood", { canvas: P.wood("#9a6b3f", "#82552b"), density: 0.6, color: 0xffffff });
+      surf("stairWood", { canvas: P.wood("#9a6b3f", "#82552b"), density: 0.6, color: 0x9a6b3f });
 
       shell(24, 18, 6.4, "floorCheck", ["wallSky", "wallRainbow", "wallSky", "wallSky"], 0xe8f2f8);
 
@@ -1279,16 +1289,16 @@ window.plethoraBit = {
 
     function buildMuseum() {
       surf("wallWhite", { color: 0xeceff1 });
-      surf("wallMoire", { canvas: P.moire("#20242c", "#e8e2d0"), density: 0.6, color: 0xffffff, anim: true });
-      surf("floorMarble", { canvas: P.noise("#d8dade", 0.035), density: 0.35, color: 0xffffff });
+      surf("wallMoire", { canvas: P.moire("#20242c", "#e8e2d0"), density: 0.6, color: 0x20242c, anim: true });
+      surf("floorMarble", { canvas: P.noise("#d8dade", 0.035), density: 0.35, color: 0xd8dade });
       surf("plinth", { color: 0xc8ccd4 });
-      surf("statueGold", { canvas: P.noise("#c9a227", 0.06), density: 1.0, color: 0xffffff });
+      surf("statueGold", { canvas: P.noise("#c9a227", 0.06), density: 1.0, color: 0xc9a227 });
       surf("statueTeal", { color: 0x2e8a8a });
       surf("statueRed", { color: 0xb53d3d });
       surf("benchGray", { color: 0x6a7076 });
-      surf("artA", { canvas: P.art(["#1d2440", "#e05252", "#e8d43c", "#4a7fd0", "#efe8da"], 11), density: 0.55, color: 0xffffff });
-      surf("artB", { canvas: P.art(["#3a2a1d", "#52b05e", "#e8a23c", "#8f5ba6", "#efe8da"], 23), density: 0.55, color: 0xffffff });
-      surf("artC", { canvas: P.art(["#10231e", "#e05294", "#3cc8e8", "#e8e2d0"], 37), density: 0.6, color: 0xffffff });
+      surf("artA", { canvas: P.art(["#1d2440", "#e05252", "#e8d43c", "#4a7fd0", "#efe8da"], 11), density: 0.55, color: 0x1d2440 });
+      surf("artB", { canvas: P.art(["#3a2a1d", "#52b05e", "#e8a23c", "#8f5ba6", "#efe8da"], 23), density: 0.55, color: 0x3a2a1d });
+      surf("artC", { canvas: P.art(["#10231e", "#e05294", "#3cc8e8", "#e8e2d0"], 37), density: 0.6, color: 0x10231e });
 
       shell(28, 20, 5, "floorMarble", ["wallMoire", "wallWhite", "wallWhite", "wallWhite"], 0xf2f4f6);
 
