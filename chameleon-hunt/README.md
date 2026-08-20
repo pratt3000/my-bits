@@ -20,16 +20,23 @@ and clear the arena before the clock runs out.
 
 ## The five arenas
 
-| # | Arena | Difficulty | Find | Time | Notes |
-|---|-------|-----------|------|------|-------|
-| 1 | Living Room | Very Easy | 3 | 2:00 | Sofas, TV unit, bookshelves |
-| 2 | Kitchen & Dining | Easy | 4 | 2:40 | Counters, fridge, dining table |
-| 3 | Master Bedroom | Medium | 5 | 3:20 | Big bed, wardrobes, curtains, vanity |
-| 4 | Toy Store | Hard | 6 | 4:20 | **Two floors** (stairs + mezzanine), giant teddies, ball pit |
-| 5 | Art Museum | Very Hard | 7 | 5:20 | Abstract statues, rotating sculptures, scrolling moiré wall |
+| # | Arena | Difficulty | Find | Time | Size | Notes |
+|---|-------|-----------|------|------|------|-------|
+| 1 | Living Room | Very Easy | 3 | 2:30 | 24×18 | Sofas, shelves, ceiling fan, coat-rack decoy |
+| 2 | Kitchen & Dining | Easy | 4 | 3:15 | 26×18 | Counters, pot rack, pantry, produce sacks |
+| 3 | Master Bedroom | Medium | 5 | 4:00 | 28×20 | Wardrobes, **hanging-clothes decoys**, laundry basket |
+| 4 | Toy Store | Hard | 6 | 5:00 | 32×22 | **Two floors**, plush mountain, **display-doll decoys** |
+| 5 | Art Museum | Very Hard | 7 | 6:00 | 36×24 | **Statue-garden decoys**, empty plinths hiders pose on |
 
-Each arena defines a pool of **15+ hand-placed hide spots** (position,
-rotation, pose, backing surface). Every run randomly draws its target count
+Hiders use six poses — stand, crouch, **sit on furniture, lie flat, curl
+into a ball, pancake against walls** — with randomized body proportions, so
+no two silhouettes match. Every arena also contains **humanoid decoys**
+(display dolls, stone figures, hanging clothes, a draped coat rack) built
+from the same pose kit; accusing one costs time. Rooms are dressed with
+ambient motion (spinning fans, drifting dust, swaying curtains and pot
+racks, bobbing balloons, a flickering TV) so the hiders' subtle sway is not
+the only movement. Each arena defines a pool of **22+ hand-placed hide
+spots** (position, rotation, pose, backing surface). Every run randomly draws its target count
 from the pool, and the drawn set is guaranteed to differ from the previous
 run's set (persisted per arena).
 
@@ -39,12 +46,12 @@ Arenas unlock in order: clearing arena *N* unlocks arena *N+1* (persisted).
 
 - Completion time is the ranked metric (faster = better); score =
   `found × 250 + remaining-time bonus`, reported via `ctx.platform.setScore`.
-- **Local leaderboards**: one per arena in `ctx.storage`, seeded with 4
-  realistic bot times, sorted fastest-first, capped at 10. Beating a time
-  prompts for a username (remembered for next time).
-- **Platform leaderboards**: five `memory.records` channels
-  (`living_room`, `kitchen`, `bedroom`, `toy_store`, `museum`), each
-  `duration_ms` / `asc` / `timer` / `best_per_user`.
+- **Platform leaderboards only** — Plethora already knows the player, so
+  wins auto-submit to five `memory.records` channels (`living_room`,
+  `kitchen`, `bedroom`, `toy_store`, `museum`; `duration_ms` / `asc` /
+  `timer` / `best_per_user`) with no name prompt, and the in-game boards
+  overlay renders the real global standings. Personal bests are cached
+  locally for the arena-select screen.
 
 ## Audio
 
