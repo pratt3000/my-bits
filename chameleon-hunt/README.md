@@ -23,14 +23,19 @@ and clear the arena before the clock runs out.
 | # | Arena | Difficulty | Find | Time | Size | Notes |
 |---|-------|-----------|------|------|------|-------|
 | 1 | Living Room | Very Easy | 3 | 2:30 | 24×18 | Sofas, shelves, ceiling fan, coat-rack decoy |
-| 2 | Kitchen & Dining | Easy | 4 | 3:15 | 26×18 | Counters, pot rack, pantry, produce sacks |
+| 2 | Kitchen & Dining | Easy | 4 | 3:15 | 26×18 | Pot rack, wine rack, sill herbs, cabinet-top perch |
 | 3 | Master Bedroom | Medium | 5 | 4:00 | 28×20 | Wardrobes, **hanging-clothes decoys**, laundry basket |
-| 4 | Toy Store | Hard | 6 | 5:00 | 32×22 | **Two floors**, plush mountain, **display-doll decoys** |
-| 5 | Art Museum | Very Hard | 7 | 6:00 | 36×24 | **Statue-garden decoys**, empty plinths hiders pose on |
+| 4 | Toy Store | Hard | 6 | 5:00 | 32×22 | **Two floors**, running toy train, balloon-camo air hider |
+| 5 | Art Museum | Very Hard | 7 | 6:00 | 36×24 | Statue garden, reliefs in paintings, **ceiling & floating hiders** |
 
-Hiders use six poses — stand, crouch, **sit on furniture, lie flat, curl
-into a ball, pancake against walls** — with randomized body proportions, so
-no two silhouettes match. Every arena also contains **humanoid decoys**
+Hiders use seven poses — stand, crouch, **sit on furniture, lie flat, curl
+into a ball, pancake against walls, and press flush INTO paintings as a
+"relief"** (no side-visible gap) — in two body builds (**hard-edged boxy or
+soft ellipsoid**) with widely randomized proportions, so no two silhouettes
+match. Later arenas hide in the air: a hider bobbing among toy-store
+balloons, one floating among the museum's suspended sculptures, one clinging
+to the museum ceiling, and ball-poses on top of shelves, cabinets and
+wardrobes. Every arena also contains **humanoid decoys**
 (display dolls, stone figures, hanging clothes, a draped coat rack) built
 from the same pose kit; accusing one costs time. Rooms are dressed with
 ambient motion (spinning fans, drifting dust, swaying curtains and pot

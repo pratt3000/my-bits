@@ -217,6 +217,7 @@ window.plethoraBit = {
             &nbsp;&nbsp;&nbsp;&nbsp;watch for <b>blinking eyes</b> and odd bumps.<br>
             🧍 They <b>stand, sit, curl up, even lie flat</b> —<br>
             &nbsp;&nbsp;&nbsp;&nbsp;and some “statues” aren’t statues…<br>
+            👀 Later arenas: check <b>above you</b>, too.<br>
             🤭 <b>Giggles get louder</b> when you're close.<br>
             ⏱ Find everyone before the clock runs out!
           </div>
@@ -306,16 +307,16 @@ window.plethoraBit = {
         targets: 3, limit: 150, mismatch: 0.09, preset: "cozy",
         blurb: "Sofas, shelves, a lazy ceiling fan" },
       { id: "kitchen", name: "Kitchen & Dining", icon: "🍳", diff: "Easy", dlv: 2,
-        targets: 4, limit: 195, mismatch: 0.05, preset: "lofi",
+        targets: 4, limit: 195, mismatch: 0.035, preset: "lofi",
         blurb: "Counters, pot racks, pantry clutter" },
       { id: "bedroom", name: "Master Bedroom", icon: "🛏️", diff: "Medium", dlv: 3,
-        targets: 5, limit: 240, mismatch: 0.028, preset: "drift",
+        targets: 5, limit: 240, mismatch: 0.018, preset: "drift",
         blurb: "Wardrobes, hanging clothes, soft light" },
       { id: "toy_store", name: "Toy Store", icon: "🧸", diff: "Hard", dlv: 4,
-        targets: 6, limit: 300, mismatch: 0.014, preset: "bubble",
+        targets: 6, limit: 300, mismatch: 0.009, preset: "bubble",
         blurb: "Two floors, plush mountains, display dolls" },
       { id: "museum", name: "Art Museum", icon: "🗿", diff: "Very Hard", dlv: 5,
-        targets: 7, limit: 360, mismatch: 0.008, preset: "spooky",
+        targets: 7, limit: 360, mismatch: 0.005, preset: "spooky",
         blurb: "Statue gardens where some statues breathe" }
     ];
     const HIDER_NAMES = ["Marco", "Polo", "Blinky", "Willow", "Dot", "Pixel", "Fern", "Ziggy", "Mo", "Luna",
@@ -915,6 +916,16 @@ window.plethoraBit = {
           [0.1, 0.3, 0.1, -0.3, 0.22, 0.06], [0.1, 0.3, 0.1, 0.3, 0.22, 0.06],
           [0.26, 0.22, 0.24, 0, 0.46, 0.07]
         ], eye: { y: 0.48, z: 0.19 }, height: 0.62
+      },
+      // Pressed INTO a wall or painting: 5cm proud, splayed limbs, no gap
+      // visible from the side — a figure "inside" the art.
+      relief: {
+        parts: [
+          [0.16, 0.54, 0.05, -0.14, 0.27, 0], [0.16, 0.54, 0.05, 0.14, 0.27, 0],
+          [0.44, 0.54, 0.05, 0, 0.82, 0],
+          [0.12, 0.5, 0.045, -0.33, 0.88, 0], [0.12, 0.5, 0.045, 0.33, 0.88, 0],
+          [0.3, 0.3, 0.05, 0, 1.3, 0]
+        ], eye: { y: 1.32, z: 0.032 }, height: 1.46
       }
     };
 
@@ -928,8 +939,13 @@ window.plethoraBit = {
         blinkAt: rnd(4, 9), blinkOn: 0, swayPh: rnd(0, 6.28), danceT: 0,
         eyes: null, matKey: spot.mat, headY: pose.eye.y, height: pose.height
       };
+      // Two body builds: boxy (hard edges) or soft (ellipsoid limbs) — like
+      // the source game's different hider body types.
+      const soft = Math.random() < 0.5;
       for (const [w, hgt, d, x, y, z] of pose.parts) {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), hiderMatFor(spot.mat, mismatch, Math.max(w, d), hgt));
+        const geo = soft ? new THREE.SphereGeometry(0.5, 10, 8) : new THREE.BoxGeometry(w, hgt, d);
+        const m = new THREE.Mesh(geo, hiderMatFor(spot.mat, mismatch, Math.max(w, d), hgt));
+        if (soft) m.scale.set(w * 1.15, hgt * 1.05, d * 1.15);
         m.position.set(x, y, z);
         m.userData.hider = H;
         parts.push(m); g.add(m);
@@ -950,9 +966,11 @@ window.plethoraBit = {
       H.eyes = eyeG;
       g.add(eyeG);
       // Body-shape variety: no two hiders share an exact silhouette.
-      if (spot.pose !== "lie") g.scale.set(rnd(0.88, 1.12), rnd(0.92, 1.15), 1);
+      if (spot.pose !== "lie") g.scale.set(rnd(0.8, 1.22), rnd(0.85, 1.28), 1);
       g.position.set(spot.x, H.y, spot.z);
       g.rotation.y = spot.ry || 0;
+      if (spot.rx) g.rotation.x = spot.rx;   // ceiling clingers hang inverted
+      H.dropTo = spot.dropTo;                // air hiders fall here on reveal
       world.group.add(g);
       world.hiders.push(H);
       for (const p of parts) world.hiderMeshes.push(p);
@@ -963,6 +981,11 @@ window.plethoraBit = {
       h.found = true;
       h.eyes.visible = true;
       h.danceT = 0.0001;
+      if (h.dropTo != null) {
+        h.y = h.dropTo;
+        h.group.rotation.x = 0;
+        h.group.position.y = h.y;
+      }
       for (const p of h.parts) {
         if (p.material.map) { p.material.map.dispose(); p.material.map = null; }
         p.material.emissive = new THREE.Color(0x222222);
@@ -1160,7 +1183,7 @@ window.plethoraBit = {
         { x: 8.4, z: 8.55, ry: Math.PI, mat: "wallCream", pose: "stand" },
         { x: -8.8, z: -8.5, ry: 0, mat: "wallAccent", pose: "stand" },
         { x: 3.4, z: -8.5, ry: 0, mat: "wallAccent", pose: "stand" },
-        { x: -4.9, z: -8.6, ry: 0, mat: "wallAccent", pose: "flat" },
+        { x: -4.9, z: -8.955, ry: 0, mat: "wallAccent", pose: "relief" },
         { x: 11.45, z: -5.6, ry: -Math.PI / 2, mat: "wallCream", pose: "stand" },
         { x: -11.45, z: 6.8, ry: Math.PI / 2, mat: "wallCream", pose: "stand" },
         { x: -1.2, z: 0.9, ry: 0.4, mat: "rug", pose: "crouch" },
@@ -1277,6 +1300,39 @@ window.plethoraBit = {
         world.group.add(lampG);
         world.anims.push({ mesh: lampG, sway: { axis: "z", amp: 0.04, freq: 0.45, ph: hx } });
       }
+      // Detail pass 2: appliances, shelving, sill herbs, crates.
+      B("fridgeSteel", 0.85, 0.5, 0.45, -1.5, 1.03, -8.4, 0, { pick: true, name: "the microwave" });
+      C("ovenBlack", 0.12, 0.14, 0.22, 2.6, 1.03, -8.3, { pick: true, name: "the kettle" });
+      B("tableWood", 3, 0.05, 0.1, -2, 1.72, -8.9, 0, { pick: true, name: "the utensil rail" });
+      for (let u = 0; u < 5; u++) {
+        const ut = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.02), matFor("fridgeSteel", 0.1, 0.3));
+        ut.position.set(-3.1 + u * 0.55, 1.52, -8.88);
+        meshOpts(ut, { pick: true, name: "the utensils" });
+      }
+      B("tableWood", 2.4, 0.06, 0.3, -9, 1.6, 8.72, 0, { pick: true, name: "the plate shelf" });
+      for (let pl = 0; pl < 4; pl++) {
+        const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), matFor("counterTop", 0.4, 0.1));
+        plate.rotation.x = Math.PI / 2;
+        plate.position.set(-9.8 + pl * 0.55, 1.82, 8.68);
+        meshOpts(plate, { pick: true, name: "the plates" });
+      }
+      B("pantryWood", 0.9, 1.2, 0.45, 12.6, 0, 1.2, 0, { pick: true, name: "the wine rack", solid: true });
+      for (let wri = 0; wri < 6; wri++) {
+        const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.32, 8),
+          new THREE.MeshLambertMaterial({ color: [0x3a5a2a, 0x5a2a35][wri % 2] }));
+        bt.rotation.x = Math.PI / 2;
+        bt.position.set(12.42 - Math.floor(wri / 2) * 0.001, 0.35 + Math.floor(wri / 2) * 0.34, 1.2 - 0.25 + (wri % 2) * 0.5);
+        meshOpts(bt, { pick: true, name: "the wine bottles" });
+      }
+      for (let hp = 0; hp < 3; hp++) {
+        C("chairRed", 0.09, 0.11, 0.16, -5 + hp, 1.1, 8.7, { pick: true, name: "the herb pots" });
+        const herb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshLambertMaterial({ color: 0x4f9a55 }));
+        herb.position.set(-5 + hp, 1.35, 8.7);
+        meshOpts(herb, { pick: true, name: "the herb pots" });
+      }
+      B("boxKraft", 0.8, 0.5, 0.6, -10.3, 0, 8.4, 0.2, { pick: true, name: "a crate", solid: true });
+      B("boxKraft", 0.7, 0.45, 0.55, -9.4, 0, 7.9, -0.15, { pick: true, name: "a crate" });
+      PL("rugRunner", 1.2, 2.6, 8, 0.02, -0.5, -Math.PI / 2, 0, {});
       dustCloud(26, 18, 3.6, 90);
 
       world.spawn = { x: -6, z: 7.8, yaw: 0.25 };
@@ -1298,11 +1354,12 @@ window.plethoraBit = {
         { x: 0.8, z: -7.35, ry: 0, mat: "cabinetBlue", pose: "crouch" },
         { x: -11.4, z: -4.0, ry: Math.PI / 2, mat: "cabinetBlue", pose: "crouch" },
         { x: -6.4, z: 8.55, ry: Math.PI, mat: "wallPaint", pose: "stand" },
-        { x: 3.4, z: 8.6, ry: Math.PI, mat: "wallPaint", pose: "flat" },
+        { x: 3.4, z: 8.955, ry: Math.PI, mat: "wallPaint", pose: "relief" },
         { x: 10.2, z: 8.55, ry: Math.PI, mat: "wallPaint", pose: "stand" },
         { x: 12.55, z: 3.8, ry: -Math.PI / 2, mat: "wallPaint", pose: "stand" },
         { x: -8.2, z: -0.8, ry: 0.2, mat: "floorTile", pose: "crouch" },
-        { x: 2, z: 8.35, ry: Math.PI, mat: "chalkDark", pose: "stand" }
+        { x: 2, z: 8.72, ry: Math.PI, mat: "chalkDark", pose: "relief" },
+        { x: -3, z: -8.55, ry: 0, mat: "cabinetBlue", pose: "ball", y: 2.9 }
       ];
     }
 
@@ -1388,16 +1445,44 @@ window.plethoraBit = {
       frameArt("frameC", 1.4, 1, -5, 2.1, -9.82, 0);
       frameArt("frameC", 1.1, 0.85, 10, 2.2, 9.82, Math.PI);
       frameArt("frameC", 1.2, 0.9, -13.82, 2.1, 5.8, Math.PI / 2);
+      // Detail pass 2: dresser TV, string lights, shelf, suitcase, clutter.
+      surf("tvDark", { color: 0x1c1c22 });
+      B("tvDark", 1.3, 0.75, 0.08, -7, 1.15, 9.6, 0, { pick: true, name: "the TV" });
+      const btv = glow(0x2a3f55, 1.15, 0.6, -7, 1.55, 9.54, Math.PI);
+      world.anims.push({ flickerMat: btv.material });
+      for (let sl = 0; sl < 8; sl++) {
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffe0a8 }));
+        bulb.position.set(-1.6 + sl * 0.46, 1.5 + Math.sin(sl * 1.4) * 0.08, -9.4);
+        meshOpts(bulb, {});
+      }
+      B("vanity", 1.8, 0.06, 0.25, 0.5, 1.9, 9.8, 0, { pick: true, name: "the wall shelf" });
+      for (let sb = 0; sb < 4; sb++) {
+        const bk = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.26, 0.18), new THREE.MeshLambertMaterial({ color: [0xc94f44, 0x3f6ea8, 0xe0b23c, 0x4f9a55][sb] }));
+        bk.position.set(-0.1 + sb * 0.3, 2.06, 9.8);
+        meshOpts(bk, { pick: true, name: "the books" });
+      }
+      const shpl = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), matFor("clothTeal", 0.3, 0.3));
+      shpl.position.set(1.15, 2.03, 9.8);
+      meshOpts(shpl, { pick: true, name: "a tiny plant" });
+      B("clothRose", 0.7, 0.55, 0.3, 12.6, 0, 1.9, 0.15, { pick: true, name: "the suitcase", solid: true });
+      B("chairMauve", 0.8, 0.4, 0.6, 2.6, 0, -3.2, 0.2, { pick: true, name: "the ottoman", solid: true });
+      SP("clothRose", 0.18, -1, 0.96, -6.1, { pick: true, name: "a teddy" });
+      SP("clothRose", 0.12, -1, 1.2, -6.05, { pick: true, name: "a teddy" });
+      B("pillow", 0.12, 0.06, 0.28, -1.95, 0, -4.72, 0.3, { pick: true, name: "the slippers" });
+      B("pillow", 0.12, 0.06, 0.28, -1.62, 0, -4.68, -0.2, { pick: true, name: "the slippers" });
+      const yoga = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 10), matFor("clothTeal", 0.4, 0.8));
+      yoga.rotation.z = Math.PI / 2; yoga.position.set(-9.5, 0.12, 8.9);
+      meshOpts(yoga, { pick: true, name: "the yoga mat" });
       dustCloud(28, 20, 3.6, 100);
 
       world.spawn = { x: -4.5, z: 8.4, yaw: -0.35 };
       return [
         { x: -5, z: -9.55, ry: 0, mat: "wallPaper", pose: "stand" },
         { x: 6.2, z: -9.55, ry: 0, mat: "wallPaper", pose: "stand" },
-        { x: 9, z: -9.6, ry: 0, mat: "wallPaper", pose: "flat" },
+        { x: 9, z: -9.955, ry: 0, mat: "wallPaper", pose: "relief" },
         { x: -13.45, z: 7, ry: Math.PI / 2, mat: "wallRose", pose: "stand" },
         { x: 3, z: 9.55, ry: Math.PI, mat: "wallRose", pose: "stand" },
-        { x: -2.2, z: 9.6, ry: Math.PI, mat: "wallRose", pose: "flat" },
+        { x: -2.2, z: 9.955, ry: Math.PI, mat: "wallRose", pose: "relief" },
         { x: -2.15, z: -6.4, ry: -Math.PI / 2, mat: "duvet", pose: "crouch" },
         { x: 2.15, z: -7.6, ry: Math.PI / 2, mat: "duvet", pose: "crouch" },
         { x: 0.3, z: -6.9, ry: 0, mat: "duvet", pose: "lie", y: 0.78 },
@@ -1416,7 +1501,9 @@ window.plethoraBit = {
         { x: 8.6, z: 7.45, ry: -Math.PI / 2, mat: "clothTeal", pose: "stand" },
         { x: 13.2, z: 4.2, ry: 0, mat: "basketWeave", pose: "ball", y: 0.15 },
         { x: 1.2, z: 0.9, ry: 0.4, mat: "rugOval", pose: "lie" },
-        { x: -6.5, z: 2.5, ry: 0, mat: "carpet", pose: "crouch" }
+        { x: -6.5, z: 2.5, ry: 0, mat: "carpet", pose: "crouch" },
+        { x: 13.35, z: -2.3, ry: 0, mat: "wardrobe", pose: "ball", y: 2.6 },
+        { x: -1.4, z: -5.6, ry: -Math.PI / 2, mat: "duvet", pose: "sit", y: 0.78 }
       ];
     }
 
@@ -1563,19 +1650,56 @@ window.plethoraBit = {
       B("boxKraft", 0.8, 0.8, 0.8, 10.3, MEZZ, -9.8, -0.3, { pick: true, name: "a box" });
       glow(0xfff2c8, 3.4, 2, -4, 4.9, -10.82, 0);
       glow(0xffe0ec, 2.6, 1.6, 6, 4.9, -10.82, 0);
+      // Detail pass 2: running toy train, arcade cabinets, kites, games.
+      surf("balloonRed", { color: 0xff7080 });
+      const track = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.05, 8, 40), matFor("stairWood", 3, 0.2));
+      track.rotation.x = -Math.PI / 2; track.position.set(6.5, 0.05, 4);
+      track.userData.neutral = true; world.occluders.push(track); world.group.add(track);
+      for (let tc = 0; tc < 3; tc++) {
+        const car = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.28, 0.24),
+          matFor(["shelfRed", "shelfBlue", "shelfYellow"][tc], 0.4, 0.3));
+        car.userData.accuse = "the toy train"; world.pickables.push(car); world.group.add(car);
+        world.anims.push({ mesh: car, orbit: { cx: 6.5, cz: 4, r: 1.7, speed: 0.55, ph: tc * 0.28, y: 0.22 } });
+      }
+      B("counterPurple", 0.7, 1.6, 0.7, 15.3, 0, 2.5, 0, { pick: true, name: "the arcade machine", solid: true });
+      B("counterPurple", 0.7, 1.6, 0.7, 15.3, 0, 4.2, 0, { pick: true, name: "the arcade machine", solid: true });
+      glow(0x88f0d0, 0.5, 0.4, 15.3, 1.25, 2.14, Math.PI);
+      glow(0xf0c888, 0.5, 0.4, 15.3, 1.25, 3.84, Math.PI);
+      for (const [kx, ky, kz, kk, kp] of [[-4, 4.8, 3, "blockRed", 0], [2, 5.2, -1, "blockBlue", 2.4]]) {
+        const kite = PL(kk, 0.9, 0.9, kx, ky, kz, 0, 0.4, { pick: true, name: "a kite" });
+        kite.rotation.z = Math.PI / 4;
+        world.anims.push({ mesh: kite, sway: { axis: "x", amp: 0.18, freq: 0.3, ph: kp } });
+      }
+      B("blockBlue", 0.5, 0.08, 0.4, -1.6, 1.0, 9.4, 0.2, { pick: true, name: "the board games" });
+      B("blockRed", 0.45, 0.08, 0.36, -1.55, 1.08, 9.42, -0.1, { pick: true, name: "the board games" });
+      for (let cp = 0; cp < 3; cp++)
+        SP(["teddyBrown", "teddyPink", "teddyBlue"][cp], 0.16, -0.3 + cp * 0.5, 1.16, 9.5, { pick: true, name: "a plushie" });
+      // Fourth balloon bunch in registered red — something can hide up there.
+      const bunch4 = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const bl = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), matFor("balloonRed", 0.6, 0.6));
+        bl.position.set(Math.cos(i * 2.1) * 0.32, 2.5 + i * 0.18, Math.sin(i * 2.1) * 0.32);
+        bl.userData.accuse = "a balloon"; world.pickables.push(bl); bunch4.add(bl);
+        const str = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 2.4, 4), matFor("counterPurple", 0.05, 2));
+        str.position.set(bl.position.x, 1.25, bl.position.z);
+        str.userData.neutral = true; world.occluders.push(str); bunch4.add(str);
+      }
+      bunch4.position.set(-12, 0, 2);
+      world.group.add(bunch4);
+      world.anims.push({ mesh: bunch4, bob: { amp: 0.1, freq: 0.45, ph: 1.7, baseY: 0 } });
       dustCloud(32, 22, 6.4, 130, 0xffe8f0);
 
       world.spawn = { x: -5.5, z: 10, yaw: -0.3 };
       return [
         { x: -6, z: 10.55, ry: Math.PI, mat: "wallRainbow", pose: "stand" },
         { x: 7, z: 10.55, ry: Math.PI, mat: "wallRainbow", pose: "stand" },
-        { x: 2.2, z: 10.6, ry: Math.PI, mat: "wallRainbow", pose: "flat" },
+        { x: 2.2, z: 10.955, ry: Math.PI, mat: "wallRainbow", pose: "relief" },
         { x: -15.45, z: 2, ry: Math.PI / 2, mat: "wallSky", pose: "stand" },
         { x: 15.45, z: 5.5, ry: -Math.PI / 2, mat: "wallSky", pose: "stand" },
         { x: -9, z: -1.4, ry: Math.PI, mat: "shelfRed", pose: "stand" },
         { x: -6.5, z: 4.4, ry: 0, mat: "shelfBlue", pose: "stand" },
         { x: -0.5, z: 2.4, ry: 0, mat: "shelfYellow", pose: "stand" },
-        { x: 2.4, z: 5.5, ry: Math.PI, mat: "shelfGreen", pose: "flat" },
+        { x: 2.4, z: 5.51, ry: Math.PI, mat: "shelfGreen", pose: "relief" },
         { x: 7, z: -0.1, ry: 0, mat: "shelfOrange", pose: "stand" },
         { x: -13.2, z: -7.9, ry: 0.4, mat: "teddyBrown", pose: "sit", y: 0 },
         { x: -10.4, z: -5.4, ry: 0.2, mat: "teddyBrown", pose: "ball" },
@@ -1588,11 +1712,13 @@ window.plethoraBit = {
         { x: 13.9, z: 10.5, ry: Math.PI, mat: "wallRainbow", pose: "stand" },
         { x: -6, z: -7.7, ry: 0, mat: "shelfYellow", pose: "stand", y: 3.1 },
         { x: 2, z: -8.7, ry: 0, mat: "shelfRed", pose: "stand", y: 3.1 },
-        { x: 6, z: -5.7, ry: 0, mat: "shelfBlue", pose: "flat", y: 3.1 },
+        { x: 6, z: -5.99, ry: 0, mat: "shelfBlue", pose: "relief", y: 3.1 },
         { x: -11.3, z: -6.2, ry: 0.4, mat: "teddyPink", pose: "sit", y: 3.1 },
         { x: -2.4, z: -5.8, ry: 0.3, mat: "teddyBrown", pose: "ball", y: 3.1 },
         { x: -14.5, z: -10.5, ry: 0, mat: "wallSky", pose: "stand", y: 3.1 },
-        { x: 9.8, z: -9.3, ry: 0.2, mat: "boxKraft", pose: "crouch", y: 3.1 }
+        { x: 9.8, z: -9.3, ry: 0.2, mat: "boxKraft", pose: "crouch", y: 3.1 },
+        { x: -12, z: 2, ry: 0.4, mat: "balloonRed", pose: "ball", y: 2.35, dropTo: 0 },
+        { x: -8, z: 3.5, ry: 0, mat: "shelfBlue", pose: "ball", y: 1.8 }
       ];
     }
 
@@ -1721,37 +1847,71 @@ window.plethoraBit = {
         B("stoneDark", 0.5, 1.05, 0.4, lx, 0, lz, 0, { pick: true, name: "the info stand", solid: true });
         B("plinth", 0.55, 0.06, 0.45, lx, 1.05, lz - 0.05, 0, { pick: true, name: "the info stand" });
       }
+      // Detail pass 2: suspended sculptures, ceiling surface, mosaic, banners.
+      surf("ceilWhite", { color: 0xf2f4f6 });
+      for (const [sx, sy, sz, kind] of [[-6, 3.4, -1, 0], [5, 2.2, -6.2, 1], [10, 3.0, 4, 0]]) {
+        const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 5.2 - sy, 4), matFor("stoneDark", 0.05, 2));
+        wire.position.set(sx, sy + (5.2 - sy) / 2, sz);
+        wire.userData.neutral = true; world.occluders.push(wire); world.group.add(wire);
+        const shape = kind === 0
+          ? new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), matFor("statueGold", 0.7, 0.7))
+          : new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), matFor("stoneDark", 0.5, 0.5));
+        shape.position.set(sx, sy, sz);
+        meshOpts(shape, { pick: true, name: "a suspended sculpture" });
+        world.anims.push({ mesh: shape, ry: 0.3 });
+      }
+      const mosaic = new THREE.Mesh(new THREE.CircleGeometry(2.6, 28), matFor("artB", 5.2, 5.2));
+      mosaic.rotation.x = -Math.PI / 2; mosaic.position.set(6, 0.02, 7);
+      meshOpts(mosaic, {});
+      const ban1 = PL("artA", 1.6, 3.4, -12, 3.2, 0, 0, 0, { pick: true, name: "a banner" });
+      const ban2 = PL("artC", 1.6, 3.4, 12, 3.2, -2, 0, 0, { pick: true, name: "a banner" });
+      world.anims.push({ mesh: ban1, sway: { axis: "z", amp: 0.05, freq: 0.4, ph: 1 } });
+      world.anims.push({ mesh: ban2, sway: { axis: "z", amp: 0.05, freq: 0.5, ph: 3 } });
+      B("plinth", 1.1, 0.4, 1.1, -2, 0, 6.5, 0, { pick: true, name: "the plinth", solid: true });
+      const cluster = new THREE.Group();
+      for (let ci = 0; ci < 4; ci++) {
+        const cb = new THREE.Mesh(new THREE.BoxGeometry(0.3 + ci * 0.06, 0.3 + ci * 0.06, 0.3 + ci * 0.06), matFor("statueTeal", 0.4, 0.4));
+        cb.position.set(Math.cos(ci * 1.7) * 0.22, 0.55 + ci * 0.26, Math.sin(ci * 1.7) * 0.22);
+        cb.rotation.y = ci * 0.7;
+        cb.userData.accuse = "the cube stack"; world.pickables.push(cb); cluster.add(cb);
+      }
+      cluster.position.set(-2, 0, 6.5);
+      world.group.add(cluster);
+      B("stoneDark", 0.55, 1.1, 0.4, 15.5, 0, 10.5, 0.4, { pick: true, name: "the donation box", solid: true });
       dustCloud(36, 24, 5, 120, 0xe8ecf4);
 
       world.spawn = { x: 0, z: 10.8, yaw: 0 };
       return [
         { x: -12, z: -11.5, ry: 0, mat: "wallMoire", pose: "stand" },
-        { x: -3, z: -11.5, ry: 0, mat: "wallMoire", pose: "stand" },
-        { x: 6, z: -11.6, ry: 0, mat: "wallMoire", pose: "flat" },
+        { x: -3, z: -11.955, ry: 0, mat: "wallMoire", pose: "relief" },
+        { x: 6, z: -11.955, ry: 0, mat: "wallMoire", pose: "relief" },
         { x: 14, z: -11.5, ry: 0, mat: "wallMoire", pose: "stand" },
-        { x: -9, z: 11.45, ry: Math.PI, mat: "artA", pose: "stand" },
-        { x: 0.6, z: 11.45, ry: Math.PI, mat: "artB", pose: "stand" },
-        { x: 9.4, z: 11.45, ry: Math.PI, mat: "artC", pose: "stand" },
-        { x: -17.45, z: -8, ry: Math.PI / 2, mat: "artC", pose: "stand" },
-        { x: -17.45, z: 3, ry: Math.PI / 2, mat: "artB", pose: "stand" },
-        { x: 17.45, z: -1, ry: -Math.PI / 2, mat: "artA", pose: "stand" },
-        { x: -8, z: 3.15, ry: 0, mat: "artA", pose: "stand" },
-        { x: -8.8, z: 1.85, ry: Math.PI, mat: "artA", pose: "flat" },
-        { x: 8, z: 3.15, ry: 0, mat: "artC", pose: "stand" },
-        { x: 0.45, z: -2.2, ry: Math.PI / 2, mat: "artB", pose: "stand" },
+        { x: -9, z: 11.78, ry: Math.PI, mat: "artA", pose: "relief" },
+        { x: 0.6, z: 11.78, ry: Math.PI, mat: "artB", pose: "relief" },
+        { x: 9.4, z: 11.78, ry: Math.PI, mat: "artC", pose: "relief" },
+        { x: -17.78, z: -8, ry: Math.PI / 2, mat: "artC", pose: "relief" },
+        { x: -17.78, z: 3, ry: Math.PI / 2, mat: "artB", pose: "relief" },
+        { x: 17.78, z: -1, ry: -Math.PI / 2, mat: "artA", pose: "relief" },
+        { x: -8, z: 2.72, ry: 0, mat: "artA", pose: "relief" },
+        { x: -8.8, z: 2.285, ry: Math.PI, mat: "artA", pose: "relief" },
+        { x: 8, z: 2.72, ry: 0, mat: "artC", pose: "relief" },
+        { x: 0.22, z: -2.2, ry: Math.PI / 2, mat: "artB", pose: "relief" },
         { x: -14.5, z: -4.2, ry: 0.5, mat: "stoneGray", pose: "stand", y: 0.55 },
         { x: -9, z: -3.6, ry: -0.4, mat: "stoneGray", pose: "stand", y: 0.55 },
         { x: -12.7, z: -4.6, ry: 0.3, mat: "stoneGray", pose: "crouch" },
         { x: 2.3, z: -8.4, ry: 0.9, mat: "statueGold", pose: "crouch" },
         { x: 12, z: -5.1, ry: 0, mat: "statueTeal", pose: "crouch" },
         { x: 14.4, z: 2.6, ry: 0.4, mat: "statueRed", pose: "crouch" },
-        { x: -4.2, z: 7.5, ry: 0, mat: "stoneDark", pose: "flat" },
+        { x: -4.2, z: 7.69, ry: 0, mat: "stoneDark", pose: "relief" },
         { x: -4, z: -0.8, ry: Math.PI, mat: "benchGray", pose: "sit", y: 0.45 },
         { x: 11, z: 8.5, ry: 0, mat: "benchGray", pose: "lie", y: 0.45 },
         { x: 16.4, z: -3.2, ry: 0, mat: "vaseTeal", pose: "ball" },
         { x: -16.4, z: 8.8, ry: 0.4, mat: "vaseRust", pose: "ball" },
         { x: -6.5, z: 4.6, ry: 0.2, mat: "floorMarble", pose: "lie" },
-        { x: 17.45, z: 8.8, ry: -Math.PI / 2, mat: "wallWhite", pose: "stand" }
+        { x: 17.45, z: 8.8, ry: -Math.PI / 2, mat: "wallWhite", pose: "stand" },
+        { x: 2.5, z: 2, ry: 0.3, rx: Math.PI, mat: "ceilWhite", pose: "lie", y: 5.17, dropTo: 0 },
+        { x: -5.9, z: -1.1, ry: 0.8, mat: "stoneDark", pose: "ball", y: 2.9, dropTo: 0 },
+        { x: 6.4, z: 7.3, ry: 0.5, mat: "artB", pose: "lie" }
       ];
     }
 
@@ -1771,6 +1931,7 @@ window.plethoraBit = {
     const EYE = 1.62, RADIUS = 0.34, SPEED = 5.2;
 
     function pickSpots(pool, count, arenaId) {
+      if (typeof window !== "undefined" && window.__chSpawnAll) return pool.slice();
       const idx = pool.map((_, i) => i);
       const lastKey = "last_" + arenaId;
       const last = store.get(lastKey, "");
@@ -2199,11 +2360,11 @@ window.plethoraBit = {
       if (state !== "paused") for (const h of world.hiders) {
         if (!h.found) {
           h.swayPh += dt;
-          h.group.rotation.z = Math.sin(h.swayPh * 0.8) * 0.005;
+          h.group.rotation.z = Math.sin(h.swayPh * 0.8) * (0.006 - world.spec.dlv * 0.0009);
           h.blinkAt -= dt;
           if (h.blinkAt <= 0) {
             h.blinkOn = 0.26;
-            h.blinkAt = rnd(5, 11) + world.spec.dlv * 1.6;
+            h.blinkAt = rnd(5, 11) + world.spec.dlv * 2.2;
           }
           if (h.blinkOn > 0) { h.blinkOn -= dt; h.eyes.visible = h.blinkOn > 0; }
         } else {
@@ -2247,6 +2408,11 @@ window.plethoraBit = {
         if (a.rz) a.mesh.rotation.z += a.rz * dt;
         if (a.bob) a.mesh.position.y = a.bob.baseY + Math.sin(tSec * a.bob.freq * 6.28 + a.bob.ph) * a.bob.amp;
         if (a.sway) a.mesh.rotation[a.sway.axis] = Math.sin(tSec * a.sway.freq * 6.28 + a.sway.ph) * a.sway.amp;
+        if (a.orbit) {
+          const an = tSec * a.orbit.speed + a.orbit.ph;
+          a.mesh.position.set(a.orbit.cx + Math.cos(an) * a.orbit.r, a.orbit.y, a.orbit.cz + Math.sin(an) * a.orbit.r);
+          a.mesh.rotation.y = -an;
+        }
         if (a.flickerMat) {
           const v = 0.72 + 0.2 * Math.sin(tSec * 13.7) * Math.sin(tSec * 3.1) + 0.08 * Math.sin(tSec * 27.3);
           a.flickerMat.color.setRGB(0.16 * v, 0.25 * v, 0.34 * v);
