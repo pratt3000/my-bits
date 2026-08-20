@@ -66,7 +66,7 @@ window.plethoraBit = {
       .ch-btn:disabled { opacity:.45; }
 
       .ch-corner { position:absolute; top:calc(${sa.top}px + 12px); right:calc(${sa.right}px + 14px);
-        display:flex; gap:10px; pointer-events:none; z-index:30; }
+        display:flex; gap:10px; pointer-events:none; z-index:50; }
       .ch-ico { pointer-events:auto; width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.28);
         background:rgba(14,30,22,.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:#eafff0;
         font-size:19px; display:flex; align-items:center; justify-content:center; cursor:pointer;
@@ -91,7 +91,7 @@ window.plethoraBit = {
 
       .ch-hud { position:absolute; inset:0; pointer-events:none; z-index:20; }
       .ch-timer { position:absolute; top:calc(${sa.top}px + 10px); left:50%; transform:translateX(-50%);
-        font-size:30px; font-weight:800; letter-spacing:1px; padding:4px 18px; border-radius:999px;
+        font-size:clamp(22px, 7.5vw, 30px); font-weight:800; letter-spacing:1px; padding:4px 16px; border-radius:999px;
         background:rgba(10,22,16,.55); border:1px solid rgba(255,255,255,.18);
         backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); text-shadow:0 1px 6px rgba(0,0,0,.5); }
       .ch-timer.low { color:#ff9090; animation:chPulse .8s ease infinite; }
@@ -265,8 +265,12 @@ window.plethoraBit = {
     const rnd = (a, b) => a + Math.random() * (b - a);
 
     function fmtMs(ms) {
-      const s = Math.max(0, Math.round(ms / 1000));
+      // ceil: the countdown reads 0:01 until the run is truly over.
+      const s = Math.max(0, Math.ceil(ms / 1000));
       return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    }
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     }
     function fmtMsPrecise(ms) {
       ms = Math.max(0, ms);
@@ -359,6 +363,7 @@ window.plethoraBit = {
     function resumeAC() { if (AC && AC.state === "suspended") { try { AC.resume(); } catch (_) {} } }
 
     function tone(freq, delay, dur, type, peak, glideTo) {
+      ensureAC(); resumeAC();
       if (!AC) return;
       try {
         const o = AC.createOscillator(), g = AC.createGain();
@@ -374,6 +379,7 @@ window.plethoraBit = {
       } catch (_) {}
     }
     function buzz(dur, f0, peak) {
+      ensureAC(); resumeAC();
       if (!AC) return;
       try {
         const o = AC.createOscillator(), g = AC.createGain();
@@ -446,12 +452,18 @@ window.plethoraBit = {
       if (!canMusic || !ctx.music) return;
       try {
         if (muted) { if (musicOn) { ctx.music.pause(); musicOn = false; } return; }
-        if (!musicOn) {
+        const st = ctx.music.state && ctx.music.state();
+        if (!musicOn && st === "paused") {
+          // A bed we paused earlier (mute toggle): resume it, don't stack play().
+          ctx.music.resume();
+          ctx.music.setPreset(preset, { fadeMs: 700 });
+          ctx.music.setVolume(volume, { fadeMs: 700 });
+          musicOn = true;
+        } else if (!musicOn || st === "stopped") {
           ctx.music.unlock();
           ctx.music.play({ preset, volume: volume, fadeInMs: 900 });
           musicOn = true;
         } else {
-          const st = ctx.music.state && ctx.music.state();
           if (st === "paused") ctx.music.resume();
           ctx.music.setPreset(preset, { fadeMs: 700 });
           ctx.music.setVolume(volume, { fadeMs: 700 });
@@ -475,8 +487,9 @@ window.plethoraBit = {
     // =====================================================================
     // 5. Screen navigation + shared UI helpers.
     // =====================================================================
-    let state = "menu";       // menu | select | play | paused | result
+    let state = "menu";       // menu | select | play | paused | won | result | peek
     let everStarted = false;  // first user gesture happened
+    let threeReady = false;   // three.js imported and renderer built
     let arena = null;         // active arena spec
     let toastTimer = null;
 
@@ -557,7 +570,7 @@ window.plethoraBit = {
         const row = document.createElement("div");
         row.className = "ch-lbrow" + (!e.bot && myName && e.name === myName ? " you" : "");
         const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
-        row.innerHTML = `<div class="r">${medal}</div><div class="nm">${e.bot ? "🤖 " : ""}${e.name}</div>
+        row.innerHTML = `<div class="r">${medal}</div><div class="nm">${e.bot ? "🤖 " : ""}${esc(e.name)}</div>
           <div class="sc">${fmtMsPrecise(e.ms)}</div>`;
         el.lbList.appendChild(row);
       });
@@ -908,7 +921,7 @@ window.plethoraBit = {
       h.eyes.visible = true;
       h.danceT = 0.0001;
       for (const p of h.parts) {
-        p.material.map = null;
+        if (p.material.map) { p.material.map.dispose(); p.material.map = null; }
         p.material.emissive = new THREE.Color(0x222222);
         p.material.needsUpdate = true;
       }
@@ -1026,14 +1039,14 @@ window.plethoraBit = {
         { x: -10.45, z: 5.2, ry: Math.PI / 2, mat: "wallCream", pose: "stand" },
         { x: 10.45, z: -4.4, ry: -Math.PI / 2, mat: "wallCream", pose: "stand" },
         { x: -1.4, z: 0.2, ry: 0.4, mat: "rug", pose: "crouch" },
-        { x: 1.4, z: 3.2, ry: -0.5, mat: "floorWood", pose: "crouch" },
+        { x: 1.4, z: 3.7, ry: -0.5, mat: "floorWood", pose: "crouch" },
         { x: -4.1, z: 4.85, ry: Math.PI, mat: "sofaBlue", pose: "stand" },
         { x: 4.35, z: 3.1, ry: -Math.PI / 2, mat: "sofaTan", pose: "crouch" },
         { x: -10.2, z: 0.1, ry: Math.PI / 2, mat: "shelfWood", pose: "stand" },
         { x: -10.2, z: 4.6, ry: Math.PI / 2, mat: "shelfWood", pose: "stand" },
         { x: 1.9, z: -7.3, ry: 0, mat: "tvBlack", pose: "stand" },
         { x: 8.9, z: 5.7, ry: 0.6, mat: "plantGreen", pose: "crouch" },
-        { x: 10.4, z: 1.15, ry: -Math.PI / 2, mat: "curtain", pose: "stand" },
+        { x: 10.4, z: 2.9, ry: -Math.PI / 2, mat: "curtain", pose: "stand" },
         { x: 8.15, z: -4.55, ry: 0, mat: "lampShade", pose: "stand" }
       ];
     }
@@ -1218,10 +1231,18 @@ window.plethoraBit = {
       }
       B("counterPurple", 19.2, 0.1, 0.1, -1.6, MEZZ + 0.9, -3.05, 0, { pick: false, occlude: true });
       collider(-2, -3.05, 20.4, 0.3, MEZZ, MEZZ + 1.6);   // mezz railing blocks walking off
+      // East stub of railing (between the stairwell and the east wall).
+      B("counterPurple", 1.3, 0.1, 0.1, 11.4, MEZZ + 0.9, -3.05, 0, { pick: false, occlude: true });
+      collider(11.4, -3.05, 1.3, 0.3, MEZZ, MEZZ + 1.6);
       // Under-mezzanine headroom blocker for the slab isn't needed (slab y0 = MEZZ-0.25 > player head).
 
       world.groundAt = (x, z, cur) => {
-        if (x > 8.2 && x < 10.8 && z > -3.2 && z < 3.2) return MEZZ * clamp((3 - z) / 6, 0, 1);
+        if (x > 8.2 && x < 10.8 && z > -3.2 && z < 3.2) {
+          const h = MEZZ * clamp((3 - z) / 6, 0, 1);
+          // Only when actually on the stairs — a ground-level player walking
+          // beneath/behind the staircase must not be teleported up.
+          if (Math.abs(cur - h) < 1.0) return h;
+        }
         if (z < -3.05) return cur > 1.55 ? MEZZ : 0;
         return 0;
       };
@@ -1275,10 +1296,10 @@ window.plethoraBit = {
         { x: 1.5, z: 2.3, ry: 0, mat: "shelfYellow", pose: "stand" },
         { x: 1.5, z: 6.7, ry: 0, mat: "shelfGreen", pose: "stand" },
         { x: 5.6, z: -0.4, ry: 0, mat: "boxKraft", pose: "crouch" },
-        { x: -10.9, z: 6.4, ry: 0.4, mat: "boxKraft", pose: "crouch" },
+        { x: -10.9, z: 6.4, ry: 2.7, mat: "boxKraft", pose: "crouch" },
         { x: -8.9, z: -5.2, ry: 0.2, mat: "teddyBrown", pose: "crouch" },
         { x: 8.3, z: 5.6, ry: 0.5, mat: "ballPit", pose: "crouch" },
-        { x: -2.5, z: 6.9, ry: 0, mat: "counterPurple", pose: "crouch" },
+        { x: -2.5, z: 6.9, ry: Math.PI, mat: "counterPurple", pose: "crouch" },
         { x: -1, z: -5.3, ry: 0, mat: "shelfYellow", pose: "stand", y: MEZZ },
         { x: 4.5, z: -6.7, ry: 0, mat: "shelfRed", pose: "stand", y: MEZZ },
         { x: -5.9, z: -5.4, ry: 0.3, mat: "teddyPink", pose: "crouch", y: MEZZ },
@@ -1387,7 +1408,7 @@ window.plethoraBit = {
         { x: 13.6, z: -6.5, ry: -Math.PI / 2, mat: "wallWhite", pose: "stand" },
         { x: -5.5, z: 4, ry: 0, mat: "artA", pose: "stand" },
         { x: 5.5, z: 4, ry: 0, mat: "artC", pose: "stand" },
-        { x: 0.9, z: -2.9, ry: 0.4, mat: "plinth", pose: "crouch" },
+        { x: 1.35, z: -3.3, ry: 0.4, mat: "plinth", pose: "crouch" },
         { x: -8, z: -3.5, ry: 0, mat: "statueTeal", pose: "crouch" },
         { x: 7.9, z: -4.3, ry: 0.4, mat: "statueRed", pose: "crouch" },
         { x: 0.6, z: 1.9, ry: 0, mat: "benchGray", pose: "crouch" },
@@ -1428,6 +1449,7 @@ window.plethoraBit = {
     }
 
     function startLevel(i) {
+      if (!threeReady) { showToast("🦎 Still loading the 3D world…"); return; }
       arenaIdx = i;
       arena = ARENAS[i];
       el.result.classList.add("ch-hidden");
@@ -1478,13 +1500,15 @@ window.plethoraBit = {
     function pauseGame() {
       if (state !== "play") return;
       state = "paused";
+      resetPointers();
       sfx.ui();
       el.pause.classList.remove("ch-hidden");
-      try { if (canMusic && ctx.music && musicOn) ctx.music.duck(0.6, 400); } catch (_) {}
+      try { if (canMusic && ctx.music && musicOn && !muted) ctx.music.setVolume(0.1, { fadeMs: 300 }); } catch (_) {}
     }
     function resumeGame() {
       el.pause.classList.add("ch-hidden");
       if (state === "paused") state = "play";
+      try { if (canMusic && ctx.music && musicOn && !muted) ctx.music.setVolume(0.3, { fadeMs: 300 }); } catch (_) {}
     }
     function quitToMenu() {
       disposeWorld();
@@ -1502,9 +1526,8 @@ window.plethoraBit = {
       return game.found * 250 + Math.round(saved / 100);
     }
 
-    function winLevel() {
+    function winLevel(completionMs) {
       state = "result";
-      const completionMs = arena.limit * 1000 - game.remainMs;
       const score = computeScore(completionMs);
       const prevBest = store.get("best_" + arena.id, null);
       const isBest = prevBest == null || completionMs < prevBest;
@@ -1547,7 +1570,7 @@ window.plethoraBit = {
             <label>🏆 You made the ${arena.name} leaderboard! Enter your name:</label>
             <div class="ch-namerow">
               <input class="ch-input" id="chName" maxlength="14" placeholder="Your name"
-                value="${savedName ? String(savedName).replace(/[&<>"]/g, "") : ""}">
+                value="${savedName ? esc(savedName) : ""}">
               <button class="ch-save" id="chNameSave">Save</button>
             </div>
           </div>` : ""}
@@ -1588,6 +1611,7 @@ window.plethoraBit = {
 
     function loseLevel() {
       state = "result";
+      resetPointers();
       sfx.lose(); haptic("error");
       flash(el.flashBad);
       el.hud.classList.add("ch-hidden");
@@ -1629,6 +1653,13 @@ window.plethoraBit = {
     let moveOrigin = { x: 0, y: 0 };
     let lastLook = { x: 0, y: 0 };
 
+    function resetPointers() {
+      pointers.clear();
+      movePid = null; lookPid = null;
+      move.x = 0; move.y = 0;
+      el.joy.classList.remove("show");
+    }
+
     function canvasXY(e) {
       const r = canvas.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -1655,6 +1686,7 @@ window.plethoraBit = {
     });
 
     ctx.listen(canvas, "pointermove", (e) => {
+      if (state !== "play" && state !== "peek") return;
       const rec = pointers.get(e.pointerId);
       if (!rec) return;
       const p = canvasXY(e);
@@ -1677,11 +1709,11 @@ window.plethoraBit = {
       }
     });
 
-    function endPointer(e) {
+    function endPointer(e, cancelled) {
       const rec = pointers.get(e.pointerId);
       if (rec) {
         const dur = e.timeStamp - rec.t;
-        if (rec.moved < 12 && dur < 420 && (state === "play" || state === "peek")) handleTap(rec.sx, rec.sy);
+        if (!cancelled && rec.moved < 12 && dur < 420 && (state === "play" || state === "peek")) handleTap(rec.sx, rec.sy);
         pointers.delete(e.pointerId);
       }
       if (e.pointerId === movePid) {
@@ -1690,8 +1722,8 @@ window.plethoraBit = {
       }
       if (e.pointerId === lookPid) lookPid = null;
     }
-    ctx.listen(canvas, "pointerup", endPointer);
-    ctx.listen(canvas, "pointercancel", endPointer);
+    ctx.listen(canvas, "pointerup", (e) => endPointer(e, false));
+    ctx.listen(canvas, "pointercancel", (e) => endPointer(e, true));
 
     // =====================================================================
     // 15. Accusations (raycast) — the "Tap to Catch" mechanic.
@@ -1760,7 +1792,13 @@ window.plethoraBit = {
       } catch (_) {}
       try { if (canMusic && ctx.music && musicOn) ctx.music.duck(0.5, 500); } catch (_) {}
       if (game.found >= game.target) {
-        ctx.timeout(() => { if (state === "play") winLevel(); }, 650);
+        // Latch the win NOW: freeze the clock and capture the exact time so
+        // the celebration delay, a queued penalty, or a pause can never turn
+        // a completed hunt into a loss or inflate the recorded time.
+        state = "won";
+        resetPointers();
+        const completionMs = arena.limit * 1000 - game.remainMs;
+        ctx.timeout(() => { if (state === "won") winLevel(completionMs); }, 650);
       }
     }
 
@@ -1805,9 +1843,10 @@ window.plethoraBit = {
       const playing = state === "play";
       const roaming = playing || state === "peek";
 
-      // --- timers ---
+      // --- timers --- (same clamped delta as the simulation so slow
+      // devices are not penalized and background gaps don't drain the clock)
       if (playing) {
-        game.remainMs -= Math.min(dtMs, 250);
+        game.remainMs -= dt * 1000;
         if (game.accuseCooldown > 0) game.accuseCooldown -= dt;
         updateTimerUI();
         if (game.remainMs <= 15000 && game.remainMs > 0) {
@@ -1837,8 +1876,9 @@ window.plethoraBit = {
       camera.position.set(player.x, player.groundY + EYE, player.z);
       camera.rotation.set(camPitch, camYaw, 0);
 
-      // --- hider idle life: sway, blink, dance ---
-      for (const h of world.hiders) {
+      // --- hider idle life: sway, blink, dance (frozen while paused so the
+      // pause overlay can't be used to scout blink tells for free) ---
+      if (state !== "paused") for (const h of world.hiders) {
         if (!h.found) {
           h.swayPh += dt;
           h.group.rotation.z = Math.sin(h.swayPh * 0.9) * 0.008;
@@ -1913,6 +1953,7 @@ window.plethoraBit = {
       renderer.render(scene3, camera);
     }
 
+    threeReady = true;
     ctx.onFrame(update);
 
     ctx.onDestroy(() => {
