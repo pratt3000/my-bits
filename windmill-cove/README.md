@@ -1,5 +1,10 @@
 # Windmill Cove
 
+Published on Plethora as **"2d golf it"** — the manifest title has to match the
+name on the listing or an upload lands on the wrong bit. The folder, the code
+and the in-game title screen still say Windmill Cove.
+
+
 Mini golf built to the shape of *Golf With Your Friends*: seven themed courses of
 nine holes, a stroke counter, water that costs you one, and a leaderboard per
 course. Single player, one screen per hole, played with a thumb.

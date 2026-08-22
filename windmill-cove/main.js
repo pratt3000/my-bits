@@ -1001,7 +1001,7 @@ function relPar(n) { return n === 0 ? "E" : n > 0 ? "+" + n : String(n); }
 
 window.plethoraBit = {
   meta: {
-    title: "Windmill Cove",
+    title: "2d golf it",
     runtime: "plethora-bit@2",
     tags: ["golf", "game", "sports", "arcade", "physics", "leaderboard"],
     permissions: ["audio", "backgroundMusic", "haptics", "storage"]
