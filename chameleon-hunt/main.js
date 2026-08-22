@@ -617,46 +617,39 @@ window.plethoraBit = {
     // =====================================================================
     let THREE = null;
     let lastLoadErr = "";
-    // Two independent engine sources — a module pin and a classic-script
-    // pin — each retried, so a hiccup on one path cannot dead-end the game.
-    // (The registry-URL overload is deliberately not used: the upload
-    // validator rejects it.)
+    // Engine loading. The registry-URL overload is deliberately not used
+    // (the upload validator rejects it), and the three-global script pin is
+    // not used either (the runtime denies it as an unauthorized channel).
 
     function usable(mod) {
       if (mod && !mod.WebGLRenderer && mod.default) mod = mod.default;
       return mod && mod.WebGLRenderer ? mod : null;
     }
-    // three-global is r134: it predates colorSpace, so map the few modern
-    // names this game uses onto their legacy equivalents.
-    function shimLegacy(mod) {
-      if (!mod) return mod;
-      if (!mod.SRGBColorSpace && mod.sRGBEncoding !== undefined) {
-        mod.SRGBColorSpace = "__legacy_srgb__";
-        mod.__legacySRGB = mod.sRGBEncoding;
-      }
-      return mod;
-    }
+    // Collect every distinct failure reason, so the failure screen reports
+    // what actually went wrong rather than only the last thing tried.
+    const loadErrs = [];
     function noteErr(err) {
-      lastLoadErr = String((err && err.message) || err || "load failed").slice(0, 140);
+      const msg = String((err && err.message) || err || "load failed").slice(0, 150);
+      if (loadErrs.indexOf(msg) === -1) loadErrs.push(msg);
+      lastLoadErr = loadErrs.join(" | ");
     }
-    // Every loader call below is a direct call with literal args, as the
-    // registry contract requires.
+    // Single declared registry pin — the dependency shape this bit shipped
+    // with for weeks. Retried a few times so a transient failure can heal.
+    // Every distinct failure reason is kept and surfaced, so a load problem
+    // reports what actually went wrong instead of a generic message.
     async function importThree() {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt) await new Promise((res) => ctx.timeout(res, 600 * attempt));
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (attempt) await new Promise((res) => ctx.timeout(res, 500 * attempt));
         try {
-          const mod = usable(await ctx.importModule("three", "0.164.1"));
+          const raw = await ctx.importModule("three", "0.164.1");
+          const mod = usable(raw);
           if (mod) return mod;
-          lastLoadErr = "engine loaded but WebGLRenderer missing";
-        } catch (err) { noteErr(err); }
+          noteErr("loaded, but no WebGLRenderer (keys: " +
+            Object.keys(raw || {}).slice(0, 5).join(",") + ")");
+        } catch (err) {
+          noteErr(err);
+        }
       }
-      // Last resort: the classic-script build exposed as window.THREE.
-      try {
-        await ctx.loadScript("three-global", "0.134.0");
-        const mod3 = usable(window.THREE);
-        if (mod3) return shimLegacy(mod3);
-        lastLoadErr = "fallback engine missing WebGLRenderer";
-      } catch (err) { noteErr(err); }
       return null;
     }
     while (!THREE) {
@@ -863,8 +856,7 @@ window.plethoraBit = {
     function texFrom(canvasEl, uRep, vRep) {
       const t = new THREE.CanvasTexture(canvasEl);
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      if (THREE.__legacySRGB !== undefined) t.encoding = THREE.__legacySRGB;
-      else t.colorSpace = THREE.SRGBColorSpace;
+      t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = 4;
       t.repeat.set(Math.max(0.25, uRep), Math.max(0.25, vRep));
       return t;

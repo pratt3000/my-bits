@@ -19,8 +19,7 @@
     "storage"
   ],
   "dependencies": [
-    "three@0.164.1",
-    "three-global@0.134.0"
+    "three@0.164.1"
   ],
   "memory": {
     "records": {
