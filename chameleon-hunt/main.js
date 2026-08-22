@@ -616,42 +616,71 @@ window.plethoraBit = {
     // 7. three.js bootstrap (after ready, so the menu is already visible).
     // =====================================================================
     let THREE = null;
-    // The registry fetch can fail transiently (flaky network, CDN hiccup).
-    // Retry with backoff, and never dead-end: the failure screen offers a
-    // Try-again button that loops back into the import.
-    async function importThree() {
-      let lastErr = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt) await new Promise((res) => ctx.timeout(res, 800 * attempt));
-        try {
-          let mod = await ctx.importModule("three", "0.164.1");
-          if (mod && !mod.WebGLRenderer && mod.default) mod = mod.default;
-          if (mod && mod.WebGLRenderer) return mod;
-          lastErr = new Error("three module missing WebGLRenderer");
-        } catch (err) { lastErr = err; }
+    let lastLoadErr = "";
+    // Three-tier engine loading. Any one of these can fail in the wild
+    // (registry hiccup, module-import quirk, CDN wobble), so we never bet
+    // the whole game on a single path — and we never dead-end.
+    const THREE_URL = "https://libs.plethora.studio/three/0.164.1/three.module.js";
+
+    function usable(mod) {
+      if (mod && !mod.WebGLRenderer && mod.default) mod = mod.default;
+      return mod && mod.WebGLRenderer ? mod : null;
+    }
+    // three-global is r134: it predates colorSpace, so map the few modern
+    // names this game uses onto their legacy equivalents.
+    function shimLegacy(mod) {
+      if (!mod) return mod;
+      if (!mod.SRGBColorSpace && mod.sRGBEncoding !== undefined) {
+        mod.SRGBColorSpace = "__legacy_srgb__";
+        mod.__legacySRGB = mod.sRGBEncoding;
       }
-      throw lastErr || new Error("three import failed");
+      return mod;
+    }
+    async function tryLoad(fn) {
+      try {
+        const mod = usable(await fn());
+        if (mod) return mod;
+        lastLoadErr = "engine loaded but WebGLRenderer missing";
+      } catch (err) {
+        lastLoadErr = String((err && err.message) || err).slice(0, 140);
+      }
+      return null;
+    }
+    async function importThree() {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt) await new Promise((res) => ctx.timeout(res, 700));
+        const a = await tryLoad(() => ctx.importModule("three", "0.164.1"));
+        if (a) return a;
+        const b = await tryLoad(() => ctx.importModule(THREE_URL));
+        if (b) return b;
+      }
+      // Last resort: the classic-script build exposed as window.THREE.
+      const c = await tryLoad(async () => {
+        await ctx.loadScript("three-global", "0.134.0");
+        return window.THREE;
+      });
+      if (c) return shimLegacy(c);
+      return null;
     }
     while (!THREE) {
-      try {
-        THREE = await importThree();
-      } catch (err) {
-        try { ctx.platform.error({ reason: "three_import_failed", message: String(err && err.message).slice(0, 120) }); } catch (_) {}
-        await new Promise((resolve) => {
-          const fatal = document.createElement("div");
-          fatal.className = "ch-fatal";
-          fatal.innerHTML = "<div><div style='font-size:40px;'>\u{1F98E}\u{1F4A4}</div>" +
-            "<div style='font-size:16px;font-weight:700;margin-top:8px;'>The chameleons couldn't load their 3D world.</div>" +
-            "<div style='font-size:13px;opacity:.75;margin-top:6px;'>Usually a brief network hiccup \u2014 give it another go.</div>" +
-            "<button class='ch-btn' id='chRetry' style='margin:18px auto 0;width:200px;'>Try again</button></div>";
-          ui.appendChild(fatal);
-          ctx.listen(fatal.querySelector("#chRetry"), "click", () => {
-            sfx.ui();
-            fatal.remove();
-            resolve();
-          });
+      THREE = await importThree();
+      if (THREE) break;
+      try { ctx.platform.error({ reason: "three_import_failed", message: lastLoadErr }); } catch (_) {}
+      await new Promise((resolve) => {
+        const fatal = document.createElement("div");
+        fatal.className = "ch-fatal";
+        fatal.innerHTML = "<div><div style='font-size:40px;'>\u{1F98E}\u{1F4A4}</div>" +
+          "<div style='font-size:16px;font-weight:700;margin-top:8px;'>The chameleons couldn't load their 3D world.</div>" +
+          "<div style='font-size:13px;opacity:.75;margin-top:6px;'>Check your connection, then try again.</div>" +
+          "<button class='ch-btn' id='chRetry' style='margin:18px auto 0;width:200px;'>Try again</button>" +
+          "<div style='font-size:10px;opacity:.45;margin-top:14px;word-break:break-word;'>" + esc(lastLoadErr) + "</div></div>";
+        ui.appendChild(fatal);
+        ctx.listen(fatal.querySelector("#chRetry"), "click", () => {
+          sfx.ui();
+          fatal.remove();
+          resolve();
         });
-      }
+      });
     }
 
     let renderer = null;
@@ -837,7 +866,8 @@ window.plethoraBit = {
     function texFrom(canvasEl, uRep, vRep) {
       const t = new THREE.CanvasTexture(canvasEl);
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.colorSpace = THREE.SRGBColorSpace;
+      if (THREE.__legacySRGB !== undefined) t.encoding = THREE.__legacySRGB;
+      else t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = 4;
       t.repeat.set(Math.max(0.25, uRep), Math.max(0.25, vRep));
       return t;
