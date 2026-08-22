@@ -6,6 +6,10 @@ course. Single player, one screen per hole, played with a thumb.
 
 ## What it is
 
+The bit opens on a title screen — **Play** and **How to play** — and Play opens
+the course list. A round left part-way through surfaces as **Continue** there.
+
+
 Top-down putting. Drag anywhere and pull back — the ball fires the way you
 pulled, like a catapult — and the ring around the ball fills green → amber →
 red as you pull further. A dotted line previews the line and up to two rail

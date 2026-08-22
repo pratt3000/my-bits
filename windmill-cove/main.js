@@ -1699,7 +1699,7 @@ window.plethoraBit = {
     /* -------------------------------------------------------- game state */
 
     var S = {
-      screen: "menu", courseIx: 0, holeIx: 0, strokes: 0, penalties: 0,
+      screen: "title", courseIx: 0, holeIx: 0, strokes: 0, penalties: 0,
       card: [], hole: null, th: null, bake: null, bakeScale: 0, waterPath: null,
       ball: { x: 0, y: 0, vx: 0, vy: 0, portalCd: 0 },
       safe: { x: 0, y: 0 }, trail: [], moving: false, holed: false,
@@ -1982,16 +1982,67 @@ window.plethoraBit = {
     }
 
     // ---- clubhouse (course select) ---------------------------------------
+    var titlePanel = divEl("position:absolute;inset:0;display:none;flex-direction:column;" +
+      "align-items:center;justify-content:center;pointer-events:auto;color:#f4f7ef;" +
+      "background:linear-gradient(180deg,rgba(10,20,12,0.86) 0%,rgba(6,11,7,0.95) 100%);" +
+      "padding:" + (20 + ctx.safeArea.top) + "px 22px " + (24 + ctx.safeArea.bottom) + "px;");
+    root.appendChild(titlePanel);
+    titlePanel.appendChild(divEl(
+      "text-align:center;margin-bottom:26px;text-shadow:0 3px 18px rgba(0,0,0,0.7);",
+      '<div style="font-size:13px;font-weight:800;letter-spacing:3px;opacity:0.7;">MINI GOLF</div>' +
+      '<div style="font-size:42px;font-weight:900;letter-spacing:-1.2px;line-height:1.02;' +
+      'margin-top:6px;">Windmill<br>Cove</div>' +
+      '<div style="opacity:0.78;font-size:13.5px;margin-top:12px;line-height:1.5;">' +
+      "Pull back, let go, watch it run.<br>Six courses, 54 holes.</div>"));
+    var titleBtns = divEl("display:flex;flex-direction:column;gap:10px;width:100%;max-width:260px;");
+    titlePanel.appendChild(titleBtns);
+    var btnPlay = btnEl(BTN + "width:100%;padding:16px;font-size:18px;border-radius:16px;" +
+      "box-shadow:0 10px 26px rgba(0,0,0,0.4);", "Play");
+    var btnResume = btnEl(BTN2 + "width:100%;padding:13px;font-size:14.5px;border-radius:14px;", "");
+    var btnHowTitle = btnEl(BTN2 + "width:100%;padding:13px;font-size:14.5px;border-radius:14px;",
+      "How to play");
+    var btnMusicTitle = btnEl(BTN2 + "width:100%;padding:11px;font-size:13px;border-radius:14px;" +
+      "opacity:0.85;", "Music: on");
+    titleBtns.appendChild(btnPlay); titleBtns.appendChild(btnResume);
+    titleBtns.appendChild(btnHowTitle); titleBtns.appendChild(btnMusicTitle);
+
+    function syncTitle() {
+      if (roundSave && COURSES[roundSave.c] && roundSave.h > 0) {
+        btnResume.style.display = "block";
+        btnResume.textContent = "Continue · " + COURSES[roundSave.c].name +
+          " hole " + (roundSave.h + 1);
+      } else btnResume.style.display = "none";
+      btnMusicTitle.textContent = "Music: " + (musicOn ? "on" : "off");
+    }
+    ctx.listen(btnPlay, "click", function () {
+      resumeAudio(); haptic("light"); ctx.platform.start();
+      S.screen = "menu"; buildMenu(); showScreen();
+    });
+    ctx.listen(btnResume, "click", function () {
+      resumeAudio(); haptic("light"); ctx.platform.start();
+      var rs = roundSave; roundSave = null;
+      if (rs) startRound(rs.c, rs.card, rs.h);
+    });
+    ctx.listen(btnHowTitle, "click", function () {
+      haptic("light"); helpPanel.style.display = "flex";
+    });
+
     var menuPanel = divEl("position:absolute;inset:0;display:none;flex-direction:column;" +
       "pointer-events:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;" +
       "background:linear-gradient(180deg,rgba(9,14,10,0.93),rgba(6,9,7,0.97));" +
       "padding:" + (16 + ctx.safeArea.top) + "px 14px " + (18 + ctx.safeArea.bottom) + "px;");
     root.appendChild(menuPanel);
 
-    var menuHead = divEl("text-align:center;margin-bottom:14px;color:#f4f7ef;",
-      '<div style="font-size:27px;font-weight:900;letter-spacing:-0.5px;">Windmill Cove</div>' +
-      '<div style="opacity:0.62;font-size:13px;margin-top:3px;">Six courses · nine holes each</div>');
+    var menuHead = divEl("display:flex;align-items:center;gap:10px;margin-bottom:14px;color:#f4f7ef;");
     menuPanel.appendChild(menuHead);
+    var btnMenuBack = btnEl(BTN2 + "padding:9px 13px;font-size:15px;border-radius:12px;", "‹");
+    menuHead.appendChild(btnMenuBack);
+    menuHead.appendChild(divEl("flex:1;text-align:center;padding-right:38px;",
+      '<div style="font-size:21px;font-weight:900;letter-spacing:-0.4px;">Choose a course</div>' +
+      '<div style="opacity:0.6;font-size:12px;margin-top:2px;">Nine holes each</div>'));
+    ctx.listen(btnMenuBack, "click", function () {
+      haptic("light"); S.screen = "title"; showScreen();
+    });
     var menuList = divEl("display:flex;flex-direction:column;gap:9px;");
     menuPanel.appendChild(menuList);
     var menuFoot = divEl("display:flex;gap:8px;margin-top:13px;justify-content:center;");
@@ -2024,17 +2075,6 @@ window.plethoraBit = {
         });
         menuList.appendChild(card);
       });
-      if (roundSave && COURSES[roundSave.c] && roundSave.h > 0) {
-        var rc = COURSES[roundSave.c];
-        var cont = btnEl(BTN + "width:100%;margin-bottom:9px;",
-          "Continue " + rc.name + " · hole " + (roundSave.h + 1));
-        ctx.listen(cont, "click", function () {
-          resumeAudio(); haptic("light"); ctx.platform.start();
-          var rs = roundSave; roundSave = null;
-          startRound(rs.c, rs.card, rs.h);
-        });
-        menuList.insertBefore(cont, menuList.firstChild);
-      }
     }
 
     // ---- hole result ------------------------------------------------------
@@ -2250,12 +2290,14 @@ window.plethoraBit = {
     function showScreen() {
       var p = S.screen === "play";
       hud.style.display = (p || S.screen === "holeEnd") ? "block" : "none";
+      titlePanel.style.display = S.screen === "title" ? "flex" : "none";
       menuPanel.style.display = S.screen === "menu" ? "flex" : "none";
       holeEnd.style.display = S.screen === "holeEnd" ? "flex" : "none";
       roundEnd.style.display = S.screen === "roundEnd" ? "flex" : "none";
       if (S.screen === "holeEnd") showHoleEnd();
       if (S.screen === "roundEnd") showRoundEnd();
       if (S.screen === "menu") { menuPanel.scrollTop = 0; stopMusic(); }
+      if (S.screen === "title") { syncTitle(); stopMusic(); }
       if (S.screen === "roundEnd") roundEnd.scrollTop = 0;
       syncHud();
     }
@@ -2272,6 +2314,15 @@ window.plethoraBit = {
       musicOn = !musicOn;
       btnMusic.textContent = "Music: " + (musicOn ? "on" : "off");
       if (!musicOn) stopMusic(); else if (S.screen === "play") startMusic(course().theme);
+      btnMusicTitle.textContent = "Music: " + (musicOn ? "on" : "off");
+      if (ctx.capabilities.storage) { try { ctx.storage.set("music", musicOn); } catch (_) {} }
+      haptic("light");
+    });
+    ctx.listen(btnMusicTitle, "click", function () {
+      musicOn = !musicOn;
+      btnMusicTitle.textContent = "Music: " + (musicOn ? "on" : "off");
+      btnMusic.textContent = "Music: " + (musicOn ? "on" : "off");
+      if (!musicOn) stopMusic();
       if (ctx.capabilities.storage) { try { ctx.storage.set("music", musicOn); } catch (_) {} }
       haptic("light");
     });

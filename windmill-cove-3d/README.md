@@ -24,11 +24,26 @@ back. A round left part-way through surfaces as **Continue** on the title.
 
 ### The courses
 
-| Course | Theme | Par | What it does to you |
+| Course | Difficulty | Par | What it does to you |
 | --- | --- | --- | --- |
-| 🌲 Fernwood Heights | Forest | 29 | Tiered greens, windmills, a creek, a mill pond |
-| 🏴‍☠️ Buccaneer Reef | Pirate | 32 | Causeways over water, cannon pads, sliding gates, a whirlpool |
-| 🛰️ Orbital Deck | Space | 32 | Ice, gravity wells, a wormhole, a black hole, a long way down |
+| 🌲 Fernwood Heights | **Easy** | 29 | Tiered greens, windmills, a creek, a mill pond. Rails everywhere. |
+| 🏴‍☠️ Buccaneer Reef | **Medium** | 32 | Narrow causeways over open water, cannon pads, fast gates, a whirlpool |
+| 🛰️ Orbital Deck | **Hard** | 33 | Ice with the rails taken away, two-metre gantries, a black hole |
+
+The three are a difficulty ladder, and the ladder is real: measured against the
+same randomised playtester, a shot on Fernwood finds the hole roughly a third
+of the time, on Buccaneer around one in six, and on Orbital between one in ten
+and one in a hundred. Every hole is still finishable at or under par — the
+harness refuses to let one through otherwise.
+
+## The cup
+
+It is an actual hole. The fairway slab that holds it has its top face rebuilt
+as a `ShapeGeometry` with a circular path punched through, and the box body
+drops 2cm so the two never fight for the same depth — so you look *down* into a
+dark shaft with a mown collar around it, rather than at a pale disc painted on
+the grass. When you hole out the ball is pulled to the middle, falls, and
+rattles once at the bottom before the card comes up.
 
 ## What being 3D actually buys
 

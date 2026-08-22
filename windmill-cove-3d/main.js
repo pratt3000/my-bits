@@ -536,6 +536,7 @@ var TEE_Y = BALL_R;
 var COURSES = [
   {
     id: "heights", name: "Fernwood Heights", theme: "forest", icon: "🌲",
+    tier: "Easy", tierColor: "#5bbf4a",
     blurb: "Tiered greens cut into a pine hillside. Commit to the climb or roll back down.",
     holes: [
       {
@@ -632,13 +633,14 @@ var COURSES = [
   }
   ,{
     id: "reef", name: "Buccaneer Reef", theme: "pirate", icon: "🏴‍☠️",
-    blurb: "Causeways over open water, cannons that throw you across it, and gates that do not wait.",
+    tier: "Medium", tierColor: "#ffc23f",
+    blurb: "Narrow causeways over open water. Every miss is a stroke and a swim.",
     holes: [
       {
         name: "Low Tide", par: 2,
         boxes: [].concat(
           plat(0, 0, 6, 10, 0, GREEN, "NWE"),
-          plat(1.5, 10, 3, 10, 0, GREEN, ""),
+          plat(1.9, 10, 2.2, 10, 0, GREEN, ""),
           plat(0, 20, 6, 10, 0, GREEN, "SWE")),
         water: [waterBox(-10, 10, 26, 10, -0.5)],
         tee: [3, TEE_Y, 3], cup: [3, 0, 26], killY: -6
@@ -647,27 +649,27 @@ var COURSES = [
         name: "Plank Bridge", par: 3,
         boxes: [].concat(
           plat(0, 0, 8, 11, 0, GREEN, "NWE"),
-          plat(2, 11, 4, 10, 0, GREEN, ""),
+          plat(2.4, 11, 3.2, 10, 0, GREEN, ""),
           plat(0, 21, 8, 11, 0, GREEN, "SWE")),
         water: [waterBox(-10, 11, 28, 10, -0.5)],
-        movers: [mover(4, 0.5, 16, 3.4, 1.0, 0.5, 1, 0, 0, 2.4, 3.6, 0, WOOD)],
+        movers: [mover(4, 0.5, 16, 2.6, 1.0, 0.5, 1, 0, 0, 2.0, 2.7, 0, WOOD)],
         tee: [4, TEE_Y, 3], cup: [4, 0, 27], killY: -6
       },
       {
         name: "Cannon Jump", par: 3,
         boxes: [].concat(
           plat(0, 0, 8, 15, 0, GREEN, "NWE"),
-          plat(0, 22, 8, 12, 0, GREEN, "SWE")),
-        water: [waterBox(-10, 15, 28, 7, -0.5)],
-        boosts: [boostPad(1.5, 11.5, 5, 3, 0, 0, 1, 19, 8)],
-        tee: [4, TEE_Y, 3], cup: [4, 0, 29], killY: -6
+          plat(0, 24, 8, 12, 0, GREEN, "SWE")),
+        water: [waterBox(-10, 15, 28, 9, -0.5)],
+        boosts: [boostPad(2.2, 11.5, 3.6, 3, 0, 0, 1, 20, 8.6)],
+        tee: [4, TEE_Y, 3], cup: [4, 0, 31], killY: -6
       },
       {
         name: "Crow's Nest", par: 3,
         boxes: [].concat(
           plat(0, 0, 9, 12, 0, GREEN, "NWE"),
-          rampZ(2, 12, 5, 7, 0, 2.8, GREEN, "WE"),
-          plat(0.5, 19, 8, 9, 2.8, GREEN, "SWE")),
+          rampZ(2.6, 12, 3.8, 7, 0, 2.8, GREEN, "WE"),
+          plat(1.5, 19, 6, 8, 2.8, GREEN, "SE")),
         water: [waterBox(-10, 12, 30, 18, -0.5)],
         tee: [4.5, TEE_Y, 3], cup: [4.5, 2.8, 24], killY: -6
       },
@@ -675,11 +677,11 @@ var COURSES = [
         name: "The Reef", par: 4,
         boxes: [].concat(
           plat(0, 0, 8, 9, 3, GREEN, "NWE"),
-          plat(0.5, 12, 7, 6, 2.1, GREEN, "WE"),
-          plat(0.5, 21, 7, 6, 1.2, GREEN, "WE"),
-          plat(0, 30, 8, 9, 0.3, GREEN, "SWE")),
+          plat(1.2, 12.5, 5, 5, 2.1, GREEN, ""),
+          plat(1.8, 22, 4.4, 5, 1.2, GREEN, ""),
+          plat(0, 31, 8, 9, 0.3, GREEN, "SWE")),
         water: [waterBox(-12, 8, 32, 24, -0.4)],
-        tee: [4, 3 + BALL_R, 3], cup: [4, 0.3, 35], killY: -6
+        tee: [4, 3 + BALL_R, 3], cup: [4, 0.3, 36], killY: -6
       },
       {
         name: "Sliding Gates", par: 4,
@@ -687,8 +689,8 @@ var COURSES = [
           plat(0, 0, 10, 10, 0, GREEN, "NWE"),
           plat(0, 10, 10, 14, 0, GREEN, "WE"),
           plat(0, 24, 10, 10, 0, GREEN, "SWE")),
-        movers: [mover(3, 0.55, 14, 4.4, 1.1, 0.5, 1, 0, 0, 3.0, 3.4, 0, WOOD),
-                 mover(7, 0.55, 20, 4.4, 1.1, 0.5, 1, 0, 0, 3.0, 3.4, 1.7, WOOD)],
+        movers: [mover(3, 0.55, 14, 5.2, 1.1, 0.5, 1, 0, 0, 3.2, 2.6, 0, WOOD),
+                 mover(7, 0.55, 20, 5.2, 1.1, 0.5, 1, 0, 0, 3.2, 2.6, 1.3, WOOD)],
         cyls: [cyl(5, 29, 0, 0.7, 0.5, RUBBER)],
         tee: [5, TEE_Y, 3], cup: [5, 0, 31]
       },
@@ -700,7 +702,7 @@ var COURSES = [
           plat(0, 24, 12, 10, 0, GREEN, "SWE"),
           plat(7, 10, 5, 14, 0, GREEN, "E")),
         water: [waterBox(5, 10, 2, 14, -0.4)],
-        wells: [well(6, 0, 17, 4.0, 9, false)],
+        wells: [well(6, 0, 17, 4.8, 12, false)],
         tee: [6, TEE_Y, 3], cup: [6, 0, 30], killY: -6
       },
       {
@@ -709,83 +711,86 @@ var COURSES = [
           plat(0, 0, 9, 12, 2.6, GREEN, "NWE"),
           rampZ(0, 12, 9, 4, 2.6, 0, GREEN, "WE"),
           plat(0, 16, 9, 8, 0, GREEN, "WE"),
-          plat(0, 30, 9, 10, 0, GREEN, "SWE")),
-        water: [waterBox(-10, 24, 30, 6, -0.5)],
-        boosts: [boostPad(2, 20, 5, 3, 0, 0, 1, 20, 8.5)],
-        tee: [4.5, 2.6 + BALL_R, 3], cup: [4.5, 0, 35], killY: -6
+          plat(0, 32, 9, 10, 0, GREEN, "SWE")),
+        water: [waterBox(-10, 24, 30, 8, -0.5)],
+        boosts: [boostPad(2.6, 20, 3.8, 3, 0, 0, 1, 21, 9)],
+        tee: [4.5, 2.6 + BALL_R, 3], cup: [4.5, 0, 37], killY: -6
       },
       {
         name: "Davy Jones", par: 5,
         boxes: [].concat(
           plat(0, 0, 12, 10, 0, GREEN, "NWE"),
-          plat(0.5, 10, 4, 12, 0, GREEN, "W"),
-          plat(7.5, 10, 4, 12, 0, GREEN, "E"),
+          plat(0.8, 10, 3.2, 12, 0, GREEN, "W"),
+          plat(8, 10, 3.2, 12, 0, GREEN, "E"),
           plat(0, 22, 12, 8, 0, GREEN, "WE"),
           rampZ(3, 30, 6, 6, 0, 2.4, GREEN, "WE"),
           plat(1.5, 36, 9, 9, 2.4, GREEN, "SWE")),
         water: [waterBox(4.5, 10, 3, 12, -0.4), waterBox(-12, 30, 15, 15, -0.4),
                 waterBox(9, 30, 15, 15, -0.4)],
-        wells: [well(6, 0, 16, 3.2, 8, false)],
-        movers: [mover(6, 0.55, 26, 5, 1.1, 0.5, 1, 0, 0, 3.2, 3.8, 0, WOOD)],
+        wells: [well(6, 0, 16, 4.0, 10, false)],
+        movers: [mover(6, 0.55, 26, 5.6, 1.1, 0.5, 1, 0, 0, 3.4, 2.9, 0, WOOD)],
         tee: [6, TEE_Y, 3], cup: [6, 2.4, 41], killY: -6
       }
     ]
   },
   {
     id: "orbital", name: "Orbital Deck", theme: "space", icon: "🛰️",
-    blurb: "Almost no friction, a long way down, and a hole that pulls harder than the cup.",
+    tier: "Hard", tierColor: "#ff5a4d",
+    blurb: "No friction, no rails worth the name, and a long way down. Bring precision.",
     holes: [
       {
-        name: "Airlock", par: 2,
+        name: "Airlock", par: 3,
         boxes: [].concat(
-          plat(0, 0, 7, 12, 0, GREEN, "NWE"),
-          plat(0, 12, 7, 10, 0, ICE, "WE"),
-          plat(0, 22, 7, 9, 0, GREEN, "SWE")),
-        tee: [3.5, TEE_Y, 3], cup: [3.5, 0, 27]
+          plat(0, 0, 6, 12, 0, GREEN, "NWE"),
+          plat(0, 12, 6, 12, 0, ICE, "WE"),
+          plat(0, 24, 6, 9, 0, ICE, "SWE")),
+        cyls: [cyl(3, 20, 0, 0.8, 0.5, RUBBER)],
+        tee: [3, TEE_Y, 3], cup: [3, 0, 29]
       },
       {
         name: "Low Gravity", par: 3,
         boxes: [].concat(
           plat(0, 0, 8, 10, 0, GREEN, "NWE"),
-          rampZ(0, 10, 8, 6, 0, 2.4, ICE, "WE"),
-          plat(0, 16, 8, 14, 2.4, ICE, "SWE")),
-        cyls: [cyl(2, 24, 2.4, 0.7, 0.5, RUBBER), cyl(6, 21, 2.4, 0.7, 0.5, RUBBER)],
+          rampZ(1, 10, 6, 6, 0, 2.4, ICE, "WE"),
+          plat(0, 16, 8, 14, 2.4, ICE, "S")),
+        cyls: [cyl(2, 24, 2.4, 0.7, 0.5, RUBBER), cyl(6, 21, 2.4, 0.7, 0.5, RUBBER),
+               cyl(4, 19, 2.4, 0.8, 0.5, METAL)],
         tee: [4, TEE_Y, 3], cup: [4, 2.4, 27]
       },
       {
         name: "Gravity Well", par: 3,
         boxes: [].concat(
           plat(0, 0, 11, 11, 0, GREEN, "NWE"),
-          plat(0, 11, 11, 12, 0, ICE, "WE"),
-          plat(0, 23, 11, 10, 0, GREEN, "SWE")),
-        wells: [well(3, 0, 17, 4.2, 7, false)],
-        tee: [5.5, TEE_Y, 3], cup: [8, 0, 29]
+          plat(0, 11, 11, 12, 0, ICE, "")),
+        wells: [well(3.4, 0, 17, 5.2, 11, false), well(8.4, 0, 21, 4.4, 9, false)],
+        tee: [5.5, TEE_Y, 3], cup: [8, 0, 20.5], killY: -7
       },
       {
         name: "Wormhole", par: 3,
         boxes: [].concat(
           plat(0, 0, 9, 13, 0, GREEN, "NSWE"),
-          plat(0, 22, 9, 13, 2.2, ICE, "NSWE")),
-        portals: [portal(4.5, 0, 9.5, 4.5, 2.2, 25.5, 2.1)],
+          plat(0, 22, 9, 13, 2.2, ICE, "NS")),
+        portals: [portal(4.5, 0, 9.5, 4.5, 2.2, 25.5, 1.65)],
         tee: [4.5, TEE_Y, 3], cup: [4.5, 2.2, 32], killY: -6
       },
       {
         name: "Debris", par: 4,
         boxes: [].concat(
           plat(0, 0, 10, 10, 0, GREEN, "NWE"),
-          plat(0, 10, 10, 16, 0, ICE, "WE"),
-          plat(0, 26, 10, 9, 0, GREEN, "SWE")),
-        cyls: [cyl(3, 15, 0, 0.8, 0.5, RUBBER), cyl(7, 19, 0, 0.8, 0.5, RUBBER),
-               cyl(5, 24, 0, 0.8, 0.5, METAL), cyl(2, 22, 0, 0.7, 0.5, METAL)],
+          plat(0.5, 10, 9, 16, 0, ICE, ""),
+          plat(0, 26, 10, 9, 0, ICE, "SWE")),
+        cyls: [cyl(3, 15, 0, 0.85, 0.5, RUBBER), cyl(7, 19, 0, 0.85, 0.5, RUBBER),
+               cyl(5, 24, 0, 0.85, 0.5, METAL), cyl(2, 22, 0, 0.75, 0.5, METAL),
+               cyl(8, 13, 0, 0.75, 0.5, METAL)],
         tee: [5, TEE_Y, 3], cup: [5, 0, 31]
       },
       {
         name: "The Gantry", par: 4,
         boxes: [].concat(
           plat(0, 0, 9, 10, 0, GREEN, "NWE"),
-          plat(3, 10, 3, 12, 0, METAL, ""),
-          plat(0, 22, 9, 7, 0, METAL, "WE"),
-          plat(3, 29, 3, 8, 0, METAL, ""),
+          plat(3.4, 10, 2.1, 12, 0, METAL, ""),
+          plat(0, 22, 9, 7, 0, METAL, ""),
+          plat(3.4, 29, 2.1, 8, 0, METAL, ""),
           plat(0, 37, 9, 9, 0, GREEN, "SWE")),
         tee: [4.5, TEE_Y, 3], cup: [4.5, 0, 42], killY: -10
       },
@@ -793,33 +798,32 @@ var COURSES = [
         name: "Event Horizon", par: 4,
         boxes: [].concat(
           plat(0, 0, 12, 11, 0, GREEN, "NWE"),
-          plat(0, 11, 12, 14, 0, ICE, "WE"),
-          plat(0, 25, 12, 10, 0, GREEN, "SWE")),
-        wells: [well(6, 0, 18, 4.0, 11, true)],
+          plat(0, 11, 12, 14, 0, ICE, "")),
+        wells: [well(6, 0, 18, 5.2, 14, true)],
         cyls: [cyl(1.6, 18, 0, 0.7, 0.5, METAL), cyl(10.4, 18, 0, 0.7, 0.5, METAL)],
-        tee: [6, TEE_Y, 3], cup: [6, 0, 31]
+        tee: [6, TEE_Y, 3], cup: [10, 0, 23], killY: -7
       },
       {
         name: "Docking Bay", par: 4,
         boxes: [].concat(
           plat(0, 0, 10, 11, 0, GREEN, "NWE"),
-          plat(0, 11, 10, 15, 0, ICE, "WE"),
-          plat(0, 26, 10, 10, 0, GREEN, "SWE")),
-        movers: [mover(3, 0.55, 15, 4.2, 1.1, 0.5, 1, 0, 0, 2.8, 3.4, 0, METAL),
-                 mover(7, 0.55, 21, 4.2, 1.1, 0.5, 1, 0, 0, 2.8, 3.4, 1.6, METAL)],
+          plat(0.5, 11, 9, 15, 0, ICE, ""),
+          plat(0, 26, 10, 10, 0, ICE, "SWE")),
+        movers: [mover(3, 0.55, 15, 5.0, 1.1, 0.5, 1, 0, 0, 3.0, 2.5, 0, METAL),
+                 mover(7, 0.55, 21, 5.0, 1.1, 0.5, 1, 0, 0, 3.0, 2.5, 1.25, METAL)],
         tee: [5, TEE_Y, 3], cup: [5, 0, 32]
       },
       {
         name: "Deep Orbit", par: 5,
         boxes: [].concat(
           plat(0, 0, 11, 10, 0, GREEN, "NWE"),
-          plat(0, 10, 11, 12, 0, ICE, "WE"),
-          rampZ(0, 22, 11, 6, 0, 2.6, ICE, "WE"),
-          plat(0, 28, 11, 8, 2.6, ICE, "WE"),
-          plat(0, 36, 11, 10, 2.6, GREEN, "SWE")),
-        wells: [well(2.5, 0, 15, 3.4, 7, false), well(8.5, 0, 31, 3.4, 7, false)],
-        spinners: [{ p: [5.5, 3.1, 33], reach: 3.6, thick: 0.18, tall: 0.42, omega: 1.6, phase: 0, blades: 3 }],
-        portals: [portal(1.5, 0, 5, 9.5, 0, 19, 1.4)],
+          plat(0.5, 10, 10, 12, 0, ICE, ""),
+          rampZ(2.5, 22, 6, 6, 0, 2.6, ICE, "WE"),
+          plat(1, 28, 9, 8, 2.6, ICE, ""),
+          plat(0, 36, 11, 10, 2.6, ICE, "SWE")),
+        wells: [well(2.5, 0, 15, 4.2, 10, false), well(8.5, 2.6, 31, 3.8, 9, false)],
+        spinners: [{ p: [5.5, 3.1, 33], reach: 4.2, thick: 0.18, tall: 0.42, omega: 2.2, phase: 0, blades: 4 }],
+        portals: [portal(1.5, 0, 5, 9.5, 0, 19, 1.3)],
         tee: [5.5, TEE_Y, 3], cup: [5.5, 2.6, 41]
       }
     ]
@@ -933,6 +937,53 @@ window.plethoraBit = {
     }
 
     var texCache = {};
+    /** A vertical sky gradient, painted once per theme. */
+    function skyTexture(th) {
+      var key = "sky" + th.sky + th.fog;
+      if (texCache[key] !== undefined) return texCache[key];
+      var cv = makeSurface(8, 128), tex = null;
+      if (cv) {
+        var c = cv.getContext("2d");
+        var g2 = c.createLinearGradient(0, 0, 0, 128);
+        var hi = "#" + th.sky.toString(16).padStart(6, "0");
+        var lo = "#" + th.fog.toString(16).padStart(6, "0");
+        g2.addColorStop(0, th.scenery === "stars" ? "#050713" : hi);
+        g2.addColorStop(0.55, hi);
+        g2.addColorStop(1, lo);
+        c.fillStyle = g2; c.fillRect(0, 0, 8, 128);
+        tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+      }
+      texCache[key] = tex;
+      return tex;
+    }
+
+    /** Scrolling ripples for water surfaces. */
+    function waveTexture() {
+      if (texCache.wave !== undefined) return texCache.wave;
+      var S2 = 128, cv = makeSurface(S2, S2), tex = null;
+      if (cv) {
+        var c = cv.getContext("2d");
+        c.fillStyle = "#ffffff"; c.fillRect(0, 0, S2, S2);
+        c.strokeStyle = "rgba(255,255,255,0)";
+        c.globalAlpha = 1;
+        for (var i = 0; i < 22; i++) {
+          c.strokeStyle = "rgba(200,235,255," + (0.25 + hash01(i, 9) * 0.3) + ")";
+          c.lineWidth = 1 + hash01(i, 8) * 2;
+          c.beginPath();
+          var y = hash01(i, 7) * S2;
+          for (var x = 0; x <= S2; x += 4) {
+            var yy = y + Math.sin(x * 0.09 + i) * 3;
+            if (x === 0) c.moveTo(x, yy); else c.lineTo(x, yy);
+          }
+          c.stroke();
+        }
+        tex = new THREE.CanvasTexture(cv);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      }
+      texCache.wave = tex;
+      return tex;
+    }
     /** The mown checkerboard, as a repeating texture. The 2D game's signature. */
     function grassTexture(th) {
       var key = "grass" + th.grass[0];
@@ -984,17 +1035,48 @@ window.plethoraBit = {
       else if (kind === METAL) col = th.metal;
       else col = th.rail;
       var sideCol = kind === GREEN ? th.side : col;
-      var mTop = new THREE.MeshLambertMaterial(top ? { map: top } : { color: col });
+      var topCol = kind === WOOD ? th.railTop
+        : kind === METAL ? 0xb6c2d2 : kind === RUBBER ? 0xff7f9a : col;
+      var mTop = new THREE.MeshLambertMaterial(top ? { map: top } : { color: topCol });
       var mSide = new THREE.MeshLambertMaterial({ color: sideCol });
       // BoxGeometry material order: +X, -X, +Y, -Y, +Z, -Z
       return [mSide, mSide, mTop, mSide, mSide, mSide];
     }
 
-    function addBox(group, b, th) {
+    /**
+     * The fairway that holds the cup gets its top face rebuilt as a shape with
+     * a circular hole punched through it, and the box body dropped 2cm so the
+     * two never fight for the same depth. That is what makes the cup read as a
+     * hole you can see down rather than a pale disc painted on the grass.
+     */
+    function addCupTop(group, b, th, cup) {
+      var CUT = 0.02, top = b.p.y + b.s.y;
+      var shape = new THREE.Shape();
+      shape.moveTo(-b.s.x, -b.s.z); shape.lineTo(b.s.x, -b.s.z);
+      shape.lineTo(b.s.x, b.s.z); shape.lineTo(-b.s.x, b.s.z);
+      shape.closePath();
+      var hole = new THREE.Path();
+      hole.absarc(cup.x - b.p.x, -(cup.z - b.p.z), CUP_R, 0, TAU, true);
+      shape.holes.push(hole);
+      var geo = new THREE.ShapeGeometry(shape, 26);
+      var mats = matFor(b.m, th, { x: b.s.x * 2, y: 0, z: b.s.z * 2 });
+      var mTop = mats[2];
+      if (mTop.map) { mTop.map.repeat.set(0.25, 0.25); mTop.map.needsUpdate = true; }
+      var surf = new THREE.Mesh(geo, mTop);
+      surf.rotation.x = -Math.PI / 2;
+      surf.position.set(b.p.x, top, b.p.z);
+      surf.receiveShadow = true;
+      group.add(surf);
+      return CUT;
+    }
+
+    function addBox(group, b, th, cupCut) {
       var size = { x: b.s.x * 2, y: b.s.y * 2, z: b.s.z * 2 };
+      var drop = 0;
+      if (cupCut) { drop = addCupTop(group, b, th, cupCut); size.y -= drop; }
       var geo = new THREE.BoxGeometry(size.x, size.y, size.z);
       var mesh = new THREE.Mesh(geo, matFor(b.m, th, size));
-      mesh.position.set(b.p.x, b.p.y, b.p.z);
+      mesh.position.set(b.p.x, b.p.y - drop / 2, b.p.z);
       mesh.rotation.order = "YXZ";
       mesh.rotation.y = b.yaw || 0;
       mesh.rotation.x = b.tilt || 0;
@@ -1023,15 +1105,21 @@ window.plethoraBit = {
     var waterMats = [];
     function addWater(group, w, th) {
       var geo = new THREE.PlaneGeometry(w.max.x - w.min.x, w.max.z - w.min.z, 1, 1);
+      var wv = waveTexture();
       var mat = new THREE.MeshLambertMaterial({
-        color: th.water, transparent: true, opacity: 0.82
+        color: th.water, transparent: true, opacity: 0.86
       });
+      if (wv) {
+        mat.map = wv.clone(); mat.map.needsUpdate = true;
+        mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+        mat.map.repeat.set((w.max.x - w.min.x) / 9, (w.max.z - w.min.z) / 9);
+      }
       var mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set((w.min.x + w.max.x) / 2, w.max.y, (w.min.z + w.max.z) / 2);
       mesh.receiveShadow = true;
       group.add(mesh);
-      waterMats.push({ mesh: mesh, base: w.max.y });
+      waterMats.push({ mesh: mesh, base: w.max.y, map: mat.map || null });
       // a darker floor under it so the water reads as depth, not a sheet
       var bed = new THREE.Mesh(
         new THREE.PlaneGeometry(w.max.x - w.min.x, w.max.z - w.min.z),
@@ -1042,21 +1130,29 @@ window.plethoraBit = {
     }
 
     var flagPivot = null, cupMesh = null;
+    var CUP_DEPTH = 0.62;
     function addCup(group, hole, th) {
-      var lip = new THREE.Mesh(
-        new THREE.CylinderGeometry(CUP_R + 0.16, CUP_R + 0.16, 0.05, 24),
+      // a mown collar, then the shaft you can see down
+      var rim = new THREE.Mesh(new THREE.RingGeometry(CUP_R, CUP_R + 0.17, 26),
         new THREE.MeshLambertMaterial({ color: 0xefe6cf }));
-      lip.position.set(hole.cup.x, hole.cup.y + 0.012, hole.cup.z);
-      group.add(lip);
+      rim.rotation.x = -Math.PI / 2;
+      rim.position.set(hole.cup.x, hole.cup.y + 0.006, hole.cup.z);
+      group.add(rim);
+      // caps the fairway slab's own top face inside the cut so nothing green shows
+      var mask = new THREE.Mesh(new THREE.CircleGeometry(CUP_R + 0.005, 26),
+        new THREE.MeshBasicMaterial({ color: 0x0d0f0c }));
+      mask.rotation.x = -Math.PI / 2;
+      mask.position.set(hole.cup.x, hole.cup.y - 0.014, hole.cup.z);
+      group.add(mask);
       cupMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(CUP_R, CUP_R, 0.5, 24, 1, true),
-        new THREE.MeshBasicMaterial({ color: 0x0a0a0a, side: THREE.DoubleSide }));
-      cupMesh.position.set(hole.cup.x, hole.cup.y - 0.24, hole.cup.z);
+        new THREE.CylinderGeometry(CUP_R, CUP_R * 0.96, CUP_DEPTH, 26, 1, true),
+        new THREE.MeshLambertMaterial({ color: 0x14160f, side: THREE.BackSide }));
+      cupMesh.position.set(hole.cup.x, hole.cup.y - CUP_DEPTH / 2, hole.cup.z);
       group.add(cupMesh);
-      var floor = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 24),
-        new THREE.MeshBasicMaterial({ color: 0x060606 }));
+      var floor = new THREE.Mesh(new THREE.CircleGeometry(CUP_R * 0.96, 26),
+        new THREE.MeshLambertMaterial({ color: 0x090a06 }));
       floor.rotation.x = -Math.PI / 2;
-      floor.position.set(hole.cup.x, hole.cup.y - 0.48, hole.cup.z);
+      floor.position.set(hole.cup.x, hole.cup.y - CUP_DEPTH, hole.cup.z);
       group.add(floor);
 
       flagPivot = new THREE.Group();
@@ -1255,8 +1351,8 @@ window.plethoraBit = {
     var ballMesh = null, shadowMesh = null, aimGroup = null, aimShaft = null, aimHead = null;
 
     function buildBallAndAim(th) {
-      ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 20, 14),
-        new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 24, 18),
+        new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 55, specular: 0x555555 }));
       ballMesh.castShadow = true;
       scene.add(ballMesh);
 
@@ -1293,12 +1389,25 @@ window.plethoraBit = {
       scene.remove(g);
     }
 
+    function bbSky(hole) { return holeBounds(hole); }
+
     function buildHoleScene(hole, th) {
       disposeGroup(holeGroup);
       waterMats.length = 0;
       holeGroup = new THREE.Group();
       var i;
-      for (i = 0; i < hole.boxes.length; i++) addBox(holeGroup, hole.boxes[i], th);
+      var cupBox = -1;
+      for (i = 0; i < hole.boxes.length; i++) {
+        var b = hole.boxes[i];
+        if (b.m === WOOD || (b.tilt || 0) !== 0 || (b.yaw || 0) !== 0) continue;
+        if (Math.abs((b.p.y + b.s.y) - hole.cup.y) > 0.02) continue;
+        if (Math.abs(hole.cup.x - b.p.x) > b.s.x - CUP_R ||
+            Math.abs(hole.cup.z - b.p.z) > b.s.z - CUP_R) continue;
+        cupBox = i; break;
+      }
+      for (i = 0; i < hole.boxes.length; i++) {
+        addBox(holeGroup, hole.boxes[i], th, i === cupBox ? hole.cup : null);
+      }
       for (i = 0; i < hole.cyls.length; i++) addCyl(holeGroup, hole.cyls[i], th);
       for (i = 0; i < hole.water.length; i++) addWater(holeGroup, hole.water[i], th);
       addProps(holeGroup, hole, th);
@@ -1306,6 +1415,15 @@ window.plethoraBit = {
       addScenery(holeGroup, hole, th);
       scene.add(holeGroup);
 
+      var skyT = skyTexture(th);
+      if (skyT) {
+        var dome = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16),
+          new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide,
+            fog: false, depthWrite: false }));
+        dome.position.set(bbSky(hole).cx, 0, bbSky(hole).cz);
+        dome.renderOrder = -1;
+        holeGroup.add(dome);
+      }
       scene.background = new THREE.Color(th.sky);
       scene.fog = new THREE.Fog(th.fog, th.fogNear, th.fogFar);
       hemi.color.setHex(th.sky);
@@ -1327,7 +1445,8 @@ window.plethoraBit = {
       card: [], hole: null, th: null, holed: false, moving: false, rollT: 0,
       ball: { p: v3(0, 0, 0), v: v3(0, 0, 0), portalCd: 0, grounded: false },
       safe: v3(0, 0, 0), sinking: 0, sinkKind: "water", t: 0, banner: 0,
-      power: 0, charging: false, survey: false
+      power: 0, charging: false, survey: false,
+      dropping: 0, dropAt: v3(0, 0, 0)
     };
     /** Camera: yaw is also the aim. Looking somewhere and aiming there are one act. */
     var cam = { yaw: 0, pitch: 0.40, dist: 9, tx: 0, ty: 0, tz: 0,
@@ -1515,8 +1634,11 @@ window.plethoraBit = {
       afterSettle();
     }
 
+    var DROP_TIME = 0.9;
     function finishHole(strokes) {
       S.holed = true; S.moving = false;
+      S.dropping = DROP_TIME;
+      S.dropAt.x = S.ball.p.x; S.dropAt.y = S.ball.p.y; S.dropAt.z = S.ball.p.z;
       S.card[S.holeIx] = strokes;
       var co = course(), hk = co.id + ":" + S.holeIx;
       if (best[hk] == null || strokes < best[hk]) best[hk] = strokes;
@@ -1528,7 +1650,7 @@ window.plethoraBit = {
       ctx.timeout(function () {
         if (S.screen !== "play") return;
         S.screen = "holeEnd"; showScreen();
-      }, 950);
+      }, 1150);
     }
 
     function nextHole() {
@@ -1874,7 +1996,10 @@ window.plethoraBit = {
           "44,#" + th.ground.toString(16).padStart(6, "0") + "cc);",
           '<div style="font-size:27px;line-height:1;">' + co.icon + "</div>" +
           '<div style="flex:1;min-width:0;"><div style="font-size:16.5px;font-weight:850;">' +
-          esc(co.name) + "</div>" +
+          esc(co.name) +
+          '<span style="margin-left:8px;font-size:10.5px;font-weight:800;letter-spacing:0.6px;' +
+          "vertical-align:middle;padding:2px 7px;border-radius:7px;color:#0b140c;background:" +
+          co.tierColor + ';">' + co.tier.toUpperCase() + "</span></div>" +
           '<div style="opacity:0.78;font-size:12px;margin-top:2px;line-height:1.35;">' +
           esc(co.blurb) + "</div></div>" +
           '<div style="text-align:right;font-size:11.5px;"><div style="font-weight:800;">Par ' +
@@ -2138,6 +2263,7 @@ window.plethoraBit = {
         if (S.banner <= 0) banner.style.opacity = "0";
       }
       if (toastT > 0) { toastT -= dt; if (toastT <= 0) toast.style.opacity = "0"; }
+      if (S.dropping > 0) S.dropping = Math.max(0, S.dropping - dt);
 
       if (S.sinking > 0) {
         S.sinking -= dt;
@@ -2211,6 +2337,10 @@ window.plethoraBit = {
       }
       for (i = 0; i < waterMats.length; i++) {
         waterMats[i].mesh.position.y = waterMats[i].base + Math.sin(S.t * 1.3 + i) * 0.035;
+        if (waterMats[i].map) {
+          waterMats[i].map.offset.y = (S.t * 0.045) % 1;
+          waterMats[i].map.offset.x = Math.sin(S.t * 0.22) * 0.03;
+        }
       }
       for (i = 0; i < portalMeshes.length; i++) portalMeshes[i].rotation.z += dt * 1.6;
       for (i = 0; i < wellMeshes.length; i++) wellMeshes[i].rotation.z -= dt * 1.1;
@@ -2220,7 +2350,22 @@ window.plethoraBit = {
       }
 
       if (ballMesh) {
-        ballMesh.visible = S.screen !== "title" && !S.holed && S.sinking <= 0;
+        var dropping = S.dropping > 0 && S.hole;
+        ballMesh.visible = S.screen !== "title" && S.sinking <= 0 && (!S.holed || dropping);
+        if (dropping) {
+          // pulled to the middle, then dropped, with one small rattle at the bottom
+          var u = 1 - S.dropping / DROP_TIME;
+          var pull = Math.min(1, u / 0.18);
+          var fall = clamp((u - 0.12) / 0.5, 0, 1);
+          var bob = fall >= 1 ? Math.abs(Math.sin((u - 0.62) * 14)) * 0.05 * (1 - (u - 0.62) / 0.38) : 0;
+          ballMesh.position.set(
+            lerp(S.dropAt.x, S.hole.cup.x, pull),
+            lerp(S.hole.cup.y, S.hole.cup.y - CUP_DEPTH + BALL_R, fall * fall) + bob,
+            lerp(S.dropAt.z, S.hole.cup.z, pull));
+          shadowMesh.visible = false;
+          if (aimGroup) aimGroup.visible = false;
+          return;
+        }
         ballMesh.position.set(S.ball.p.x, S.ball.p.y, S.ball.p.z);
         var sp = hlen(S.ball.v);
         if (sp > 0.01) {                       // roll the ball as it travels
