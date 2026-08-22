@@ -956,6 +956,40 @@ window.plethoraBit = {
       return p;
     }
 
+    /**
+     * Merged boundary segments between cells matching `test` and cells that do
+     * not — the same sweep the wall extractor uses. Stroke this, never the
+     * region path, which is a stack of per-row rects with internal edges.
+     */
+    function regionEdges(hole, test) {
+      var on = function (gx, gy) {
+        if (gx < 0 || gy < 0 || gx >= hole.gw || gy >= hole.gh) return false;
+        return test(hole.surf[gy * hole.gw + gx]);
+      };
+      var p = new Path2D(), gx, gy, run;
+      for (gx = 0; gx <= hole.gw; gx++) {
+        run = -1;
+        for (gy = 0; gy <= hole.gh; gy++) {
+          var v = gy < hole.gh && (on(gx - 1, gy) !== on(gx, gy));
+          if (v && run < 0) run = gy;
+          else if (!v && run >= 0) {
+            p.moveTo(gx * CELL, run * CELL); p.lineTo(gx * CELL, gy * CELL); run = -1;
+          }
+        }
+      }
+      for (gy = 0; gy <= hole.gh; gy++) {
+        run = -1;
+        for (gx = 0; gx <= hole.gw; gx++) {
+          var h = gx < hole.gw && (on(gx, gy - 1) !== on(gx, gy));
+          if (h && run < 0) run = gx;
+          else if (!h && run >= 0) {
+            p.moveTo(run * CELL, gy * CELL); p.lineTo(gx * CELL, gy * CELL); run = -1;
+          }
+        }
+      }
+      return p;
+    }
+
     /* --------------------------------------------------------- scenery */
 
     /** Everything outside the course. Hash-seeded so it never crawls. */
@@ -1089,6 +1123,9 @@ window.plethoraBit = {
       var waterP = regionPath(hole, function (s) { return s === WATER; });
       var sandP = regionPath(hole, function (s) { return s === SAND; });
       var iceP = regionPath(hole, function (s) { return s === ICE; });
+      var waterE = regionEdges(hole, function (s) { return s === WATER; });
+      var sandE = regionEdges(hole, function (s) { return s === SAND; });
+      var iceE = regionEdges(hole, function (s) { return s === ICE; });
 
       // the course sits slightly proud of the scenery
       c.save();
@@ -1123,7 +1160,7 @@ window.plethoraBit = {
       for (var i = 0; i < 900; i++) {
         c.fillRect(hash01(i, 21) * W, hash01(i, 22) * H, 0.16, 0.16);
       }
-      c.strokeStyle = "rgba(120,92,44,0.34)"; c.lineWidth = 0.9; c.stroke(sandP);
+      c.strokeStyle = "rgba(120,92,44,0.40)"; c.lineWidth = 0.8; c.stroke(sandE);
       c.restore();
 
       c.save(); c.clip(iceP);
@@ -1135,8 +1172,9 @@ window.plethoraBit = {
         c.beginPath(); c.moveTo(ix, iy);
         c.lineTo(ix + Math.cos(ia) * il, iy + Math.sin(ia) * il); c.stroke();
       }
-      c.strokeStyle = "rgba(140,190,215,0.5)"; c.lineWidth = 0.2;
-      c.stroke(iceP);
+      c.restore();
+      c.save(); c.clip(iceP);
+      c.strokeStyle = "rgba(140,190,215,0.55)"; c.lineWidth = 0.5; c.stroke(iceE);
       c.restore();
 
       c.save(); c.clip(waterP);
@@ -1145,15 +1183,12 @@ window.plethoraBit = {
       c.fillStyle = wg; c.fillRect(0, 0, W, H);
       c.fillStyle = "rgba(0,0,0,0.18)";
       c.fillRect(0, 0, W, H);
-      // a shoreline, drawn from inside so it darkens as it meets the bank
-      c.strokeStyle = "rgba(0,0,0,0.30)"; c.lineWidth = 1.5; c.stroke(waterP);
-      c.strokeStyle = "rgba(0,0,0,0.18)"; c.lineWidth = 3.0; c.stroke(waterP);
-      c.strokeStyle = "rgba(210,240,255,0.34)"; c.lineWidth = 0.24;
-      c.stroke(waterP);
+      // a shoreline: shallows just inside the bank, damp grass just outside
+      c.strokeStyle = "rgba(0,0,0,0.22)"; c.lineWidth = 1.1; c.stroke(waterE);
+      c.strokeStyle = "rgba(190,235,255,0.30)"; c.lineWidth = 0.34; c.stroke(waterE);
       c.restore();
-      c.save(); c.clip(inside);                       // damp sand on the bank
-      c.strokeStyle = "rgba(150,190,120,0.32)"; c.lineWidth = 0.5;
-      c.stroke(waterP);
+      c.save(); c.clip(inside);
+      c.strokeStyle = "rgba(64,92,44,0.30)"; c.lineWidth = 0.7; c.stroke(waterE);
       c.restore();
 
       // The tee box and cup apron are square cells; draw them round so a
