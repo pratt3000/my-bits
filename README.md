@@ -17,6 +17,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
 | [`windmill-cove/`](windmill-cove)       | Mini golf in the Golf With Your Friends mould — six courses, nine holes each. |
+| [`windmill-cove-3d/`](windmill-cove-3d) | The same game in 3D — orbit the camera, survey the hole, aim by looking.     |
 
 ## Layout convention
 
