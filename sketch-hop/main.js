@@ -58,6 +58,9 @@ window.plethoraBit = {
     const rand = makeRng(0x5eed1e);
     const pick = (arr, r) => arr[Math.floor((r || rand)() * arr.length) % arr.length];
     const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+    // Subtract the dead zone rather than gating on it, so control eases in from
+    // zero instead of jumping the moment the threshold is crossed.
+    const deadzone = (v, d) => (Math.abs(v) <= d ? 0 : v > 0 ? v - d : v + d);
     const lerp = (a, b, t) => a + (b - a) * t;
 
     /* ---------------------------------------------------------------- *
@@ -863,10 +866,16 @@ window.plethoraBit = {
     const SPRING_V = -1680;
     const TRAMP_V = -1950;
     const MONSTER_BOUNCE_V = -1150;
-    const MAX_VX = 560;
-    const STEER_ACC = 2100;
-    const TILT_ACC = 2600;
-    const DRAG = 0.86;
+    // Steering is a velocity target, not an acceleration. Acceleration control
+    // means every correction fights momentum you already committed to, which is
+    // what made this twitchy at speed.
+    const MAX_VX = 360;          // px/s at full deflection
+    const STEER_EASE = 0.0018;   // per-second approach to the target velocity
+    const TOUCH_DEAD = 9;        // px of slack before a drag steers at all
+    const TOUCH_FULL = 132;      // px of drag for full speed
+    const TILT_DEAD = 0.075;     // normalized tilt ignored, so a resting hand holds still
+    const TILT_FULL = 0.46;      // normalized tilt for full speed (~21 degrees)
+    const TILT_SMOOTH = 0.0006;  // per-second approach, filters sensor jitter
 
     const POWER = {
       propeller: { dur: 2.6, vy: -640, label: "PROPELLER" },
@@ -1124,6 +1133,7 @@ window.plethoraBit = {
     let pointerDown = false;
     let pointerX = 0, pointerY = 0;
     let pressStart = 0, pressMovedBy = 0, pressOx = 0, pressOy = 0;
+    let steerAnchor = 0;
 
     async function enableTilt() {
       if (tiltReady) return true;
@@ -1277,18 +1287,27 @@ window.plethoraBit = {
       const h = hopper;
       const prevFeet = h.y + HOP_H * 0.5 * U;
 
-      // Horizontal steering
-      let acc = 0;
+      // Horizontal steering.
+      //
+      // Touch is measured from where the finger went down, not from the
+      // creature. Steering the creature *towards the finger* meant a
+      // tap-to-shoot on the far side of the screen yanked it across — the shot
+      // and the steer were reading the same number. Anchored to the touch
+      // point, a tap has zero drag and therefore zero steering, and only a
+      // deliberate slide moves anything.
+      let targetVx = 0;
       if (steerMode === "tilt" && tiltReady) {
-        tiltValue = lerp(tiltValue, readTilt(), 0.35);
-        acc = tiltValue * TILT_ACC * U;
+        tiltValue = lerp(tiltValue, readTilt(), 1 - Math.pow(TILT_SMOOTH, dt));
+        targetVx = clamp(deadzone(tiltValue, TILT_DEAD) / TILT_FULL, -1, 1) * MAX_VX * U;
       } else if (pointerDown) {
-        const dx = pointerX - h.x;
-        const dead = 6 * U;
-        if (Math.abs(dx) > dead) acc = clamp(dx / (90 * U), -1, 1) * STEER_ACC * U;
+        const maxOff = TOUCH_FULL * U;
+        let dx = pointerX - steerAnchor;
+        // Rubber-band the anchor so the control can never get stuck pinned.
+        if (dx > maxOff) { steerAnchor = pointerX - maxOff; dx = maxOff; }
+        else if (dx < -maxOff) { steerAnchor = pointerX + maxOff; dx = -maxOff; }
+        targetVx = clamp(deadzone(dx, TOUCH_DEAD * U) / maxOff, -1, 1) * MAX_VX * U;
       }
-      h.vx += acc * dt;
-      if (acc === 0) h.vx *= Math.pow(DRAG, dt * 60);
+      h.vx += (targetVx - h.vx) * (1 - Math.pow(STEER_EASE, dt));
       h.vx = clamp(h.vx, -MAX_VX * U, MAX_VX * U);
       h.x += h.vx * dt;
 
@@ -2046,29 +2065,10 @@ window.plethoraBit = {
       }
     }
 
-    let boardRows = null;
-    let boardState = "idle";   // idle | loading | ok | error
-    let boardScope = "global";
-    async function loadBoard(scope) {
-      boardScope = scope || boardScope;
-      boardState = "loading";
-      boardRows = null;
-      try {
-        const res = await ctx.memory.record("score").leaderboard({ scope: boardScope, period: "all_time" });
-        const rows = (res && (res.entries || res.rows || res.leaderboard || res.data)) || [];
-        boardRows = Array.isArray(rows) ? rows.slice(0, 10) : [];
-        boardState = "ok";
-      } catch (err) {
-        boardRows = [];
-        boardState = "error";
-      }
-    }
-
     /* ================================================================ *
      * SCREENS
      * ================================================================ */
     let showHelp = false;
-    let showBoard = false;
     let titleT = 0;
 
     function drawHud() {
@@ -2123,10 +2123,16 @@ window.plethoraBit = {
       const top = safe().top;
       const bob = Math.sin(titleT * 2) * 6 * U;
 
+      // Line spacing has to exceed the cap height or the two words collide on
+      // a short screen, where U shrinks the glyphs and the gap in lockstep.
       const titleW = W * 0.84;
-      inkTextFit("SKETCH", cx, top + H * 0.17 + bob, 58 * U, titleW, INK, "center", 700, false);
-      inkTextFit("HOP", cx, top + H * 0.17 + 52 * U + bob, 58 * U, titleW, GREEN_DARK, "center", 700, false);
-      inkTextFit("climb the page, don't fall off", cx, top + H * 0.17 + 94 * U + bob, 15 * U, titleW, INK_SOFT, "center", 700, false);
+      const titleSize = 52 * U;
+      const titleLead = titleSize * 1.08;
+      const ty = top + H * 0.17 + bob;
+      inkTextFit("SKETCH", cx, ty, titleSize, titleW, INK, "center", 700, false);
+      inkTextFit("HOP", cx, ty + titleLead, titleSize, titleW, GREEN_DARK, "center", 700, false);
+      inkTextFit("climb the page, don't fall off", cx, ty + titleLead + titleSize * 0.82, 15 * U,
+        titleW, INK_SOFT, "center", 700, false);
 
       // A hopper bouncing on the title screen, drawn from the same sprite.
       const hy = top + H * 0.40 + Math.abs(Math.sin(titleT * 3)) * -46 * U;
@@ -2147,11 +2153,14 @@ window.plethoraBit = {
 
       by += 58 * U;
       inkButton("help", "HOW TO PLAY", cx - bw / 2, by, bw, 44 * U, "rgba(255,255,255,0.9)", 18 * U);
-      by += 54 * U;
-      inkButton("board", "LEADERBOARD", cx - bw / 2, by, bw, 44 * U, "rgba(255,255,255,0.9)", 18 * U);
+      by += 44 * U;
 
+      // Anchored to the bottom of the button stack, not to the bottom of the
+      // page: pinned to the page it landed straight on top of the last button
+      // on a short screen. Clamped so it can never reach the home indicator.
       if (best > 0) {
-        inkTextFit("your best  " + best, cx, H - safe().bottom - 30 * U, 19 * U, W * 0.7,
+        const bestY = Math.min(by + 26 * U, H - safe().bottom - 18 * U);
+        inkTextFit("your best  " + best, cx, bestY, 19 * U, W * 0.7,
           INK_SOFT, "center", 700, false);
       }
     }
@@ -2159,7 +2168,7 @@ window.plethoraBit = {
     function drawHelp() {
       const lines = [
         [null, "You bounce forever. Steer, don't fall."],
-        [null, steerMode === "tilt" ? "Tilt the phone to steer." : "Hold and drag to steer."],
+        [null, steerMode === "tilt" ? "Tilt gently to steer." : "Hold, then slide to steer."],
         [null, "Quick tap shoots ink."],
         [GREEN, "Green holds its ground."],
         [BLUE, "Blue slides sideways."],
@@ -2193,46 +2202,6 @@ window.plethoraBit = {
         ly += rowH;
       }
       inkButton("close_help", "GOT IT", px + pw / 2 - 68 * U, py + ph - 52 * U, 136 * U, 40 * U, GREEN, 19 * U);
-    }
-
-    function drawBoard() {
-      const pw = Math.min(340 * U, W * 0.9);
-      const ph = Math.min(430 * U, H * 0.76);
-      const px = (W - pw) / 2, py = (H - ph) / 2;
-      g.fillStyle = "rgba(30,28,22,0.35)";
-      g.fillRect(0, 0, W, H);
-      inkPanel(px, py, pw, ph, "rgba(252,250,240,0.98)", 88);
-      inkTextFit("LEADERBOARD", px + pw / 2, py + 30 * U, 24 * U, pw - 40 * U, INK, "center", 700, false);
-
-      const half = (pw - 46 * U) / 2;
-      inkButton("scope_global", "GLOBAL", px + 18 * U, py + 50 * U, half, 34 * U,
-        boardScope === "global" ? YELLOW : "rgba(255,255,255,0.9)", 15 * U);
-      inkButton("scope_following", "FRIENDS", px + 28 * U + half, py + 50 * U, half, 34 * U,
-        boardScope === "following" ? YELLOW : "rgba(255,255,255,0.9)", 15 * U);
-
-      let ly = py + 108 * U;
-      if (boardState === "loading") {
-        inkText("loading…", px + pw / 2, ly + 40 * U, 18 * U, INK_SOFT, "center", 700, false);
-      } else if (boardState === "error") {
-        inkText("couldn't load right now", px + pw / 2, ly + 30 * U, 16 * U, INK_SOFT, "center", 700, false);
-        inkText("your score is still saved", px + pw / 2, ly + 54 * U, 14 * U, INK_SOFT, "center", 700, false);
-      } else if (boardRows && boardRows.length === 0) {
-        inkText("no climbs logged yet", px + pw / 2, ly + 30 * U, 16 * U, INK_SOFT, "center", 700, false);
-        inkText("be the first", px + pw / 2, ly + 54 * U, 14 * U, INK_SOFT, "center", 700, false);
-      } else if (boardRows) {
-        for (let i = 0; i < boardRows.length; i++) {
-          const row = boardRows[i];
-          const name = row.displayName || row.username || row.name || row.handle || "climber";
-          const val = row.formatted || row.label || row.value || row.score || 0;
-          const mine = row.isViewer || row.isMe || row.self;
-          inkText(String(i + 1), px + 18 * U, ly, 14 * U, INK_SOFT, "left", 700, false);
-          inkTextFit(String(name).slice(0, 14), px + 42 * U, ly, 14 * U, pw * 0.48,
-            mine ? GREEN_DARK : INK, "left", 700, false);
-          inkTextFit(String(val), px + pw - 18 * U, ly, 14 * U, pw * 0.3, INK, "right", 700, false);
-          ly += 27 * U;
-        }
-      }
-      inkButton("close_board", "BACK", px + pw / 2 - 70 * U, py + ph - 54 * U, 140 * U, 42 * U, "rgba(255,255,255,0.92)", 20 * U);
     }
 
     const DEATH_TEXT = {
@@ -2289,9 +2258,7 @@ window.plethoraBit = {
       const rowY = bottom - rowH;
       const playY = rowY - playH - 10 * U;
       inkButton("again", "PLAY AGAIN", px + pad, playY, pw - pad * 2, playH, GREEN, 22 * U);
-      const halfw = (pw - pad * 2 - 10 * U) / 2;
-      inkButton("board", "BOARD", px + pad, rowY, halfw, rowH, "rgba(255,255,255,0.92)", 15 * U);
-      inkButton("home", "MENU", px + pad + halfw + 10 * U, rowY, halfw, rowH, "rgba(255,255,255,0.92)", 15 * U);
+      inkButton("home", "MENU", px + pad, rowY, pw - pad * 2, rowH, "rgba(255,255,255,0.92)", 15 * U);
     }
 
     /* ================================================================ *
@@ -2325,7 +2292,6 @@ window.plethoraBit = {
       else drawHud();
       if (state === "dead") drawGameOver();
       if (showHelp) drawHelp();
-      if (showBoard) drawBoard();
     }
 
     function frame(dtMs) {
@@ -2336,7 +2302,7 @@ window.plethoraBit = {
         if (Math.abs(spriteScale - U) > 0.001) buildSprites();
       }
       titleT += dt;
-      if (state === "play" && !showHelp && !showBoard) updatePlay(dt);
+      if (state === "play" && !showHelp) updatePlay(dt);
       updateParticles(dt);
       render();
       if (!firstFrameDone) {
@@ -2366,7 +2332,6 @@ window.plethoraBit = {
       resetRun();
       state = "play";
       showHelp = false;
-      showBoard = false;
       resumeAudio();
       sfx.boing(1);
       ctx.platform.interact({ type: "run_start" });
@@ -2376,13 +2341,9 @@ window.plethoraBit = {
       sfx.blip();
       if (id === "play") { firstGesture(); beginRun(); return; }
       if (id === "again") { firstGesture(); beginRun(); return; }
-      if (id === "home") { state = "title"; showBoard = false; return; }
+      if (id === "home") { state = "title"; return; }
       if (id === "help") { showHelp = true; return; }
       if (id === "close_help") { showHelp = false; return; }
-      if (id === "board" || id === "board2") { showBoard = true; loadBoard(boardScope); return; }
-      if (id === "close_board") { showBoard = false; return; }
-      if (id === "scope_global") { loadBoard("global"); return; }
-      if (id === "scope_following") { loadBoard("following"); return; }
       if (id === "sound") {
         muted = !muted;
         musicOn = !muted;
@@ -2411,6 +2372,7 @@ window.plethoraBit = {
       pointerX = event.offsetX;
       pointerY = event.offsetY;
       pressOx = pointerX; pressOy = pointerY;
+      steerAnchor = pointerX;
       pressMovedBy = 0;
       pressStart = performance.now();
       // A press that lands on a button must not also steer the hopper.
@@ -2433,7 +2395,7 @@ window.plethoraBit = {
 
       const id = hitButton(x, y);
       if (id) { pressButton(id); return; }
-      if (showHelp || showBoard) return;
+      if (showHelp) return;
       if (state === "title") { firstGesture(); beginRun(); return; }
       if (state === "dead") return;
       if (state === "play" && (wasTap || steerMode === "tilt")) fireBullet(x, y);

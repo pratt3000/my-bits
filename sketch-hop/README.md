@@ -47,14 +47,35 @@ immune to all of it.
 
 ## Controls
 
-Two schemes, both one-handed.
+Two schemes, both one-handed. Both drive a **velocity target** rather than an
+acceleration — with acceleration control every correction fights momentum you
+already committed to, which is what made an earlier build twitchy at speed.
 
-- **Touch** (default) — hold anywhere and drag; the creature steers toward your
-  finger. A *quick tap* fires ink toward the tap point.
-- **Tilt** — opt in from the title card. Motion is a permission-gated
-  capability, so it is never the default and never the only option: if the grant
-  is denied the bit silently stays on touch. A stored tilt preference is
-  re-armed on the next real gesture, because iOS only grants motion from one.
+- **Touch** (default) — hold anywhere, then slide left/right. The offset is
+  measured **from where your finger went down**, not from the creature. An
+  earlier build steered the creature *toward* the finger, which meant a
+  tap-to-shoot on the far side of the screen yanked it across the page: the shot
+  and the steer were reading the same number. Anchored to the touch point, a tap
+  has zero drag and therefore zero steering. While you are held at full
+  deflection the anchor rubber-bands with you, so the control can never get
+  stuck pinned at one edge. A *quick tap* fires ink toward the tap point.
+- **Tilt** — opt in from the title card. A dead zone of 0.075 means a resting
+  hand holds still instead of drifting, and full speed arrives at roughly 21°.
+  Motion is a permission-gated capability, so it is never the default and never
+  the only option: if the grant is denied the bit silently stays on touch. A
+  stored tilt preference is re-armed on the next real gesture, because iOS only
+  grants motion from one.
+
+Measured in the harness at 390×780:
+
+| | |
+| --- | --- |
+| tap-to-shoot sideways drift | **0.0 px** |
+| full deflection | 349 px/s — about 1.1 s to cross the page |
+| 30 px slide | 54 px/s (proportional, not saturated) |
+| coast to rest from neutral | 26 px |
+| coast after lifting the finger | 32 px |
+| resting hand on tilt, over 1.5 s | **0.0 px** drift |
 
 ## Art
 
@@ -116,6 +137,9 @@ sketch-hop/
   (`ctx.music` bed), `haptics`, `storage` (personal best, control and sound
   preference), `motion` (opt-in tilt steering, with touch fallback).
 - Memory: one `records` channel, `score`, submitted once at the end of a run.
+  There is deliberately **no leaderboard UI inside the bit** — Plethora renders
+  its own from this channel, and a second one in the bit is duplicate surface
+  that can only drift out of step with it.
 - No dependencies, no packaged assets.
 - If a WebView has no `OffscreenCanvas`, `makeSurface()` returns null and every
   bake site falls back to drawing live: flat rectangles, a plain ellipse
