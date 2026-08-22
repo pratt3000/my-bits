@@ -1323,7 +1323,7 @@ window.plethoraBit = {
     /* -------------------------------------------------------- game state */
 
     var S = {
-      screen: "menu", courseIx: 0, holeIx: 0, strokes: 0, capped: false,
+      screen: "title", courseIx: 0, holeIx: 0, strokes: 0, capped: false,
       card: [], hole: null, th: null, holed: false, moving: false, rollT: 0,
       ball: { p: v3(0, 0, 0), v: v3(0, 0, 0), portalCd: 0, grounded: false },
       safe: v3(0, 0, 0), sinking: 0, sinkKind: "water", t: 0, banner: 0,
@@ -1790,14 +1790,71 @@ window.plethoraBit = {
 
     /* ---- panels ---------------------------------------------------------- */
 
+    var titlePanel = divEl("position:absolute;inset:0;display:none;flex-direction:column;" +
+      "align-items:center;justify-content:center;pointer-events:auto;color:#f4f7ef;" +
+      "background:linear-gradient(180deg,rgba(6,12,8,0.30) 0%,rgba(6,12,8,0.62) 46%," +
+      "rgba(5,9,6,0.88) 100%);" +
+      "padding:" + (20 + ctx.safeArea.top) + "px 22px " + (24 + ctx.safeArea.bottom) + "px;");
+    root.appendChild(titlePanel);
+
+    var titleArt = divEl("text-align:center;margin-bottom:26px;text-shadow:0 3px 18px rgba(0,0,0,0.7);",
+      '<div style="font-size:13px;font-weight:800;letter-spacing:3px;opacity:0.7;">MINI GOLF</div>' +
+      '<div style="font-size:42px;font-weight:900;letter-spacing:-1.2px;line-height:1.02;' +
+      'margin-top:6px;">Windmill<br>Cove <span style="color:#8ef07a;">3D</span></div>' +
+      '<div style="opacity:0.78;font-size:13.5px;margin-top:12px;line-height:1.5;">' +
+      "Look around the hole, line it up,<br>and hit it. Three courses, 27 holes.</div>");
+    titlePanel.appendChild(titleArt);
+
+    var titleBtns = divEl("display:flex;flex-direction:column;gap:10px;width:100%;max-width:260px;");
+    titlePanel.appendChild(titleBtns);
+    var btnPlay = btnEl(BTN + "width:100%;padding:16px;font-size:18px;border-radius:16px;" +
+      "box-shadow:0 10px 26px rgba(0,0,0,0.4);", "Play");
+    var btnResume = btnEl(BTN2 + "width:100%;padding:13px;font-size:14.5px;border-radius:14px;", "");
+    var btnHowTitle = btnEl(BTN2 + "width:100%;padding:13px;font-size:14.5px;border-radius:14px;",
+      "How to play");
+    var btnMusicTitle = btnEl(BTN2 + "width:100%;padding:11px;font-size:13px;border-radius:14px;" +
+      "opacity:0.85;", "Music: on");
+    titleBtns.appendChild(btnPlay);
+    titleBtns.appendChild(btnResume);
+    titleBtns.appendChild(btnHowTitle);
+    titleBtns.appendChild(btnMusicTitle);
+
+    function syncTitle() {
+      if (roundSave && COURSES[roundSave.c] && roundSave.h > 0) {
+        btnResume.style.display = "block";
+        btnResume.textContent = "Continue · " + COURSES[roundSave.c].name +
+          " hole " + (roundSave.h + 1);
+      } else btnResume.style.display = "none";
+      btnMusicTitle.textContent = "Music: " + (musicOn ? "on" : "off");
+    }
+    ctx.listen(btnPlay, "click", function () {
+      resumeAudio(); haptic("light"); ctx.platform.start();
+      S.screen = "menu"; buildMenu(); showScreen();
+    });
+    ctx.listen(btnResume, "click", function () {
+      resumeAudio(); haptic("light"); ctx.platform.start();
+      var rs = roundSave; roundSave = null;
+      if (rs) startRound(rs.c, rs.card, rs.h);
+    });
+    ctx.listen(btnHowTitle, "click", function () {
+      haptic("light"); helpPanel.style.display = "flex";
+    });
+
     var menuPanel = divEl("position:absolute;inset:0;display:none;flex-direction:column;" +
       "pointer-events:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;color:#f4f7ef;" +
       "background:linear-gradient(180deg,rgba(9,14,10,0.94),rgba(6,9,7,0.97));" +
       "padding:" + (16 + ctx.safeArea.top) + "px 14px " + (18 + ctx.safeArea.bottom) + "px;");
     root.appendChild(menuPanel);
-    menuPanel.appendChild(divEl("text-align:center;margin-bottom:14px;",
-      '<div style="font-size:26px;font-weight:900;letter-spacing:-0.5px;">Windmill Cove 3D</div>' +
-      '<div style="opacity:0.62;font-size:13px;margin-top:3px;">Look around, line it up, hit it</div>'));
+    var menuHead = divEl("display:flex;align-items:center;gap:10px;margin-bottom:14px;");
+    menuPanel.appendChild(menuHead);
+    var btnMenuBack = btnEl(BTN2 + "padding:9px 13px;font-size:15px;border-radius:12px;", "‹");
+    menuHead.appendChild(btnMenuBack);
+    menuHead.appendChild(divEl("flex:1;text-align:center;padding-right:38px;",
+      '<div style="font-size:21px;font-weight:900;letter-spacing:-0.4px;">Choose a course</div>' +
+      '<div style="opacity:0.6;font-size:12px;margin-top:2px;">Nine holes each</div>'));
+    ctx.listen(btnMenuBack, "click", function () {
+      haptic("light"); S.screen = "title"; showScreen();
+    });
     var menuList = divEl("display:flex;flex-direction:column;gap:9px;");
     menuPanel.appendChild(menuList);
     var menuFoot = divEl("display:flex;gap:8px;margin-top:13px;justify-content:center;");
@@ -1828,17 +1885,6 @@ window.plethoraBit = {
         });
         menuList.appendChild(card);
       });
-      if (roundSave && COURSES[roundSave.c] && roundSave.h > 0) {
-        var rc = COURSES[roundSave.c];
-        var cont = btnEl(BTN + "width:100%;margin-bottom:9px;",
-          "Continue " + rc.name + " · hole " + (roundSave.h + 1));
-        ctx.listen(cont, "click", function () {
-          resumeAudio(); haptic("light"); ctx.platform.start();
-          var rs = roundSave; roundSave = null;
-          startRound(rs.c, rs.card, rs.h);
-        });
-        menuList.insertBefore(cont, menuList.firstChild);
-      }
     }
 
     var holeEnd = divEl("position:absolute;inset:0;display:none;align-items:center;" +
@@ -2029,12 +2075,14 @@ window.plethoraBit = {
       hud.style.display = (p || S.screen === "holeEnd") ? "block" : "none";
       padWrap.style.display = p ? "flex" : "none";
       leftPad.style.display = p ? "flex" : "none";
+      titlePanel.style.display = S.screen === "title" ? "flex" : "none";
       menuPanel.style.display = S.screen === "menu" ? "flex" : "none";
       holeEnd.style.display = S.screen === "holeEnd" ? "flex" : "none";
       roundEnd.style.display = S.screen === "roundEnd" ? "flex" : "none";
       if (S.screen === "holeEnd") showHoleEnd();
       if (S.screen === "roundEnd") { showRoundEnd(); roundEnd.scrollTop = 0; }
       if (S.screen === "menu") { menuPanel.scrollTop = 0; stopMusic(); }
+      if (S.screen === "title") { syncTitle(); stopMusic(); }
       syncHud();
     }
 
@@ -2049,6 +2097,15 @@ window.plethoraBit = {
       musicOn = !musicOn;
       btnMusic.textContent = "Music: " + (musicOn ? "on" : "off");
       if (!musicOn) stopMusic(); else if (S.screen === "play") startMusic(course().theme);
+      btnMusicTitle.textContent = "Music: " + (musicOn ? "on" : "off");
+      if (ctx.capabilities.storage) { try { ctx.storage.set("music3d", musicOn); } catch (_) {} }
+      haptic("light");
+    });
+    ctx.listen(btnMusicTitle, "click", function () {
+      musicOn = !musicOn;
+      btnMusicTitle.textContent = "Music: " + (musicOn ? "on" : "off");
+      btnMusic.textContent = "Music: " + (musicOn ? "on" : "off");
+      if (!musicOn) stopMusic();
       if (ctx.capabilities.storage) { try { ctx.storage.set("music3d", musicOn); } catch (_) {} }
       haptic("light");
     });
@@ -2112,6 +2169,19 @@ window.plethoraBit = {
         }
       }
 
+      if (S.screen === "title") {
+        cam.yaw += dt * 0.075;
+        cam.wantDist = 21;
+        cam.pitch = 0.46;
+        var tb = holeBounds(S.hole);
+        cam.tx = lerp(cam.tx, tb.cx, 1 - Math.pow(0.2, dt));
+        cam.ty = lerp(cam.ty, tb.cy + 1.2, 1 - Math.pow(0.2, dt));
+        cam.tz = lerp(cam.tz, tb.cz, 1 - Math.pow(0.2, dt));
+        cam.dist = lerp(cam.dist, cam.wantDist, 1 - Math.pow(0.15, dt));
+        applyCamera();
+        return;
+      }
+
       // camera: follow the ball unless the player has panned away
       var tx = S.ball.p.x + cam.panX, ty = S.ball.p.y + (S.survey ? 1.5 : 0), tz = S.ball.p.z + cam.panZ;
       var k = S.moving ? 1 - Math.pow(0.001, dt) : 1 - Math.pow(0.02, dt);
@@ -2150,7 +2220,7 @@ window.plethoraBit = {
       }
 
       if (ballMesh) {
-        ballMesh.visible = !S.holed && S.sinking <= 0;
+        ballMesh.visible = S.screen !== "title" && !S.holed && S.sinking <= 0;
         ballMesh.position.set(S.ball.p.x, S.ball.p.y, S.ball.p.z);
         var sp = hlen(S.ball.v);
         if (sp > 0.01) {                       // roll the ball as it travels
@@ -2167,6 +2237,7 @@ window.plethoraBit = {
 
       if (aimGroup) {
         var show = S.screen === "play" && !S.moving && !S.holed && S.sinking <= 0;
+        if (S.screen === "title") show = false;
         aimGroup.visible = show;
         if (show) {
           var pw = S.charging ? S.power : 0.34;
@@ -2205,7 +2276,7 @@ window.plethoraBit = {
     S.ball.p.x = S.hole.tee.x; S.ball.p.y = S.hole.tee.y; S.ball.p.z = S.hole.tee.z;
     cam.yaw = Math.atan2(S.hole.cup.x - S.hole.tee.x, S.hole.cup.z - S.hole.tee.z);
     cam.tx = S.ball.p.x; cam.ty = S.ball.p.y; cam.tz = S.ball.p.z;
-    cam.dist = cam.wantDist = 13; cam.pitch = 0.55;
+    cam.dist = cam.wantDist = 21; cam.pitch = 0.46;
     applyCamera();
     renderer.render(scene, camera);
 

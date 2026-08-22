@@ -8,6 +8,11 @@ player, a fewest-strokes leaderboard per course.
 
 ## Playing it
 
+The front door is a title screen — **Play** and **How to play**, over a slow
+orbit of the first hole. Play opens the course list; the course list has a way
+back. A round left part-way through surfaces as **Continue** on the title.
+
+
 - **Drag one finger** to swing the camera around the ball. Where you look is
   where you aim — the arrow on the ground is your line. Aiming and looking are
   deliberately the same act, which is how the games this imitates do it.
@@ -21,9 +26,9 @@ player, a fewest-strokes leaderboard per course.
 
 | Course | Theme | Par | What it does to you |
 | --- | --- | --- | --- |
-| 🌲 Fernwood Heights | Forest | 30 | Tiered greens, windmills, a creek, a mill pond |
+| 🌲 Fernwood Heights | Forest | 29 | Tiered greens, windmills, a creek, a mill pond |
 | 🏴‍☠️ Buccaneer Reef | Pirate | 32 | Causeways over water, cannon pads, sliding gates, a whirlpool |
-| 🛰️ Orbital Deck | Space | 31 | Ice, gravity wells, a wormhole, a black hole, a long way down |
+| 🛰️ Orbital Deck | Space | 32 | Ice, gravity wells, a wormhole, a black hole, a long way down |
 
 ## What being 3D actually buys
 
