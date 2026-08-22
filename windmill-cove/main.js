@@ -1726,11 +1726,11 @@ window.plethoraBit = {
       try { ctx.storage.set("best", best); } catch (_) {}
     }
     function saveRound() {
+      var v = (S.screen === "play" || S.screen === "holeEnd")
+        ? { c: S.courseIx, h: S.holeIx, card: S.card.slice() } : null;
+      roundSave = v;
       if (!ctx.capabilities.storage) return;
-      try {
-        ctx.storage.set("round", S.screen === "play" || S.screen === "holeEnd"
-          ? { c: S.courseIx, h: S.holeIx, card: S.card } : null);
-      } catch (_) {}
+      try { ctx.storage.set("round", v); } catch (_) {}
     }
 
     function course() { return COURSES[S.courseIx]; }
@@ -1824,7 +1824,7 @@ window.plethoraBit = {
         S.capped = true;
         flash("Stroke limit — picked up");
         ctx.timeout(function () {
-          if (!S.holed) finishHole(strokeCap(S.hole.par));
+          if (!S.holed && S.screen === "play") finishHole(strokeCap(S.hole.par));
         }, 700);
       }
     }
@@ -1843,6 +1843,7 @@ window.plethoraBit = {
       try { ctx.music.sting(strokes <= par ? "success" : "tap"); } catch (_) {}
       ctx.platform.milestone("hole_out", { hole: S.holeIx + 1, strokes: strokes, par: par });
       ctx.timeout(function () {
+        if (S.screen !== "play") return;
         S.screen = "holeEnd";
         showScreen();
       }, 900);
@@ -2261,6 +2262,7 @@ window.plethoraBit = {
 
     ctx.listen(btnBack, "click", function () {
       haptic("light");
+      saveRound();                       // bank the round before stepping out
       S.screen = "menu"; buildMenu(); showScreen();
     });
     ctx.listen(btnHelp, "click", function () { haptic("light"); helpPanel.style.display = "flex"; });
