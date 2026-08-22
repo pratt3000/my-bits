@@ -633,7 +633,14 @@ window.plethoraBit = {
      * ================================================================ */
     let AC = null;
     let master = null;
-    let muted = false;
+    // Player settings. Sensitivity is stored per scheme because the right
+    // number for a thumb and the right number for a wrist are not the same.
+    let sens = { touch: 1, tilt: 1 };
+    let invertTilt = false;
+    let sfxOn = true;
+    let hapticsOn = true;
+    let shakeOn = true;
+    const sensOf = () => clamp(sens[steerMode] || 1, SENS_MIN, SENS_MAX);
     let noiseBuf = null;
 
     function audioReady() {
@@ -674,7 +681,7 @@ window.plethoraBit = {
     }
 
     function tone(type, f0, f1, dur, peak, delay) {
-      if (!AC || muted) return;
+      if (!AC || !sfxOn) return;
       const t0 = AC.currentTime + (delay || 0);
       const o = AC.createOscillator();
       o.type = type;
@@ -686,7 +693,7 @@ window.plethoraBit = {
     }
 
     function noise(dur, peak, filterType, f0, f1, q, delay) {
-      if (!AC || muted || !noiseBuf) return;
+      if (!AC || !sfxOn || !noiseBuf) return;
       const t0 = AC.currentTime + (delay || 0);
       const src = AC.createBufferSource();
       src.buffer = noiseBuf;
@@ -705,7 +712,7 @@ window.plethoraBit = {
     const sfx = {
       // The jump. Short, springy, pitched up as the climb gets faster.
       boing(power) {
-        if (!AC || muted) return;
+        if (!AC || !sfxOn) return;
         const p = clamp(power || 1, 0.6, 2.4);
         const t0 = AC.currentTime;
         const o = AC.createOscillator();
@@ -727,7 +734,7 @@ window.plethoraBit = {
         noise(0.035, 0.07, "highpass", 1800, 900, 1, 0);
       },
       spring() {
-        if (!AC || muted) return;
+        if (!AC || !sfxOn) return;
         const t0 = AC.currentTime;
         const o = AC.createOscillator();
         o.type = "sine";
@@ -780,7 +787,7 @@ window.plethoraBit = {
       blip() { tone("square", 700, 700, 0.045, 0.09, 0); },
       thud() { noise(0.1, 0.14, "lowpass", 700, 180, 2, 0); },
       ufo() {
-        if (!AC || muted) return;
+        if (!AC || !sfxOn) return;
         tone("sine", 900, 1500, 0.5, 0.10, 0);
         tone("sine", 1350, 700, 0.5, 0.07, 0.06);
       }
@@ -789,7 +796,7 @@ window.plethoraBit = {
     // Sustained thrust for propeller / jetpack / rocket. One voice, retuned.
     let thrust = null;
     function startThrust(kind) {
-      if (!AC || muted || thrust) return;
+      if (!AC || !sfxOn || thrust) return;
       try {
         const src = AC.createBufferSource();
         src.buffer = noiseBuf;
@@ -835,6 +842,7 @@ window.plethoraBit = {
     let musicHandle = null;
     async function startMusic() {
       if (!ctx.capabilities || !ctx.capabilities.backgroundMusic || !musicOn) return;
+      if (musicHandle) return;
       try {
         await ctx.music.unlock();
         musicHandle = await ctx.music.play({
@@ -869,8 +877,9 @@ window.plethoraBit = {
     // Steering is a velocity target, not an acceleration. Acceleration control
     // means every correction fights momentum you already committed to, which is
     // what made this twitchy at speed.
-    const MAX_VX = 360;          // px/s at full deflection
-    const STEER_EASE = 0.0018;   // per-second approach to the target velocity
+    const MAX_VX = 420;          // px/s at full deflection, before the user's multiplier
+    const SENS_MIN = 0.5, SENS_MAX = 2.0;
+    const STEER_EASE = 0.00006;  // per-second approach to the target velocity (tau about 0.11s)
     const TOUCH_DEAD = 9;        // px of slack before a drag steers at all
     const TOUCH_FULL = 132;      // px of drag for full speed
     const TILT_DEAD = 0.075;     // normalized tilt ignored, so a resting hand holds still
@@ -1161,7 +1170,7 @@ window.plethoraBit = {
       if (!isFinite(t)) t = 0;
       // Normalize: sensors report roughly -1..1 or degrees depending on host.
       if (Math.abs(t) > 3) t = t / 45;
-      return clamp(t, -1, 1);
+      return clamp(t, -1, 1) * (invertTilt ? -1 : 1);
     }
 
     function fireBullet(tx, ty) {
@@ -1208,7 +1217,16 @@ window.plethoraBit = {
       }
     }
 
-    function shake(amp) { shakeAmp = Math.max(shakeAmp, amp); shakeT = 0.32; }
+    function shake(amp) {
+      if (!shakeOn) return;
+      shakeAmp = Math.max(shakeAmp, amp);
+      shakeT = 0.32;
+    }
+
+    function haptic(kind) {
+      if (!hapticsOn) return;
+      try { ctx.platform.haptic(kind); } catch (err) { /* host without haptics */ }
+    }
 
     function die(reason) {
       if (state !== "play") return;
@@ -1217,7 +1235,7 @@ window.plethoraBit = {
       deathAt = performance.now();
       stopThrust();
       if (reason === "fall") sfx.fall(); else sfx.hurt();
-      ctx.platform.haptic("error");
+      haptic("error");
       duck(0.6, 900);
       shake(reason === "fall" ? 0 : 12 * U);
       addParticles(hopper.x, hopper.y, 22, GREEN, 380 * U, 0.9, 6 * U);
@@ -1230,9 +1248,9 @@ window.plethoraBit = {
     function giveBounce(v, kind) {
       hopper.vy = v * U;
       hopper.squash = -1;
-      if (kind === "spring") { sfx.spring(); ctx.platform.haptic("medium"); }
-      else if (kind === "trampoline") { sfx.trampoline(); ctx.platform.haptic("medium"); hopper.spin = Math.PI * 4; }
-      else { sfx.boing(1 + clamp(climb / 20000, 0, 1)); ctx.platform.haptic("light"); }
+      if (kind === "spring") { sfx.spring(); haptic("medium"); }
+      else if (kind === "trampoline") { sfx.trampoline(); haptic("medium"); hopper.spin = Math.PI * 4; }
+      else { sfx.boing(1 + clamp(climb / 20000, 0, 1)); haptic("light"); }
     }
 
     function grantPower(type) {
@@ -1247,7 +1265,7 @@ window.plethoraBit = {
         startThrust(type);
         sfx.powerup();
       }
-      ctx.platform.haptic("success");
+      haptic("success");
       ctx.platform.milestone("powerup", { type });
       duck(0.35, 500);
       addParticles(hopper.x, hopper.y, 16, YELLOW, 260 * U, 0.7, 5 * U);
@@ -1268,7 +1286,7 @@ window.plethoraBit = {
           p.falling = true;
           p.vy = 60 * U;
           sfx.crack();
-          ctx.platform.haptic("light");
+          haptic("light");
           addParticles(p.x, p.y, 10, BROWN, 160 * U, 0.7, 4 * U);
         }
         return;
@@ -1295,20 +1313,21 @@ window.plethoraBit = {
       // and the steer were reading the same number. Anchored to the touch
       // point, a tap has zero drag and therefore zero steering, and only a
       // deliberate slide moves anything.
+      const vMax = MAX_VX * U * sensOf();
       let targetVx = 0;
       if (steerMode === "tilt" && tiltReady) {
         tiltValue = lerp(tiltValue, readTilt(), 1 - Math.pow(TILT_SMOOTH, dt));
-        targetVx = clamp(deadzone(tiltValue, TILT_DEAD) / TILT_FULL, -1, 1) * MAX_VX * U;
+        targetVx = clamp(deadzone(tiltValue, TILT_DEAD) / TILT_FULL, -1, 1) * vMax;
       } else if (pointerDown) {
         const maxOff = TOUCH_FULL * U;
         let dx = pointerX - steerAnchor;
         // Rubber-band the anchor so the control can never get stuck pinned.
         if (dx > maxOff) { steerAnchor = pointerX - maxOff; dx = maxOff; }
         else if (dx < -maxOff) { steerAnchor = pointerX + maxOff; dx = -maxOff; }
-        targetVx = clamp(deadzone(dx, TOUCH_DEAD * U) / maxOff, -1, 1) * MAX_VX * U;
+        targetVx = clamp(deadzone(dx, TOUCH_DEAD * U) / maxOff, -1, 1) * vMax;
       }
       h.vx += (targetVx - h.vx) * (1 - Math.pow(STEER_EASE, dt));
-      h.vx = clamp(h.vx, -MAX_VX * U, MAX_VX * U);
+      h.vx = clamp(h.vx, -vMax, vMax);
       h.x += h.vx * dt;
 
       // Wrap around the sheet edges
@@ -1416,7 +1435,7 @@ window.plethoraBit = {
             m.alive = false;
             bopped++;
             sfx.squish();
-            ctx.platform.haptic("medium");
+            haptic("medium");
             addParticles(m.x, m.y, 14, PURPLE, 220 * U, 0.7, 5 * U);
             monsters.splice(i, 1);
             if (!hopper.power) giveBounce(MONSTER_BOUNCE_V, "plain");
@@ -1854,6 +1873,7 @@ window.plethoraBit = {
       "(": ".7,0 .34,.5 .7,1",
       ")": ".3,0 .66,.5 .3,1",
       "+": ".12,.55 .82,.55|.47,.22 .47,.88",
+      "\u00d7": ".18,.3 .8,.78|.8,.3 .18,.78",
       "★": ".5,0 .63,.36 1,.38 .71,.62 .81,1 .5,.78 .19,1 .29,.62 0,.38 .37,.36 .5,0"
     };
     const NARROW = { "I": .62, "1": .72, "!": .42, "'": .38, ":": .42, ".": .42, ",": .42, "-": .78, "(": .5, ")": .5 };
@@ -1955,7 +1975,32 @@ window.plethoraBit = {
     }
 
     let buttons = [];
-    function resetButtons() { buttons = []; }
+    let sliders = [];
+    function resetButtons() { buttons = []; sliders = []; }
+
+    function inkSlider(id, x, y, w, h, value) {
+      const midY = y + h * 0.5;
+      const hx = x + w * clamp(value, 0, 1);
+      inkLine(g, x, midY, x + w, midY, 3.2 * U, 1.3, makeRng(id.length * 41 + 5), INK_SOFT);
+      if (hx > x + 1) inkLine(g, x, midY, hx, midY, 4 * U, 1.1, makeRng(77), GREEN_DARK);
+      // tick at the default so 1.0x is findable by feel
+      const dx = x + w * ((1 - SENS_MIN) / (SENS_MAX - SENS_MIN));
+      inkLine(g, dx, midY - 7 * U, dx, midY + 7 * U, 1.8 * U, 0.8, makeRng(78), "rgba(109,99,80,0.55)");
+      const knob = blobPoints(hx, midY, 11 * U, 11 * U, 0.06, makeRng(79), 10);
+      inkFill(g, knob, GREEN, 2.6 * U, true, null);
+      sliders.push({ id, x, y, w, h });
+      return { id, x, w };
+    }
+
+    function hitSlider(px, py) {
+      for (let i = sliders.length - 1; i >= 0; i--) {
+        const s = sliders[i];
+        // generous vertical padding: a slider on a phone is a thumb target
+        if (px >= s.x - 22 * U && px <= s.x + s.w + 22 * U &&
+            py >= s.y - 10 * U && py <= s.y + s.h + 10 * U) return s;
+      }
+      return null;
+    }
 
     function drawSpeaker(x, y, s, on) {
       const r = makeRng(606);
@@ -1979,6 +2024,20 @@ window.plethoraBit = {
         inkLine(g, x + s * 0.22, y - s * 0.26, x + s * 0.58, y + s * 0.26, s * 0.12, s * 0.03, r, INK);
         inkLine(g, x + s * 0.58, y - s * 0.26, x + s * 0.22, y + s * 0.26, s * 0.12, s * 0.03, r, INK);
       }
+    }
+
+    function drawGear(x, y, s) {
+      const r = makeRng(303);
+      const teeth = 8;
+      const pts = [];
+      for (let i = 0; i < teeth * 2; i++) {
+        const a = (i / (teeth * 2)) * Math.PI * 2;
+        const rad = i % 2 === 0 ? s * 0.52 : s * 0.36;
+        pts.push({ x: x + Math.cos(a) * rad, y: y + Math.sin(a) * rad });
+      }
+      inkFill(g, wobblePoints(pts, s * 0.03, r), "rgba(255,255,255,0)", s * 0.14, true, null);
+      const hole = blobPoints(x, y, s * 0.16, s * 0.16, 0.05, makeRng(304), 8);
+      inkFill(g, hole, PAPER, s * 0.12, true, null);
     }
 
     function drawSwatch(x, y, s, fill) {
@@ -2038,20 +2097,39 @@ window.plethoraBit = {
       try {
         const v = await ctx.storage.get("best");
         if (typeof v === "number" && isFinite(v)) best = v;
-        const m = await ctx.storage.get("steer");
-        if (m === "tilt" || m === "touch") steerMode = m;
-        const s = await ctx.storage.get("sound");
-        if (s === false) { muted = true; musicOn = false; }
+        const s = await ctx.storage.get("settings");
+        if (s && typeof s === "object") {
+          if (s.steer === "tilt" || s.steer === "touch") steerMode = s.steer;
+          if (s.sens && typeof s.sens === "object") {
+            if (isFinite(s.sens.touch)) sens.touch = clamp(s.sens.touch, SENS_MIN, SENS_MAX);
+            if (isFinite(s.sens.tilt)) sens.tilt = clamp(s.sens.tilt, SENS_MIN, SENS_MAX);
+          }
+          if (typeof s.invertTilt === "boolean") invertTilt = s.invertTilt;
+          if (typeof s.sfx === "boolean") sfxOn = s.sfx;
+          if (typeof s.music === "boolean") musicOn = s.music;
+          if (typeof s.haptics === "boolean") hapticsOn = s.haptics;
+          if (typeof s.shake === "boolean") shakeOn = s.shake;
+        }
       } catch (err) { /* first run */ }
     }
+
+    async function saveSettings() {
+      if (!ctx.capabilities || !ctx.capabilities.storage) return;
+      try {
+        await ctx.storage.set("settings", {
+          steer: steerMode, sens: sens, invertTilt: invertTilt,
+          sfx: sfxOn, music: musicOn, haptics: hapticsOn, shake: shakeOn
+        });
+      } catch (err) { /* storage full or denied */ }
+    }
+
     async function saveBest() {
       if (score > best) best = score;
       if (!ctx.capabilities || !ctx.capabilities.storage) return;
       try {
         await ctx.storage.set("best", best);
-        await ctx.storage.set("steer", steerMode);
-        await ctx.storage.set("sound", !muted);
       } catch (err) { /* storage full or denied */ }
+      saveSettings();
     }
 
     async function submitScore() {
@@ -2069,6 +2147,8 @@ window.plethoraBit = {
      * SCREENS
      * ================================================================ */
     let showHelp = false;
+    let showSettings = false;
+    let activeSlider = null;
     let titleT = 0;
 
     function drawHud() {
@@ -2112,10 +2192,15 @@ window.plethoraBit = {
         inkText("SHIELD " + Math.ceil(hopper.shieldT), W - 16 * U, ry, 15 * U, TEAL, "right", 700, false);
       }
 
+      const gap = 8 * U;
+      const by0 = st - 4 * U;
       const sx = W - bs - 14 * U;
-      inkButton("sound", "", sx, st - 4 * U, bs, bs, "rgba(255,255,255,0.85)", 19 * U);
-      drawSpeaker(sx + bs * 0.52, st - 4 * U + bs * 0.5, bs * 0.46, !muted);
-      inkButton("help", "?", W - bs * 2 - 22 * U, st - 4 * U, bs, bs, "rgba(255,255,255,0.85)", 22 * U);
+      inkButton("sound", "", sx, by0, bs, bs, "rgba(255,255,255,0.85)", 19 * U);
+      drawSpeaker(sx + bs * 0.52, by0 + bs * 0.5, bs * 0.46, sfxOn || musicOn);
+      const gx = sx - bs - gap;
+      inkButton("settings", "", gx, by0, bs, bs, "rgba(255,255,255,0.85)", 19 * U);
+      drawGear(gx + bs * 0.5, by0 + bs * 0.5, bs * 0.62);
+      inkButton("help", "?", gx - bs - gap, by0, bs, bs, "rgba(255,255,255,0.85)", 22 * U);
     }
 
     function drawTitle() {
@@ -2145,14 +2230,9 @@ window.plethoraBit = {
       inkButton("play", "TAP TO PLAY", cx - bw / 2, by, bw, 56 * U, GREEN, 26 * U);
 
       by += 70 * U;
-      const half = (bw - 10 * U) / 2;
-      inkButton("mode_touch", "TOUCH", cx - bw / 2, by, half, 44 * U,
-        steerMode === "touch" ? YELLOW : "rgba(255,255,255,0.9)", 18 * U);
-      inkButton("mode_tilt", "TILT", cx - bw / 2 + half + 10 * U, by, half, 44 * U,
-        steerMode === "tilt" ? YELLOW : "rgba(255,255,255,0.9)", 18 * U);
-
-      by += 58 * U;
       inkButton("help", "HOW TO PLAY", cx - bw / 2, by, bw, 44 * U, "rgba(255,255,255,0.9)", 18 * U);
+      by += 54 * U;
+      inkButton("settings", "SETTINGS", cx - bw / 2, by, bw, 44 * U, "rgba(255,255,255,0.9)", 18 * U);
       by += 44 * U;
 
       // Anchored to the bottom of the button stack, not to the bottom of the
@@ -2202,6 +2282,73 @@ window.plethoraBit = {
         ly += rowH;
       }
       inkButton("close_help", "GOT IT", px + pw / 2 - 68 * U, py + ph - 52 * U, 136 * U, 40 * U, GREEN, 19 * U);
+    }
+
+    function drawSettings() {
+      const showInvert = steerMode === "tilt";
+      const showHaptics = !!(ctx.capabilities && ctx.capabilities.haptics);
+      const toggles = 3 + (showInvert ? 1 : 0) + (showHaptics ? 1 : 0);
+
+      // Size from the content that is actually drawn. The sensitivity row is
+      // taller than a toggle because the slider sits under its label, and
+      // leaving that out ran the footer buttons over the last toggle.
+      const headerH = 62 * U, sensExtra = 24 * U;
+      const doneH = 42 * U, resetH = 32 * U, footPad = 18 * U, footGap = 8 * U;
+      const footerH = footPad + doneH + footGap + resetH + 14 * U;
+      let rowH = 34 * U;
+      const needed = () => headerH + rowH * (2 + toggles) + sensExtra + footerH;
+      const maxH = H * 0.92;
+      if (needed() > maxH) rowH = Math.max(24 * U, rowH * (maxH - headerH - sensExtra - footerH) / (rowH * (2 + toggles)));
+      const pw = Math.min(348 * U, W * 0.92);
+      const ph = Math.min(maxH, needed());
+      const px = (W - pw) / 2, py = (H - ph) / 2;
+      g.fillStyle = "rgba(30,28,22,0.38)";
+      g.fillRect(0, 0, W, H);
+      inkPanel(px, py, pw, ph, "rgba(252,250,240,0.98)", 91);
+      inkTextFit("SETTINGS", px + pw / 2, py + 28 * U, 25 * U, pw - 40 * U, INK, "center", 700, false);
+
+      const lx = px + 22 * U;
+      const rx = px + pw - 24 * U;
+      const labelW = pw * 0.44;
+      let ly = py + headerH;
+
+      // Steering scheme
+      inkTextFit("STEERING", lx, ly + rowH * 0.5, 14 * U, labelW, INK, "left", 700, false);
+      const tw = 60 * U;
+      inkButton("set_touch", "TOUCH", rx - tw * 2 - 8 * U, ly + 3 * U, tw, rowH - 6 * U,
+        steerMode === "touch" ? YELLOW : "rgba(255,255,255,0.9)", 12 * U);
+      inkButton("set_tilt", "TILT", rx - tw, ly + 3 * U, tw, rowH - 6 * U,
+        steerMode === "tilt" ? YELLOW : "rgba(255,255,255,0.9)", 12 * U);
+      ly += rowH;
+
+      // Sensitivity, for whichever scheme is active
+      const s = sensOf();
+      inkTextFit((steerMode === "tilt" ? "TILT" : "TOUCH") + " SENSITIVITY", lx, ly + rowH * 0.4,
+        14 * U, labelW * 1.4, INK, "left", 700, false);
+      inkTextFit(s.toFixed(2).replace(/0$/, "") + "\u00d7", rx, ly + rowH * 0.4, 15 * U, 70 * U,
+        GREEN_DARK, "right", 700, false);
+      const sliderW = rx - lx;
+      inkSlider("sens", lx, ly + rowH * 0.66, sliderW, 20 * U,
+        (s - SENS_MIN) / (SENS_MAX - SENS_MIN));
+      ly += rowH + sensExtra;
+
+      function toggleRow(id, label, on) {
+        inkTextFit(label, lx, ly + rowH * 0.5, 14 * U, labelW, INK, "left", 700, false);
+        inkButton(id, on ? "ON" : "OFF", rx - 60 * U, ly + 3 * U, 60 * U, rowH - 6 * U,
+          on ? GREEN : "rgba(255,255,255,0.9)", 12 * U);
+        ly += rowH;
+      }
+      if (showInvert) toggleRow("set_invert", "INVERT TILT", invertTilt);
+      toggleRow("set_sfx", "SOUND", sfxOn);
+      toggleRow("set_music", "MUSIC", musicOn);
+      if (showHaptics) toggleRow("set_haptics", "VIBRATION", hapticsOn);
+      toggleRow("set_shake", "SCREEN SHAKE", shakeOn);
+
+      const bottom = py + ph - footPad;
+      inkButton("set_done", "DONE", px + 22 * U, bottom - doneH, pw - 44 * U, doneH, GREEN, 21 * U);
+      inkButton("set_reset", best > 0 ? "RESET BEST (" + best + ")" : "RESET BEST",
+        px + 22 * U, bottom - doneH - resetH - footGap, pw - 44 * U, resetH,
+        "rgba(255,255,255,0.9)", 13 * U);
     }
 
     const DEATH_TEXT = {
@@ -2292,6 +2439,7 @@ window.plethoraBit = {
       else drawHud();
       if (state === "dead") drawGameOver();
       if (showHelp) drawHelp();
+      if (showSettings) drawSettings();
     }
 
     function frame(dtMs) {
@@ -2302,7 +2450,7 @@ window.plethoraBit = {
         if (Math.abs(spriteScale - U) > 0.001) buildSprites();
       }
       titleT += dt;
-      if (state === "play" && !showHelp) updatePlay(dt);
+      if (state === "play" && !showHelp && !showSettings) updatePlay(dt);
       updateParticles(dt);
       render();
       if (!firstFrameDone) {
@@ -2328,10 +2476,33 @@ window.plethoraBit = {
       }
     }
 
+    function applyMusic() {
+      if (musicOn) { resumeAudio(); startMusic(); }
+      else {
+        try { ctx.music.stop({ fadeOutMs: 250 }); } catch (err) { /* not playing */ }
+        musicHandle = null;
+      }
+    }
+
+    function openSettings() {
+      showSettings = true;
+      // The game is paused behind the panel, so the sustained thrust voice
+      // would otherwise loop under a frozen screen.
+      stopThrust();
+    }
+
+    function closeSettings() {
+      showSettings = false;
+      activeSlider = null;
+      if (state === "play" && hopper && hopper.power) startThrust(hopper.power);
+      saveSettings();
+    }
+
     function beginRun() {
       resetRun();
       state = "play";
       showHelp = false;
+      showSettings = false;
       resumeAudio();
       sfx.boing(1);
       ctx.platform.interact({ type: "run_start" });
@@ -2344,24 +2515,57 @@ window.plethoraBit = {
       if (id === "home") { state = "title"; return; }
       if (id === "help") { showHelp = true; return; }
       if (id === "close_help") { showHelp = false; return; }
-      if (id === "sound") {
-        muted = !muted;
-        musicOn = !muted;
-        if (muted) { stopThrust(); try { ctx.music.stop({ fadeOutMs: 250 }); } catch (e) { /* not playing */ } }
-        else { resumeAudio(); startMusic(); }
-        saveBest();
-        return;
-      }
-      if (id === "mode_touch") { steerMode = "touch"; saveBest(); return; }
-      if (id === "mode_tilt") {
+      if (id === "settings") { openSettings(); return; }
+      if (id === "set_done") { closeSettings(); return; }
+      if (id === "set_touch") { steerMode = "touch"; saveSettings(); return; }
+      if (id === "set_tilt") {
         const ok = await enableTilt();
         steerMode = ok ? "tilt" : "touch";
-        if (!ok) {
-          // Denied or unsupported: stay on touch and say so on the card.
-          showHelp = true;
-        }
-        saveBest();
+        saveSettings();
         return;
+      }
+      if (id === "set_invert") { invertTilt = !invertTilt; saveSettings(); return; }
+      if (id === "set_sfx") {
+        sfxOn = !sfxOn;
+        if (!sfxOn) stopThrust(); else { resumeAudio(); sfx.blip(); }
+        saveSettings();
+        return;
+      }
+      if (id === "set_music") { musicOn = !musicOn; applyMusic(); saveSettings(); return; }
+      if (id === "set_haptics") {
+        hapticsOn = !hapticsOn;
+        if (hapticsOn) haptic("light");
+        saveSettings();
+        return;
+      }
+      if (id === "set_shake") { shakeOn = !shakeOn; saveSettings(); return; }
+      if (id === "set_reset") {
+        best = 0;
+        if (ctx.capabilities && ctx.capabilities.storage) {
+          try { await ctx.storage.set("best", 0); } catch (err) { /* denied */ }
+        }
+        haptic("warning");
+        return;
+      }
+      // The speaker is a master quick-mute; the panel has the two separately.
+      if (id === "sound") {
+        const anyOn = sfxOn || musicOn;
+        sfxOn = !anyOn;
+        musicOn = !anyOn;
+        if (!sfxOn) stopThrust();
+        applyMusic();
+        saveSettings();
+        return;
+      }
+    }
+
+    // Sliders are dragged, so they are captured on press and tracked on move
+    // rather than resolved on release like the buttons.
+    function applySlider(s, px) {
+      const v = clamp((px - s.x) / s.w, 0, 1);
+      if (s.id === "sens") {
+        const raw = SENS_MIN + v * (SENS_MAX - SENS_MIN);
+        sens[steerMode] = clamp(Math.round(raw / 0.05) * 0.05, SENS_MIN, SENS_MAX);
       }
     }
 
@@ -2375,8 +2579,15 @@ window.plethoraBit = {
       steerAnchor = pointerX;
       pressMovedBy = 0;
       pressStart = performance.now();
-      // A press that lands on a button must not also steer the hopper.
-      if (hitButton(pointerX, pointerY)) pointerDown = false;
+      // A press that lands on a control must not also steer the hopper.
+      const s = hitSlider(pointerX, pointerY);
+      if (s) {
+        activeSlider = { id: s.id, x: s.x, w: s.w };
+        applySlider(activeSlider, pointerX);
+        pointerDown = false;
+      } else if (hitButton(pointerX, pointerY)) {
+        pointerDown = false;
+      }
     }, { passive: false });
 
     ctx.listen(canvas, "pointermove", event => {
@@ -2384,6 +2595,7 @@ window.plethoraBit = {
       pressMovedBy = Math.max(pressMovedBy, Math.hypot(x - pressOx, y - pressOy));
       pointerX = x;
       pointerY = y;
+      if (activeSlider) applySlider(activeSlider, x);
     }, { passive: true });
 
     function endPress(event) {
@@ -2393,16 +2605,22 @@ window.plethoraBit = {
       const wasTap = dur < 320 && pressMovedBy < 14 * U;
       pointerDown = false;
 
+      if (activeSlider) {
+        applySlider(activeSlider, x);
+        activeSlider = null;
+        saveSettings();
+        return;
+      }
       const id = hitButton(x, y);
       if (id) { pressButton(id); return; }
-      if (showHelp) return;
+      if (showHelp || showSettings) return;
       if (state === "title") { firstGesture(); beginRun(); return; }
       if (state === "dead") return;
       if (state === "play" && (wasTap || steerMode === "tilt")) fireBullet(x, y);
     }
 
     ctx.listen(canvas, "pointerup", event => { event.preventDefault(); endPress(event); }, { passive: false });
-    ctx.listen(canvas, "pointercancel", () => { pointerDown = false; }, { passive: true });
+    ctx.listen(canvas, "pointercancel", () => { pointerDown = false; activeSlider = null; }, { passive: true });
     ctx.listen(canvas, "contextmenu", event => event.preventDefault(), { passive: false });
 
     /* ---- Boot -------------------------------------------------------- */

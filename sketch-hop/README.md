@@ -47,9 +47,13 @@ immune to all of it.
 
 ## Controls
 
-Two schemes, both one-handed. Both drive a **velocity target** rather than an
-acceleration — with acceleration control every correction fights momentum you
-already committed to, which is what made an earlier build twitchy at speed.
+Two schemes, both one-handed, and both adjustable — the right number for a
+thumb is not the right number for a wrist, and it is not the same number for
+two different people either, so **sensitivity is a setting rather than a guess**.
+
+Both drive a **velocity target** rather than an acceleration. With acceleration
+control every correction fights momentum you already committed to, which is what
+made an early build twitchy at speed.
 
 - **Touch** (default) — hold anywhere, then slide left/right. The offset is
   measured **from where your finger went down**, not from the creature. An
@@ -59,23 +63,53 @@ already committed to, which is what made an earlier build twitchy at speed.
   has zero drag and therefore zero steering. While you are held at full
   deflection the anchor rubber-bands with you, so the control can never get
   stuck pinned at one edge. A *quick tap* fires ink toward the tap point.
-- **Tilt** — opt in from the title card. A dead zone of 0.075 means a resting
-  hand holds still instead of drifting, and full speed arrives at roughly 21°.
-  Motion is a permission-gated capability, so it is never the default and never
-  the only option: if the grant is denied the bit silently stays on touch. A
-  stored tilt preference is re-armed on the next real gesture, because iOS only
-  grants motion from one.
+- **Tilt** — a dead zone of 0.075 means a resting hand holds still instead of
+  drifting, and full speed arrives at roughly 21°. Motion is a permission-gated
+  capability, so it is never the default and never the only option: if the grant
+  is denied the bit falls back to touch. A stored tilt preference is re-armed on
+  the next real gesture, because iOS only grants motion from one.
 
-Measured in the harness at 390×780:
+Measured in the harness at 390×780, at the default 1.0×:
 
 | | |
 | --- | --- |
 | tap-to-shoot sideways drift | **0.0 px** |
-| full deflection | 349 px/s — about 1.1 s to cross the page |
-| 30 px slide | 54 px/s (proportional, not saturated) |
-| coast to rest from neutral | 26 px |
-| coast after lifting the finger | 32 px |
-| resting hand on tilt, over 1.5 s | **0.0 px** drift |
+| full deflection | 407 px/s — about 1 s to cross the page |
+| 30 px slide | 65 px/s (proportional, not saturated) |
+| coast to rest from neutral | 18 px |
+| coast after lifting the finger | 25 px |
+| resting hand on tilt | **0.0 px** drift |
+| tilt at 0.15 / 0.45 / full | 71 / 355 / 437 px/s |
+
+Sensitivity spans **0.5× to 2.0×**, measured end to end through the slider as
+204 / 509 / 814 px/s at minimum, middle and maximum. The slider has a tick at
+1.0× so the default is findable by feel.
+
+## Settings
+
+Reachable from the title card and from the gear in the HUD; opening it mid-run
+pauses the game (and stops the sustained thrust voice, which would otherwise
+loop under a frozen screen).
+
+| Setting | |
+| --- | --- |
+| **Steering** | Touch or tilt. |
+| **Sensitivity** | 0.5×–2.0×, stored *per scheme* so each remembers its own. |
+| **Invert tilt** | Shown only in tilt mode. |
+| **Sound** | Synthesized effects. |
+| **Music** | The `ctx.music` bed, independent of effects. |
+| **Vibration** | Shown only where `ctx.capabilities.haptics` is true. |
+| **Screen shake** | For anyone who would rather the page held still. |
+| **Reset best** | Clears the local personal best. |
+
+The speaker in the HUD stays as a master quick-mute for both audio channels at
+once. Everything persists through `ctx.storage` under a single `settings` key.
+
+The panel sizes itself from the content it actually draws — an earlier version
+estimated its height and ran the footer buttons over the last toggle, because
+the estimate forgot that the sensitivity row is taller than a toggle. If the
+content still cannot fit the screen, the row height shrinks rather than
+overflowing.
 
 ## Art
 
