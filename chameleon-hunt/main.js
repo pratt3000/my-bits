@@ -616,24 +616,64 @@ window.plethoraBit = {
     // 7. three.js bootstrap (after ready, so the menu is already visible).
     // =====================================================================
     let THREE = null;
-    try {
-      THREE = await ctx.importModule("three", "0.164.1");
-      if (THREE && !THREE.WebGLRenderer && THREE.default) THREE = THREE.default;
-    } catch (err) {
-      THREE = null;
+    // The registry fetch can fail transiently (flaky network, CDN hiccup).
+    // Retry with backoff, and never dead-end: the failure screen offers a
+    // Try-again button that loops back into the import.
+    async function importThree() {
+      let lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt) await new Promise((res) => ctx.timeout(res, 800 * attempt));
+        try {
+          let mod = await ctx.importModule("three", "0.164.1");
+          if (mod && !mod.WebGLRenderer && mod.default) mod = mod.default;
+          if (mod && mod.WebGLRenderer) return mod;
+          lastErr = new Error("three module missing WebGLRenderer");
+        } catch (err) { lastErr = err; }
+      }
+      throw lastErr || new Error("three import failed");
     }
-    if (!THREE || !THREE.WebGLRenderer) {
-      const fatal = document.createElement("div");
-      fatal.className = "ch-fatal";
-      fatal.innerHTML = "<div><div style='font-size:40px;'>🦎💤</div><div style='font-size:16px;font-weight:700;margin-top:8px;'>The chameleons couldn't load their 3D world.</div><div style='font-size:13px;opacity:.75;margin-top:6px;'>Please close and reopen this Bit.</div></div>";
-      ui.appendChild(fatal);
-      try { ctx.platform.error({ reason: "three_import_failed" }); } catch (_) {}
-      return;
+    while (!THREE) {
+      try {
+        THREE = await importThree();
+      } catch (err) {
+        try { ctx.platform.error({ reason: "three_import_failed", message: String(err && err.message).slice(0, 120) }); } catch (_) {}
+        await new Promise((resolve) => {
+          const fatal = document.createElement("div");
+          fatal.className = "ch-fatal";
+          fatal.innerHTML = "<div><div style='font-size:40px;'>\u{1F98E}\u{1F4A4}</div>" +
+            "<div style='font-size:16px;font-weight:700;margin-top:8px;'>The chameleons couldn't load their 3D world.</div>" +
+            "<div style='font-size:13px;opacity:.75;margin-top:6px;'>Usually a brief network hiccup \u2014 give it another go.</div>" +
+            "<button class='ch-btn' id='chRetry' style='margin:18px auto 0;width:200px;'>Try again</button></div>";
+          ui.appendChild(fatal);
+          ctx.listen(fatal.querySelector("#chRetry"), "click", () => {
+            sfx.ui();
+            fatal.remove();
+            resolve();
+          });
+        });
+      }
     }
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    let renderer = null;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    } catch (err) {
+      // Rare: WebGL unavailable. Retry once without antialias before giving up.
+      try { renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false }); } catch (err2) {
+        const fatal = document.createElement("div");
+        fatal.className = "ch-fatal";
+        fatal.innerHTML = "<div><div style='font-size:40px;'>\u{1F98E}</div><div style='font-size:15px;font-weight:700;margin-top:8px;'>This device couldn't start 3D graphics.<br>Close other apps and reopen this Bit.</div></div>";
+        ui.appendChild(fatal);
+        try { ctx.platform.error({ reason: "webgl_unavailable" }); } catch (_) {}
+        return;
+      }
+    }
     renderer.setPixelRatio(Math.min(ctx.nativeDpr || window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x0b1d16, 1);
+    // If the OS reclaims the GPU (backgrounding, memory pressure), keep the
+    // context restorable instead of freezing on a dead canvas.
+    ctx.listen(canvas, "webglcontextlost", (e) => { e.preventDefault(); });
+    ctx.listen(canvas, "webglcontextrestored", () => { try { renderer.resetState(); } catch (_) {} });
 
     const scene3 = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(70, ctx.width / Math.max(1, ctx.height), 0.08, 120);
