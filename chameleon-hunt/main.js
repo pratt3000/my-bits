@@ -617,10 +617,10 @@ window.plethoraBit = {
     // =====================================================================
     let THREE = null;
     let lastLoadErr = "";
-    // Three-tier engine loading. Any one of these can fail in the wild
-    // (registry hiccup, module-import quirk, CDN wobble), so we never bet
-    // the whole game on a single path — and we never dead-end.
-    const THREE_URL = "https://libs.plethora.studio/three/0.164.1/three.module.js";
+    // Two independent engine sources — a module pin and a classic-script
+    // pin — each retried, so a hiccup on one path cannot dead-end the game.
+    // (The registry-URL overload is deliberately not used: the upload
+    // validator rejects it.)
 
     function usable(mod) {
       if (mod && !mod.WebGLRenderer && mod.default) mod = mod.default;
@@ -636,30 +636,27 @@ window.plethoraBit = {
       }
       return mod;
     }
-    async function tryLoad(fn) {
-      try {
-        const mod = usable(await fn());
-        if (mod) return mod;
-        lastLoadErr = "engine loaded but WebGLRenderer missing";
-      } catch (err) {
-        lastLoadErr = String((err && err.message) || err).slice(0, 140);
-      }
-      return null;
+    function noteErr(err) {
+      lastLoadErr = String((err && err.message) || err || "load failed").slice(0, 140);
     }
+    // Every loader call below is a direct call with literal args, as the
+    // registry contract requires.
     async function importThree() {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        if (attempt) await new Promise((res) => ctx.timeout(res, 700));
-        const a = await tryLoad(() => ctx.importModule("three", "0.164.1"));
-        if (a) return a;
-        const b = await tryLoad(() => ctx.importModule(THREE_URL));
-        if (b) return b;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt) await new Promise((res) => ctx.timeout(res, 600 * attempt));
+        try {
+          const mod = usable(await ctx.importModule("three", "0.164.1"));
+          if (mod) return mod;
+          lastLoadErr = "engine loaded but WebGLRenderer missing";
+        } catch (err) { noteErr(err); }
       }
       // Last resort: the classic-script build exposed as window.THREE.
-      const c = await tryLoad(async () => {
+      try {
         await ctx.loadScript("three-global", "0.134.0");
-        return window.THREE;
-      });
-      if (c) return shimLegacy(c);
+        const mod3 = usable(window.THREE);
+        if (mod3) return shimLegacy(mod3);
+        lastLoadErr = "fallback engine missing WebGLRenderer";
+      } catch (err) { noteErr(err); }
       return null;
     }
     while (!THREE) {
