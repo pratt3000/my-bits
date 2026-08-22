@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Windmill Cove",
+  "description": "Mini golf in the Golf With Your Friends mould: six themed courses of nine holes, one screen each, played by pulling back and letting go. Windmills sweep the fairway, sliding gates block the causeway, whirlpools drag your line, cannonball pads fire you down the corridor. Water and out-of-bounds cost a stroke. Sand kills roll, ice barely slows you, ramps push, portals move you. Fernwood, Buccaneer Bay, Sunken Oasis, Hollow Manor, Sugar Rush and Orbital Nine each keep their own fewest-strokes leaderboard.",
+  "tags": [
+    "golf",
+    "game",
+    "sports",
+    "arcade",
+    "physics",
+    "leaderboard",
+    "minigolf",
+    "singleplayer"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "fernwood_round": {
+        "label": "Fernwood",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "buccaneer_round": {
+        "label": "Buccaneer Bay",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "oasis_round": {
+        "label": "Sunken Oasis",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "manor_round": {
+        "label": "Hollow Manor",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "sugar_round": {
+        "label": "Sugar Rush",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "orbital_round": {
+        "label": "Orbital Nine",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
