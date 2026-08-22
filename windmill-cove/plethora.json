@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Windmill Cove",
-  "description": "Mini golf in the Golf With Your Friends mould: six themed courses of nine holes, one screen each, played by pulling back and letting go. Windmills sweep the fairway, sliding gates block the causeway, whirlpools drag your line, cannonball pads fire you down the corridor. Water and out-of-bounds cost a stroke. Sand kills roll, ice barely slows you, ramps push, portals move you. Fernwood, Buccaneer Bay, Sunken Oasis, Hollow Manor, Sugar Rush and Orbital Nine each keep their own fewest-strokes leaderboard.",
+  "description": "Mini golf in the Golf With Your Friends mould: seven themed courses of nine holes, one screen each, played by pulling back and letting go. Windmills sweep the fairway, sliding gates block the causeway, whirlpools drag your line, cannonball pads fire you down the corridor. Water and out-of-bounds cost a stroke. Sand kills roll, ice barely slows you, ramps push, portals move you. Fernwood, Buccaneer Bay, Sunken Oasis, Hollow Manor, Sugar Rush, Orbital Nine and the frozen Glacier Run each keep their own fewest-strokes leaderboard.",
   "tags": [
     "golf",
     "game",
@@ -105,6 +105,22 @@
       },
       "orbital_round": {
         "label": "Orbital Nine",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "glacier_round": {
+        "label": "Glacier Run",
         "valueType": "number",
         "order": "asc",
         "format": "integer",

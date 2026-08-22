@@ -855,6 +855,83 @@ var COURSES = [
       }
     ]
   }
+  ,{
+    id: "glacier", name: "Glacier Run", theme: "frost", icon: "❄️",
+    blurb: "Groomed lanes over black ice, open leads in the floe, and powder that stops a ball dead.",
+    holes: [
+      {
+        name: "First Frost", par: 3, w: 26, h: 44,
+        pads: [[5, 4, 16, 36]],
+        ice: [[5, 14, 16, 12]],
+        tee: [13, 36], cup: [13, 8],
+        posts: [[8.5, 30, 0.85, 0], [17.5, 30, 0.85, 0]]
+      },
+      {
+        name: "Snowdrift", par: 3, w: 26, h: 44,
+        pads: [[5, 4, 16, 36]],
+        sand: [[5, 18, 16, 8]],
+        tee: [13, 36], cup: [13, 8],
+        posts: [[13, 12, 1.1, 0]]
+      },
+      {
+        name: "Black Ice", par: 3, w: 24, h: 46,
+        pads: [[4, 4, 16, 38]],
+        ice: [[4, 4, 16, 38]],
+        tee: [12, 38], cup: [12, 8],
+        posts: [[12, 22, 1.3, 0], [7, 15, 0.9, 0], [17, 15, 0.9, 0]]
+      },
+      {
+        name: "The Lead", par: 3, w: 28, h: 44,
+        pads: [[4, 4, 20, 36]],
+        water: [[4, 18, 20, 6]],
+        bridges: [[12, 18, 4, 6]],
+        ice: [[4, 26, 20, 6]],
+        tee: [14, 36], cup: [14, 8],
+        posts: [[9, 12, 0.9, 0], [19, 12, 0.9, 0]]
+      },
+      {
+        name: "Icicle Alley", par: 4, w: 28, h: 48,
+        pads: [[4, 4, 20, 40]],
+        ice: [[4, 20, 20, 10]],
+        tee: [14, 40], cup: [14, 8],
+        spinners: [[14, 25, 4.6, 0.45, 1.6, 0, 4]],
+        posts: [[7, 34, 1.0, 0], [21, 34, 1.0, 0]]
+      },
+      {
+        name: "Floe", par: 4, w: 28, h: 50,
+        pads: [[4, 4, 20, 42]],
+        ice: [[4, 12, 20, 20]],
+        tee: [14, 42], cup: [14, 8],
+        movers: [[6, 20, 5, 1.6, 6, 0, 3.6, 0], [13, 29, 5, 1.6, -6, 0, 3.6, 1.8]]
+      },
+      {
+        name: "Whiteout", par: 4, w: 30, h: 48,
+        pads: [[4, 4, 22, 40]],
+        sand: [[4, 10, 22, 26]],
+        bridges: [[12, 10, 6, 26]],
+        tee: [15, 40], cup: [15, 8],
+        posts: [[10, 22, 1.0, 0], [20, 22, 1.0, 0]]
+      },
+      {
+        name: "Crevasse", par: 4, w: 30, h: 48,
+        pads: [[4, 4, 22, 40]],
+        ice: [[4, 4, 22, 40]],
+        cuts: [[9, 28, 5, 4], [17, 20, 5, 4], [9, 12, 5, 4]],
+        tee: [15, 40], cup: [15, 8]
+      },
+      {
+        name: "Glacier Run", par: 5, w: 32, h: 56,
+        pads: [[4, 4, 24, 48]],
+        ice: [[4, 14, 24, 18]],
+        sand: [[4, 8, 24, 5]],
+        water: [[4, 34, 10, 6], [18, 34, 10, 6]],
+        tee: [16, 48], cup: [16, 7],
+        spinners: [[16, 23, 4.8, 0.45, -1.8, 0, 3]],
+        movers: [[8, 42, 6, 1.6, 6, 0, 3.4, 0]],
+        posts: [[16, 30, 1.2, 0]]
+      }
+    ]
+  }
 ];
 
 /* ------------------------------------------------------------- the palettes */
@@ -864,37 +941,43 @@ var THEMES = {
     sky: "#1d3320", sky2: "#12211a", grass: ["#4fae3c", "#43992f"],
     rail: "#6d4526", railTop: "#8f5f37", railDark: "#3a2312", cap: "#a8763f",
     water: ["#2f7fb5", "#1f5f92"], sand: "#d8c07a", ice: "#bfe4ee",
-    ink: "#f2f7ef", music: "cozy", scenery: "pine"
+    ink: "#f2f7ef", grit: "#7a5a28", music: "cozy", scenery: "pine"
   },
   pirate: {
     sky: "#0d3b4a", sky2: "#072633", grass: ["#4bb05a", "#3d9749"],
     rail: "#7a5637", railTop: "#9c7248", railDark: "#3f2a17", cap: "#b98c53",
     water: ["#1f88a8", "#0f5f7d"], sand: "#e0cd93", ice: "#cfe9f2",
-    ink: "#f4f7f2", music: "jungle", scenery: "wave"
+    ink: "#f4f7f2", grit: "#7c6330", music: "jungle", scenery: "wave"
   },
   desert: {
     sky: "#c99a55", sky2: "#a97b3d", grass: ["#5aab3f", "#4b9433"],
     rail: "#c2934f", railTop: "#dbb271", railDark: "#7d5b2b", cap: "#e5c78c",
     water: ["#2f9fb5", "#1c7b92"], sand: "#e6cd8c", ice: "#cfe9f2",
-    ink: "#3a2a12", music: "drone", scenery: "dune"
+    ink: "#3a2a12", grit: "#8a6a2e", music: "drone", scenery: "dune"
   },
   haunted: {
     sky: "#1a1424", sky2: "#0c0912", grass: ["#3b7148", "#31603c"],
     rail: "#463046", railTop: "#5f4362", railDark: "#221624", cap: "#6d4f70",
     water: ["#3b5f8a", "#25406a"], sand: "#b6a98c", ice: "#c9dbe8",
-    ink: "#efe9f5", music: "spooky", scenery: "grave"
+    ink: "#efe9f5", grit: "#5b5344", music: "spooky", scenery: "grave"
   },
   candy: {
     sky: "#f6a8c6", sky2: "#e4799f", grass: ["#5fd39a", "#4dbb87"],
     rail: "#ea5f7c", railTop: "#ff849b", railDark: "#a83a52", cap: "#fff0f4",
     water: ["#59c8e8", "#33a2c6"], sand: "#ffd9a3", ice: "#dff4ff",
-    ink: "#4a1f2c", music: "bubble", scenery: "candy"
+    ink: "#4a1f2c", grit: "#c08a4a", music: "bubble", scenery: "candy"
+  },
+  frost: {
+    sky: "#24384a", sky2: "#14222e", grass: ["#86bfa2", "#71ab8e"],
+    rail: "#4d6274", railTop: "#71889c", railDark: "#25333f", cap: "#93aec1",
+    water: ["#1d6288", "#0d3d5c"], sand: "#eef6fb", ice: "#9fd4e8",
+    ink: "#eaf3fa", grit: "#7d97ab", music: "drift", scenery: "snow"
   },
   space: {
     sky: "#0a0d1c", sky2: "#05060e", grass: ["#3f8e86", "#357a73"],
     rail: "#7d8a9c", railTop: "#a2b0c2", railDark: "#3d4553", cap: "#c3ceda",
     water: ["#4a4bd0", "#2d2b96"], sand: "#c8b48f", ice: "#cfe6f4",
-    ink: "#eaf1f8", music: "ambient", scenery: "star"
+    ink: "#eaf1f8", grit: "#6d6250", music: "ambient", scenery: "star"
   }
 };
 
@@ -1042,13 +1125,54 @@ window.plethoraBit = {
           c.stroke();
         }
       } else if (th.scenery === "dune") {
+        var sunx = W * 0.72, suny = H * 0.12;
+        var haze = c.createRadialGradient(sunx, suny, 0, sunx, suny, W * 0.5);
+        haze.addColorStop(0, "rgba(255,236,190,0.5)");
+        haze.addColorStop(1, "rgba(255,236,190,0)");
+        c.fillStyle = haze; c.fillRect(0, 0, W, H);
         for (i = 0; i < 9; i++) {
-          c.fillStyle = i % 2 ? "rgba(255,235,190,0.13)" : "rgba(120,80,30,0.10)";
+          var crest = H * (0.1 + i * 0.1);
+          c.fillStyle = i % 2 ? "rgba(255,235,190,0.15)" : "rgba(120,80,30,0.12)";
           c.beginPath(); c.moveTo(0, H);
           for (x = 0; x <= W; x += 3) {
-            c.lineTo(x, H * (0.1 + i * 0.1) + Math.sin(x * 0.09 + i * 2.2) * 3.2);
+            c.lineTo(x, crest + Math.sin(x * 0.09 + i * 2.2) * 3.2);
           }
           c.lineTo(W, H); c.closePath(); c.fill();
+          c.strokeStyle = "rgba(255,248,225,0.22)"; c.lineWidth = 0.4;
+          c.beginPath();
+          for (x = 0; x <= W; x += 3) {
+            var cy2 = crest + Math.sin(x * 0.09 + i * 2.2) * 3.2;
+            if (x === 0) c.moveTo(x, cy2); else c.lineTo(x, cy2);
+          }
+          c.stroke();
+        }
+        for (i = 0; i < 14; i++) {                 // saguaro and boulders
+          x = 3 + hash01(seed + i, 31) * (W - 6);
+          y = H * (0.24 + hash01(seed + i, 32) * 0.7);
+          if (hash01(seed + i, 33) < 0.55) {
+            var ch = 3 + hash01(seed + i, 34) * 3.5;
+            c.strokeStyle = "rgba(46,74,44,0.82)";
+            c.lineCap = "round"; c.lineJoin = "round";
+            c.lineWidth = 0.9;
+            c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - ch); c.stroke();
+            c.lineWidth = 0.66;
+            c.beginPath();                                  // left arm
+            c.moveTo(x, y - ch * 0.5);
+            c.lineTo(x - 1.25, y - ch * 0.5);
+            c.lineTo(x - 1.25, y - ch * 0.78);
+            c.stroke();
+            c.beginPath();                                  // right arm
+            c.moveTo(x, y - ch * 0.66);
+            c.lineTo(x + 1.1, y - ch * 0.66);
+            c.lineTo(x + 1.1, y - ch * 0.94);
+            c.stroke();
+          } else {
+            c.fillStyle = "rgba(126,96,54,0.75)";
+            c.beginPath();
+            c.ellipse(x, y, 1.4 + hash01(seed + i, 35) * 1.6,
+                      0.9 + hash01(seed + i, 36) * 0.8, 0, Math.PI, 0);
+            c.fill();
+          }
         }
       } else if (th.scenery === "grave") {
         for (i = 0; i < 26; i++) {
@@ -1060,22 +1184,103 @@ window.plethoraBit = {
           c.arc(x, y, r, Math.PI, 0); c.lineTo(x + r, y + r * 1.5);
           c.closePath(); c.fill();
         }
-        for (i = 0; i < 22; i++) {
-          c.fillStyle = "rgba(190,200,230,0.05)";
+        for (i = 0; i < 16; i++) {               // bare trees behind the stones
+          x = hash01(seed + i, 61) * W; y = hash01(seed + i, 62) * H;
+          var th2 = 3 + hash01(seed + i, 63) * 4;
+          c.strokeStyle = "rgba(28,22,34,0.85)";
+          c.lineWidth = 0.42;
+          c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - th2); c.stroke();
+          c.lineWidth = 0.26;
+          for (var br = 0; br < 5; br++) {
+            var bh = y - th2 * (0.45 + br * 0.13);
+            var dir2 = br % 2 ? 1 : -1;
+            c.beginPath(); c.moveTo(x, bh);
+            c.lineTo(x + dir2 * (0.9 + hash01(seed + i, 64 + br) * 1.3), bh - 0.9);
+            c.stroke();
+          }
+        }
+        for (i = 0; i < 26; i++) {
+          c.fillStyle = "rgba(190,200,230,0.06)";
           c.beginPath();
           c.ellipse(hash01(seed + i, 5) * W, hash01(seed + i, 6) * H,
                     5 + hash01(seed + i, 7) * 9, 2 + hash01(seed + i, 8) * 3, 0, 0, TAU);
           c.fill();
         }
+      } else if (th.scenery === "snow") {
+        for (i = 0; i < 6; i++) {          // drifts banked against the far edge
+          c.fillStyle = "rgba(226,240,250," + (0.05 + i * 0.015).toFixed(3) + ")";
+          c.beginPath(); c.moveTo(0, H);
+          for (x = 0; x <= W; x += 3) {
+            c.lineTo(x, H * (0.12 + i * 0.15) + Math.sin(x * 0.07 + i * 2.1) * 2.6);
+          }
+          c.lineTo(W, H); c.closePath(); c.fill();
+        }
+        for (i = 0; i < 76; i++) {         // snow-laden pines
+          x = hash01(seed + i, 1) * W; y = hash01(seed + i, 2) * H;
+          r = 1.3 + hash01(seed + i, 3) * 1.8;
+          c.fillStyle = "rgba(0,0,0,0.20)";
+          c.beginPath();
+          c.ellipse(x + r * 0.3, y + r * 0.7, r * 0.8, r * 0.3, 0, 0, TAU);
+          c.fill();
+          c.fillStyle = "#2a3a30";
+          c.fillRect(x - r * 0.1, y + r * 0.2, r * 0.2, r * 0.5);
+          for (var ks = 0; ks < 3; ks++) {
+            c.fillStyle = ["#22483a", "#1c3d31", "#173328"][ks];
+            c.beginPath();
+            c.moveTo(x, y - r * (1.4 - ks * 0.34));
+            c.lineTo(x + r * (0.5 + ks * 0.24), y + ks * r * 0.44);
+            c.lineTo(x - r * (0.5 + ks * 0.24), y + ks * r * 0.44);
+            c.closePath(); c.fill();
+            c.fillStyle = "rgba(240,249,255,0.92)";   // snow sitting on the branch
+            var tipY = y - r * (1.4 - ks * 0.34);
+            var baseY = y + ks * r * 0.44;
+            var capY = tipY + (baseY - tipY) * 0.44;
+            var capW = (r * (0.5 + ks * 0.24)) * 0.44;
+            c.beginPath();
+            c.moveTo(x, tipY);
+            c.lineTo(x + capW, capY);
+            c.quadraticCurveTo(x, capY + r * 0.13, x - capW, capY);
+            c.closePath(); c.fill();
+          }
+        }
+        for (i = 0; i < 150; i++) {        // flakes caught in the air
+          c.fillStyle = "rgba(255,255,255," + (0.2 + hash01(seed + i, 9) * 0.45).toFixed(3) + ")";
+          c.beginPath();
+          c.arc(hash01(seed + i, 7) * W, hash01(seed + i, 8) * H,
+                0.18 + hash01(seed + i, 10) * 0.28, 0, TAU);
+          c.fill();
+        }
       } else if (th.scenery === "candy") {
         var cols = ["#ffd6e6", "#ffe9a8", "#c9f0e0", "#e2d4ff", "#ffc0cb"];
-        for (i = 0; i < 90; i++) {
+        for (i = 0; i < 70; i++) {                 // gumdrops with a highlight
           x = hash01(seed + i, 1) * W; y = hash01(seed + i, 2) * H;
-          r = 0.9 + hash01(seed + i, 3) * 2.1;
+          r = 0.9 + hash01(seed + i, 3) * 1.9;
+          c.fillStyle = "rgba(150,70,110,0.16)";
+          c.beginPath(); c.ellipse(x + r * 0.2, y + r * 0.5, r * 0.9, r * 0.32, 0, 0, TAU); c.fill();
           c.fillStyle = cols[i % cols.length];
-          c.globalAlpha = 0.5;
+          c.globalAlpha = 0.75;
           c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+          c.globalAlpha = 0.85;
+          c.fillStyle = "rgba(255,255,255,0.75)";
+          c.beginPath();
+          c.ellipse(x - r * 0.32, y - r * 0.36, r * 0.26, r * 0.16, -0.6, 0, TAU); c.fill();
           c.globalAlpha = 1;
+        }
+        for (i = 0; i < 12; i++) {                 // lollipop swirls
+          x = hash01(seed + i, 41) * W; y = hash01(seed + i, 42) * H;
+          r = 1.6 + hash01(seed + i, 43) * 1.4;
+          c.strokeStyle = "rgba(255,255,255,0.7)"; c.lineWidth = 0.5;
+          c.beginPath(); c.moveTo(x, y + r); c.lineTo(x, y + r * 2.6); c.stroke();
+          c.fillStyle = i % 2 ? "#ff8fb4" : "#8fd9ff";
+          c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+          c.strokeStyle = "rgba(255,255,255,0.9)"; c.lineWidth = 0.42;
+          c.beginPath();
+          for (var u = 0; u <= 1.001; u += 0.05) {
+            var aa = u * 7.5, rr2 = r * u;
+            var px2 = x + Math.cos(aa) * rr2, py2 = y + Math.sin(aa) * rr2;
+            if (u === 0) c.moveTo(px2, py2); else c.lineTo(px2, py2);
+          }
+          c.stroke();
         }
       } else {
         for (i = 0; i < 260; i++) {
@@ -1156,10 +1361,24 @@ window.plethoraBit = {
       // hazards
       c.save(); c.clip(sandP);
       c.fillStyle = th.sand; c.fillRect(0, 0, W, H);
-      c.fillStyle = "rgba(120,90,40,0.20)";
-      for (var i = 0; i < 900; i++) {
-        c.fillRect(hash01(i, 21) * W, hash01(i, 22) * H, 0.16, 0.16);
+      var grit = th.grit || "#7a5a28";
+      c.globalAlpha = 0.16;
+      c.strokeStyle = grit; c.lineWidth = 0.22;      // wind ripples
+      for (var rp = 0; rp < 26; rp++) {
+        var ry = (rp / 26) * H;
+        c.beginPath();
+        for (var rx = 0; rx <= W; rx += 1.4) {
+          var yy2 = ry + Math.sin(rx * 0.55 + rp * 1.7) * 0.5;
+          if (rx === 0) c.moveTo(rx, yy2); else c.lineTo(rx, yy2);
+        }
+        c.stroke();
       }
+      c.globalAlpha = 0.22;
+      c.fillStyle = grit;
+      for (var i = 0; i < 700; i++) {
+        c.fillRect(hash01(i, 21) * W, hash01(i, 22) * H, 0.14, 0.14);
+      }
+      c.globalAlpha = 1;
       c.strokeStyle = "rgba(120,92,44,0.40)"; c.lineWidth = 0.8; c.stroke(sandE);
       c.restore();
 
@@ -1171,6 +1390,19 @@ window.plethoraBit = {
         var ia = hash01(i, 33) * TAU, il = 1.4 + hash01(i, 34) * 3.4;
         c.beginPath(); c.moveTo(ix, iy);
         c.lineTo(ix + Math.cos(ia) * il, iy + Math.sin(ia) * il); c.stroke();
+      }
+      var sheen = c.createLinearGradient(0, 0, W, H);
+      sheen.addColorStop(0, "rgba(255,255,255,0)");
+      sheen.addColorStop(0.42, "rgba(255,255,255,0.30)");
+      sheen.addColorStop(0.58, "rgba(255,255,255,0.30)");
+      sheen.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = sheen; c.fillRect(0, 0, W, H);
+      c.fillStyle = "rgba(255,255,255,0.4)";
+      for (var ib = 0; ib < 70; ib++) {           // bubbles frozen in
+        c.beginPath();
+        c.arc(hash01(ib, 51) * W, hash01(ib, 52) * H,
+              0.07 + hash01(ib, 53) * 0.13, 0, TAU);
+        c.fill();
       }
       c.restore();
       c.save(); c.clip(iceP);
@@ -1293,6 +1525,10 @@ window.plethoraBit = {
       gr.addColorStop(0, top); gr.addColorStop(1, base);
       c.fillStyle = gr;
       c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+      c.strokeStyle = "rgba(255,255,255,0.22)"; c.lineWidth = r * 0.1;
+      c.beginPath(); c.arc(x, y, r * 0.94, Math.PI * 1.05, Math.PI * 1.85); c.stroke();
+      c.strokeStyle = "rgba(0,0,0,0.22)"; c.lineWidth = r * 0.1;
+      c.beginPath(); c.arc(x, y, r * 0.94, Math.PI * 0.1, Math.PI * 0.8); c.stroke();
       if (rim) {
         c.strokeStyle = rim; c.lineWidth = r * 0.16;
         c.beginPath(); c.arc(x, y, r * 0.9, 0, TAU); c.stroke();
@@ -1416,14 +1652,27 @@ window.plethoraBit = {
     /** The cup, its apron and a flagstick that leans with the breeze. */
     function drawCup(c, hole, th, t, holed) {
       var x = hole.cup[0], y = hole.cup[1];
-      c.fillStyle = "rgba(255,255,255,0.16)";
-      c.beginPath(); c.arc(x, y, CUP_R + 0.34, 0, TAU); c.fill();
+      // worn ring in the turf, then the mown collar
+      c.fillStyle = "rgba(0,0,0,0.13)";
+      c.beginPath(); c.arc(x, y + 0.05, CUP_R + 0.42, 0, TAU); c.fill();
       c.fillStyle = "#efe6cf";
-      c.beginPath(); c.arc(x, y, CUP_R + 0.12, 0, TAU); c.fill();
-      var gr = c.createRadialGradient(x, y - CUP_R * 0.3, 0.05, x, y, CUP_R);
-      gr.addColorStop(0, "#000000"); gr.addColorStop(1, "#241d12");
+      c.beginPath(); c.arc(x, y, CUP_R + 0.16, 0, TAU); c.fill();
+      c.fillStyle = "rgba(120,104,74,0.5)";
+      c.beginPath(); c.arc(x, y, CUP_R + 0.16, 0, TAU);
+      c.arc(x, y, CUP_R + 0.05, 0, TAU, true); c.fill();
+      // the shaft: light spills onto the near wall, the far wall stays black
+      var gr = c.createRadialGradient(x, y + CUP_R * 0.42, CUP_R * 0.12,
+                                      x, y, CUP_R * 1.05);
+      gr.addColorStop(0, "#3a3227");
+      gr.addColorStop(0.55, "#14110b");
+      gr.addColorStop(1, "#000000");
       c.fillStyle = gr;
       c.beginPath(); c.arc(x, y, CUP_R, 0, TAU); c.fill();
+      // a crisp lip, brightest where the sun catches it
+      c.strokeStyle = "rgba(255,255,255,0.30)"; c.lineWidth = 0.09;
+      c.beginPath(); c.arc(x, y, CUP_R - 0.03, Math.PI * 0.18, Math.PI * 0.82); c.stroke();
+      c.strokeStyle = "rgba(0,0,0,0.55)"; c.lineWidth = 0.1;
+      c.beginPath(); c.arc(x, y, CUP_R - 0.02, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
 
       if (holed) return;
       var sway = Math.sin(t * 1.5) * 0.16;
@@ -1993,7 +2242,7 @@ window.plethoraBit = {
       '<div style="font-size:42px;font-weight:900;letter-spacing:-1.2px;line-height:1.02;' +
       'margin-top:6px;">Windmill<br>Cove</div>' +
       '<div style="opacity:0.78;font-size:13.5px;margin-top:12px;line-height:1.5;">' +
-      "Pull back, let go, watch it run.<br>Six courses, 54 holes.</div>"));
+      "Pull back, let go, watch it run.<br>Seven courses, 63 holes.</div>"));
     var titleBtns = divEl("display:flex;flex-direction:column;gap:10px;width:100%;max-width:260px;");
     titlePanel.appendChild(titleBtns);
     var btnPlay = btnEl(BTN + "width:100%;padding:16px;font-size:18px;border-radius:16px;" +

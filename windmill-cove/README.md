@@ -1,6 +1,6 @@
 # Windmill Cove
 
-Mini golf built to the shape of *Golf With Your Friends*: six themed courses of
+Mini golf built to the shape of *Golf With Your Friends*: seven themed courses of
 nine holes, a stroke counter, water that costs you one, and a leaderboard per
 course. Single player, one screen per hole, played with a thumb.
 
@@ -29,6 +29,7 @@ to fight, no panning to find the flag, and aiming stays precise on a phone.
 | 👻 Hollow Manor | Haunted | 33 | Sliding doors, cold spots, a crypt of blockers |
 | 🍭 Sugar Rush | Candy | 32 | Gumdrop bumpers that fire you back, frosting rinks, slides |
 | 🛰️ Orbital Nine | Space | 32 | Almost no friction, gravity wells, wormholes, one black hole |
+| ❄️ Glacier Run | Frost | 33 | Groomed lanes over black ice, open leads, powder that stops a ball dead |
 
 ### The mechanics, and where they came from
 
@@ -100,6 +101,20 @@ Inherited from `cairn/`, and obeyed here from the start:
 - `document.createElement(tag)` with a computed tag. Only literal `"div"` and
   `"button"` here.
 - Bare `setTimeout` — timers go through `ctx.timeout`.
+
+### Graphics notes
+
+The cup used to be a dark coin: a radial gradient running black in the middle
+to brown at the rim, which is backwards for a hole. It now has a worn ring in
+the turf, a mown collar, a shaft lit on the near wall and black on the far one,
+and a lip that catches the light on one side and goes dark on the other.
+
+Bunker sand grew wind ripples and takes its grit colour from the theme, so the
+frost course speckles blue-grey rather than desert brown. Ice gained a diagonal
+sheen and trapped bubbles over its cracks. Posts and bumpers got a rim light.
+And three backdrops that were carrying almost nothing — desert, candy and
+haunted — grew saguaro and boulders under a sun haze, lollipop swirls and
+highlit gumdrops, and bare trees behind the headstones.
 
 ### Verification
 
