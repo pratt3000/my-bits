@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "runtime": "plethora-bit@2",
   "entry": "main.js",
-  "title": "Sketch Hop",
+  "title": "Sketch Hop II",
   "description": "An endless doodle-style jumper drawn on graph paper. Bounce up an infinite page: green platforms hold, blue ones slide, brown ones crumble underfoot and white ones vanish after a single bounce. Springs and trampolines fling you; propeller hats, jetpacks and rockets fly you through whole screens; a shield eats one monster. Five inked monsters block the way — land on their heads or shoot ink from your nose — while UFO tractor beams and black holes hunt you between platforms. Steer by dragging or by tilting the phone. Every run submits your height to a global leaderboard.",
   "tags": [
     "game",

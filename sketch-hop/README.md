@@ -1,7 +1,22 @@
-# Sketch Hop
+# Sketch Hop II
 
 An endless doodle-style vertical jumper, drawn on graph paper. You bounce
 forever; the only job is to steer, and never come back down.
+
+## Versions
+
+**Sketch Hop** (v1) is published. **Sketch Hop II** is this source, uploaded as
+a separate bit because the agent draft endpoint could not revise the published
+one. The only reason for the split is the fix below — a run should end because
+the player made a mistake, and in v1 it often did not.
+
+| | |
+| --- | --- |
+| v1 | first release |
+| **II** | **every platform is now provably reachable** (see *Generation invariants*), sensitivity is adjustable from a settings panel, and steering was rebuilt as a velocity target |
+
+The manifest title is what the upload targets, so it names the current
+release.
 
 A homage to the classic notebook-doodle jumper — same genre and the same
 hand-drawn feel, with its own creature, its own monsters and its own name.
