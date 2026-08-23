@@ -491,12 +491,12 @@ window.plethoraBit = {
     // =====================================================================
     let state = "menu";     // menu | run | paused | dying | dead
     let started = false;
-    let toastT = null;
+    let toastTok = 0;
     function toast(msg, ms) {
       el.toast.textContent = msg;
       el.toast.classList.add("show");
-      if (toastT) clearTimeout(toastT);
-      toastT = setTimeout(() => el.toast.classList.remove("show"), ms || 1300);
+      const tok = ++toastTok;   // a newer toast supersedes this one
+      ctx.timeout(() => { if (tok === toastTok) el.toast.classList.remove("show"); }, ms || 1300);
     }
     function flash(node) {
       node.classList.add("on");
@@ -1654,7 +1654,20 @@ window.plethoraBit = {
     }
 
     // --- death, revive, results -------------------------------------------
-    let saveTimer = null;
+    // A single runtime-owned ticker drives the revive countdown; creating a
+    // fresh interval per death would leak one ticker per run.
+    const saveState = { left: 0, arc: null, num: null, btn: null };
+    ctx.interval(() => {
+      if (saveState.left <= 0) return;
+      saveState.left -= 1;
+      if (saveState.num) saveState.num.textContent = String(Math.max(0, saveState.left));
+      if (saveState.arc) saveState.arc.style.strokeDashoffset = String(175.9 * (1 - saveState.left / 5));
+      if (saveState.left <= 0 && saveState.btn) {
+        saveState.btn.disabled = true;
+        saveState.btn.textContent = "Too slow…";
+      }
+    }, 1000);
+
     function die(cause) {
       if (P.dead) return;
       P.dead = true;
@@ -1729,20 +1742,14 @@ window.plethoraBit = {
       ctx.listen(el.deadPanel.querySelector("#btnMenu2"), "click", () => { sfx.ui(); el.dead.classList.add("id-hidden"); quitToMenu(); });
 
       const saveBtn = el.deadPanel.querySelector("#btnSave");
+      saveState.left = 0;
       if (saveBtn) {
-        let left = 5;
-        const arc = el.deadPanel.querySelector("#ringArc");
-        const num = el.deadPanel.querySelector("#ringNum");
-        const tick = () => {
-          left -= 1;
-          if (num) num.textContent = String(Math.max(0, left));
-          if (arc) arc.style.strokeDashoffset = String(175.9 * (1 - left / 5));
-          if (left <= 0) { clearInterval(saveTimer); saveTimer = null; saveBtn.disabled = true; saveBtn.textContent = "Too slow…"; }
-        };
-        if (saveTimer) clearInterval(saveTimer);
-        saveTimer = setInterval(tick, 1000);
+        saveState.arc = el.deadPanel.querySelector("#ringArc");
+        saveState.num = el.deadPanel.querySelector("#ringNum");
+        saveState.btn = saveBtn;
+        saveState.left = 5;
         ctx.listen(saveBtn, "click", () => {
-          if (saveTimer) { clearInterval(saveTimer); saveTimer = null; }
+          saveState.left = 0;
           const cost = reviveCost;
           if (wallet.gems < cost) return;
           wallet.addGems(-cost);
@@ -1987,7 +1994,7 @@ window.plethoraBit = {
     showMenu();
 
     ctx.onDestroy(() => {
-      if (saveTimer) clearInterval(saveTimer);
+      saveState.left = 0;
       for (const s of track) disposeSegment(s);
       try { if (canMusic && ctx.music && musicOn) ctx.music.stop({ fadeOutMs: 200 }); } catch (_) {}
       scene.traverse((o) => {

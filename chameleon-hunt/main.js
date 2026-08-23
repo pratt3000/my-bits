@@ -482,13 +482,13 @@ window.plethoraBit = {
     let everStarted = false;  // first user gesture happened
     let threeReady = false;   // three.js imported and renderer built
     let arena = null;         // active arena spec
-    let toastTimer = null;
+    let toastTimer = 0;
 
     function showToast(msg, ms) {
       el.toast.textContent = msg;
       el.toast.classList.add("show");
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => el.toast.classList.remove("show"), ms || 1600);
+      const tok = ++toastTimer;   // a newer toast supersedes this one
+      ctx.timeout(() => { if (tok === toastTimer) el.toast.classList.remove("show"); }, ms || 1600);
     }
     function flash(elm) {
       elm.classList.add("on");
