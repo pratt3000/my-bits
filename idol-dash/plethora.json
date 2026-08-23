@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Idol Dash",
+  "description": "You grabbed the cursed idol and the temple guardians want it back. Sprint, swipe to turn, jump the roots, slide the gates, and grab shields, magnets and boosts as the ruins blur past. Endless, ever-faster, and ranked on a global leaderboard.",
+  "tags": ["3d", "endless-runner", "arcade", "temple", "action", "mobile"],
+  "permissions": ["haptics", "backgroundMusic", "audio", "storage"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "High Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "distance": {
+        "label": "Farthest Run",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
