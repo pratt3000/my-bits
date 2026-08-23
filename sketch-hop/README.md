@@ -182,17 +182,65 @@ sketch-hop/
 
 ### Generation invariants
 
-Three spawn bugs were found by dumping world geometry and testing it rather than
-by looking at it, and all three are now asserted over 25 seeds / 428 platforms:
+The generator is tested by auditing the worlds it produces, not by looking at
+them. All of the following are asserted over 100 generated worlds across four
+screen sizes — roughly 43,000 platforms.
 
-- **Twin platforms must clear each other.** Two platforms on the same row within
-  `w + 26·U` fuse into what reads as one long bar, which is not the route choice
-  the twin spawn was meant to offer.
-- **Monsters and hazards are placed before the row above them exists**, so a
-  later platform can land on top of one. A sweep at the end of `generateUpTo`
-  drops anything left buried.
-- Gaps stay inside the jump arc: apex is `v²/2g ≈ 192·U` px, so the maximum
-  generated gap is capped at `158·U`.
+**Every platform can be left again.** This is the one that matters. Vertical
+gaps were always capped inside the jump arc, but horizontal placement was drawn
+uniformly across the page, so a platform one gap up and most of a screen
+sideways was simply unreachable: you bounced in place until you fell. An audit
+of the old generator found **40.6% of platforms were dead ends**, and a
+breadth-first solver could not climb to the top of the world in *any* of 30
+seeds.
+
+Reachability is now derived rather than hoped for:
+
+- Airtime is the jump arc — `t = (v0 + sqrt(v0² − 2·g·gap)) / g`, the moment the
+  feet fall back through a line `gap` above the launch point.
+- Horizontal reach is that airtime run through the steering model, starting
+  from rest, with a 0.8 safety factor for reaction time.
+- Both are evaluated at the **slowest sensitivity the settings allow**, so
+  moving the slider mid-run can never invalidate a layout that is already on
+  screen. A fast player simply has margin to spare.
+- The page wraps, so distance is the shorter way round.
+- Every row is aimed at the *stretch* the player might launch from — the union
+  of the row below's rungs, including the full patrol of a sliding one — with
+  the span reduced by half that stretch's width, so the next row is reachable
+  from anywhere along it.
+- A `pullIntoReach` step drags any placement that lands outside the arc back to
+  the nearest point inside it. Placement is still random; it is just no longer
+  allowed to be impossible.
+- A crumbling platform gives no bounce, so it can never be a rung. One alone on
+  a row is a dead end by construction, so it always gets a solid partner.
+- A backstop pass sweeps every platform and bridges anything still stranded,
+  first by promoting a nearby crumbling platform to solid, then by placing a
+  stone — sweeping ten heights and seventeen offsets for a clean slot before
+  accepting a crowded one.
+
+Two subtler cases had to be handled before the audit came back clean:
+
+- **Sliding platforms used to sweep the whole page**, which made reachability
+  *time-varying*: land on one at the wrong phase and the next rung was out of
+  range. They now patrol a bounded stretch, and reachability is judged at the
+  worst phase — launch from the end of the patrol furthest from the target,
+  land on the end of the target's patrol furthest from the source. If that
+  works, every other pairing does.
+- **A bobbing platform level with you is not progress**, even though its top
+  phase sits higher. Counting it as a successor satisfied the invariant while
+  leaving the player stuck, and hid real dead ends. A successor must now rise
+  by at least `26·U`. Bob amplitude is also kept well inside the smallest row
+  gap, so a bobbing platform no longer drifts through its neighbours.
+
+Result: **0 stranded platforms**, and the solver climbs to the top of generated
+space in every seed (worst shortfall 0.85 jump-heights, median 0.00).
+
+Also asserted, and originally found the same way:
+
+- Twin platforms clear each other *and* any solid partner already on the row,
+  or they fuse into what reads as one long bar.
+- Monsters and hazards are placed before the row above them exists, so a sweep
+  drops any left buried by a later platform.
 
 ### What the upload validator rejects
 

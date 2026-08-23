@@ -902,6 +902,7 @@ window.plethoraBit = {
     let hazards = [];           // black holes and UFOs
     let camY = 0;               // world y at the top of the screen
     let spawnY = 0;             // highest world y generated so far
+    let lastRungs = [];         // rungs of the last generated row, the chain anchor
     let startY = 0;
     let climb = 0;              // pixels climbed above the start
     let score = 0;
@@ -955,12 +956,21 @@ window.plethoraBit = {
         itemT: 0
       };
       if (kind === "move") {
-        p.vx = (60 + r() * 90) * U * (r() > 0.5 ? 1 : -1);
+        p.vx = (55 + r() * 78) * U * (r() > 0.5 ? 1 : -1);
+        // A sliding platform patrols a bounded stretch rather than the whole
+        // page. Sweeping edge to edge made its reachability time-varying:
+        // land on it at the wrong phase and the next rung was simply gone.
+        p.range = (30 + r() * 54) * U;
+        p.minX = clamp(x - p.range, w * 0.55, W - w * 0.55);
+        p.maxX = clamp(x + p.range, w * 0.55, W - w * 0.55);
       }
       if (kind === "boost") {
-        // A vertically bobbing platform: rarer, appears higher up.
+        // A vertically bobbing platform. The swing is kept well inside the
+        // smallest row gap: a taller bob drifted the platform through its
+        // neighbours, which both looked wrong and made its height — and so
+        // its reachability — depend on the phase you happened to catch it at.
         p.baseY = y;
-        p.bob = 30 * U + r() * 40 * U;
+        p.bob = (11 + r() * 10) * U;
         p.bobT = r() * Math.PI * 2;
       }
       return p;
@@ -1012,36 +1022,296 @@ window.plethoraBit = {
         : { w: 62 * U, h: 30 * U };
     }
 
+    /* ---- Reachability -------------------------------------------------
+     * A run should only end because the player made a mistake, so the
+     * generator has to prove that every platform it places can actually be
+     * left again. Vertical gaps were always capped, but horizontal placement
+     * was uniform across the page, which is what stranded people: a platform
+     * one gap up but most of a screen sideways is simply not reachable.
+     *
+     * Airtime comes from the jump arc; horizontal reach from the steering
+     * model. Both are evaluated at the SLOWEST sensitivity the settings
+     * allow, so moving the slider mid-run can never invalidate the layout.
+     * ------------------------------------------------------------------ */
+    const REACH_SAFETY = 0.80;   // headroom for reaction time and imprecision
+    const STEER_TAU = 0.11;      // time constant implied by STEER_EASE
+
+    const apexRise = () => (JUMP_V * JUMP_V * U) / (2 * G_ACC);
+
+    // Time from launch until the feet fall back through a line `gap` above
+    // the launch point. Zero when the arc never gets that high.
+    function jumpAirTime(gap) {
+      const v0 = -JUMP_V * U;
+      const g = G_ACC * U;
+      const disc = v0 * v0 - 2 * g * gap;
+      if (disc <= 0) return 0;
+      return (v0 + Math.sqrt(disc)) / g;
+    }
+
+    // Horizontal distance the creature can cover in that airtime, starting
+    // from rest, under the eased velocity-target steering.
+    function horizReach(gap) {
+      const t = jumpAirTime(gap);
+      if (t <= 0) return -1;
+      const vmax = MAX_VX * U * SENS_MIN;
+      return vmax * Math.max(0, t - STEER_TAU * (1 - Math.exp(-t / STEER_TAU))) * REACH_SAFETY;
+    }
+
+    // The page wraps, so the long way round is never the only way round.
+    function wrapDx(ax, bx) {
+      const d = Math.abs(ax - bx);
+      return Math.min(d, W - d);
+    }
+
+    // Bobbing platforms are judged at their worst phase: lowest when you are
+    // launching off one, highest when you are trying to land on one.
+    const srcY = p => (p.kind === "boost" && p.baseY !== undefined ? p.baseY + p.bob : p.y);
+    const tgtY = p => (p.kind === "boost" && p.baseY !== undefined ? p.baseY - p.bob : p.y);
+    // A crumbling platform gives no bounce, so it can never be a rung.
+    const isRung = p => p.kind !== "crumble";
+
+    function reachSpan(gap, w) {
+      const r = horizReach(gap);
+      if (r < 0) return -1;
+      return r + w * 0.5 + HOP_W * 0.5 * U * 0.5;
+    }
+
+    // Extremes of a platform's horizontal travel. A static platform is a
+    // point; a sliding one is the stretch it patrols.
+    // Nominal height, ignoring the bob phase. A bobbing platform level with
+    // you is not progress even though its top phase sits higher, and counting
+    // it as a successor was hiding real dead ends.
+    const nomY = p => (p.kind === "boost" && p.baseY !== undefined ? p.baseY : p.y);
+    const MIN_RISE = () => 26 * U;
+
+    const platLo = p => (p.kind === "move" && p.minX !== undefined ? p.minX : p.x);
+    const platHi = p => (p.kind === "move" && p.maxX !== undefined ? p.maxX : p.x);
+
+    // Reachable at every phase, not just at the moment of generation: launch
+    // from the end of p's patrol furthest from q, land on the end of q's
+    // patrol furthest from p. If that works, every other pairing does too.
+    function canReach(p, q) {
+      if (!isRung(q)) return false;
+      // has to actually take you upward, not merely be reachable
+      if (nomY(q) > nomY(p) - MIN_RISE()) return false;
+      const gap = srcY(p) - tgtY(q);
+      if (gap <= 1) return false;
+      const span = reachSpan(gap, q.w);
+      if (span < 0) return false;
+      const ps = [platLo(p), platHi(p)];
+      const qs = [platLo(q), platHi(q)];
+      let worst = 0;
+      for (let i = 0; i < 2; i++) {
+        for (let j = 0; j < 2; j++) worst = Math.max(worst, wrapDx(ps[i], qs[j]));
+      }
+      return worst <= span;
+    }
+
+    // Nearest x to `want` that is still landable from x0, honouring the wrap
+    // and keeping the platform fully on the page.
+    function pullIntoReach(x0, want, span, w) {
+      const lo = w * 0.55, hi = W - w * 0.55;
+      const clamped = clamp(want, lo, hi);
+      if (wrapDx(x0, clamped) <= span) return clamped;
+      let best = null, bestD = Infinity;
+      const cands = [x0 + span, x0 - span, x0 + span - W, x0 - span + W, x0];
+      for (let i = 0; i < cands.length; i++) {
+        const c = clamp(cands[i], lo, hi);
+        if (wrapDx(x0, c) > span + 0.5) continue;
+        const dd = Math.abs(c - want);
+        if (dd < bestD) { bestD = dd; best = c; }
+      }
+      return best === null ? clamp(x0, lo, hi) : best;
+    }
+
+    // Where to aim the next row from, given the rungs of the row below. With
+    // two rungs the anchor is the midpoint of the shorter arc and the usable
+    // span shrinks by half their separation, so the next row is reachable
+    // from either of them rather than only from one.
+    // The stretch the player might launch from, covering every rung in the
+    // row and the full patrol of any sliding one. The next row is aimed at
+    // its centre with the span reduced by its half-width, so it is reachable
+    // from anywhere along it.
+    function rowAnchor(rungs) {
+      if (!rungs.length) return null;
+      let lo = Infinity, hi = -Infinity, y = -Infinity;
+      for (let i = 0; i < rungs.length; i++) {
+        lo = Math.min(lo, platLo(rungs[i]));
+        hi = Math.max(hi, platHi(rungs[i]));
+        y = Math.max(y, srcY(rungs[i]));
+      }
+      return { x: (lo + hi) / 2, y: y, shrink: (hi - lo) / 2 };
+    }
+
+    // Backstop for the invariant: every rung must have some rung above it
+    // that can actually be reached. The placement rules below keep this true
+    // for the main chain; this catches side platforms and odd geometry.
+    function ensureReachable() {
+      const apex = apexRise();
+      const w = PLAT_W * U;
+      for (let pass = 0; pass < 4; pass++) {
+        const rungs = platforms.filter(isRung).sort((a, b) => b.y - a.y);
+        let added = 0;
+        for (let i = 0; i < rungs.length; i++) {
+          const p = rungs[i];
+          // Near the top of generated space the successor simply is not built
+          // yet; the next call will place it.
+          if (p.y - spawnY < apex * 1.15) continue;
+          let ok = false;
+          for (let j = 0; j < rungs.length; j++) {
+            if (rungs[j] !== p && canReach(p, rungs[j])) { ok = true; break; }
+          }
+          if (ok) continue;
+
+          // Bridge it, aiming toward whatever sits above so the new stone is
+          // not simply a fresh dead end one row higher.
+          let bestAbove = null;
+          for (let j = 0; j < rungs.length; j++) {
+            const q = rungs[j];
+            if (tgtY(q) >= srcY(p) - 20 * U) continue;
+            if (!bestAbove || tgtY(q) > tgtY(bestAbove)) bestAbove = q;
+          }
+          // Cheapest repair: if a crumbling platform already sits somewhere
+          // reachable, promote it to solid rather than adding geometry.
+          let promoted = false;
+          for (let j = 0; j < platforms.length; j++) {
+            const q = platforms[j];
+            if (q === p || isRung(q)) continue;
+            const probe = { x: q.x, y: q.y, w: q.w, kind: "static", vx: q.vx };
+            if (canReach(p, probe)) { q.kind = "static"; promoted = true; break; }
+          }
+          if (promoted) { added++; continue; }
+
+          // Otherwise bridge with a stone. Sweep the whole reachable span at
+          // several gaps, nearest-to-ideal first, so a clean slot is found
+          // rather than settling for a crowded one.
+          // A fine sweep of heights, ordered outward from the comfortable
+          // one, so the last-resort placement below is almost never needed.
+          const gaps = [0.58, 0.50, 0.66, 0.42, 0.74, 0.36, 0.82, 0.30, 0.90, 0.26];
+          let placed = false;
+          for (let gi = 0; gi < gaps.length && !placed; gi++) {
+            const gap = Math.min(apex * gaps[gi], 118 * U);
+            const span = reachSpan(gap, w);
+            if (span < 0) continue;
+            const y = srcY(p) - gap;
+            let want = p.x;
+            if (bestAbove) {
+              let dd = bestAbove.x - p.x;
+              if (Math.abs(dd) > W / 2) dd = dd > 0 ? dd - W : dd + W;
+              want = p.x + clamp(dd, -span * 0.75, span * 0.75);
+            }
+            const cands = [];
+            for (let k = -8; k <= 8; k++) {
+              cands.push(pullIntoReach(p.x, want + (k / 8) * span, span, w));
+            }
+            cands.sort((m, n) => Math.abs(m - want) - Math.abs(n - want));
+            for (let ci = 0; ci < cands.length; ci++) {
+              if (overlapsPlatform(cands[ci], y, w * 0.5, PLAT_H * U * 0.5)) continue;
+              platforms.push(platformAt(cands[ci], y, "static", gen));
+              placed = true;
+              break;
+            }
+          }
+
+          // Last resort: a rung with nowhere to go is worse than a crowded
+          // pair, so place the stone regardless of what it sits near.
+          if (!placed) {
+            const gap = Math.min(apex * 0.5, 100 * U);
+            const span = Math.max(10 * U, reachSpan(gap, w));
+            platforms.push(platformAt(pullIntoReach(p.x, p.x, span, w), srcY(p) - gap, "static", gen));
+            placed = true;
+          }
+          if (placed) added++;
+          if (added > 24) break;
+        }
+        if (!added) break;
+      }
+    }
+
     function generateUpTo(targetY) {
       const r = gen;
       let guard = 0;
+      let produced = 0;
       while (spawnY > targetY && guard++ < 400) {
+        produced++;
         const d = clamp((startY - spawnY) / (750 * 30), 0, 1);
         const minGap = lerp(58, 74, d) * U;
         const maxGap = lerp(96, 158, d) * U;
         const gap = lerp(minGap, maxGap, Math.pow(r(), 0.8));
         spawnY -= gap;
 
-        const kind = chooseKind(d, r);
         const w = PLAT_W * U;
-        const x = lerp(w * 0.55, W - w * 0.55, r());
+        let kind = chooseKind(d, r);
+
+        // Aim from the row below, and pull the placement into the arc if the
+        // random draw landed outside it. Uniform x across the page is what
+        // used to strand people.
+        const anchor = rowAnchor(lastRungs);
+        let x = lerp(w * 0.55, W - w * 0.55, r());
+        if (anchor) {
+          const span = reachSpan(anchor.y - spawnY, w) - anchor.shrink;
+          x = span > 0
+            ? pullIntoReach(anchor.x, x, span, w)
+            : pullIntoReach(lastRungs[0].x, x, Math.max(8 * U, reachSpan(srcY(lastRungs[0]) - spawnY, w)), w);
+        }
         const p = platformAt(x, spawnY, kind, r);
+        // Trim the patrol so both ends stay inside the arc from the row below.
+        if (p.kind === "move" && anchor) {
+          const allow = Math.max(10 * U, reachSpan(anchor.y - spawnY, w) - anchor.shrink);
+          const room = Math.max(0, allow - wrapDx(anchor.x, p.x));
+          const rng = Math.min(p.range, room);
+          p.range = rng;
+          p.minX = clamp(p.x - rng, w * 0.55, W - w * 0.55);
+          p.maxX = clamp(p.x + rng, w * 0.55, W - w * 0.55);
+        }
         p.item = chooseItem(kind, d, r);
         platforms.push(p);
+
+        // A crumbling platform gives no bounce, so a row containing only one
+        // is a dead end by construction. It always gets a solid partner.
+        const rowRungs = [];
+        if (isRung(p)) rowRungs.push(p);
+        if (!isRung(p)) {
+          const pSpan = anchor
+            ? Math.max(8 * U, reachSpan(anchor.y - spawnY, w) - anchor.shrink)
+            : W * 0.5;
+          let px2 = x + (x < W / 2 ? 1 : -1) * (w + 34 * U);
+          px2 = pullIntoReach(anchor ? anchor.x : x, px2, pSpan, w);
+          if (Math.abs(px2 - x) > w + 20 * U) {
+            const partner = platformAt(px2, spawnY - lerp(0, 12, r()) * U, r() < 0.75 ? "static" : "vanish", r);
+            platforms.push(partner);
+            rowRungs.push(partner);
+          } else {
+            // No room beside it — make this one solid instead of stranding.
+            p.kind = "static";
+            kind = "static";
+            rowRungs.push(p);
+          }
+        }
 
         // Occasional twin platform on the same row, for route choice. It only
         // lands if it clears the first one — two touching platforms read as a
         // single long bar, which is not the choice we meant to offer.
         if (r() < 0.10 + d * 0.08 && W > 340 * U) {
-          const x2 = x < W / 2 ? lerp(W * 0.62, W - w * 0.55, r()) : lerp(w * 0.55, W * 0.38, r());
+          let x2 = x < W / 2 ? lerp(W * 0.62, W - w * 0.55, r()) : lerp(w * 0.55, W * 0.38, r());
           const y2 = spawnY - lerp(0, 16, r()) * U;
-          if (Math.abs(x2 - x) > w + 26 * U) {
+          if (anchor) {
+            const span2 = reachSpan(anchor.y - y2, w) - anchor.shrink;
+            if (span2 > 0) x2 = pullIntoReach(anchor.x, x2, span2, w);
+          }
+          let clear = Math.abs(x2 - x) > w + 26 * U;
+          for (let i = 0; i < rowRungs.length && clear; i++) {
+            if (Math.abs(x2 - rowRungs[i].x) <= w + 26 * U) clear = false;
+          }
+          if (clear) {
             const k2 = chooseKind(d, r);
             const p2 = platformAt(x2, y2, k2, r);
             p2.item = chooseItem(k2, d, r);
             platforms.push(p2);
+            if (isRung(p2)) rowRungs.push(p2);
           }
         }
+        if (rowRungs.length) lastRungs = rowRungs.slice(0, 2);
 
         // Monsters
         const mChance = d < 0.03 ? 0 : 0.055 + d * 0.10;
@@ -1081,6 +1351,11 @@ window.plethoraBit = {
         }
       }
 
+      // This runs on every frame of play, but only has work to do on the
+      // frames that actually extended the world.
+      if (!produced) return;
+      ensureReachable();
+
       // Monsters and hazards are placed before the row above them exists, so
       // a later platform can land on top of one. Drop anything left buried.
       for (let i = hazards.length - 1; i >= 0; i--) {
@@ -1114,14 +1389,23 @@ window.plethoraBit = {
       shakeT = 0;
 
       // A guaranteed ladder of easy ground so nobody dies to the first gap.
+      // Each rung is pulled into the arc of the one below it, same as the
+      // procedural rows above.
       const base = platformAt(W / 2, startY - 24 * U, "static", gen);
       base.w = W * 0.52;
       platforms.push(base);
+      lastRungs = [base];
       let y = startY - 24 * U;
       for (let i = 0; i < 6; i++) {
-        y -= (78 + gen() * 26) * U;
-        const p = platformAt(lerp(PLAT_W * U * 0.6, W - PLAT_W * U * 0.6, gen()), y, "static", gen);
+        const gap = (78 + gen() * 26) * U;
+        y -= gap;
+        const w = PLAT_W * U;
+        const prev = lastRungs[0];
+        const span = reachSpan(srcY(prev) - y, w);
+        const want = lerp(w * 0.6, W - w * 0.6, gen());
+        const p = platformAt(pullIntoReach(prev.x, want, span, w), y, "static", gen);
         platforms.push(p);
+        lastRungs = [p];
       }
       spawnY = y;
       generateUpTo(camY - H);
@@ -1399,9 +1683,10 @@ window.plethoraBit = {
         const p = platforms[i];
         if (p.kind === "move") {
           p.x += p.vx * dt;
-          const half = p.w * 0.5;
-          if (p.x < half) { p.x = half; p.vx = Math.abs(p.vx); }
-          else if (p.x > W - half) { p.x = W - half; p.vx = -Math.abs(p.vx); }
+          const lo = p.minX !== undefined ? p.minX : p.w * 0.5;
+          const hi = p.maxX !== undefined ? p.maxX : W - p.w * 0.5;
+          if (p.x < lo) { p.x = lo; p.vx = Math.abs(p.vx); }
+          else if (p.x > hi) { p.x = hi; p.vx = -Math.abs(p.vx); }
         }
         if (p.kind === "boost") {
           p.bobT += dt * 1.6;
