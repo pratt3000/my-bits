@@ -1,11 +1,11 @@
 # Last Straw
 
-**Twenty-six thousand straws. One needle. Somewhere in there.**
+**Twenty thousand straws. One needle. Somewhere in there.**
 
 A 3D haystack you take apart by hand. Orbit it, tap a straw to pull it out, or
 press and hold to burrow a shaft into the pile. Somewhere inside is a sewing
-needle. Six pieces of worthless junk are in there too, and they glint exactly
-like the real thing.
+needle. Eight pieces of worthless junk are in there too — they glint exactly
+like the real thing, and each one has its own small sad story.
 
 It is meant to be a long sitting. The dig saves itself, so you can leave the
 haystack half-demolished and come back to it.
@@ -28,7 +28,7 @@ haystack half-demolished and come back to it.
   straw along the ray, so the pile peels from the outside in and a sustained
   hold bores a visible tunnel.
 - **Warmth** is the only hint. Every straw you pull reports its distance to the
-  needle, and the meter reacts inside 1.55 units — about 2% of the pile. The
+  needle, and the meter reacts inside 1.45 units — about 2% of the pile. The
   white tick marks the closest you have ever been.
 - The needle **glints** when a clear line opens between it and the camera. So
   does every piece of junk.
@@ -44,21 +44,26 @@ pointer events a thumb would. Eight runs, all solved:
 
 | | straws pulled | time |
 | --- | --- | --- |
-| luckiest | 668 | 3 min |
-| median | 10,623 | **52 min** |
-| worst | 17,352 | 89 min |
+| luckiest | 1,381 | 7 min |
+| median | 6,539 | **32 min** |
+| worst | 16,136 | 91 min |
 
 The spread is the point: the leaderboard is *fewest straws*, so a lucky early
 shaft is worth bragging about, and a bad run turns into a grudge. Clearing all
-26,000 straws would take roughly an hour and a half of solid burrowing, which is
-the practical ceiling.
+20,000 straws takes about 80 minutes of solid burrowing, which is the practical
+ceiling.
+
+This is a simulated player with perfect recall and no wasted motion, so a human
+should sit at or above these numbers. An earlier build at 26,000 straws measured
+a 52-minute median; dropping to 20,000 traded roughly twenty minutes off the
+middle of the range, partly clawed back by tightening `W_RANGE`.
 
 ## How it is built
 
 Everything is procedural — `maxAssets` is 0, so there is not a single packaged
 byte of art or audio.
 
-**The pile.** 26,000 straws in one `InstancedMesh`. Positions are sampled
+**The pile.** 20,000 straws in one `InstancedMesh`. Positions are sampled
 uniformly by volume inside a domed-cone profile, and each straw is oriented in
 the local tangent plane near the surface (thatch) blending to a jumble deeper
 in. Per-straw colour is darkened by distance from the hull, which is what makes
@@ -69,7 +74,13 @@ straw swaps the last live one into the hole and decrements `mesh.count`, so the
 GPU never draws a gap and picking only walks straws that still exist. Only the
 16 floats that actually changed are re-uploaded, via `addUpdateRange`.
 
-**Picking is custom.** `InstancedMesh.raycast` would test all 26,000 instances;
+**The camera cannot get into the hay.** The orbit centre sits on the pile's
+axis, so a fixed minimum zoom would put the eye inside it. Instead the minimum
+distance is found per frame by marching out along the view direction until it
+leaves the hull, which lets you close to within about 0.85 units of the surface
+from any angle without ever ending up buried.
+
+**Picking is custom.** `InstancedMesh.raycast` would test all 20,000 instances;
 instead each straw is treated as a capsule with a bounding-sphere reject, a
 `b - h >= bestT` early-out, and an exact ray/segment closest-approach test. The
 needle and the junk are tested in the same pass as spheres, which makes
@@ -79,8 +90,8 @@ you pull hay.
 **Sound** is synthesised into `data:` URLs at boot — six noise-burst straw
 rustles and a set of struck-metal tings — layered under a `ctx.music` bed.
 
-**Saving.** Which straws are gone is a bitfield, base64'd to about 4.3 KB, plus
-three seeds (field, pile layout, hiding places). The entire 26,000-object scene
+**Saving.** Which straws are gone is a bitfield, base64'd to about 3.3 KB, plus
+three seeds (field, pile layout, hiding places). The entire 20,000-object scene
 is a pure function of those seeds, which is why the save stays inside the
 8192-byte `memory.local` ceiling. `ctx.storage` is the primary copy and the
 platform channel is the cross-device backup.
@@ -117,7 +128,7 @@ The length of a hunt is governed by a handful of constants at the top of
 | `STRAW_COUNT`, `STACK_R/H`     | Size of the search space and how much hay a shaft costs    |
 | `W_WARM`, `W_RANGE`            | How much of the pile the hint covers — the strongest lever |
 | `HOLD_SLOW_MS`, `HOLD_FAST_MS` | Burrow cadence, so how long clearing hay takes             |
-| `DECOY_COUNT`                  | How many false glints are in there                         |
+| `DECOY_COUNT`                  | How many false glints are in there (needs a `JUNK` entry)  |
 
 Widening `W_RANGE` collapses the search dramatically; it is quadratic in the
 fraction of the pile the meter covers.

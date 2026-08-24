@@ -24,10 +24,10 @@ window.plethoraBit = {
     // =======================================================================
     // 0. TUNING
     // =======================================================================
-    const STRAW_COUNT = 26000;   // the whole premise
-    const STACK_R     = 6.8;     // haystack radius at the ground
-    const STACK_H     = 8.2;     // haystack height
-    const DECOY_COUNT = 6;       // shiny things that are not the needle
+    const STRAW_COUNT = 20000;   // the whole premise
+    const STACK_R     = 6.3;     // haystack radius at the ground
+    const STACK_H     = 7.7;     // haystack height
+    const DECOY_COUNT = 8;       // shiny things that are not the needle
 
     // Burrow cadence. First pull is quick, then the rate ramps up the longer a
     // press is held and resets on release. Tuned so a full 10k clear is roughly
@@ -40,10 +40,10 @@ window.plethoraBit = {
     // Warmth thresholds, in world units from the needle. Deliberately tight:
     // a 1.6 sphere is ~3% of the pile, so the meter narrows the hunt without
     // handing it over. Widening these collapses the search dramatically.
-    const W_BURNING = 0.40;
-    const W_HOT     = 0.75;
-    const W_WARM    = 1.15;
-    const W_RANGE   = 1.55;      // meter reads zero beyond this
+    const W_BURNING = 0.375;
+    const W_HOT     = 0.70;
+    const W_WARM    = 1.08;
+    const W_RANGE   = 1.45;      // meter reads zero beyond this
 
     const SAVE_KEY  = "laststraw.dig.v1";
     const SAVE_VER  = 1;
@@ -100,7 +100,13 @@ window.plethoraBit = {
         display: flex; align-items: center; gap: 9px;
       }
       .ls-sub .dot { opacity: .4; }
-      .ls-junk { color: #ffd489; }
+      .ls-junk {
+        pointer-events: auto; cursor: pointer; color: #ffd489;
+        background: none; border: none; padding: 2px 6px; margin: -2px -6px;
+        font: inherit; font-weight: 700; letter-spacing: .5px;
+        border-bottom: 1px dashed rgba(255,212,137,.45);
+      }
+      .ls-junk:active { opacity: .6; }
 
       /* ---- warmth meter ---- */
       .ls-warm {
@@ -171,15 +177,54 @@ window.plethoraBit = {
       .ls-toast.on { opacity: 1; transform: translate(-50%,-50%) scale(1); }
       .ls-toast .lead { display: block; font-size: 22px; margin-bottom: 5px; }
 
+      /* ---- a piece of junk, and its story ---- */
+      .ls-find {
+        position: absolute; left: 50%; top: calc(${padT}px + 74px);
+        transform: translate(-50%, -12px); z-index: 8; pointer-events: auto;
+        width: min(340px, 86vw); text-align: left; cursor: pointer;
+        padding: 14px 16px 15px; border-radius: 18px;
+        background: linear-gradient(180deg, rgba(58,36,12,.93), rgba(30,18,6,.93));
+        border: 1px solid rgba(255,214,140,.34);
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 18px 44px rgba(16,7,0,.55);
+        opacity: 0; visibility: hidden;
+        transition: opacity .3s ease, transform .3s ease, visibility 0s linear .3s;
+      }
+      .ls-find.on {
+        opacity: 1; visibility: visible; transform: translate(-50%, 0);
+        transition: opacity .3s ease, transform .3s ease, visibility 0s linear 0s;
+      }
+      .ls-find-head { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+      .ls-find-ic { font-size: 24px; line-height: 1; }
+      .ls-find-nm { font-size: 15px; font-weight: 800; letter-spacing: -.2px; color: #ffe6b3; }
+      .ls-find-st { font-size: 12.5px; line-height: 1.5; font-weight: 600; opacity: .88; }
+      .ls-find-hint { margin-top: 9px; font-size: 10px; font-weight: 800; letter-spacing: 1.4px; opacity: .45; text-transform: uppercase; }
+
+      /* ---- the collection ---- */
+      .ls-find-row {
+        display: flex; gap: 11px; align-items: flex-start; text-align: left;
+        padding: 11px 12px; border-radius: 13px; margin-bottom: 7px;
+        background: rgba(255,232,190,.07); border: 1px solid rgba(255,232,190,.10);
+      }
+      .ls-find-row.miss { opacity: .38; }
+      .ls-find-row .ic { font-size: 20px; line-height: 1.1; flex: 0 0 24px; text-align: center; }
+      .ls-find-row .nm { font-size: 13px; font-weight: 800; margin-bottom: 3px; }
+      .ls-find-row .st { font-size: 11.5px; line-height: 1.45; font-weight: 600; opacity: .82; }
+
       /* ---- full-screen panels ---- */
       .ls-panel {
         position: absolute; inset: 0; z-index: 9; pointer-events: auto;
         display: flex; align-items: center; justify-content: center; padding: 26px;
         background: radial-gradient(120% 90% at 50% 24%, rgba(58,32,8,.72), rgba(14,7,2,.92));
         backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-        opacity: 1; transition: opacity .5s ease;
+        opacity: 1; visibility: visible;
+        transition: opacity .5s ease, visibility 0s linear 0s;
       }
-      .ls-panel.hide { opacity: 0; pointer-events: none; }
+      .ls-panel.hide {
+        opacity: 0; pointer-events: none; visibility: hidden;
+        transition: opacity .5s ease, visibility 0s linear .5s;
+      }
+      .ls-panel.hide * { pointer-events: none !important; }
       .ls-card {
         width: 100%; max-width: 380px; max-height: 100%; overflow-y: auto;
         -webkit-overflow-scrolling: touch; text-align: center;
@@ -281,11 +326,11 @@ window.plethoraBit = {
       <div class="ls-vig"></div>
 
       <div class="ls-hud">
-        <div class="ls-count"><span class="val">26,000</span><span class="unit">straws left</span></div>
+        <div class="ls-count"><span class="val">20,000</span><span class="unit">straws left</span></div>
         <div class="ls-sub">
           <span class="clock">00:00</span>
           <span class="dot">•</span>
-          <span class="ls-junk"><span class="jv">0</span>/${DECOY_COUNT} junk</span>
+          <button class="ls-junk" aria-label="What you have found"><span class="jv">0</span>/${DECOY_COUNT} junk</button>
         </div>
       </div>
 
@@ -306,10 +351,19 @@ window.plethoraBit = {
       <div class="ls-hint"></div>
       <div class="ls-toast"></div>
 
+      <div class="ls-find">
+        <div class="ls-find-head">
+          <span class="ls-find-ic">🔩</span>
+          <span class="ls-find-nm">Something</span>
+        </div>
+        <div class="ls-find-st"></div>
+        <div class="ls-find-hint">not a needle · tap to dismiss</div>
+      </div>
+
       <div class="ls-panel p-intro">
         <div class="ls-card">
           <div class="ls-title">LAST<br>STRAW</div>
-          <div class="ls-tag">Twenty-six thousand straws.<br>One needle. Somewhere in there.</div>
+          <div class="ls-tag">Twenty thousand straws.<br>One needle. Somewhere in there.</div>
           <div class="ls-resume" style="display:none"></div>
           <div class="ls-rule"></div>
           <div class="ls-list">
@@ -339,6 +393,16 @@ window.plethoraBit = {
           </div>
           <button class="ls-cta c-back">Back to the hay</button>
           <button class="ls-link l-restart">Abandon this dig, start a fresh haystack</button>
+        </div>
+      </div>
+
+      <div class="ls-panel p-finds hide">
+        <div class="ls-card">
+          <div class="ls-title" style="font-size:28px">WHAT YOU<br>HAVE FOUND</div>
+          <div class="ls-tag" style="font-size:12px">Everything in this haystack except the needle.</div>
+          <div class="ls-rule"></div>
+          <div class="ls-find-list"></div>
+          <button class="ls-cta c-back3">Back to the hay</button>
         </div>
       </div>
 
@@ -386,6 +450,13 @@ window.plethoraBit = {
       pIntro:   $(".p-intro"),
       pHelp:    $(".p-help"),
       pLb:      $(".p-lb"),
+      pFinds:   $(".p-finds"),
+      findList: $(".ls-find-list"),
+      find:     $(".ls-find"),
+      findIc:   $(".ls-find-ic"),
+      findNm:   $(".ls-find-nm"),
+      findSt:   $(".ls-find-st"),
+      bJunk:    $(".ls-junk"),
       pWin:     $(".p-win"),
       cta:      $(".p-intro .ls-cta"),
       load:     $(".ls-load"),
@@ -1137,7 +1208,7 @@ window.plethoraBit = {
 
         sHalf[i] = len * 0.5;
         sDepth[i] = depth01;
-        sSway[i] = Math.pow(1 - depth01, 2.2) * 0.19;
+        sSway[i] = Math.pow(1 - depth01, 6.0) * 0.040;
 
         // Hay colour, then darkened by depth so the inside of the pile reads as
         // shadow. Digging a shaft therefore carves a visibly dark tunnel.
@@ -1176,14 +1247,15 @@ window.plethoraBit = {
           .replace("#include <begin_vertex>", [
             "#include <begin_vertex>",
             "float ph = instanceMatrix[3][0] * 0.9 + instanceMatrix[3][2] * 0.7 + instanceMatrix[3][1] * 0.45;",
-            "transformed.x += sin(uTime * 1.9 + ph) * aSway * transformed.y;",
-            "transformed.z += cos(uTime * 1.6 + ph * 1.21) * aSway * 0.7 * transformed.y;"
+            "transformed.x += sin(uTime * 0.75 + ph) * aSway * transformed.y;",
+            "transformed.z += cos(uTime * 0.61 + ph * 1.21) * aSway * 0.7 * transformed.y;"
           ].join("\n"));
       };
       return mat;
     }
 
     const strawMesh = new THREE.InstancedMesh(strawGeo, strawMaterial(true), STRAW_COUNT);
+    strawMesh.name = "haystack";
     strawMesh.frustumCulled = false;
     strawMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(strawMesh);
@@ -1284,6 +1356,7 @@ window.plethoraBit = {
       eyeRing.position.y = 0.455;
       eyeRing.rotation.y = Math.PI / 2;
       needle.add(body, tip, eyeRing);
+      needle.name = "needle";
       scene.add(needle);
     }
 
@@ -1295,14 +1368,50 @@ window.plethoraBit = {
     glint.scale.setScalar(1.1);
     scene.add(glint);
 
-    // ---- six pieces of junk ---------------------------------------------
+    // ---- eight pieces of junk -------------------------------------------
+    // Each one is a small story. Finding them is the consolation prize for an
+    // hour of your life, and they are all findable again from the HUD.
     const JUNK = [
-      { name: "a bent nail",     msg: "A bent nail. Not a needle. Nobody is impressed.",                     color: 0x9aa0a8, metal: 0.9,  rough: 0.42 },
-      { name: "a bottle cap",    msg: "A bottle cap. Someone stood here drinking something in 1997.",        color: 0xc0432f, metal: 0.75, rough: 0.34 },
-      { name: "a brass ring",    msg: "A brass ring. Worthless, sentimental, and still not a needle.",       color: 0xc79a3a, metal: 0.95, rough: 0.22 },
-      { name: "a shirt button",  msg: "A shirt button. Its shirt is long gone. So is your afternoon.",       color: 0xe8dfc9, metal: 0.12, rough: 0.62 },
-      { name: "a small coin",    msg: "A coin. Wrong currency, wrong century, wrong shape entirely.",        color: 0xb2732f, metal: 0.92, rough: 0.28 },
-      { name: "a paperclip",     msg: "A paperclip. So close. So very, very not it.",                        color: 0xbfc6cf, metal: 0.94, rough: 0.24 }
+      {
+        icon: "🔩", name: "A bent nail",
+        story: "Someone swung a hammer here, missed, swore, and never found it. You have now spent longer looking for this nail than they spent losing it.",
+        color: 0x9aa0a8, metal: 0.90, rough: 0.42, shape: "nail"
+      },
+      {
+        icon: "🍾", name: "A bottle cap",
+        story: "Crimped, rusted, and about thirty summers old. Somebody stood exactly where you are standing, drank something cold, and did not think about you once.",
+        color: 0xc0432f, metal: 0.75, rough: 0.34, shape: "cap"
+      },
+      {
+        icon: "💍", name: "A wedding ring",
+        story: "Inscribed inside: FOREVER — 1974. It is in a haystack. You are welcome to draw your own conclusions about how that went.",
+        color: 0xc79a3a, metal: 0.96, rough: 0.20, shape: "ring"
+      },
+      {
+        icon: "🪡", name: "A thimble",
+        story: "A sewing thimble. So the needle had company in here. One of them has turned up. It is not the one you wanted.",
+        color: 0xcfd4dc, metal: 0.88, rough: 0.30, shape: "thimble"
+      },
+      {
+        icon: "🔑", name: "A house key",
+        story: "Cut for a lock that was replaced decades ago. It opens nothing. Nobody can get in. You are holding a key to nowhere, in a haystack.",
+        color: 0xb8a35e, metal: 0.93, rough: 0.28, shape: "key"
+      },
+      {
+        icon: "👓", name: "One spectacle lens",
+        story: "Half a pair of glasses. Someone else was in here looking for something small. They did not find it either, and they left worse off than they arrived.",
+        color: 0xbfe0f0, metal: 0.10, rough: 0.06, shape: "lens"
+      },
+      {
+        icon: "🧷", name: "A paperclip",
+        story: "Straightened out, bent back, then given up on. Thin, metal and pointy: everything a needle is, except a needle.",
+        color: 0xbfc6cf, metal: 0.94, rough: 0.24, shape: "clip"
+      },
+      {
+        icon: "🪙", name: "A worn coin",
+        story: "The face has rubbed away entirely. Wrong country, wrong century, wrong shape, wrong everything. Its only remaining value is that it is not hay.",
+        color: 0xb2732f, metal: 0.92, rough: 0.30, shape: "coin"
+      }
     ];
 
     // The props are built once; only where they hide changes between runs.
@@ -1312,27 +1421,44 @@ window.plethoraBit = {
         const spec = JUNK[j % JUNK.length];
         const mat = metalMat(spec.color, spec.metal, spec.rough);
         const g = new THREE.Group();
-        if (j % 6 === 0) {
+        if (spec.shape === "nail") {
           const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.44, 6), mat);
           const head = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.028, 8), mat);
           head.position.y = 0.23;
           shaft.rotation.z = 0.22;
           g.add(shaft, head);
-        } else if (j % 6 === 1) {
-          const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.105, 0.055, 16), mat);
-          g.add(cap);
-        } else if (j % 6 === 2) {
+        } else if (spec.shape === "cap") {
+          g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.105, 0.055, 16), mat));
+        } else if (spec.shape === "ring") {
           g.add(new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.026, 7, 16), mat));
-        } else if (j % 6 === 3) {
-          g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.024, 16), mat));
-        } else if (j % 6 === 4) {
-          g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.098, 0.098, 0.016, 18), mat));
-        } else {
+        } else if (spec.shape === "thimble") {
+          const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.088, 0.13, 14, 1, true), mat);
+          const dome = new THREE.Mesh(new THREE.SphereGeometry(0.072, 14, 7, 0, TAU, 0, Math.PI / 2), mat);
+          dome.position.y = 0.065;
+          g.add(cup, dome);
+        } else if (spec.shape === "key") {
+          const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.30, 6), mat);
+          const bow = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.016, 6, 14), mat);
+          bow.position.y = 0.16;
+          bow.rotation.x = Math.PI / 2;
+          const t1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.030, 0.014), mat);
+          t1.position.set(0.030, -0.10, 0);
+          const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.030, 0.014), mat);
+          t2.position.set(0.030, -0.15, 0);
+          g.add(shaft, bow, t1, t2);
+        } else if (spec.shape === "lens") {
+          const lens = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 10), mat);
+          lens.scale.set(1, 1, 0.16);
+          g.add(lens);
+        } else if (spec.shape === "clip") {
           const t1 = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.014, 6, 16), mat);
           const t2 = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.013, 6, 14), mat);
           t2.position.z = 0.012;
           g.add(t1, t2);
+        } else {
+          g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.098, 0.098, 0.016, 18), mat));
         }
+        g.name = "junk";
         scene.add(g);
 
         const spark = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -1344,7 +1470,8 @@ window.plethoraBit = {
 
         decoys.push({
           pos: new THREE.Vector3(), mesh: g, spark: spark,
-          name: spec.name, msg: spec.msg, found: false, vis: false, idx: j
+          icon: spec.icon, name: spec.name, story: spec.story,
+          found: false, vis: false, idx: j
         });
       }
     }
@@ -1781,14 +1908,14 @@ window.plethoraBit = {
       try { ctx.music.sting("fail"); } catch (_) {}
       try { ctx.platform.interact({ type: "junk", name: dc.name }); } catch (_) {}
       try { ctx.platform.milestone("junk", { found: junkFound }); } catch (_) {}
-      toast(dc.msg, "🔩", 3400);
+      showFind(dc);
       updateHud();
     }
 
     // =======================================================================
     // 12. INPUT — orbit, pinch, and the dig
     // =======================================================================
-    let camAz = 0.7, camEl = 0.40, camDist = 25.5, camTgtY = 3.6;
+    let camAz = 0.7, camEl = 0.40, camDist = 23.8, camTgtY = 3.4;
     let tAz = camAz, tEl = camEl, tDist = camDist, tTgtY = camTgtY;
 
     const pointers = new Map();
@@ -1896,7 +2023,7 @@ window.plethoraBit = {
       if (mode === "gesture" && pointers.size >= 2) {
         const it = Array.from(pointers.values());
         const d = Math.hypot(it[0].x - it[1].x, it[0].y - it[1].y) || 1;
-        tDist = clamp(pinchDist0 * (pinchD0 / d), 3.6, 40);
+        tDist = clamp(pinchDist0 * (pinchD0 / d), 2.4, 40);
         const midY = (it[0].y + it[1].y) * 0.5;
         tTgtY = clamp(pinchTgtY0 + (midY - pinchMidY) * 0.022, 0.25, STACK_H * 0.98);
         return;
@@ -1934,7 +2061,7 @@ window.plethoraBit = {
         marker.visible = false;
         pressId = -1;
       }
-      if (pointers.size === 0) mode = "none";
+      if (pointers.size === 0) { mode = "none"; pressId = -1; }
       else if (pointers.size === 1) {
         // Dropping to one finger after a pinch must not fire a stray pull.
         mode = "orbit";
@@ -1951,7 +2078,7 @@ window.plethoraBit = {
     ctx.listen(canvas, "contextmenu", (ev) => ev.preventDefault(), { passive: false });
     ctx.listen(canvas, "wheel", (ev) => {
       ev.preventDefault();
-      tDist = clamp(tDist * (1 + Math.sign(ev.deltaY) * 0.10), 3.6, 40);
+      tDist = clamp(tDist * (1 + Math.sign(ev.deltaY) * 0.10), 2.4, 40);
     }, { passive: false });
 
     function digInterval(heldMs) {
@@ -2000,6 +2127,41 @@ window.plethoraBit = {
         el.warmLbl.textContent = TIER_NAMES[tier];
       }
       warmTier = tier;
+    }
+
+    let findTimer = null;
+    function showFind(dc) {
+      el.findIc.textContent = dc.icon;
+      el.findNm.textContent = dc.name;
+      el.findSt.textContent = dc.story;
+      el.find.classList.add("on");
+      if (findTimer) clearTimeout(findTimer);
+      findTimer = setTimeout(() => el.find.classList.remove("on"), 7500);
+    }
+
+    // Built with DOM nodes rather than markup so the copy is always text.
+    function renderFinds() {
+      el.findList.textContent = "";
+      for (let i = 0; i < decoys.length; i++) {
+        const dc = decoys[i];
+        const row = document.createElement("div");
+        row.className = "ls-find-row" + (dc.found ? "" : " miss");
+        const ic = document.createElement("span");
+        ic.className = "ic";
+        ic.textContent = dc.found ? dc.icon : "❔";
+        const body = document.createElement("div");
+        const nm = document.createElement("div");
+        nm.className = "nm";
+        nm.textContent = dc.found ? dc.name : "Still in there";
+        const st = document.createElement("div");
+        st.className = "st";
+        st.textContent = dc.found ? dc.story : "Something small and disappointing. You have not reached it yet.";
+        body.appendChild(nm);
+        body.appendChild(st);
+        row.appendChild(ic);
+        row.appendChild(body);
+        el.findList.appendChild(row);
+      }
     }
 
     let hintTimer = null;
@@ -2087,7 +2249,7 @@ window.plethoraBit = {
       if (Array.isArray(s.cam) && s.cam.length === 4) {
         tAz = camAz = s.cam[0];
         tEl = camEl = clamp(s.cam[1], 0.06, 1.35);
-        tDist = camDist = clamp(s.cam[2], 3.6, 40);
+        tDist = camDist = clamp(s.cam[2], 2.4, 40);
         tTgtY = camTgtY = clamp(s.cam[3], 0.25, STACK_H * 0.98);
       }
     }
@@ -2294,10 +2456,12 @@ window.plethoraBit = {
 
       buildStack(null);
       tAz = camAz = 0.7; tEl = camEl = 0.40;
-      tDist = camDist = 25.5; tTgtY = camTgtY = 3.6;
+      tDist = camDist = 23.8; tTgtY = camTgtY = 3.4;
 
       el.pWin.classList.add("hide");
       el.pHelp.classList.add("hide");
+      el.pFinds.classList.add("hide");
+      el.find.classList.remove("on");
       updateHud();
       updateWarmUi();
       try { ctx.platform.setProgress(0, { pulled: 0 }); } catch (_) {}
@@ -2323,6 +2487,23 @@ window.plethoraBit = {
     const _q2 = new THREE.Quaternion();
     const _e = new THREE.Euler();
     const orbitC = new THREE.Vector3();
+
+    // The orbit centre sits on the pile's axis, i.e. inside it, so a hard
+    // minimum zoom would put the eye in the middle of the hay. March out along
+    // the current view direction to find where it leaves the hull instead.
+    function minOrbitDist(az, el) {
+      const ce = Math.cos(el);
+      const dx = Math.cos(az) * ce, dy = Math.sin(el), dz = Math.sin(az) * ce;
+      let d = 0.4;
+      for (let i = 0; i < 80; i++) {
+        const y = camTgtY + dy * d;
+        if (y > STACK_H || y < 0) break;
+        const r = Math.hypot(dx * d, dz * d);
+        if (r > hullR(y / STACK_H)) break;
+        d += 0.2;
+      }
+      return d + 0.7;
+    }
 
     function placeCamera() {
       if (won) orbitC.copy(needlePos);
@@ -2370,6 +2551,10 @@ window.plethoraBit = {
       }
 
       // ---- camera ----
+      if (!won) {
+        const minD = minOrbitDist(tAz, tEl);
+        if (tDist < minD) tDist = minD;
+      }
       const k = 1 - Math.exp(-dt * 12);
       camAz += (tAz - camAz) * k;
       camEl += (tEl - camEl) * k;
@@ -2560,14 +2745,17 @@ window.plethoraBit = {
     el.load.style.display = "none";
     safeReady();
 
+    const panelOpen = (p) => !p.classList.contains("hide");
+
     function closeIntro() {
       el.pIntro.classList.add("hide");
       beginPlay();
       hint(resuming ? "Welcome back. It is still in there." : "Tap a straw to pull it. Hold to burrow.", 5200);
     }
 
-    ctx.listen(el.cta, "click", closeIntro);
+    ctx.listen(el.cta, "click", () => { if (panelOpen(el.pIntro)) closeIntro(); });
     ctx.listen(el.lFresh, "click", async () => {
+      if (!panelOpen(el.pIntro)) return;
       el.lFresh.style.display = "none";
       el.resume.style.display = "none";
       await resetRun();
@@ -2577,13 +2765,21 @@ window.plethoraBit = {
     ctx.listen(el.bHelp, "click", () => { el.pHelp.classList.remove("hide"); });
     ctx.listen($(".c-back"), "click", () => { el.pHelp.classList.add("hide"); });
     ctx.listen($(".l-restart"), "click", async () => {
+      if (!panelOpen(el.pHelp)) return;
       el.pHelp.classList.add("hide");
       await resetRun();
     });
+    ctx.listen(el.bJunk, "click", () => { renderFinds(); el.pFinds.classList.remove("hide"); });
+    ctx.listen($(".c-back3"), "click", () => { el.pFinds.classList.add("hide"); });
+    ctx.listen(el.find, "click", () => { el.find.classList.remove("on"); });
     ctx.listen(el.bLb, "click", () => { showLeaderboard(); });
     ctx.listen($(".c-back2"), "click", () => { el.pLb.classList.add("hide"); });
-    ctx.listen($(".c-again"), "click", async () => { await resetRun(); });
+    ctx.listen($(".c-again"), "click", async () => {
+      if (!panelOpen(el.pWin)) return;
+      await resetRun();
+    });
     ctx.listen($(".l-look"), "click", () => {
+      if (!panelOpen(el.pWin)) return;
       el.pWin.classList.add("hide");
       hint("There it is. A needle. Drag to admire it.", 5000);
     });
@@ -2601,6 +2797,7 @@ window.plethoraBit = {
       try { ctx.audio.stopAll(); } catch (_) {}
       if (toastTimer) clearTimeout(toastTimer);
       if (hintTimer) clearTimeout(hintTimer);
+      if (findTimer) clearTimeout(findTimer);
       try { renderer.dispose(); } catch (_) {}
       try {
         scene.traverse((o) => {
