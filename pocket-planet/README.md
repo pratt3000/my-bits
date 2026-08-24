@@ -17,28 +17,35 @@ where the last one left off.
 
 ## How it works
 
-**The globe is a quad-sphere.** Six cube faces of 12×12 cells are projected out
-to a sphere and tangent-warped (`tan(c·π/4)`) so the tiles come out close to
-equal-area instead of bunching at the cube corners — 864 tiles, about 48 around
-the equator, so a full lap on foot takes roughly 25 seconds.
+**The planet is one continuous height field on a sphere.** Six cube faces of
+48×48 quads are projected out and tangent-warped (`tan(c·π/4)`) so the mesh
+stays even instead of bunching at the cube corners. Vertices are shared across
+face seams through a quantised direction key, which is what keeps the twelve
+cube edges from showing as lighting creases. Flat shading over that grid keeps
+the low-poly facet character while the silhouette stays a proper sphere.
 
-Every position query goes through a unit direction vector, and `dirToTile()` is
-the exact inverse of the forward mapping. That is what makes walking across a
-cube seam free: there is no adjacency table anywhere, so the character, the
-build target and the tile neighbours all cross face boundaries without a
-special case.
+**Tiles are the placement grid, not the geometry.** 864 of them, about 48 around
+the equator, so a full lap on foot takes roughly 25 seconds. Every position
+query goes through a unit direction vector, and `dirToTile()` is the exact
+inverse of the forward mapping. That is what makes walking across a cube seam
+free: there is no adjacency table anywhere, so the character, the build target
+and the tile neighbours all cross face boundaries without a special case. The
+character samples the height field at its exact position rather than at the
+tile, so a rise is a slope and not a staircase.
 
-**Terrain is banded by rank, not by threshold.** Elevation comes from continent
-noise plus detail plus ridged noise biased toward high ground, then the values
-are sorted and cut at fixed percentiles. Every seed therefore produces the same
-pleasing land/sea balance — no planet ever comes out all ocean or all rock.
+**Everything is banded by rank, not by threshold.** Elevation comes from
+continent noise plus detail plus ridged noise biased toward high ground; the
+values are then sorted and the sea is placed at a fixed percentile. Terrain
+colours are cut on the same percentile scale. Every seed therefore produces the
+same pleasing land/sea balance and the same biome proportions — no planet comes
+out all ocean, and no planet comes out all beach.
 
-**Each tile is a prism on a sealing skirt.** The visible cap is inset to carve a
-dark groove between neighbours; underneath it sits a full-width skirt whose
-edges meet its neighbours' exactly. Without the skirt, grooves opened straight
-through to the sea sphere and every gap between two pieces of land glowed blue.
-Land bands also clear sea level by more than the groove depth, and the water's
-swell is capped below that, so the sea can never break through a beach.
+**The sea is a patch of the planet's own vertex grid**, not a sphere laid over
+it, and it fades out at the shoreline in alpha rather than stopping at a facet
+edge. As a full sphere it covered every low-lying scrap of land and washed the
+world out with a milky film; clipped on facet boundaries instead, every coast
+came out visibly serrated. The swell is stilled toward the shore by the same
+depth attribute that drives the fade.
 
 **Trees grow on wall-clock time.** Only the planting timestamp is stored, so
 growth continues while the bit is closed: sprout → sapling → young tree → tree →
@@ -66,8 +73,8 @@ Built on established cozy-diorama practice rather than invented from scratch:
   luminance before colour, so the planet reads even in greyscale.
 - **One warm key, one cool fill** (Tiny Glade) — a single orbiting sun with soft
   shadows plus a hemisphere bounce does nearly all the shaping.
-- **Chunky rounded forms**, generous bevels, and narrow dark grooves so every
-  facet catches a different amount of light.
+- **Chunky rounded forms** and flat-shaded facets, so every plane catches a
+  different amount of light without the world turning into blocks.
 - **Real-time growth stages** (Petit Planet, Little Planet) so the world keeps
   changing between visits.
 

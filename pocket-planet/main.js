@@ -302,25 +302,17 @@ window.plethoraBit = {
     const TILES = 6 * FACE;             // 864 tiles total
     const TILE_ANG = (Math.PI / 2) / N; // angular width of one tile (radians)
 
-    const CORE_R = 8.86;                // solid inner sphere (nothing is ever below this)
     const SEA_R = 9.99;                 // water surface radius
-    const INSET = 0.94;                 // tile shrink toward its centre -> dark grooves
-    const GROOVE = 0.15;                // how deep the groove between tiles cuts
+    const SUB = 4;                      // mesh quads per tile edge
+    const MESH_N = N * SUB;             // 48 quads along each cube-face edge
 
-    // Terrain height bands. Index = level, value = radius of the tile's top face.
-    // Every land band clears SEA_R by more than GROOVE, so the sea can never
-    // show up through the gaps between two pieces of land.
-    const LEVEL_R = [9.40, 9.74, 10.20, 10.38, 10.62, 10.92, 11.26, 11.60];
-
-    // Percentile cut points for the elevation field. Because the bands are
-    // assigned by rank rather than by absolute value, every seed produces a
-    // planet with the same pleasing land/sea balance (~42% water) — no seed
-    // ever comes out all ocean or all rock.
-    const BANDS = [0.30, 0.42, 0.50, 0.71, 0.845, 0.935, 0.988];
-
-    // Biome ids (colour), kept separate from level (height).
-    const B_DEEP = 0, B_SHALLOW = 1, B_SAND = 2, B_GRASS = 3, B_MEADOW = 4,
-          B_FOREST = 5, B_ROCK = 6, B_SNOW = 7, B_ICE = 8;
+    // The surface is one continuous height field, not a stack of bands. Rank
+    // decides where the coastline falls: elevations are sorted and the sea is
+    // put at a fixed percentile, so every seed gets the same pleasing land/sea
+    // balance without any planet coming out all ocean or all rock.
+    const SEA_P = 0.44;                 // fraction of the surface under water
+    const R_ABYSS = 9.24;               // deepest sea floor
+    const LAND_RELIEF = 1.84;           // shoreline to highest peak
 
     // Placeable ids. These are the characters written into the save string, so
     // they must never be renumbered once a planet exists in the wild.
@@ -510,7 +502,7 @@ window.plethoraBit = {
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.06;
+    renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     ctx.onDestroy(() => { try { renderer.dispose(); } catch (_) {} });
@@ -610,10 +602,6 @@ window.plethoraBit = {
       }
       return o.normalize();
     }
-    // Grid corner (u,v in 0..N) -> unit direction.
-    function cornerDir(f, u, v, out) {
-      return faceDir(f, warp((u / N) * 2 - 1), warp((v / N) * 2 - 1), out);
-    }
     // Tile centre -> unit direction.
     function tileDir(i, out) {
       const f = (i / FACE) | 0, r = i - f * FACE, v = (r / N) | 0, u = r - v * N;
@@ -640,27 +628,13 @@ window.plethoraBit = {
       u = clamp(u, 0, N - 1); v = clamp(v, 0, N - 1);
       return f * FACE + v * N + u;
     }
-    // The four edge-neighbours of a tile, found by stepping one tile-width in
-    // each tangent direction and re-querying. Works across face seams.
-    function neighbours(i, out) {
-      const d = tileDir(i, tmpA);
-      const up = Math.abs(d.y) < 0.92 ? tmpB.set(0, 1, 0) : tmpB.set(1, 0, 0);
-      const e1 = tmpC.crossVectors(up, d).normalize();
-      const e2 = tmpD.crossVectors(d, e1).normalize();
-      const s = Math.tan(TILE_ANG);
-      const res = out || [];
-      const p = V();
-      for (let k = 0; k < 4; k++) {
-        const dx = k === 0 ? s : k === 1 ? -s : 0;
-        const dy = k === 2 ? s : k === 3 ? -s : 0;
-        p.copy(d).addScaledVector(e1, dx).addScaledVector(e2, dy).normalize();
-        res[k] = dirToTile(p);
-      }
-      return res;
-    }
-
     // =====================================================================
-    // 6. TERRAIN GENERATION
+    // 6. TERRAIN
+    //    The planet is one continuous height field over the sphere. Tiles are
+    //    still the placement grid, but nothing about the geometry is tile
+    //    shaped: elevation, colour and normals all vary smoothly, so the world
+    //    reads as a round planet with rolling ground rather than blocks
+    //    stacked on a ball.
     // =====================================================================
     let nElev, nDetail, nRidge, nMoist, nForest;
     function seedNoise() {
@@ -672,74 +646,164 @@ window.plethoraBit = {
     }
     seedNoise();
 
-    const tLevel  = new Uint8Array(TILES);   // height band 0..7
-    const tBiome  = new Uint8Array(TILES);   // colour band
-    const tMoist  = new Float32Array(TILES);
-    const tNatural= new Int8Array(TILES);    // seed-derived decoration, -1 = none
+    // Continents from a big smooth field, detail on top, and ridged noise
+    // biased toward already-high ground so mountain spines form inland rather
+    // than as random spikes out at sea.
+    function elevAt(d) {
+      const cont = fbm(nElev, d.x, d.y, d.z, 3, 0.92, 0.5);
+      const det  = fbm(nDetail, d.x, d.y, d.z, 4, 2.7, 0.5);
+      const ridgeRaw = fbm(nRidge, d.x, d.y, d.z, 3, 1.9, 0.5);
+      const ridge = Math.pow(Math.max(0, 1 - Math.abs(ridgeRaw) * 1.9), 3);
+      return cont + det * 0.34 + ridge * 0.5 * Math.max(0, cont + 0.12);
+    }
+    function moistAt(d) { return fbm(nMoist, d.x + 11.3, d.y - 7.1, d.z + 3.9, 3, 1.6, 0.5); }
+    function coldAt(d) { return Math.pow(Math.abs(d.y), 3.1) + fbm(nMoist, d.y * 3, 1.7, 0.3, 2, 2.2, 0.5) * 0.09; }
+
+    // ---------------------------------------------------------------------
+    // Mesh topology. Vertices are shared across cube-face seams via a
+    // quantised direction key, which is what lets averaged normals come out
+    // seamless: without it the twelve cube edges show as lighting creases.
+    // ---------------------------------------------------------------------
+    let vDir = null, vCount = 0, meshIndex = null;
+    const faceFlip = new Uint8Array(6);
+
+    function gridDir(f, gu, gv, out) {
+      return faceDir(f, warp((gu / MESH_N) * 2 - 1), warp((gv / MESH_N) * 2 - 1), out);
+    }
+
+    (function buildTopology() {
+      const map = new Map();
+      const dirs = [];
+      const idx = [];
+      const d = V(), p0 = V(), p1 = V(), p2 = V(), e1 = V(), e2 = V();
+
+      function vid(f, gu, gv) {
+        gridDir(f, gu, gv, d);
+        const key = Math.round(d.x * 1e5) + "," + Math.round(d.y * 1e5) + "," + Math.round(d.z * 1e5);
+        let id = map.get(key);
+        if (id === undefined) {
+          id = dirs.length / 3;
+          dirs.push(d.x, d.y, d.z);
+          map.set(key, id);
+        }
+        return id;
+      }
+      // Cube faces do not all share a handedness, so read the winding off the
+      // geometry once per face instead of hard-coding it.
+      for (let f = 0; f < 6; f++) {
+        gridDir(f, 0, 0, p0); gridDir(f, 1, 0, p1); gridDir(f, 1, 1, p2);
+        e1.subVectors(p1, p0); e2.subVectors(p2, p0);
+        faceFlip[f] = e1.cross(e2).dot(p0) < 0 ? 1 : 0;
+      }
+      for (let f = 0; f < 6; f++) {
+        for (let gv = 0; gv < MESH_N; gv++) {
+          for (let gu = 0; gu < MESH_N; gu++) {
+            const a = vid(f, gu, gv), b = vid(f, gu + 1, gv);
+            const c = vid(f, gu + 1, gv + 1), e = vid(f, gu, gv + 1);
+            if (faceFlip[f]) idx.push(a, e, c, a, c, b);
+            else             idx.push(a, b, c, a, c, e);
+          }
+        }
+      }
+      vCount = dirs.length / 3;
+      vDir = new Float32Array(dirs);
+      meshIndex = vCount > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
+    })();
+
+    const vElev = new Float32Array(vCount);
+    const vRad  = new Float32Array(vCount);
+    const vPct  = new Float32Array(vCount);
+    const vMoist= new Float32Array(vCount);
+    let elevSorted = new Float32Array(vCount);
+
+    // Percentile of an elevation within this planet's own distribution.
+    // Piecewise-linear over every mesh vertex, so it is smooth in practice.
+    function pctOf(e) {
+      const n = elevSorted.length;
+      if (e <= elevSorted[0]) return 0;
+      if (e >= elevSorted[n - 1]) return 1;
+      let lo = 0, hi = n - 1;
+      while (lo < hi - 1) {
+        const m = (lo + hi) >> 1;
+        if (elevSorted[m] <= e) lo = m; else hi = m;
+      }
+      const a = elevSorted[lo], b = elevSorted[hi];
+      return (lo + (b > a ? (e - a) / (b - a) : 0)) / (n - 1);
+    }
+    // Percentile -> radius. Ocean deepens away from the shore; land leaves the
+    // coast almost flat and only climbs steeply in the top fifth, which keeps
+    // most of the planet walkable and puts the drama in a few peaks.
+    function radiusFromP(p) {
+      if (p <= SEA_P) {
+        const t = p / SEA_P;
+        return R_ABYSS + (SEA_R - R_ABYSS) * Math.pow(t, 0.72);
+      }
+      const t = (p - SEA_P) / (1 - SEA_P);
+      // Linear term first so the ground actually climbs away from the water;
+      // a pure power curve left a huge shelf sitting inside the sea sphere.
+      return SEA_R + LAND_RELIEF * (0.30 * t + 0.70 * Math.pow(t, 2.6));
+    }
+    function heightAt(d) { return radiusFromP(pctOf(elevAt(d))); }
+
+    // ---------------------------------------------------------------------
+    // Per-tile summary, used by the build grid and the natural scatter.
+    // ---------------------------------------------------------------------
+    const B_DEEP = 0, B_SHALLOW = 1, B_SAND = 2, B_GRASS = 3, B_MEADOW = 4,
+          B_HIGHLAND = 5, B_ROCK = 6, B_SNOW = 7, B_ICE = 8;
+
+    const tHeight = new Float32Array(TILES);
+    const tPct    = new Float32Array(TILES);
+    const tBiome  = new Uint8Array(TILES);
+    const tNatural= new Int8Array(TILES);
     const tDirs   = new Float32Array(TILES * 3);
 
+    // Bands are cut on rank, not on absolute height. Keyed to height they
+    // tracked the shape of the elevation curve instead of the planet, and
+    // half the land came out beach-coloured.
+    function biomeOf(p, cold) {
+      if (cold > 0.60) return p < SEA_P ? B_ICE : B_SNOW;
+      if (p < SEA_P * 0.55) return B_DEEP;
+      if (p < SEA_P) return B_SHALLOW;
+      const q = (p - SEA_P) / (1 - SEA_P);
+      if (q < 0.08) return B_SAND;
+      if (q < 0.42) return B_GRASS;
+      if (q < 0.68) return B_MEADOW;
+      if (q < 0.84) return B_HIGHLAND;
+      if (q < 0.94) return B_ROCK;
+      return B_SNOW;
+    }
+
     function generate() {
-      const elev = new Float32Array(TILES);
       const d = V();
+      for (let i = 0; i < vCount; i++) {
+        d.set(vDir[i * 3], vDir[i * 3 + 1], vDir[i * 3 + 2]);
+        vElev[i] = elevAt(d);
+        vMoist[i] = moistAt(d);
+      }
+      elevSorted = Float32Array.from(vElev).sort();
+      for (let i = 0; i < vCount; i++) {
+        vPct[i] = pctOf(vElev[i]);
+        vRad[i] = radiusFromP(vPct[i]);
+      }
+
       for (let i = 0; i < TILES; i++) {
         tileDir(i, d);
         tDirs[i * 3] = d.x; tDirs[i * 3 + 1] = d.y; tDirs[i * 3 + 2] = d.z;
-
-        // Continents from a big smooth field, detail on top, and ridged noise
-        // biased to already-high ground so mountains form inland spines rather
-        // than random spikes in the sea.
-        const cont = fbm(nElev, d.x, d.y, d.z, 3, 0.92, 0.5);
-        const det  = fbm(nDetail, d.x, d.y, d.z, 4, 2.7, 0.5);
-        const ridgeRaw = fbm(nRidge, d.x, d.y, d.z, 3, 1.9, 0.5);
-        const ridge = Math.pow(Math.max(0, 1 - Math.abs(ridgeRaw) * 1.9), 3);
-        elev[i] = cont + det * 0.34 + ridge * 0.5 * Math.max(0, cont + 0.12);
-        tMoist[i] = fbm(nMoist, d.x + 11.3, d.y - 7.1, d.z + 3.9, 3, 1.6, 0.5);
+        tPct[i] = pctOf(elevAt(d));
+        tHeight[i] = radiusFromP(tPct[i]);
+        tBiome[i] = biomeOf(tPct[i], coldAt(d));
       }
 
-      // Rank-based banding: sort a copy, read off the cut values. This is what
-      // guarantees a good-looking land/sea split for every possible seed.
-      const sorted = Float32Array.from(elev).sort();
-      const cut = BANDS.map(p => sorted[clamp(Math.floor(p * (TILES - 1)), 0, TILES - 1)]);
-
-      for (let i = 0; i < TILES; i++) {
-        const e = elev[i];
-        let lv = 7;
-        for (let k = 0; k < cut.length; k++) { if (e < cut[k]) { lv = k; break; } }
-        tLevel[i] = lv;
-
-        // Polar caps: high |y| freezes whatever is there. Gives the globe two
-        // bright poles, which also helps you read its spin at a glance.
-        const dy = tDirs[i * 3 + 1];
-        const cold = Math.pow(Math.abs(dy), 3.1) + fbm(nMoist, dy * 3, 1.7, 0.3, 2, 2.2, 0.5) * 0.09;
-
-        let bi;
-        if (lv === 0) bi = B_DEEP;
-        else if (lv === 1) bi = B_SHALLOW;
-        else if (lv === 2) bi = B_SAND;
-        else if (lv === 3) bi = B_GRASS;
-        else if (lv === 4) bi = B_MEADOW;
-        else if (lv === 5) bi = B_FOREST;
-        else if (lv === 6) bi = B_ROCK;
-        else bi = B_SNOW;
-
-        if (cold > 0.60) {
-          if (lv <= 1) bi = B_ICE;
-          else bi = B_SNOW;
-        }
-        tBiome[i] = bi;
-      }
-
-      // Seed-derived natural scatter, so a brand-new planet already looks
-      // lived-in rather than like an empty grid waiting for chores.
+      // Seed-derived scatter, so a brand-new planet already looks lived-in
+      // rather than like an empty grid waiting for chores.
       for (let i = 0; i < TILES; i++) {
         tNatural[i] = -1;
         const bi = tBiome[i];
-        const d2 = V(tDirs[i * 3], tDirs[i * 3 + 1], tDirs[i * 3 + 2]);
-        const forest = fbm(nForest, d2.x, d2.y, d2.z, 3, 2.4, 0.5);
+        const forest = fbm(nForest, tDirs[i * 3], tDirs[i * 3 + 1], tDirs[i * 3 + 2], 3, 2.4, 0.5);
         const h = hash2(i, 17);
-        if (bi === B_GRASS || bi === B_MEADOW || bi === B_FOREST) {
-          const dens = forest + (bi === B_FOREST ? 0.16 : bi === B_MEADOW ? 0.05 : 0);
-          if (dens > 0.10 && h < 0.72) tNatural[i] = P_TREE;
+        if (bi === B_GRASS || bi === B_MEADOW || bi === B_HIGHLAND) {
+          const dens = forest + (bi === B_MEADOW ? 0.14 : bi === B_HIGHLAND ? 0.04 : 0);
+          if (dens > 0.10 && h < 0.70) tNatural[i] = P_TREE;
           else if (h > 0.955) tNatural[i] = P_FLOWER;
           else if (h > 0.935) tNatural[i] = P_ROCK;
         } else if (bi === B_ROCK) {
@@ -751,12 +815,11 @@ window.plethoraBit = {
     }
     generate();
 
-    function isWater(i) { return tLevel[i] <= 1; }
+    // A tile counts as water a hair above the waterline, so nothing is ever
+    // built standing ankle-deep in the sea.
+    function isWater(i) { return tHeight[i] < SEA_R + 0.025; }
     function dirOf(i, out) { return (out || V()).set(tDirs[i * 3], tDirs[i * 3 + 1], tDirs[i * 3 + 2]); }
 
-    // Effective content of a tile: an explicit placement wins; otherwise the
-    // seed-derived scatter shows through. A cleared tile stores P_EMPTY, which
-    // is how "I chopped that natural tree down" survives a reload.
     function contentOf(i) {
       if (isWater(i)) return null;
       const rec = placed.get(i);
@@ -766,190 +829,100 @@ window.plethoraBit = {
       return null;
     }
 
-    // ---------------------------------------------------------------------
-    // Palette. Ordered by luminance first (so the planet reads in greyscale),
-    // with hue and saturation layered on afterwards for warmth.
-    // ---------------------------------------------------------------------
-    const COL = {
-      deep:    new THREE.Color(0x24506b),
-      shallow: new THREE.Color(0x3a7f9c),
-      sand:    new THREE.Color(0xf5dfa4),
-      sandWet: new THREE.Color(0xdfc088),
-      grassDry:new THREE.Color(0xc3d072),
-      grassWet:new THREE.Color(0x69b855),
-      meadow:  new THREE.Color(0x6fb552),
-      forest:  new THREE.Color(0x53994c),
-      rock:    new THREE.Color(0xb4ab9c),
-      snow:    new THREE.Color(0xf6fafd),
-      ice:     new THREE.Color(0xd6edf5),
-      path:    new THREE.Color(0xb9ae99),
-      soil:    new THREE.Color(0x9a7a5b)
-    };
-
-    const _c = new THREE.Color();
-    function tileColor(i, out) {
-      const c = out || _c;
-      const bi = tBiome[i];
-      const m = clamp(tMoist[i] * 0.5 + 0.5, 0, 1);
-      switch (bi) {
-        case B_DEEP:    c.copy(COL.deep); break;
-        case B_SHALLOW: c.copy(COL.shallow); break;
-        case B_SAND:    c.copy(COL.sand); break;
-        case B_GRASS:   c.copy(COL.grassDry).lerp(COL.grassWet, m); break;
-        case B_MEADOW:  c.copy(COL.grassWet).lerp(COL.meadow, m * 0.8 + 0.1); break;
-        case B_FOREST:  c.copy(COL.meadow).lerp(COL.forest, m * 0.7 + 0.3); break;
-        case B_ROCK:    c.copy(COL.rock); break;
-        case B_SNOW:    c.copy(COL.snow); break;
-        default:        c.copy(COL.ice); break;
-      }
-      // Beaches darken where they meet the sea — a cheap stand-in for wet sand
-      // that reads as a shoreline without needing a foam pass.
-      if (bi === B_SAND) {
-        const nb = neighbours(i, _nbuf);
-        let wet = 0;
-        for (let k = 0; k < 4; k++) if (isWater(nb[k])) wet++;
-        if (wet) c.lerp(COL.sandWet, Math.min(1, wet * 0.34));
-      }
-      // Per-tile jitter keeps a big region of one biome from reading as a
-      // single flat slab of colour.
-      c.offsetHSL((hash2(i, 5) - 0.5) * 0.026, (hash2(i, 7) - 0.5) * 0.09,
-                  (hash2(i, 3) - 0.5) * 0.085);
-      const rec = placed.get(i);
-      if (rec && rec.type === P_PATH) c.copy(COL.path).offsetHSL(0, 0, (hash2(i, 11) - 0.5) * 0.06);
-      return c;
-    }
-    const _nbuf = [0, 0, 0, 0];
-
     // =====================================================================
     // 7. PLANET MESH
-    //    One merged, non-indexed, flat-shaded buffer. Each tile is a little
-    //    prism: an inset top cap plus four walls dropping to the core radius.
-    //    The inset is what carves the dark groove between neighbours, and the
-    //    walls are what turn a height change into a readable terrace.
+    //    Palette is ordered by luminance first, so the planet reads even in
+    //    greyscale; hue and saturation are layered on afterwards for warmth.
+    //    Bands cross-fade rather than switching, which is what turns a height
+    //    field into a coastline instead of a contour map.
     // =====================================================================
-    const TRIS_PER_TILE = 20;                 // inset cap + groove + skirt cap + terrace
-    const VERTS_PER_TILE = TRIS_PER_TILE * 3;
+    const COL = {
+      abyss:   new THREE.Color(0x1d4560),
+      deep:    new THREE.Color(0x2b6284),
+      shallow: new THREE.Color(0x4a93ad),
+      sand:    new THREE.Color(0xf2dda2),
+      grassDry:new THREE.Color(0xcbd171),
+      grassWet:new THREE.Color(0x5cb54e),
+      meadow:  new THREE.Color(0x4e9f4a),
+      highland:new THREE.Color(0x468553),
+      rock:    new THREE.Color(0x9b9184),
+      snow:    new THREE.Color(0xf7fbfe),
+      ice:     new THREE.Color(0xd2e9f3),
+      path:    new THREE.Color(0xbcb09a)
+    };
+    const _c = new THREE.Color(), _c2 = new THREE.Color();
+
+    // Smooth 0..1 ramp between two heights.
+    function ramp(x, a, b) {
+      const t = clamp((x - a) / (b - a), 0, 1);
+      return t * t * (3 - 2 * t);
+    }
+    function terrainColor(p, moist, cold, out) {
+      const c = out || _c;
+      const m = clamp(moist * 1.25 + 0.5, 0, 1);
+      if (p < SEA_P) {
+        const q = p / SEA_P;                       // 0 abyss -> 1 shoreline
+        c.copy(COL.abyss).lerp(COL.deep, ramp(q, 0.14, 0.56));
+        c.lerp(COL.shallow, ramp(q, 0.50, 0.92));
+        c.lerp(COL.sand, ramp(q, 0.90, 1.0));
+      } else {
+        const q = (p - SEA_P) / (1 - SEA_P);       // 0 shoreline -> 1 summit
+        c.copy(COL.sand);
+        _c2.copy(COL.grassDry).lerp(COL.grassWet, m);
+        c.lerp(_c2, ramp(q, 0.05, 0.19));
+        c.lerp(COL.meadow, ramp(q, 0.40, 0.70));
+        c.lerp(COL.highland, ramp(q, 0.68, 0.86));
+        c.lerp(COL.rock, ramp(q, 0.88, 0.955));
+        c.lerp(COL.snow, ramp(q, 0.962, 0.995));
+      }
+      // Ice caps, faded in so the poles do not end in a hard ring.
+      const ice = ramp(cold, 0.44, 0.68);
+      if (ice > 0) c.lerp(p < SEA_P ? COL.ice : COL.snow, ice);
+      return c;
+    }
+
     const terrainGeo = new THREE.BufferGeometry();
-    const tPos = new Float32Array(TILES * VERTS_PER_TILE * 3);
-    const tNor = new Float32Array(TILES * VERTS_PER_TILE * 3);
-    const tCol = new Float32Array(TILES * VERTS_PER_TILE * 3);
+    const tPos = new Float32Array(vCount * 3);
+    const tCol = new Float32Array(vCount * 3);
+    terrainGeo.setIndex(new THREE.BufferAttribute(meshIndex, 1));
+    terrainGeo.setAttribute("position", new THREE.BufferAttribute(tPos, 3));
+    terrainGeo.setAttribute("color", new THREE.BufferAttribute(tCol, 3));
 
     function buildTerrain() {
-      const c0 = V();
-      const q = [V(), V(), V(), V()];     // inset corners  (the visible cap)
-      const Q = [V(), V(), V(), V()];     // full corners   (the sealing skirt)
-      const a1 = [V(), V(), V(), V()], a2 = [V(), V(), V(), V()];
-      const b1 = [V(), V(), V(), V()], b2 = [V(), V(), V(), V()];
-      const centre = V(), e1 = V(), e2 = V(), nrm = V();
-      let w = 0;
-
-      function tri(a, b, cc) {
-        e1.subVectors(b, a); e2.subVectors(cc, a);
-        nrm.crossVectors(e1, e2).normalize();
-        const pts = [a, b, cc];
-        for (let k = 0; k < 3; k++) {
-          tPos[w] = pts[k].x; tPos[w + 1] = pts[k].y; tPos[w + 2] = pts[k].z;
-          tNor[w] = nrm.x;    tNor[w + 1] = nrm.y;    tNor[w + 2] = nrm.z;
-          w += 3;
-        }
+      const d = V();
+      for (let i = 0; i < vCount; i++) {
+        const o = i * 3;
+        const r = vRad[i];
+        d.set(vDir[o], vDir[o + 1], vDir[o + 2]);
+        tPos[o] = d.x * r; tPos[o + 1] = d.y * r; tPos[o + 2] = d.z * r;
+        terrainColor(vPct[i], vMoist[i], coldAt(d), _c);
+        _c.offsetHSL(0, 0, fbm(nForest, d.x * 5.5, d.y * 5.5, d.z * 5.5, 2, 1, 0.5) * 0.05);
+        tCol[o] = _c.r; tCol[o + 1] = _c.g; tCol[o + 2] = _c.b;
       }
-      function ring(top, bot) {
-        for (let k = 0; k < 4; k++) {
-          const k2 = (k + 1) & 3;
-          tri(top[k], bot[k], bot[k2]);
-          tri(top[k], bot[k2], top[k2]);
-        }
-      }
-
-      for (let i = 0; i < TILES; i++) {
-        const f = (i / FACE) | 0, r = i - f * FACE, v = (r / N) | 0, u = r - v * N;
-        dirOf(i, centre);
-        for (let k = 0; k < 4; k++) {
-          const uu = u + (k === 1 || k === 2 ? 1 : 0);
-          const vv = v + (k === 2 || k === 3 ? 1 : 0);
-          cornerDir(f, uu, vv, c0);
-          Q[k].copy(c0);
-          q[k].copy(c0).lerp(centre, 1 - INSET).normalize();
-        }
-        // Cube faces do not all share a handedness, so take the winding from
-        // the geometry itself rather than hard-coding it per face.
-        e1.subVectors(q[1], q[0]); e2.subVectors(q[2], q[0]);
-        if (nrm.crossVectors(e1, e2).dot(centre) < 0) {
-          let t = q[1].clone(); q[1].copy(q[3]); q[3].copy(t);
-          t = Q[1].clone(); Q[1].copy(Q[3]); Q[3].copy(t);
-        }
-
-        // Each tile is a narrow inset cap sitting on a full-width skirt. The
-        // skirt is what seals the planet: neighbouring skirts meet edge to
-        // edge, so a groove bottoms out on soil instead of opening a hole
-        // through to the sea or to space.
-        const rTop = LEVEL_R[tLevel[i]];
-        let rSkirt = rTop - GROOVE;
-        if (!isWater(i)) rSkirt = Math.max(rSkirt, SEA_R + 0.05);
-        for (let k = 0; k < 4; k++) {
-          a1[k].copy(q[k]).multiplyScalar(rTop);
-          a2[k].copy(q[k]).multiplyScalar(rSkirt);
-          b1[k].copy(Q[k]).multiplyScalar(rSkirt);
-          b2[k].copy(Q[k]).multiplyScalar(CORE_R);
-        }
-        tri(a1[0], a1[1], a1[2]); tri(a1[0], a1[2], a1[3]);   // cap          0..5
-        ring(a1, a2);                                        // groove       6..29
-        tri(b1[0], b1[1], b1[2]); tri(b1[0], b1[2], b1[3]);   // groove floor 30..35
-        ring(b1, b2);                                        // terrace     36..59
-      }
-      if (!terrainGeo.getAttribute("position")) {
-        terrainGeo.setAttribute("position", new THREE.BufferAttribute(tPos, 3));
-        terrainGeo.setAttribute("normal", new THREE.BufferAttribute(tNor, 3));
-        terrainGeo.setAttribute("color", new THREE.BufferAttribute(tCol, 3));
-      } else {
-        terrainGeo.getAttribute("position").needsUpdate = true;
-        terrainGeo.getAttribute("normal").needsUpdate = true;
-      }
+      terrainGeo.getAttribute("position").needsUpdate = true;
+      terrainGeo.getAttribute("color").needsUpdate = true;
+      terrainGeo.computeVertexNormals();          // shared verts -> smooth, seamless
       terrainGeo.computeBoundingSphere();
     }
     buildTerrain();
 
-    const colAttr = terrainGeo.getAttribute("color");
-    // Vertex bands per tile: 0-5 cap, 6-29 groove, 30-35 groove floor, 36-59 terrace.
-    function paintTile(i) {
-      const c = tileColor(i, _c);
-      const o0 = i * VERTS_PER_TILE * 3;
-      function band(from, to, r, g, b) {
-        let o = o0 + from * 3;
-        for (let k = from; k < to; k++) { tCol[o] = r; tCol[o + 1] = g; tCol[o + 2] = b; o += 3; }
-      }
-      band(0, 6, c.r, c.g, c.b);
-      band(6, 30, c.r * 0.42, c.g * 0.42, c.b * 0.44);                    // groove shadow
-      band(30, 36, c.r * 0.30, c.g * 0.30, c.b * 0.33);                   // groove floor
-      // Terraces read as cliff faces: the tile's own hue, pushed toward soil.
-      band(36, VERTS_PER_TILE, c.r * 0.58 + 0.14, c.g * 0.56 + 0.11, c.b * 0.54 + 0.08);
-    }
-    function repaintAll() {
-      for (let i = 0; i < TILES; i++) paintTile(i);
-      colAttr.needsUpdate = true;
-    }
-    function repaintTile(i) {
-      paintTile(i);
-      colAttr.needsUpdate = true;
-    }
-    repaintAll();
-
-    const terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    // Flat shading keeps the low-poly facet character the references live on,
+    // while the silhouette stays a proper sphere. Smooth normals made the
+    // whole planet read as one soft, mushy gradient.
+    const terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const terrain = new THREE.Mesh(terrainGeo, terrainMat);
     terrain.castShadow = true;
     terrain.receiveShadow = true;
     planet.add(terrain);
 
-    // Solid core so the grooves read as deep shadow instead of holes.
-    const coreMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2e });
-    const core = new THREE.Mesh(new THREE.SphereGeometry(CORE_R, 32, 24), coreMat);
-    planet.add(core);
-
     // ---------------------------------------------------------------------
-    // Build-target highlight: a floating border band over one tile.
+    // Build-target highlight: a ring that follows the ground it sits on.
+    // Rebuilt only when the target changes, since each vertex costs a height
+    // sample; the pulse is done with colour and opacity instead.
     // ---------------------------------------------------------------------
+    const HL_SEG = 28;
     const hlGeo = new THREE.BufferGeometry();
-    const hlPos = new Float32Array(4 * 6 * 3);   // 4 border quads
+    const hlPos = new Float32Array(HL_SEG * 6 * 3);
     hlGeo.setAttribute("position", new THREE.BufferAttribute(hlPos, 3));
     const hlMat = new THREE.MeshBasicMaterial({
       color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false,
@@ -960,25 +933,33 @@ window.plethoraBit = {
     highlight.frustumCulled = false;
     planet.add(highlight);
 
-    const _hOut = [V(), V(), V(), V()], _hIn = [V(), V(), V(), V()];
-    function setHighlight(i, lift) {
-      const f = (i / FACE) | 0, r = i - f * FACE, v = (r / N) | 0, u = r - v * N;
-      const centre = dirOf(i, tmpA);
-      const rr = LEVEL_R[tLevel[i]] + (lift || 0.035);
-      const tmp = tmpB;
-      for (let k = 0; k < 4; k++) {
-        const uu = u + (k === 1 || k === 2 ? 1 : 0);
-        const vv = v + (k === 2 || k === 3 ? 1 : 0);
-        cornerDir(f, uu, vv, tmp);
-        _hOut[k].copy(tmp).lerp(centre, 1 - INSET).normalize().multiplyScalar(rr);
-        _hIn[k].copy(tmp).lerp(centre, 1 - INSET * 0.74).normalize().multiplyScalar(rr);
-      }
+    let hlTile = -1;
+    const _hA = V(), _hB = V(), _hC = V(), _hD = V(), _hP = V();
+    function setHighlight(i) {
+      if (i === hlTile || i < 0 || i >= TILES) return;
+      hlTile = i;
+      const c = dirOf(i, _hA);
+      _hB.set(0, 1, 0);
+      if (Math.abs(c.y) > 0.9) _hB.set(1, 0, 0);
+      const e1 = _hC.crossVectors(_hB, c).normalize();
+      const e2 = _hD.crossVectors(c, e1).normalize();
+      const rIn = Math.tan(TILE_ANG * 0.30), rOut = Math.tan(TILE_ANG * 0.44);
       let w = 0;
-      for (let k = 0; k < 4; k++) {
-        const k2 = (k + 1) & 3;
-        const pts = [_hOut[k], _hOut[k2], _hIn[k2], _hOut[k], _hIn[k2], _hIn[k]];
-        for (let p = 0; p < 6; p++) {
-          hlPos[w] = pts[p].x; hlPos[w + 1] = pts[p].y; hlPos[w + 2] = pts[p].z; w += 3;
+      const inner = [], outer = [];
+      for (let k = 0; k <= HL_SEG; k++) {
+        const a = (k / HL_SEG) * Math.PI * 2;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        for (let side = 0; side < 2; side++) {
+          const rr = side ? rOut : rIn;
+          _hP.copy(c).addScaledVector(e1, ca * rr).addScaledVector(e2, sa * rr).normalize();
+          _hP.multiplyScalar(heightAt(_hP) + 0.045);
+          (side ? outer : inner)[k] = _hP.clone();
+        }
+      }
+      for (let k = 0; k < HL_SEG; k++) {
+        const pts = [inner[k], outer[k], outer[k + 1], inner[k], outer[k + 1], inner[k + 1]];
+        for (let q = 0; q < 6; q++) {
+          hlPos[w] = pts[q].x; hlPos[w + 1] = pts[q].y; hlPos[w + 2] = pts[q].z; w += 3;
         }
       }
       hlGeo.getAttribute("position").needsUpdate = true;
@@ -989,21 +970,60 @@ window.plethoraBit = {
     // =====================================================================
     const uTime = { value: 0 };
 
+
     // --- water -----------------------------------------------------------
+    // The sea is a patch of the planet's own vertex grid, not a sphere laid
+    // over it. As a full sphere it covered every low-lying scrap of land and
+    // washed the whole world out with a milky film.
+    const waterGeo = new THREE.BufferGeometry();
+    const wPos = new Float32Array(vCount * 3);
+    const wDepth = new Float32Array(vCount);
+    waterGeo.setAttribute("position", new THREE.BufferAttribute(wPos, 3));
+    waterGeo.setAttribute("aDepth", new THREE.BufferAttribute(wDepth, 1));
+
+    function buildWater() {
+      for (let i = 0; i < vCount; i++) {
+        const o = i * 3;
+        wPos[o] = vDir[o] * SEA_R;
+        wPos[o + 1] = vDir[o + 1] * SEA_R;
+        wPos[o + 2] = vDir[o + 2] * SEA_R;
+        // 0 at the shoreline, 1 out in open water: stills the swell where the
+        // sea meets the sand so it cannot lap up over the beach.
+        wDepth[i] = clamp((SEA_P - vPct[i]) / (SEA_P * 0.35), 0, 1);
+      }
+      const idx = [];
+      for (let t = 0; t < meshIndex.length; t += 3) {
+        const a = meshIndex[t], b = meshIndex[t + 1], c = meshIndex[t + 2];
+        let n = 0;
+        if (vPct[a] < SEA_P) n++;
+        if (vPct[b] < SEA_P) n++;
+        if (vPct[c] < SEA_P) n++;
+        if (n >= 1) idx.push(a, b, c);          // anything touching water
+      }
+      waterGeo.setIndex(new THREE.BufferAttribute(
+        vCount > 65535 ? new Uint32Array(idx) : new Uint16Array(idx), 1));
+      waterGeo.getAttribute("position").needsUpdate = true;
+      waterGeo.getAttribute("aDepth").needsUpdate = true;
+      waterGeo.computeVertexNormals();
+      waterGeo.computeBoundingSphere();
+    }
+    buildWater();
+
     const waterMat = new THREE.MeshPhongMaterial({
-      color: 0x56bcdb, specular: 0xd8f6ff, shininess: 84,
-      transparent: true, opacity: 0.74, depthWrite: false
+      color: 0x58c0dd, specular: 0xcdefff, shininess: 70,
+      transparent: true, opacity: 0.58, depthWrite: false, side: THREE.DoubleSide
     });
     waterMat.onBeforeCompile = function (shader) {
       shader.uniforms.uTime = uTime;
-      const waveFn = `
+      shader.vertexShader = `
         uniform float uTime;
+        attribute float aDepth;
+        varying float vPPDepth;
         float ppWave(vec3 p) {
-          return sin(p.x * 1.7 + uTime * 1.15) * cos(p.z * 1.55 + uTime * 0.83) * 0.026
-               + sin(p.y * 2.3 - uTime * 0.90) * 0.013;
+          return sin(p.x * 1.7 + uTime * 1.15) * cos(p.z * 1.55 + uTime * 0.83) * 0.030
+               + sin(p.y * 2.3 - uTime * 0.90) * 0.016;
         }
-      `;
-      shader.vertexShader = waveFn + shader.vertexShader;
+      ` + shader.vertexShader;
       // Displace along the radius, then rebuild the normal from finite
       // differences so the sun actually glints across the moving surface.
       shader.vertexShader = shader.vertexShader.replace(
@@ -1014,29 +1034,39 @@ window.plethoraBit = {
          vec3 ppTa = normalize(cross(ppN, ppAxis));
          vec3 ppTb = cross(ppN, ppTa);
          float ppE = 0.24;
-         float ppH0 = ppWave(position);
-         float ppHa = ppWave(position + ppTa * ppE);
-         float ppHb = ppWave(position + ppTb * ppE);
+         float ppH0 = ppWave(position) * aDepth;
+         float ppHa = ppWave(position + ppTa * ppE) * aDepth;
+         float ppHb = ppWave(position + ppTb * ppE) * aDepth;
          objectNormal = normalize(ppN - (ppTa * (ppHa - ppH0) + ppTb * (ppHb - ppH0)) * (2.4 / ppE));`
       );
       shader.vertexShader = shader.vertexShader.replace(
         "#include <begin_vertex>",
         `#include <begin_vertex>
+         vPPDepth = aDepth;
          transformed += ppN * ppH0;`
       );
+      // The shoreline is where the sea fades out, not where the mesh stops:
+      // clipping it on facet edges left every coast visibly serrated.
+      const outChunk = shader.fragmentShader.indexOf("#include <opaque_fragment>") >= 0
+        ? "#include <opaque_fragment>" : "#include <output_fragment>";
+      shader.fragmentShader = "varying float vPPDepth;\n" + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace(
+        outChunk, outChunk + "\n  gl_FragColor.a *= smoothstep(0.0, 0.16, vPPDepth);"
+      );
     };
-    const water = new THREE.Mesh(new THREE.SphereGeometry(SEA_R, 72, 48), waterMat);
+    const water = new THREE.Mesh(waterGeo, waterMat);
     water.renderOrder = 2;
+    water.frustumCulled = false;
     planet.add(water);
 
     // --- atmosphere rim ---------------------------------------------------
     const atmoUniforms = {
       uColor: { value: new THREE.Color(0x9fd8f6) },
-      uStrength: { value: 0.9 },
-      uPow: { value: 2.6 }
+      uStrength: { value: 0.8 },
+      uPow: { value: 3.5 }
     };
     const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(13.2, 48, 32),
+      new THREE.SphereGeometry(12.25, 48, 32),
       new THREE.ShaderMaterial({
         uniforms: atmoUniforms,
         transparent: true, depthWrite: false, side: THREE.BackSide,
@@ -1267,7 +1297,7 @@ window.plethoraBit = {
     // ---------------------------------------------------------------------
     charPos = V(0, 1, 0);
     const charHeading = V(0, 0, 1);
-    let charR = LEVEL_R[3];
+    let charR = SEA_R + 0.3;
     let swimBlend = 0, walkPhase = 0, moveAmt = 0;
 
     function placeCharacter() {
@@ -1286,7 +1316,7 @@ window.plethoraBit = {
         let s = 0;
         if (bi === B_GRASS) s = 3;
         else if (bi === B_MEADOW) s = 2.4;
-        else if (bi === B_FOREST) s = 1.6;
+        else if (bi === B_HIGHLAND) s = 1.6;
         else if (bi === B_SAND) s = 1.2;
         else s = 0.2;
         s -= Math.abs(d.y) * 2.2;                 // prefer temperate latitudes
@@ -1307,7 +1337,7 @@ window.plethoraBit = {
       charHeading.normalize();
     }
     orthoHeading();
-    charR = LEVEL_R[tLevel[dirToTile(charPos)]];
+    charR = heightAt(charPos);
 
     // Rotate `dir` toward `target` around `axis` by at most `maxStep` radians.
     function turnToward(dir, target, axis, maxStep) {
@@ -1349,7 +1379,8 @@ window.plethoraBit = {
       ["glowW", new THREE.IcosahedronGeometry(1, 0),                        matGlowWarm,  1200],
       ["glowC", new THREE.IcosahedronGeometry(1, 0),                        matGlowCool,  1600],
       ["blade", baseAt(new THREE.BoxGeometry(1, 1, 1)),                     matBlob,       600],
-      ["halo",  new THREE.IcosahedronGeometry(1, 1),                        haloMat,       600]
+      ["halo",  new THREE.IcosahedronGeometry(1, 1),                        haloMat,       600],
+      ["slab",  baseAt(new THREE.CylinderGeometry(1, 1, 1, 10, 1)),         matBlob,       600]
     ];
     const parts = {};
     for (let i = 0; i < PART_DEFS.length; i++) {
@@ -1396,7 +1427,7 @@ window.plethoraBit = {
     const _bu = V(), _bx = V(), _bz = V(), _bh = V();
     function tileBase(i, out, rLift) {
       const up = dirOf(i, _bu);
-      const rr = LEVEL_R[tLevel[i]] + (rLift || 0);
+      const rr = tHeight[i] + (rLift || 0);
       _bh.set(0, 1, 0);
       if (Math.abs(up.y) > 0.9) _bh.set(1, 0, 0);
       _bx.crossVectors(_bh, up).normalize();
@@ -1412,19 +1443,21 @@ window.plethoraBit = {
     // Model tables.
     // ---------------------------------------------------------------------
     //  trunk height, trunk radius scale, then [yOffset, radius] per canopy tier
+    // Canopies sit a little higher and a little narrower than they did on the
+    // terraced planet, so the trunk still reads against open ground.
     const TREE_STAGE = [
-      { h: 0.15, r: 0.45, tiers: [[0.18, 0.150]] },
-      { h: 0.31, r: 0.62, tiers: [[0.39, 0.240]] },
-      { h: 0.47, r: 0.80, tiers: [[0.57, 0.310], [0.77, 0.230]] },
-      { h: 0.61, r: 0.96, tiers: [[0.72, 0.375], [0.95, 0.292], [1.14, 0.205]] },
-      { h: 0.78, r: 1.14, tiers: [[0.91, 0.440], [1.20, 0.348], [1.45, 0.248]] }
+      { h: 0.17, r: 0.45, tiers: [[0.20, 0.140]] },
+      { h: 0.34, r: 0.62, tiers: [[0.43, 0.220]] },
+      { h: 0.53, r: 0.80, tiers: [[0.64, 0.285], [0.83, 0.210]] },
+      { h: 0.70, r: 0.96, tiers: [[0.82, 0.340], [1.04, 0.266], [1.22, 0.188]] },
+      { h: 0.88, r: 1.14, tiers: [[1.02, 0.400], [1.30, 0.318], [1.54, 0.226]] }
     ];
     const TRUNK_C  = [new THREE.Color(0x7a5334), new THREE.Color(0x6a4a3c), new THREE.Color(0x8a6446)];
-    const LEAF_C   = [new THREE.Color(0x5cae4f), new THREE.Color(0x82cc60), new THREE.Color(0x4c9a55)];
-    const PINE_C   = [new THREE.Color(0x3f8a5c), new THREE.Color(0x51a066), new THREE.Color(0x67b775)];
+    const LEAF_C   = [new THREE.Color(0x6cbe5a), new THREE.Color(0x93da6c), new THREE.Color(0x59ab5f)];
+    const PINE_C   = [new THREE.Color(0x4a9a66), new THREE.Color(0x5cb072), new THREE.Color(0x72c581)];
     const BLOSSOM_C= [new THREE.Color(0xf9c2d6), new THREE.Color(0xffdcea), new THREE.Color(0xf7a9c6)];
     const FLOWER_C = [0xff8fa8, 0xffd166, 0xf6f4ef, 0xc8a2e8, 0xff9f5a, 0x8fd9ff];
-    const ROCK_C   = [new THREE.Color(0xa39a8c), new THREE.Color(0x8d8578), new THREE.Color(0xb8b0a2)];
+    const ROCK_C   = [new THREE.Color(0x928878), new THREE.Color(0x7d7466), new THREE.Color(0xa39a89)];
     const HOUSE_W  = [new THREE.Color(0xfbf3e4), new THREE.Color(0xf3e2cc), new THREE.Color(0xe9eef2)];
     const HOUSE_R  = [new THREE.Color(0xd0705a), new THREE.Color(0x6f97b0), new THREE.Color(0x8a6f9e), new THREE.Color(0xc98f4e)];
 
@@ -1581,12 +1614,16 @@ window.plethoraBit = {
       if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
     }
 
+    // Paving is a laid stone rather than a recoloured tile: the terrain mesh
+    // shares vertices between neighbours, so tinting one tile would bleed.
     function emitPathPebbles(i, base) {
-      for (let k = 0; k < 3; k++) {
-        const a = hash2(i, 241 + k) * Math.PI * 2, rr = hash2(i, 251 + k) * 0.36;
-        _pc.copy(COL.path).offsetHSL(0, 0, -0.10 + (hash2(i, 257 + k) - 0.5) * 0.08);
-        emit("blob", base, Math.cos(a) * rr, 0.012, Math.sin(a) * rr,
-             0.07, 0.022, 0.07, _pc, 0, hash2(i, 263 + k) * 3, 0);
+      _pc.copy(COL.path).offsetHSL(0, 0, (hash2(i, 241) - 0.5) * 0.07);
+      emit("slab", base, 0, -0.03, 0, 0.50, 0.10, 0.50, _pc, 0, hash2(i, 251) * 3, 0);
+      for (let k = 0; k < 2; k++) {
+        const a = hash2(i, 257 + k) * Math.PI * 2, rr = 0.30 + hash2(i, 263 + k) * 0.14;
+        _pc.copy(COL.path).offsetHSL(0, 0, -0.09 + (hash2(i, 269 + k) - 0.5) * 0.07);
+        emit("blob", base, Math.cos(a) * rr, 0.015, Math.sin(a) * rr,
+             0.075, 0.026, 0.075, _pc, 0, hash2(i, 271 + k) * 3, 0);
       }
     }
 
@@ -1657,7 +1694,7 @@ window.plethoraBit = {
     //     One warm key light on an orbit, a cool hemisphere bounce, and a
     //     sky gradient that cross-fades through dawn, day, dusk and night.
     // =====================================================================
-    const sun = new THREE.DirectionalLight(0xfff3dd, 2.15);
+    const sun = new THREE.DirectionalLight(0xfff3dd, 1.58);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
     sun.shadow.camera.near = 12;
@@ -1669,9 +1706,9 @@ window.plethoraBit = {
     scene.add(sun);
     scene.add(sun.target);
 
-    const hemi = new THREE.HemisphereLight(0xbfe6ff, 0x6b7a55, 1.05);
+    const hemi = new THREE.HemisphereLight(0xbfe6ff, 0x6b7a55, 0.82);
     scene.add(hemi);
-    const amb = new THREE.AmbientLight(0xffffff, 0.24);
+    const amb = new THREE.AmbientLight(0xffffff, 0.22);
     scene.add(amb);
 
     // The moon is a second, much softer key so the night side still reads.
@@ -1691,10 +1728,10 @@ window.plethoraBit = {
     const SKY_KEYS = [
       { t: 0.00, c: ["#0b1130", "#17244d", "#2c3c68"], sun: 0.00, hemi: 0.26, amb: 0.12, atm: "#5f7fd8", glow: 1.0, moonI: 0.78, sky: 0x47699f, gnd: 0x303a58 },
       { t: 0.12, c: ["#2c2a52", "#7a5570", "#e0906b"], sun: 0.60, hemi: 0.50, amb: 0.15, atm: "#f0a37e", glow: 0.55, moonI: 0.34, sky: 0x9a8fc4, gnd: 0x5e5a58 },
-      { t: 0.22, c: ["#5aa8de", "#9fd2ee", "#ffd9ad"], sun: 1.60, hemi: 0.86, amb: 0.22, atm: "#ffc79a", glow: 0.16, moonI: 0.22, sky: 0xcfe4ff, gnd: 0x7b7a58 },
-      { t: 0.38, c: ["#5fb6e8", "#9fdcf5", "#e6f6fb"], sun: 2.10, hemi: 1.06, amb: 0.26, atm: "#9fd8f6", glow: 0.0, moonI: 0.20, sky: 0xbfe6ff, gnd: 0x84895c },
-      { t: 0.62, c: ["#5fb6e8", "#9fdcf5", "#e6f6fb"], sun: 2.10, hemi: 1.06, amb: 0.26, atm: "#9fd8f6", glow: 0.0, moonI: 0.20, sky: 0xbfe6ff, gnd: 0x84895c },
-      { t: 0.76, c: ["#4a7fc4", "#eaa079", "#ffd0a0"], sun: 1.50, hemi: 0.84, amb: 0.22, atm: "#ffb489", glow: 0.22, moonI: 0.20, sky: 0xffd9bb, gnd: 0x7d7355 },
+      { t: 0.22, c: ["#5aa8de", "#9fd2ee", "#ffd9ad"], sun: 1.24, hemi: 0.70, amb: 0.19, atm: "#ffc79a", glow: 0.16, moonI: 0.22, sky: 0xcfe4ff, gnd: 0x7b7a58 },
+      { t: 0.38, c: ["#5fb6e8", "#9fdcf5", "#e6f6fb"], sun: 1.58, hemi: 0.82, amb: 0.22, atm: "#9fd8f6", glow: 0.0, moonI: 0.20, sky: 0xbfe6ff, gnd: 0x84895c },
+      { t: 0.62, c: ["#5fb6e8", "#9fdcf5", "#e6f6fb"], sun: 1.58, hemi: 0.82, amb: 0.22, atm: "#9fd8f6", glow: 0.0, moonI: 0.20, sky: 0xbfe6ff, gnd: 0x84895c },
+      { t: 0.76, c: ["#4a7fc4", "#eaa079", "#ffd0a0"], sun: 1.16, hemi: 0.68, amb: 0.19, atm: "#ffb489", glow: 0.22, moonI: 0.20, sky: 0xffd9bb, gnd: 0x7d7355 },
       { t: 0.87, c: ["#25315e", "#6d4a75", "#d97a63"], sun: 0.46, hemi: 0.48, amb: 0.15, atm: "#c98ab0", glow: 0.62, moonI: 0.38, sky: 0x9d86ad, gnd: 0x554e5c },
       { t: 1.00, c: ["#0b1130", "#17244d", "#2c3c68"], sun: 0.00, hemi: 0.26, amb: 0.12, atm: "#5f7fd8", glow: 1.0, moonI: 0.78, sky: 0x47699f, gnd: 0x303a58 }
     ];
@@ -1952,7 +1989,7 @@ window.plethoraBit = {
         haptic("light");
         toast("🌿 Now a " + STAGE_NAME[clamp(stage, 0, 4)], 1700);
       }
-      burst(dirOf(i, tmpC), LEVEL_R[tLevel[i]] + 0.7, 8, stage >= 4 ? 0xffd0e6 : 0xd6ffb0, 0.30);
+      burst(dirOf(i, tmpC), tHeight[i] + 0.7, 8, stage >= 4 ? 0xffd0e6 : 0xd6ffb0, 0.30);
     }
 
     function updateHud() {
@@ -2004,21 +2041,20 @@ window.plethoraBit = {
         growthStage.delete(i);
         sting("clear");
         haptic("light");
-        burst(dirOf(i, tmpC), LEVEL_R[tLevel[i]] + 0.25, 9, 0xe8dcc4, 0.34);
+        burst(dirOf(i, tmpC), tHeight[i] + 0.25, 9, 0xe8dcc4, 0.34);
       } else {
         placed.set(i, { type: tool, t: tool === P_TREE ? Date.now() : 0 });
         popStart.set(i, nowMs);
         if (tool === P_TREE) {
           growthStage.set(i, 0);
           sting("plant");
-          burst(dirOf(i, tmpC), LEVEL_R[tLevel[i]] + 0.3, 10, 0xbdf0a0, 0.28);
+          burst(dirOf(i, tmpC), tHeight[i] + 0.3, 10, 0xbdf0a0, 0.28);
         } else {
           sting("place");
-          burst(dirOf(i, tmpC), LEVEL_R[tLevel[i]] + 0.25, 8, 0xfff0c8, 0.30);
+          burst(dirOf(i, tmpC), tHeight[i] + 0.25, 8, 0xfff0c8, 0.30);
         }
         haptic(tool === P_HOUSE || tool === P_MILL ? "medium" : "light");
       }
-      repaintTile(i);
       propsDirty = true;
       rebuildProps(nowMs);
       queueSave();
@@ -2369,10 +2405,10 @@ window.plethoraBit = {
       seedNoise();
       generate();
       buildTerrain();
-      repaintAll();
+      buildWater();
       placeCharacter();
       orthoHeading();
-      charR = LEVEL_R[tLevel[dirToTile(charPos)]];
+      charR = heightAt(charPos);
       walkTarget = null;
       focusTile = -1;
       camSnap = true;
@@ -2486,10 +2522,12 @@ window.plethoraBit = {
       moveAmt += (amount - moveAmt) * damp(dt, 12);
 
       // ---- ground / water ----
-      const standTile = dirToTile(charPos);
-      const inWater = isWater(standTile);
-      const goalR = inWater ? SEA_R : LEVEL_R[tLevel[standTile]];
-      charR += (goalR - charR) * damp(dt, 11);
+      // Sampled from the height field at the exact position rather than from
+      // the tile, so walking over a rise is a slope and not a staircase.
+      const groundR = heightAt(charPos);
+      const inWater = groundR < SEA_R;
+      const goalR = inWater ? SEA_R : groundR;
+      charR += (goalR - charR) * damp(dt, 18);
       swimBlend += ((inWater ? 1 : 0) - swimBlend) * damp(dt, 5.5);
       if (inWater !== wasSwimming) {
         wasSwimming = inWater;
@@ -2554,7 +2592,7 @@ window.plethoraBit = {
         _mTmp.copy(charPos).multiplyScalar(ca).addScaledVector(charHeading, sb).normalize();
         targetTile = dirToTile(_mTmp);
       }
-      setHighlight(targetTile, 0.035 + Math.sin(timeMs * 0.005) * 0.012);
+      setHighlight(targetTile);
       const ok = buildCheck(targetTile, tool).ok;
       hlMat.color.setHex(ok ? 0x9dffb0 : 0xff9c8a);
       hlMat.opacity = 0.30 + Math.sin(timeMs * 0.005) * 0.10 + (ok ? 0.16 : 0);
