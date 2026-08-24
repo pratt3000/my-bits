@@ -101,6 +101,22 @@ window.plethoraBit = {
         border:1px solid rgba(255,255,255,.72); box-shadow:0 3px 10px rgba(24,66,92,.16);
         backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px); white-space:nowrap; }
       .pp-chip.pp-life { color:#7a4a12; background:rgba(255,246,224,.76); }
+      .pp-chip.pp-seed { color:#6b4a1e; background:rgba(255,240,214,.82); }
+
+      /* ---------- current wish ---------- */
+      .pp-wish { margin-top:9px; max-width:min(300px,74vw); pointer-events:none;
+        background:rgba(255,255,255,.72); border:1px solid rgba(255,255,255,.8);
+        border-radius:16px; padding:8px 11px 9px; box-shadow:0 4px 14px rgba(24,66,92,.18);
+        backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+        transition:transform .3s ease, box-shadow .3s ease; }
+      .pp-wish.pop { transform:scale(1.06); box-shadow:0 8px 22px rgba(198,150,40,.42); }
+      .pp-wish .row { display:flex; align-items:center; gap:7px; }
+      .pp-wish .ic { font-size:15px; line-height:1; }
+      .pp-wish .tx { flex:1; font-size:12px; font-weight:800; color:#14415a; line-height:1.25; }
+      .pp-wish .nu { font-size:11px; font-weight:900; color:#7a8fa0; white-space:nowrap; }
+      .pp-wish .bar { height:4px; border-radius:99px; background:rgba(20,65,90,.14); margin-top:6px; overflow:hidden; }
+      .pp-wish .bar i { display:block; height:100%; border-radius:99px;
+        background:linear-gradient(90deg,#8ed36a,#f0c65a); transition:width .35s ease; }
 
       .pp-topright { position:absolute; top:${SAT + 12}px; right:${SAR + 14}px; display:flex; gap:9px; }
       .pp-ico { pointer-events:auto; width:42px; height:42px; border-radius:50%; cursor:pointer;
@@ -157,6 +173,13 @@ window.plethoraBit = {
       .pp-tool.sel { background:rgba(255,255,255,.95); border-color:#6fc95a; transform:translateY(-4px);
         box-shadow:0 8px 18px rgba(41,110,52,.26); }
       .pp-tool.sel .nm { color:#2c6b32; opacity:1; }
+      .pp-tool { position:relative; }
+      .pp-tool .cost { position:absolute; top:-5px; right:-4px; font-size:9px; font-weight:900;
+        padding:2px 5px; border-radius:99px; background:rgba(255,246,224,.96); color:#7a4a12;
+        border:1px solid rgba(255,255,255,.85); box-shadow:0 2px 5px rgba(24,66,92,.18); }
+      .pp-tool.lock { opacity:.45; }
+      .pp-tool.lock .gl { filter:grayscale(1); }
+      .pp-tool.lock .cost { background:rgba(230,236,240,.96); color:#5d7385; }
 
       /* ---------- sheet (instructions / stats) ---------- */
       .pp-sheet { position:absolute; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
@@ -205,8 +228,12 @@ window.plethoraBit = {
         <div class="pp-hud">
           <div class="pp-chipline">
             <span class="pp-chip pp-c-tree">🌳 0</span>
-            <span class="pp-chip pp-c-home">🏠 0</span>
+            <span class="pp-chip pp-seed">🌰 0</span>
             <span class="pp-chip pp-life">✦ 0</span>
+          </div>
+          <div class="pp-wish">
+            <div class="row"><span class="ic">🌳</span><span class="tx">…</span><span class="nu">0 / 0</span></div>
+            <div class="bar"><i style="width:0%"></i></div>
           </div>
         </div>
         <div class="pp-topright">
@@ -235,8 +262,13 @@ window.plethoraBit = {
     const el = {
       hud: ui.querySelector(".pp-hud"),
       cTree: ui.querySelector(".pp-c-tree"),
-      cHome: ui.querySelector(".pp-c-home"),
+      cSeed: ui.querySelector(".pp-seed"),
       cLife: ui.querySelector(".pp-life"),
+      wish: ui.querySelector(".pp-wish"),
+      wIcon: ui.querySelector(".pp-wish .ic"),
+      wText: ui.querySelector(".pp-wish .tx"),
+      wNum: ui.querySelector(".pp-wish .nu"),
+      wFill: ui.querySelector(".pp-wish .bar i"),
       bSky: ui.querySelector(".pp-b-sky"),
       bSnd: ui.querySelector(".pp-b-snd"),
       bInfo: ui.querySelector(".pp-b-info"),
@@ -316,28 +348,81 @@ window.plethoraBit = {
 
     // Placeable ids. These are the characters written into the save string, so
     // they must never be renumbered once a planet exists in the wild.
+    // Ids are written into the save string as a single digit, so 9 is the last
+    // one this format can take.
     const P_EMPTY = 0, P_TREE = 1, P_FLOWER = 2, P_PATH = 3, P_HOUSE = 4,
-          P_LAMP = 5, P_MUSH = 6, P_MILL = 7, P_ROCK = 8;
+          P_LAMP = 5, P_MUSH = 6, P_MILL = 7, P_ROCK = 8, P_FENCE = 9;
 
     // Tools, in strip order. `cap` bounds how many of a thing can exist, which
     // keeps the instanced buffers from ever overflowing.
+    // cost = seeds to place. `at` = wishes you must have granted before the
+    // tool appears, which is what turns the palette into a progression.
     const TOOLS = [
-      { id: P_TREE,   gl: "🌱", nm: "TREE",   lab: "PLANT",  cap: 640, hint: "Plant a tree — it keeps growing while you are away" },
-      { id: P_FLOWER, gl: "🌼", nm: "FLOWER", lab: "SOW",    cap: 400, hint: "Sow a patch of wildflowers" },
-      { id: P_PATH,   gl: "🧱", nm: "PATH",   lab: "PAVE",   cap: 500, hint: "Lay a paving stone" },
-      { id: P_HOUSE,  gl: "🏠", nm: "HOUSE",  lab: "BUILD",  cap: 260, hint: "Raise a cottage — its windows light up at night" },
-      { id: P_LAMP,   gl: "🏮", nm: "LAMP",   lab: "HANG",   cap: 300, hint: "Hang a lantern — it glows after dark" },
-      { id: P_MUSH,   gl: "🍄", nm: "SHROOM", lab: "GROW",   cap: 300, hint: "Grow glowing mushrooms" },
-      { id: P_MILL,   gl: "🌀", nm: "MILL",   lab: "RAISE",  cap: 120, hint: "Raise a windmill — its sails turn in the breeze" },
-      { id: P_ROCK,   gl: "🪨", nm: "STONES", lab: "STACK",  cap: 320, hint: "Stack a little cairn" },
-      { id: P_EMPTY,  gl: "✕",  nm: "CLEAR",  lab: "CLEAR",  cap: Infinity, hint: "Clear this tile back to bare ground" }
+      { id: P_TREE,   gl: "🌱", nm: "TREE",   lab: "PLANT", cost: 0,  at: 0,  cap: 640, hint: "Plant a tree — it keeps growing while you are away" },
+      { id: P_FLOWER, gl: "🌼", nm: "FLOWER", lab: "SOW",   cost: 0,  at: 0,  cap: 400, hint: "Sow a patch of wildflowers" },
+      { id: P_PATH,   gl: "🧱", nm: "PATH",   lab: "PAVE",  cost: 1,  at: 1,  cap: 500, hint: "Lay a paving stone" },
+      { id: P_FENCE,  gl: "🚧", nm: "FENCE",  lab: "FENCE", cost: 1,  at: 2,  cap: 400, hint: "Fence off a patch of ground" },
+      { id: P_ROCK,   gl: "🪨", nm: "STONES", lab: "STACK", cost: 2,  at: 3,  cap: 320, hint: "Stack a little cairn" },
+      { id: P_LAMP,   gl: "🏮", nm: "LAMP",   lab: "HANG",  cost: 4,  at: 5,  cap: 300, hint: "Hang a lantern — it glows after dark" },
+      { id: P_HOUSE,  gl: "🏠", nm: "HOUSE",  lab: "BUILD", cost: 10, at: 7,  cap: 260, hint: "Raise a cottage — its windows light up at night" },
+      { id: P_MUSH,   gl: "🍄", nm: "SHROOM", lab: "GROW",  cost: 3,  at: 9,  cap: 300, hint: "Grow glowing mushrooms" },
+      { id: P_MILL,   gl: "🌀", nm: "MILL",   lab: "RAISE", cost: 20, at: 12, cap: 120, hint: "Raise a windmill — its sails turn in the breeze" },
+      { id: P_EMPTY,  gl: "✕",  nm: "CLEAR",  lab: "CLEAR", cost: 0,  at: 0,  cap: Infinity, hint: "Clear a tile — you get half the seeds back" }
     ];
+
+    const START_SEEDS = 6;
+    const HARVEST_YIELD = 3;            // seeds from one ripe tree
+    const TEND_COST = 1;                // seeds to hurry a tree along
+    const TEND_MS = 4 * 60e3;           // how much growing time one tend buys
+    const FRUIT_MS = 20 * 60e3;         // ripe again this long after harvesting
 
     // Tree growth. Real wall-clock time, so a planet left overnight comes back
     // as a forest. Thresholds are ms since the tree was planted.
     const GROW_MS = [0, 45e3, 4 * 60e3, 20 * 60e3, 120 * 60e3];
+    const RIPE = GROW_MS.length - 1;    // stage at which a tree bears fruit
     const STAGE_NAME = ["sprout", "sapling", "young tree", "tree", "ancient tree"];
     const LIFE_PTS = [1, 2, 4, 7, 12];   // Planet Life value of a tree per stage
+
+    // ---------------------------------------------------------------------
+    // Wishes: the goal loop. Every one is checked against the current state of
+    // the planet rather than against a lifetime counter, so they survive a
+    // reload with no extra bookkeeping and stay forgiving if you tear
+    // something down. `stat` names what is being counted; targets escalate.
+    // ---------------------------------------------------------------------
+    const WISH_KINDS = {
+      trees:   { icon: "🌳", text: n => "Have " + n + " trees of your own" },
+      grown:   { icon: "🌲", text: n => "Bring " + n + " trees to full size" },
+      flowers: { icon: "🌼", text: n => "Sow " + n + " patches of wildflowers" },
+      path:    { icon: "🧱", text: n => "Lay " + n + " paving stones" },
+      fence:   { icon: "🚧", text: n => "Put up " + n + " stretches of fence" },
+      rock:    { icon: "🪨", text: n => "Stack " + n + " cairns" },
+      lamp:    { icon: "🏮", text: n => "Light " + n + " lanterns" },
+      house:   { icon: "🏠", text: n => "Build " + n + " cottages" },
+      mush:    { icon: "🍄", text: n => "Grow " + n + " mushroom rings" },
+      mill:    { icon: "🌀", text: n => "Raise " + n + " windmills" },
+      harvest: { icon: "🧺", text: n => "Harvest ripe trees " + n + " times" },
+      life:    { icon: "✦",  text: n => "Reach " + n + " Planet Life" }
+    };
+    // Authored for the opening hours so the pacing lines up with the unlocks,
+    // then generated so it never runs dry.
+    const WISH_PLAN = [
+      ["trees", 4], ["path", 3], ["grown", 1], ["fence", 4], ["trees", 8],
+      ["rock", 3], ["harvest", 2], ["lamp", 3], ["flowers", 5], ["house", 1],
+      ["trees", 14], ["mush", 3], ["grown", 6], ["mill", 1], ["life", 120],
+      ["harvest", 8], ["lamp", 8], ["house", 3], ["trees", 22], ["fence", 10],
+      ["flowers", 12], ["grown", 14], ["life", 260], ["mill", 3]
+    ];
+    const WISH_TAIL = ["trees", "grown", "harvest", "flowers", "lamp", "house", "life", "fence", "rock", "mill", "mush", "path"];
+    const WISH_BASE = { trees: 30, grown: 20, harvest: 26, flowers: 16, lamp: 12, house: 5, life: 340, fence: 14, rock: 12, mill: 4, mush: 12, path: 26 };
+
+    function wishAt(n) {
+      if (n < WISH_PLAN.length) return { kind: WISH_PLAN[n][0], target: WISH_PLAN[n][1] };
+      const k = n - WISH_PLAN.length;
+      const kind = WISH_TAIL[k % WISH_TAIL.length];
+      const cycle = Math.floor(k / WISH_TAIL.length);
+      return { kind: kind, target: Math.round(WISH_BASE[kind] * (1.35 + cycle * 0.55)) };
+    }
+    function seedReward(n) { return Math.min(40, 6 + n * 2); }
 
     const DAY_MS = 300e3;               // one full day/night cycle
     const WALK_SPEED = 2.2;             // world units per second on land
@@ -379,6 +464,9 @@ window.plethoraBit = {
     const placed = new Map();
     let seed = 0;
     let outfit = 0;
+    let seeds = START_SEEDS;            // the currency
+    let wishesDone = 0;                 // also drives which tools are unlocked
+    let harvests = 0;
 
     function packPlaced() {
       let out = "";
@@ -397,7 +485,7 @@ window.plethoraBit = {
         const type = parseInt(str[i + 2], 10);
         const mins = b64dec(str.slice(i + 3, i + 7));
         if (idx < 0 || idx >= TILES || mins < 0) continue;
-        if (!(type >= P_EMPTY && type <= P_ROCK)) continue;
+        if (!(type >= P_EMPTY && type <= P_FENCE)) continue;
         placed.set(idx, { type: type, t: mins > 0 ? EPOCH0 + mins * 60000 : 0 });
       }
     }
@@ -406,7 +494,8 @@ window.plethoraBit = {
     let charPos = null;   // THREE.Vector3, filled in once three is up
 
     function buildSave() {
-      const save = { v: 1, s: seed, t: Date.now(), h: outfit, p: packPlaced() };
+      const save = { v: 1, s: seed, t: Date.now(), h: outfit, p: packPlaced(),
+                     sd: seeds, wn: wishesDone, hv: harvests };
       if (charPos) {
         save.c = [
           Math.round(charPos.x * 1e4) / 1e4,
@@ -457,6 +546,10 @@ window.plethoraBit = {
       if (!pick) return false;
       seed = pick.s >>> 0;
       outfit = (typeof pick.h === "number" && pick.h >= 0) ? pick.h | 0 : 0;
+      const num = (v, d) => (typeof v === "number" && isFinite(v) && v >= 0) ? Math.floor(v) : d;
+      seeds = num(pick.sd, START_SEEDS);
+      wishesDone = num(pick.wn, 0);
+      harvests = num(pick.hv, 0);
       unpackPlaced(pick.p);
       return pick;
     }
@@ -1194,7 +1287,7 @@ window.plethoraBit = {
     // behind, which is the angle you see almost all the time.
     const OUTFITS = [
       { body: 0xf07a68, hair: 0x8a5a3c, hat: 0xfff0d6 },
-      { body: 0x66b6e8, hair: 0x4d4657, hat: 0xffe9a8 },
+      { body: 0x66b6e8, hair: 0x6b6274, hat: 0xffe9a8 },
       { body: 0xffd166, hair: 0xa4593a, hat: 0xf28fb0 },
       { body: 0x9d7ce0, hair: 0x3f5464, hat: 0xd7f5ff },
       { body: 0x5fcf9a, hair: 0x8d5238, hat: 0xffd6ea },
@@ -1374,7 +1467,7 @@ window.plethoraBit = {
       ["trunk", baseAt(new THREE.CylinderGeometry(0.62, 1, 1, 6, 1)),       matBlob,       800],
       ["pine",  baseAt(new THREE.ConeGeometry(1, 1, 7)),                    matBlob,      1600],
       ["stem",  baseAt(new THREE.CylinderGeometry(1, 1, 1, 5, 1)),          matBlob,      2700],
-      ["box",   baseAt(new THREE.BoxGeometry(1, 1, 1)),                     matBlob,      1600],
+      ["box",   baseAt(new THREE.BoxGeometry(1, 1, 1)),                     matBlob,      2200],
       ["cone4", baseAt(new THREE.ConeGeometry(1, 1, 4)),                    matBlob,      1300],
       ["glowW", new THREE.IcosahedronGeometry(1, 0),                        matGlowWarm,  1200],
       ["glowC", new THREE.IcosahedronGeometry(1, 0),                        matGlowCool,  1600],
@@ -1500,9 +1593,9 @@ window.plethoraBit = {
         const top = st.tiers[0];
         for (let b = 0; b < 3; b++) {
           const a = hash2(i, 101 + b) * Math.PI * 2, rr = top[1] * 1.05 * jitter;
-          _pc.setHex(sp === 2 ? 0xff8fbd : 0xff7a5c);
+          _pc.setHex(sp === 2 ? 0xff7ab0 : 0xff6a45);
           emit("blob", base, Math.cos(a) * rr, (top[0] + 0.1 + hash2(i, 103 + b) * 0.34) * k,
-                             Math.sin(a) * rr, 0.052 * pop, 0.052 * pop, 0.052 * pop, _pc);
+                             Math.sin(a) * rr, 0.078 * pop, 0.078 * pop, 0.078 * pop, _pc);
         }
       }
     }
@@ -1616,6 +1709,26 @@ window.plethoraBit = {
 
     // Paving is a laid stone rather than a recoloured tile: the terrain mesh
     // shares vertices between neighbours, so tinting one tile would bleed.
+    const FENCE_C = [new THREE.Color(0x9a7550), new THREE.Color(0x8a6647), new THREE.Color(0xa88461)];
+    function emitFence(i, base, pop) {
+      const r = 0.42, h = 0.30 * pop;
+      _pc.copy(FENCE_C[Math.floor(hash2(i, 277) * 3) % 3]);
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI * 0.5 + Math.PI * 0.25;
+        const x = Math.cos(a) * r * 1.414, z = Math.sin(a) * r * 1.414;
+        emit("stem", base, x, 0, z, 0.036 * pop, h * 1.18, 0.036 * pop, _pc);
+      }
+      _pc.offsetHSL(0, 0, 0.05);
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI * 0.5;
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        for (let bar = 0; bar < 2; bar++) {
+          emit("box", base, x, h * (0.42 + bar * 0.42), z,
+               bar === 0 ? 0.03 : 0.03, 0.045 * pop, r * 1.42, _pc, 0, -a, 0);
+        }
+      }
+    }
+
     function emitPathPebbles(i, base) {
       _pc.copy(COL.path).offsetHSL(0, 0, (hash2(i, 241) - 0.5) * 0.07);
       emit("slab", base, 0, -0.03, 0, 0.50, 0.10, 0.50, _pc, 0, hash2(i, 251) * 3, 0);
@@ -1632,7 +1745,8 @@ window.plethoraBit = {
     // =====================================================================
     let propsDirty = true;
     const popStart = new Map();       // tile -> ms, drives the place-down pop
-    let statTrees = 0, statHouses = 0, statLife = 0;
+    let statTrees = 0, statHouses = 0, statLife = 0, statGrown = 0;
+    const statCount = new Uint16Array(P_FENCE + 1);   // your placements, by type
     const growthStage = new Map();    // tile -> last stage we drew, for chimes
 
     function popScale(i, now) {
@@ -1648,7 +1762,8 @@ window.plethoraBit = {
     function rebuildProps(now) {
       for (const k in parts) if (k !== "blade") parts[k].n = 0;
       mills.length = 0;
-      statTrees = 0; statHouses = 0; statLife = 0;
+      statTrees = 0; statHouses = 0; statLife = 0; statGrown = 0;
+      statCount.fill(0);
 
       const wall = Date.now();
       for (let i = 0; i < TILES; i++) {
@@ -1656,12 +1771,16 @@ window.plethoraBit = {
         if (!c || c.type === P_EMPTY) continue;
         const pop = popScale(i, now);
         tileBase(i, _base);
+        if (!c.nat && c.type !== P_EMPTY) statCount[c.type]++;
         switch (c.type) {
           case P_TREE: {
             const s = stageOf(c, wall);
             emitTree(i, _base, s, pop);
-            statTrees++;
-            if (!c.nat) statLife += LIFE_PTS[s];
+            if (!c.nat) {
+              statTrees++;
+              statLife += LIFE_PTS[s];
+              if (s >= 3) statGrown++;
+            }
             if (!c.nat) {
               const prev = growthStage.get(i);
               if (prev !== undefined && s > prev) onTreeGrew(i, s);
@@ -1676,6 +1795,7 @@ window.plethoraBit = {
           case P_MUSH:   emitMushrooms(i, _base, pop); statLife += 2; break;
           case P_MILL:   emitMill(i, _base, pop); statLife += 10; break;
           case P_ROCK:   emitRocks(i, _base, pop, !!c.nat); if (!c.nat) statLife += 1; break;
+          case P_FENCE:  emitFence(i, _base, pop); statLife += 1; break;
         }
       }
       for (const k in parts) {
@@ -1880,6 +2000,12 @@ window.plethoraBit = {
           tone(146.8, 0.13, "sine", 0.10, 0, 104); break;
         case "pick":
           tone(880, 0.07, "triangle", 0.07); break;
+        case "harvest":
+          tone(587.3, 0.16, "triangle", 0.13); tone(880, 0.18, "sine", 0.10, 0.06);
+          tone(1174.7, 0.22, "sine", 0.06, 0.12); break;
+        case "wish":
+          tone(523.3, 0.26, "triangle", 0.11); tone(659.3, 0.26, "sine", 0.09, 0.08);
+          tone(784, 0.30, "sine", 0.08, 0.16); tone(1046.5, 0.42, "sine", 0.06, 0.24); break;
         case "hello":
           tone(523.3, 0.30, "sine", 0.10); tone(784, 0.34, "sine", 0.08, 0.09);
           tone(1046.5, 0.40, "sine", 0.055, 0.18); break;
@@ -1964,10 +2090,14 @@ window.plethoraBit = {
 
     // =====================================================================
     // 15. ACTIONS
+    //     The big button is contextual: what it does depends on what is on
+    //     the tile in front of you. A tree in front means tend it or take its
+    //     fruit; bare ground means place whatever tool is selected. That gives
+    //     the verbs somewhere to live without a second row of buttons.
     // =====================================================================
     let tool = P_TREE;
     let targetTile = dirToTile(charPos);
-    let focusTile = -1;              // a tapped tile stays targeted until you move
+    let focusTile = -1;
     let started = false, worldReady = false;
     let lastGrowChime = 0;
     let nowMs = 0;
@@ -1976,41 +2106,50 @@ window.plethoraBit = {
       for (let i = 0; i < TOOLS.length; i++) if (TOOLS[i].id === id) return TOOLS[i];
       return TOOLS[0];
     }
-    function countType(t) {
-      let n = 0;
-      placed.forEach(r => { if (r.type === t) n++; });
-      return n;
-    }
+    function isUnlocked(id) { return wishesDone >= toolDef(id).at; }
+    function addSeeds(n) { seeds = Math.max(0, seeds + n); updateHud(); }
 
     function onTreeGrew(i, stage) {
       if (nowMs - lastGrowChime > 1400) {
         lastGrowChime = nowMs;
         sting("grow");
         haptic("light");
-        toast("🌿 Now a " + STAGE_NAME[clamp(stage, 0, 4)], 1700);
+        toast(stage >= RIPE ? "🧺 A tree is ripe" : "🌿 Now a " + STAGE_NAME[clamp(stage, 0, 4)], 1700);
       }
-      burst(dirOf(i, tmpC), tHeight[i] + 0.7, 8, stage >= 4 ? 0xffd0e6 : 0xd6ffb0, 0.30);
+      burst(dirOf(i, tmpC), tHeight[i] + 0.7, 8, stage >= RIPE ? 0xffd98a : 0xd6ffb0, 0.30);
     }
 
     function updateHud() {
       el.cTree.textContent = "🌳 " + statTrees;
-      el.cHome.textContent = "🏠 " + statHouses;
+      el.cSeed.textContent = "🌰 " + seeds;
       el.cLife.textContent = "✦ " + statLife;
     }
 
-    // What would happen if BUILD were pressed on `i` right now.
-    function buildCheck(i, t) {
-      if (i < 0 || i >= TILES) return { ok: false, why: "Nowhere to build" };
-      if (isWater(i)) return { ok: false, why: "That is water 🌊" };
+    // ---------------------------------------------------------------------
+    // What pressing the button would do to tile `i` right now.
+    // ---------------------------------------------------------------------
+    function resolveAction(i) {
+      const def = toolDef(tool);
+      if (i < 0 || i >= TILES) return { kind: "none", ok: false, why: "Nowhere to build", gl: "✕", lab: "—" };
+      if (isWater(i)) return { kind: "none", ok: false, why: "That is water 🌊", gl: "🌊", lab: "WATER" };
       const cur = contentOf(i);
-      if (t === P_EMPTY) {
-        if (!cur || cur.type === P_EMPTY) return { ok: false, why: "Already clear" };
-        return { ok: true };
+
+      if (tool === P_EMPTY) {
+        if (!cur || cur.type === P_EMPTY) return { kind: "none", ok: false, why: "Already clear", gl: "✕", lab: "CLEAR" };
+        return { kind: "clear", ok: true, gl: "✕", lab: "CLEAR" };
       }
-      if (cur && cur.type === t && !cur.nat) return { ok: false, why: "Already here" };
-      const def = toolDef(t);
-      if (countType(t) >= def.cap) return { ok: false, why: "That is as many as the planet holds" };
-      return { ok: true };
+      if (cur && cur.type === P_TREE) {
+        // Wild trees are already full grown, so they are ripe by definition.
+        if (cur.nat || stageOf(cur, Date.now()) >= RIPE) {
+          return { kind: "harvest", ok: true, gl: "🧺", lab: "HARVEST" };
+        }
+        return { kind: "tend", ok: seeds >= TEND_COST, why: "Needs 🌰 " + TEND_COST,
+                 gl: "💧", lab: "TEND", cost: TEND_COST };
+      }
+      if (cur && cur.type === def.id) return { kind: "none", ok: false, why: "Already here", gl: def.gl, lab: def.lab };
+      if (statCount[def.id] >= def.cap) return { kind: "none", ok: false, why: "That is as many as the planet holds", gl: def.gl, lab: def.lab };
+      if (seeds < def.cost) return { kind: "place", ok: false, why: "Needs 🌰 " + def.cost, gl: def.gl, lab: def.lab, cost: def.cost };
+      return { kind: "place", ok: true, gl: def.gl, lab: def.lab, cost: def.cost };
     }
 
     let scoreTimer = null;
@@ -2019,51 +2158,83 @@ window.plethoraBit = {
       scoreTimer = setTimeout(async () => {
         scoreTimer = null;
         try { ctx.platform.setScore(statLife); } catch (_) {}
-        try {
-          if (ctx.memory && ctx.memory.record) await ctx.memory.record("life").submit(statLife);
-        } catch (_) {}
+        try { if (ctx.memory && ctx.memory.record) await ctx.memory.record("life").submit(statLife); } catch (_) {}
       }, 2500);
     }
     ctx.onDestroy(() => { if (scoreTimer) clearTimeout(scoreTimer); });
 
     function doBuild() {
       const i = targetTile;
-      const chk = buildCheck(i, tool);
-      if (!chk.ok) {
-        toast(chk.why, 1300);
+      const act = resolveAction(i);
+      if (!act.ok) {
+        toast(act.why || "Not here", 1300);
         sting("nope");
         haptic("warning");
         return;
       }
-      const wasTrees = statTrees, wasHouses = statHouses;
-      if (tool === P_EMPTY) {
+      const wall = Date.now();
+      const wasHouses = statHouses;
+      const dir = dirOf(i, tmpC), r = tHeight[i];
+
+      if (act.kind === "clear") {
+        const cur = contentOf(i);
+        const refund = (cur && !cur.nat) ? Math.floor(toolDef(cur.type).cost / 2) : 0;
         placed.set(i, { type: P_EMPTY, t: 0 });
         growthStage.delete(i);
+        if (refund) addSeeds(refund);
         sting("clear");
         haptic("light");
-        burst(dirOf(i, tmpC), tHeight[i] + 0.25, 9, 0xe8dcc4, 0.34);
+        burst(dir, r + 0.25, 9, 0xe8dcc4, 0.34);
+        toast(refund ? "Cleared · 🌰 +" + refund : "Cleared", 1200);
+
+      } else if (act.kind === "harvest") {
+        // Knock the tree back one stage; it ripens again after FRUIT_MS, which
+        // keeps all of this inside the single timestamp the save already has.
+        const t0 = wall - (GROW_MS[RIPE] - FRUIT_MS);
+        const rec = placed.get(i);
+        const wild = !rec;
+        if (rec) rec.t = t0;
+        else { placed.set(i, { type: P_TREE, t: t0 }); popStart.set(i, nowMs); }
+        growthStage.set(i, stageOf(placed.get(i), wall));
+        harvests++;
+        addSeeds(HARVEST_YIELD);
+        sting("harvest");
+        haptic("success");
+        burst(dir, r + 1.0, 14, 0xffd070, 0.34);
+        toast(wild ? "Harvested · this tree is yours now 🌰 +" + HARVEST_YIELD
+                   : "Harvested · 🌰 +" + HARVEST_YIELD, 1600);
+
+      } else if (act.kind === "tend") {
+        addSeeds(-TEND_COST);
+        placed.get(i).t -= TEND_MS;
+        toast("Tended 💧", 1000);
+        growthStage.set(i, stageOf(placed.get(i), wall));
+        sting("plant");
+        haptic("light");
+        burst(dir, r + 0.8, 10, 0x9fe8ff, 0.26);
+
       } else {
-        placed.set(i, { type: tool, t: tool === P_TREE ? Date.now() : 0 });
+        addSeeds(-(act.cost || 0));
+        placed.set(i, { type: tool, t: tool === P_TREE ? wall : 0 });
         popStart.set(i, nowMs);
         if (tool === P_TREE) {
           growthStage.set(i, 0);
           sting("plant");
-          burst(dirOf(i, tmpC), tHeight[i] + 0.3, 10, 0xbdf0a0, 0.28);
+          burst(dir, r + 0.3, 10, 0xbdf0a0, 0.28);
         } else {
           sting("place");
-          burst(dirOf(i, tmpC), tHeight[i] + 0.25, 8, 0xfff0c8, 0.30);
+          burst(dir, r + 0.25, 8, 0xfff0c8, 0.30);
         }
         haptic(tool === P_HOUSE || tool === P_MILL ? "medium" : "light");
       }
+
       propsDirty = true;
       rebuildProps(nowMs);
+      checkWishes();
       queueSave();
       queueScore();
-      try { ctx.platform.interact({ type: "build", tool: toolDef(tool).nm.toLowerCase(), tile: i }); } catch (_) {}
-      if (statTrees >= 10 && wasTrees < 10) { milestone("ten_trees", "Ten trees 🌳"); }
-      if (statTrees >= 50 && wasTrees < 50) { milestone("fifty_trees", "A whole forest 🌲"); }
-      if (statHouses >= 1 && wasHouses < 1) { milestone("first_home", "Home sweet home 🏠"); }
-      if (statHouses >= 5 && wasHouses < 5) { milestone("village", "A little village 🏘️"); }
+      try { ctx.platform.interact({ type: act.kind, tool: toolDef(tool).nm.toLowerCase(), tile: i }); } catch (_) {}
+      if (statHouses >= 1 && wasHouses < 1) milestone("first_home", "Home sweet home 🏠");
     }
     function milestone(name, msg) {
       try { ctx.platform.milestone(name, { life: statLife }); } catch (_) {}
@@ -2071,22 +2242,102 @@ window.plethoraBit = {
       haptic("success");
     }
 
-    function selectTool(id) {
+    // ---------------------------------------------------------------------
+    // Wishes.
+    // ---------------------------------------------------------------------
+    function wishStat(kind) {
+      switch (kind) {
+        case "trees":   return statCount[P_TREE];
+        case "grown":   return statGrown;
+        case "flowers": return statCount[P_FLOWER];
+        case "path":    return statCount[P_PATH];
+        case "fence":   return statCount[P_FENCE];
+        case "rock":    return statCount[P_ROCK];
+        case "lamp":    return statCount[P_LAMP];
+        case "house":   return statCount[P_HOUSE];
+        case "mush":    return statCount[P_MUSH];
+        case "mill":    return statCount[P_MILL];
+        case "harvest": return harvests;
+        case "life":    return statLife;
+      }
+      return 0;
+    }
+    function checkWishes(silent) {
+      let granted = 0, reward = 0;
+      const opened = [];
+      while (granted < 6) {                     // a loaded save can settle several at once
+        const w = wishAt(wishesDone);
+        if (wishStat(w.kind) < w.target) break;
+        reward += seedReward(wishesDone);
+        wishesDone++;
+        granted++;
+        for (let k = 0; k < TOOLS.length; k++) if (TOOLS[k].at === wishesDone) opened.push(TOOLS[k]);
+      }
+      if (granted) {
+        addSeeds(reward);
+        refreshTools();
+        if (!silent) {
+          sting("wish");
+          haptic("success");
+          burst(charPos, charR + 1.1, 16, 0xffe6a0, 0.42);
+          if (opened.length) {
+            toast(opened[0].gl + " " + titleCase(opened[0].nm) + " unlocked · 🌰 +" + reward, 2600);
+          } else {
+            toast("Wish granted · 🌰 +" + reward, 2200);
+          }
+          el.wish.classList.add("pop");
+          setTimeout(() => el.wish.classList.remove("pop"), 420);
+          try { ctx.platform.milestone("wish_" + wishesDone, { life: statLife }); } catch (_) {}
+        }
+      }
+      updateWish();
+      return granted;
+    }
+    function titleCase(w) { return w.charAt(0) + w.slice(1).toLowerCase(); }
+
+    function updateWish() {
+      const w = wishAt(wishesDone);
+      const kind = WISH_KINDS[w.kind];
+      const have = Math.min(wishStat(w.kind), w.target);
+      el.wIcon.textContent = kind.icon;
+      el.wText.textContent = kind.text(w.target);
+      el.wNum.textContent = have + " / " + w.target;
+      el.wFill.style.width = Math.round((have / w.target) * 100) + "%";
+    }
+
+    function refreshTools() {
+      const kids = el.tools.children;
+      for (let k = 0; k < kids.length; k++) {
+        const id = parseInt(kids[k].dataset.id, 10);
+        const def = toolDef(id);
+        const open = isUnlocked(id);
+        kids[k].classList.toggle("lock", !open);
+        const badge = kids[k].querySelector(".cost");
+        if (badge) {
+          badge.textContent = open ? (def.cost ? "🌰" + def.cost : "") : "🔒";
+          badge.style.display = (open && !def.cost) ? "none" : "";
+        }
+      }
+      if (!isUnlocked(tool)) selectTool(P_TREE, true);
+    }
+
+    function selectTool(id, quiet) {
+      if (!isUnlocked(id)) {
+        const def = toolDef(id);
+        toast("🔒 " + titleCase(def.nm) + " — granted at wish " + (def.at + 1), 2200);
+        sting("nope");
+        return;
+      }
       tool = id;
-      const def = toolDef(id);
-      el.build.textContent = "";
-      el.build.appendChild(document.createTextNode(def.gl));
-      const lab = document.createElement("span");
-      lab.className = "lab";
-      lab.textContent = def.lab;
-      el.build.appendChild(lab);
       const kids = el.tools.children;
       for (let k = 0; k < kids.length; k++) {
         kids[k].classList.toggle("sel", parseInt(kids[k].dataset.id, 10) === id);
       }
-      toast(def.hint, 2100);
-      sting("pick");
-      haptic("light");
+      if (!quiet) {
+        toast(toolDef(id).hint, 2100);
+        sting("pick");
+        haptic("light");
+      }
     }
 
     // =====================================================================
@@ -2283,8 +2534,8 @@ window.plethoraBit = {
       } else {
         focusTile = tile;
         walkTarget = null; walkTile = -1;
-        const chk = buildCheck(tile, tool);
-        if (!chk.ok && tool !== P_EMPTY) toast(chk.why, 1200);
+        const act = resolveAction(tile);
+        if (!act.ok && act.why) toast(act.why, 1200);
       }
     }
 
@@ -2297,10 +2548,12 @@ window.plethoraBit = {
         const b = document.createElement("button");
         b.className = "pp-tool";
         b.dataset.id = String(t.id);
-        b.innerHTML = '<span class="gl">' + t.gl + '</span><span class="nm">' + t.nm + "</span>";
+        b.innerHTML = '<span class="gl">' + t.gl + '</span><span class="nm">' + t.nm +
+                      '</span><span class="cost"></span>';
         ctx.listen(b, "click", () => { resumeAudio(); firstGesture(); selectTool(t.id); });
         el.tools.appendChild(b);
       }
+      refreshTools();
     })();
 
     ctx.listen(el.build, "click", () => { resumeAudio(); firstGesture(); doBuild(); });
@@ -2361,15 +2614,18 @@ window.plethoraBit = {
         '<p class="lead">A little world that keeps living while you are away.</p>' +
         '<div class="pp-stats">' +
           '<div class="pp-stat"><div class="v">' + statTrees + '</div><div class="l">TREES</div></div>' +
-          '<div class="pp-stat"><div class="v">' + statHouses + '</div><div class="l">HOMES</div></div>' +
+          '<div class="pp-stat"><div class="v">' + wishesDone + '</div><div class="l">WISHES</div></div>' +
           '<div class="pp-stat"><div class="v">' + statLife + '</div><div class="l">LIFE</div></div>' +
         '</div>' +
         '<ul class="pp-list">' +
           '<li><span class="k">🕹️</span><span>Drag the <b>lower left</b> to walk. Your character keeps to the surface, and swims when the ground runs out.</span></li>' +
           '<li><span class="k">🌍</span><span>Drag <b>anywhere else</b> to spin the globe, and pinch to zoom out until you can see the whole thing.</span></li>' +
           '<li><span class="k">👆</span><span><b>Tap a tile</b> to aim at it. Tap somewhere far off and you will walk there by yourself.</span></li>' +
-          '<li><span class="k">🌱</span><span>Pick a tool below, then press the <b>big round button</b> to place it on the glowing tile.</span></li>' +
-          '<li><span class="k">⏳</span><span>Trees grow in <b>real time</b> — sprout, sapling, tree, then ancient and blossoming. Close the bit and they keep going.</span></li>' +
+          '<li><span class="k">🌱</span><span>Pick a tool below, then press the <b>big round button</b> to act on the glowing ring in front of you.</span></li>' +
+          '<li><span class="k">⏳</span><span>Trees grow in <b>real time</b> — sprout, sapling, tree, then ripe. Close the bit and they keep going.</span></li>' +
+          '<li><span class="k">🧺</span><span>Stand at a <b>ripe tree</b> — including any of the <b>wild</b> ones already growing here — and the button becomes <b>Harvest</b>. That is where 🌰 seeds come from, and a harvested wild tree becomes yours.</span></li>' +
+          '<li><span class="k">💧</span><span>At a young tree the button becomes <b>Tend</b>: spend a seed to hurry it along.</span></li>' +
+          '<li><span class="k">🎯</span><span>Follow the <b>wish</b> at the top left. Granting one pays out seeds and <b>unlocks new tools</b>.</span></li>' +
           '<li><span class="k">🌙</span><span>Day turns to night on its own. Lanterns, windows and mushrooms light up. Tap <b>☀️</b> to skip ahead.</span></li>' +
           '<li><span class="k">✨</span><span>Tap <b>your character</b> for a new look. Everything is saved automatically.</span></li>' +
         '</ul>' +
@@ -2415,6 +2671,11 @@ window.plethoraBit = {
       growthStage.clear();
       popStart.clear();
       mills.length = 0;
+      seeds = START_SEEDS;
+      wishesDone = 0;
+      harvests = 0;
+      refreshTools();
+      selectTool(P_TREE, true);
       seed = (Math.floor(Math.random() * 0xfffffff) ^ (Date.now() & 0xfffff)) >>> 0;
       seedNoise();
       generate();
@@ -2449,6 +2710,18 @@ window.plethoraBit = {
     resize();
 
     const _mR = V(), _mF = V(), _mDir = V(), _mAxis = V(), _mTmp = V();
+    const _fA = V(), _fB = V();
+    const FRONT_SWEEP = [-0.6, 0.6, -1.2, 1.2];
+    let btnLab = "";
+
+    // The tile one step ahead, optionally swung `off` radians to either side.
+    function frontTile(off) {
+      const ang = TILE_ANG * 1.05;
+      _fA.copy(charHeading);
+      if (off) _fA.applyAxisAngle(charPos, off);
+      _fB.copy(charPos).multiplyScalar(Math.cos(ang)).addScaledVector(_fA, Math.sin(ang)).normalize();
+      return dirToTile(_fB);
+    }
     let wasSwimming = false, nextGrowCheck = 0, breathT = 0;
     let quality = 2, slowFrames = 0, fastFrames = 0;
 
@@ -2606,15 +2879,31 @@ window.plethoraBit = {
       if (focusTile >= 0) {
         targetTile = focusTile;
       } else {
-        const ca = Math.cos(TILE_ANG * 1.05), sb = Math.sin(TILE_ANG * 1.05);
-        _mTmp.copy(charPos).multiplyScalar(ca).addScaledVector(charHeading, sb).normalize();
-        targetTile = dirToTile(_mTmp);
+        targetTile = frontTile(0);
+        // Nearly half the planet is sea, so facing open water is common. Sweep
+        // a little either side so the ring finds ground you can actually use
+        // instead of leaving you standing there with nothing to do.
+        if (isWater(targetTile)) {
+          for (let k = 0; k < FRONT_SWEEP.length; k++) {
+            const t = frontTile(FRONT_SWEEP[k]);
+            if (!isWater(t)) { targetTile = t; break; }
+          }
+        }
       }
       setHighlight(targetTile);
-      const ok = buildCheck(targetTile, tool).ok;
-      hlMat.color.setHex(ok ? 0x9dffb0 : 0xff9c8a);
-      hlMat.opacity = 0.48 + Math.sin(timeMs * 0.005) * 0.12 + (ok ? 0.14 : 0);
-      el.build.classList.toggle("bad", !ok);
+      const act = resolveAction(targetTile);
+      hlMat.color.setHex(act.ok ? 0x9dffb0 : 0xff9c8a);
+      hlMat.opacity = 0.38 + Math.sin(timeMs * 0.005) * 0.10 + (act.ok ? 0.12 : 0);
+      el.build.classList.toggle("bad", !act.ok);
+      if (act.lab !== btnLab) {
+        btnLab = act.lab;
+        el.build.textContent = "";
+        el.build.appendChild(document.createTextNode(act.gl));
+        const lb = document.createElement("span");
+        lb.className = "lab";
+        lb.textContent = act.lab;
+        el.build.appendChild(lb);
+      }
 
       // ---- growth ----
       if (timeMs > nextGrowCheck) {
@@ -2662,8 +2951,9 @@ window.plethoraBit = {
     renderer.render(scene, camera);
     worldReady = true;
 
-    selectTool(P_TREE);
-    el.toast.classList.remove("show");     // selectTool's hint would fire too early
+    selectTool(P_TREE, true);
+    updateHud();
+    checkWishes(true);                     // a loaded save may already satisfy some
 
     el.cta.disabled = false;
     el.cta.textContent = isReturning ? "Back to my planet 🌍" : "Begin 🌱";

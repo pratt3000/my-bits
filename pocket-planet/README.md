@@ -52,6 +52,31 @@ growth continues while the bit is closed: sprout → sapling → young tree → 
 ancient tree, over about two hours. A stage change while you are watching gets a
 chime and a sparkle.
 
+## The loop
+
+The bit was a pure sandbox at first and played as aimless, so it now has a
+spine:
+
+- **Wishes** are the direction. One is always shown top-left with a progress
+  bar. Every wish is checked against the current state of the planet rather
+  than a lifetime counter, so they survive a reload with no extra bookkeeping
+  and stay forgiving if you tear something down. The first two dozen are
+  authored so the pacing lines up with the unlocks; after that they generate.
+- **Seeds** are the economy. They come from harvesting ripe trees, and they
+  pay for everything except planting, which stays free.
+- **Tools unlock** as wishes are granted, so the palette opens up instead of
+  arriving all at once.
+
+The action button is contextual — it does whatever the tile in front of you
+calls for. A ripe tree becomes **Harvest**, a young one becomes **Tend** (a
+seed to hurry it along), bare ground places the selected tool. That gives the
+verbs somewhere to live without a second row of buttons.
+
+A fresh planet already carries about a hundred wild trees, and those are
+harvestable too: harvesting one yields seeds and makes it yours. Without that,
+a new player could spend their opening seeds and then have no way to earn more
+until something ripened two hours later.
+
 ## Persistence
 
 Two layers, whichever is newer wins on load:
