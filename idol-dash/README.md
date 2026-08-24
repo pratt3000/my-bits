@@ -59,8 +59,10 @@ own sky gradient, fog, lighting, path/wall textures and roadside props
 
 Score comes from distance × multiplier plus pickups. Two platform record
 channels — **High Score** and **Farthest Run** — auto-submit at the end of
-each run (Plethora already knows the player, so there's no name prompt), and
-the in-game board renders the real global standings with your row starred.
+each run (Plethora already knows the player, so there's no name prompt).
+There is deliberately **no in-bit leaderboard UI**: Plethora surfaces a
+leaderboard per bit already, so the game just shows your personal best on
+the menu and lets the platform own the standings.
 
 ## Files
 

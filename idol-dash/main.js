@@ -76,6 +76,9 @@ window.plethoraBit = {
 
       .id-wallet { display:flex; gap:14px; justify-content:center; margin:12px 0 16px;
         font-size:15px; font-weight:900; }
+      .id-bestline { font-size:12px; font-weight:800; letter-spacing:1.5px; opacity:.75; margin:-6px 0 18px; }
+      .id-bestline b { color:#ffd979; font-size:15px; }
+      .id-bestline i { font-style:normal; }
       .id-wallet span { display:inline-flex; align-items:center; gap:5px;
         background:rgba(0,0,0,.35); border:1px solid rgba(255,220,160,.2);
         padding:6px 13px; border-radius:999px; }
@@ -214,9 +217,9 @@ window.plethoraBit = {
         <div class="id-logo">IDOL DASH</div>
         <div class="id-logo-sub">ENDLESS TEMPLE RUN</div>
         <div class="id-wallet"><span>🪙 <i id="wCoins">0</i></span><span>💎 <i id="wGems">0</i></span></div>
+        <div class="id-bestline">BEST <b id="wBest">0</b> · <i id="wBestD">0</i> m</div>
         <button class="id-btn" id="btnPlay">▶  RUN</button>
         <button class="id-btn ghost" id="btnShop">⚡  Upgrades</button>
-        <button class="id-btn ghost" id="btnBoards">🏆  Leaderboard</button>
         <button class="id-btn ghost" id="btnHow">?  How to play</button>
       </div>
 
@@ -282,15 +285,6 @@ window.plethoraBit = {
         </div>
       </div>
 
-      <div class="id-ov id-hidden" id="ovBoards">
-        <div class="id-panel">
-          <h2>🏆 Leaderboard</h2>
-          <div class="id-tabs" id="lbTabs"></div>
-          <div class="id-lb" id="lbList"></div>
-          <button class="id-btn ghost" id="btnLbClose" style="margin:14px 0 0;">Close</button>
-        </div>
-      </div>
-
       <div class="id-ov id-hidden" id="ovDead">
         <div class="id-panel" id="deadPanel"></div>
       </div>
@@ -304,11 +298,11 @@ window.plethoraBit = {
       coins: $("hCoins"), gems: $("hGems"), gemWrap: $("hGemWrap"), pw: $("hPw"),
       toast: $("idToast"), turn: $("idTurn"), turnArrow: $("idTurnArrow"),
       flashHurt: $("idFlashHurt"), flashGood: $("idFlashGood"),
-      how: $("ovHow"), pause: $("ovPause"), shop: $("ovShop"), boards: $("ovBoards"),
-      dead: $("ovDead"), deadPanel: $("deadPanel"),
-      shopList: $("shopList"), lbTabs: $("lbTabs"), lbList: $("lbList"),
+      how: $("ovHow"), pause: $("ovPause"), shop: $("ovShop"),
+      dead: $("ovDead"), deadPanel: $("deadPanel"), shopList: $("shopList"),
       pauseBtn: $("idPause"), muteBtn: $("idMute"),
-      wCoins: $("wCoins"), wGems: $("wGems"), sCoins: $("sCoins"), sGems: $("sGems")
+      wCoins: $("wCoins"), wGems: $("wGems"), wBest: $("wBest"), wBestD: $("wBestD"),
+      sCoins: $("sCoins"), sGems: $("sGems")
     };
 
     // =====================================================================
@@ -363,6 +357,8 @@ window.plethoraBit = {
       el.wGems.textContent = fmt(wallet.gems);
       el.sCoins.textContent = fmt(wallet.coins);
       el.sGems.textContent = fmt(wallet.gems);
+      el.wBest.textContent = fmt(store.get("best_score", 0));
+      el.wBestD.textContent = fmt(store.get("best_distance", 0));
     }
 
     // =====================================================================
@@ -568,60 +564,10 @@ window.plethoraBit = {
       }
     }
 
-    // ---- Leaderboard (platform records) -----------------------------------
-    const BOARDS = [
-      { id: "score", label: "Score", fmt: (v) => fmt(v) },
-      { id: "distance", label: "Distance", fmt: (v) => fmt(v) + " m" }
-    ];
-    let lbTab = 0, lbReq = 0;
-    function renderBoards() {
-      el.lbTabs.innerHTML = "";
-      BOARDS.forEach((b, i) => {
-        const btn = document.createElement("button");
-        btn.textContent = b.label;
-        btn.className = i === lbTab ? "on" : "";
-        ctx.listen(btn, "click", () => { sfx.ui(); lbTab = i; renderBoards(); });
-        el.lbTabs.appendChild(btn);
-      });
-      const board = BOARDS[lbTab];
-      const req = ++lbReq;
-      const mine = store.get("best_" + board.id, 0);
-      el.lbList.innerHTML = '<div class="id-empty">Loading…</div>';
-      const fill = (entries) => {
-        if (req !== lbReq) return;
-        el.lbList.innerHTML = "";
-        if (!entries || !entries.length) {
-          el.lbList.innerHTML = '<div class="id-empty">' +
-            (mine ? "No global times yet — your best is " + board.fmt(mine) + "."
-                  : "No runs yet. Be the first!") + "</div>";
-          return;
-        }
-        entries.slice(0, 12).forEach((e, i) => {
-          const you = !!(e.isViewer || e.viewer || e.you || e.self || e.isSelf || e.is_viewer);
-          const nm = e.displayName || e.display_name || e.username || e.name ||
-            (e.user && (e.user.displayName || e.user.username)) || "Runner";
-          const val = e.value != null ? e.value : (e.score != null ? e.score : 0);
-          const row = document.createElement("div");
-          row.className = "id-row" + (you ? " you" : "");
-          row.innerHTML = `<div class="r">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</div>
-            <div class="nm">${you ? "⭐ " : ""}${esc(nm)}</div>
-            <div class="sc">${e.label ? esc(e.label) : board.fmt(val)}</div>`;
-          el.lbList.appendChild(row);
-        });
-      };
-      try {
-        ctx.memory.record(board.id).leaderboard({ scope: "global", period: "all_time" })
-          .then((lb) => fill((lb && (lb.entries || lb.rows || lb.items || (Array.isArray(lb) ? lb : null))) || []))
-          .catch(() => fill(null));
-      } catch (_) { fill(null); }
-    }
-
     // ---- Menu wiring ------------------------------------------------------
     ctx.listen($("btnPlay"), "click", () => { firstGesture(); sfx.ui(); haptic("light"); startRun(); });
     ctx.listen($("btnShop"), "click", () => { firstGesture(); sfx.ui(); renderShop(); el.shop.classList.remove("id-hidden"); });
     ctx.listen($("btnShopClose"), "click", () => { sfx.ui(); el.shop.classList.add("id-hidden"); refreshWallet(); });
-    ctx.listen($("btnBoards"), "click", () => { firstGesture(); sfx.ui(); renderBoards(); el.boards.classList.remove("id-hidden"); });
-    ctx.listen($("btnLbClose"), "click", () => { sfx.ui(); el.boards.classList.add("id-hidden"); });
     ctx.listen($("btnHow"), "click", () => { firstGesture(); sfx.ui(); el.how.classList.remove("id-hidden"); });
     ctx.listen($("btnHowOk"), "click", () => { sfx.ui(); el.how.classList.add("id-hidden"); });
     ctx.listen(el.muteBtn, "click", () => { firstGesture(); muted = !muted; store.set("muted", muted); applyMute(); sfx.ui(); });
@@ -1715,7 +1661,6 @@ window.plethoraBit = {
     function startRun() {
       el.dead.classList.add("id-hidden");
       el.shop.classList.add("id-hidden");
-      el.boards.classList.add("id-hidden");
       el.menu.classList.add("id-hidden");
       el.hud.classList.remove("id-hidden");
       el.pauseBtn.classList.remove("id-hidden");
@@ -1828,7 +1773,6 @@ window.plethoraBit = {
           </div>` : ""}
         <div style="height:6px;"></div>
         <button class="id-btn" id="btnAgain">Run again</button>
-        <button class="id-btn ghost" id="btnBoards2">🏆 Leaderboard</button>
         <button class="id-btn ghost" id="btnMenu2" style="margin-bottom:0;">Menu</button>
         <div id="subNote" style="font-size:11.5px;opacity:.6;margin-top:10px;">Saving your score…</div>`;
       el.dead.classList.remove("id-hidden");
@@ -1854,7 +1798,6 @@ window.plethoraBit = {
       try { ctx.platform.fail({ cause, score, distance: dist }); } catch (_) {}
 
       ctx.listen(el.deadPanel.querySelector("#btnAgain"), "click", () => { sfx.ui(); startRun(); });
-      ctx.listen(el.deadPanel.querySelector("#btnBoards2"), "click", () => { sfx.ui(); renderBoards(); el.boards.classList.remove("id-hidden"); });
       ctx.listen(el.deadPanel.querySelector("#btnMenu2"), "click", () => { sfx.ui(); el.dead.classList.add("id-hidden"); quitToMenu(); });
 
       const saveBtn = el.deadPanel.querySelector("#btnSave");

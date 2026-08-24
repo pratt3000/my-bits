@@ -57,9 +57,9 @@ Arenas unlock in order: clearing arena *N* unlocks arena *N+1* (persisted).
 - **Platform leaderboards only** — Plethora already knows the player, so
   wins auto-submit to five `memory.records` channels (`living_room`,
   `kitchen`, `bedroom`, `toy_store`, `museum`; `duration_ms` / `asc` /
-  `timer` / `best_per_user`) with no name prompt, and the in-game boards
-  overlay renders the real global standings. Personal bests are cached
-  locally for the arena-select screen.
+  `timer` / `best_per_user`) with no name prompt. There is deliberately no
+  in-bit leaderboard UI — Plethora surfaces a leaderboard per bit already —
+  so the arena-select screen just shows your cached personal best.
 
 ## Audio
 

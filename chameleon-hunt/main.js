@@ -185,7 +185,6 @@ window.plethoraBit = {
         <div class="ch-tag">They are camouflaged into the room.<br>You are the Seeker. Find them all.</div>
         <button class="ch-btn" id="btnPlay">Start Hunting</button>
         <button class="ch-btn ghost" id="btnHow">How to play</button>
-        <button class="ch-btn ghost" id="btnBoards">Leaderboards</button>
       </div>
 
       <div class="ch-screen ch-hidden" id="scrSelect">
@@ -238,14 +237,6 @@ window.plethoraBit = {
         <div class="ch-panel" id="resPanel"></div>
       </div>
 
-      <div class="ch-overlay ch-hidden" id="ovBoards">
-        <div class="ch-panel">
-          <h2 style="margin-bottom:12px;">🏆 Leaderboards</h2>
-          <div class="ch-tabs" id="lbTabs"></div>
-          <div class="ch-lblist" id="lbList"></div>
-          <button class="ch-btn ghost" id="btnLbClose" style="margin:14px 0 0;">Close</button>
-        </div>
-      </div>
     `;
     root.appendChild(ui);
 
@@ -256,7 +247,6 @@ window.plethoraBit = {
       toast: $("chToast"), flashBad: $("chFlashBad"), flashGood: $("chFlashGood"),
       joy: $("chJoy"), knob: $("chKnob"),
       how: $("ovHow"), pause: $("ovPause"), result: $("ovResult"), resPanel: $("resPanel"),
-      boards: $("ovBoards"), lbTabs: $("lbTabs"), lbList: $("lbList"),
       pauseBtn: $("chPause"), muteBtn: $("chMute")
     };
 
@@ -538,58 +528,12 @@ window.plethoraBit = {
       });
     }
 
-    // Leaderboard overlay: real platform boards via ctx.memory records.
-    let lbTab = 0, lbReqId = 0;
-    function renderBoards() {
-      el.lbTabs.innerHTML = "";
-      ARENAS.forEach((a, i) => {
-        const b = document.createElement("button");
-        b.textContent = a.icon + " " + a.name.split(" ")[0];
-        b.className = i === lbTab ? "on" : "";
-        ctx.listen(b, "click", () => { sfx.ui(); lbTab = i; renderBoards(); });
-        el.lbTabs.appendChild(b);
-      });
-      const a = ARENAS[lbTab];
-      const req = ++lbReqId;
-      const best = personalBest(a);
-      el.lbList.innerHTML = '<div class="ch-lbempty">Loading times…</div>';
-      const fill = (entries) => {
-        if (req !== lbReqId) return; // a newer tab click superseded this fetch
-        el.lbList.innerHTML = "";
-        if (entries && entries.length) {
-          entries.slice(0, 10).forEach((e, i) => {
-            const row = document.createElement("div");
-            const you = !!(e.isViewer || e.viewer || e.you || e.self || e.isSelf || e.is_viewer);
-            row.className = "ch-lbrow" + (you ? " you" : "");
-            const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
-            const nm = e.displayName || e.display_name || e.username || e.name ||
-              (e.user && (e.user.displayName || e.user.username)) || "Player";
-            const val = e.value != null ? e.value : (e.score != null ? e.score : e.ms);
-            row.innerHTML = `<div class="r">${medal}</div><div class="nm">${you ? "⭐ " : ""}${esc(nm)}</div>
-              <div class="sc">${val != null ? fmtMsPrecise(val) : (e.label ? esc(e.label) : "—")}</div>`;
-            el.lbList.appendChild(row);
-          });
-        } else {
-          el.lbList.innerHTML = '<div class="ch-lbempty">' +
-            (best ? "No global times to show — your best is " + fmtMsPrecise(best) + "."
-                  : "No times yet. Clear the arena to set one!") + "</div>";
-        }
-      };
-      try {
-        ctx.memory.record(a.id).leaderboard({ scope: "global", period: "all_time" })
-          .then((lb) => fill((lb && (lb.entries || lb.rows || lb.items || (Array.isArray(lb) ? lb : null))) || []))
-          .catch(() => fill(null));
-      } catch (_) { fill(null); }
-    }
-
     // =====================================================================
     // 6. Menu wiring.
     // =====================================================================
     ctx.listen($("btnPlay"), "click", () => { firstGesture(); sfx.ui(); haptic("light"); bed("ambient", 0.2); renderCards(); state = "select"; show("select"); });
     ctx.listen($("btnHow"), "click", () => { firstGesture(); sfx.ui(); el.how.classList.remove("ch-hidden"); });
     ctx.listen($("btnHowOk"), "click", () => { sfx.ui(); el.how.classList.add("ch-hidden"); });
-    ctx.listen($("btnBoards"), "click", () => { firstGesture(); sfx.ui(); renderBoards(); el.boards.classList.remove("ch-hidden"); });
-    ctx.listen($("btnLbClose"), "click", () => { sfx.ui(); el.boards.classList.add("ch-hidden"); });
     ctx.listen($("btnSelBack"), "click", () => { sfx.ui(); state = "menu"; show("menu"); });
     ctx.listen(el.muteBtn, "click", () => { firstGesture(); muted = !muted; store.set("muted", muted); applyMute(); sfx.ui(); });
     ctx.listen(el.pauseBtn, "click", () => {
@@ -2247,7 +2191,6 @@ window.plethoraBit = {
       arenaIdx = i;
       arena = ARENAS[i];
       el.result.classList.add("ch-hidden");
-      el.boards.classList.add("ch-hidden");
 
       freshWorld(arena);
       const pool = BUILDERS[i]();
@@ -2355,7 +2298,6 @@ window.plethoraBit = {
         <div style="height:10px;"></div>
         <button class="ch-btn" id="resReplay">Replay arena</button>
         ${arenaIdx + 1 < ARENAS.length ? `<button class="ch-btn" id="resNext">Next arena ▸</button>` : ""}
-        <button class="ch-btn ghost" id="resBoards">Leaderboard</button>
         <button class="ch-btn ghost" id="resMenu" style="margin-bottom:0;">Menu</button>`;
       el.result.classList.remove("ch-hidden");
 
@@ -2373,9 +2315,6 @@ window.plethoraBit = {
       ctx.listen(el.resPanel.querySelector("#resReplay"), "click", () => { sfx.ui(); startLevel(arenaIdx); });
       const nextBtn = el.resPanel.querySelector("#resNext");
       if (nextBtn) ctx.listen(nextBtn, "click", () => { sfx.ui(); startLevel(arenaIdx + 1); });
-      ctx.listen(el.resPanel.querySelector("#resBoards"), "click", () => {
-        sfx.ui(); lbTab = arenaIdx; renderBoards(); el.boards.classList.remove("ch-hidden");
-      });
       ctx.listen(el.resPanel.querySelector("#resMenu"), "click", () => {
         sfx.ui(); el.result.classList.add("ch-hidden"); quitToMenu();
       });
