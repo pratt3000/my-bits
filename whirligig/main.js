@@ -309,19 +309,23 @@ window.plethoraBit = {
 
     // Speckled paper, pre-rendered once in plate-local space so it turns with
     // the plate and reads as a real rotating object rather than a flat fill.
+    // Texture source for the plate. Created through ctx so the runtime owns
+    // its lifecycle; it is never displayed, only sampled by drawImage.
+    const paperCanvas = ctx.createCanvas();
+    paperCanvas.style.display = "none";
+    paperCanvas.style.pointerEvents = "none";
+
     let paper = null;
     let paperSize = 0;
 
     function makePaper(px) {
       const size = clamp(Math.round(px * 2), 128, 1024);
       if (paper && paperSize === size) return;
-      const c =
-        typeof OffscreenCanvas === "function"
-          ? new OffscreenCanvas(size, size)
-          : Object.assign(document.createElement("canvas"), { width: size, height: size });
-      c.width = size;
-      c.height = size;
-      const p = c.getContext("2d");
+      paperCanvas.width = size;
+      paperCanvas.height = size;
+      const p = paperCanvas.getContext("2d");
+      p.setTransform(1, 0, 0, 1, 0, 0);
+      p.clearRect(0, 0, size, size);
       const h = size / 2;
 
       p.fillStyle = C.paper;
@@ -354,7 +358,7 @@ window.plethoraBit = {
       p.arc(h, h, h, 0, TAU);
       p.fill();
 
-      paper = c;
+      paper = paperCanvas;
       paperSize = size;
     }
 
