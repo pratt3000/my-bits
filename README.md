@@ -16,6 +16,19 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ones-and-zeros/`](ones-and-zeros)     | Conway's Game of Life in colour — cells born as 1s, fading to 0s when they die. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`strange-silk/`](strange-silk)         | Chaotic attractors iterated a million times — tap for a new seed, a new painting. |
+| [`morphogen/`](morphogen)               | Turing's reaction–diffusion live: coral, spots and worms from two numbers.   |
+| [`orrery/`](orrery)                     | Bodies on whole-number orbits ring bells as they cross the top — self-playing music. |
+| [`paper-loom/`](paper-loom)             | A print that lays itself out: recursive cuts, Truchet motifs, chosen palettes. |
+| [`heartwood/`](heartwood)               | A tree grown by space colonization, one reach toward the light at a time.    |
+
+### Generative art set
+
+`strange-silk`, `morphogen`, `orrery`, `paper-loom` and `heartwood` are five
+takes on the same brief — art made by an autonomous system, re-seeded on tap —
+deliberately drawn from five different families so no two feel alike:
+deterministic chaos, chemistry, music, graphic design, and botany. Each shows
+its seed, and a tap anywhere throws a new one.
 
 ## Layout convention
 

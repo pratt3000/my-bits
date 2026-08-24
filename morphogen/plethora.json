@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Morphogen",
+  "description": "Turing's answer to why a leopard has spots, running live in your hand. Two chemicals — one feeds itself, one eats it — spreading at different speeds. Nothing in the maths knows what a spot is, yet coral, worms, fingerprints and dividing cells all emerge. Drag to pour more in, tap for a new seed.",
+  "tags": [
+    "generative",
+    "art",
+    "science",
+    "nature",
+    "simulation",
+    "calm",
+    "sensory"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic"
+  ],
+  "dependencies": []
+}

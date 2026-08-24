@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Heartwood",
+  "description": "A tree that grows itself. Not a fractal — a cloud of invisible points is scattered into the air and the wood reaches for whichever ones are nearest, using each up as it arrives. That single rule gives you trunks, forks, limbs competing for the same light, and a crown that fills its space, because it is roughly the rule real trees use. Tap to grow another.",
+  "tags": [
+    "generative",
+    "art",
+    "nature",
+    "tree",
+    "calm",
+    "sensory",
+    "seasons"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic"
+  ],
+  "dependencies": []
+}

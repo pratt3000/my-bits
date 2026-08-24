@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Orrery",
+  "description": "A music box with no music in it. Bodies circle at whole-number ratios of one shared loop, each ringing a bell as it crosses the top — so the piece drifts out into dense polyrhythm and falls back into a single unison chord, forever. Nothing is composed: the seed picks the orbits, the scale and the key, and the mechanism plays itself. Tap for a new sky.",
+  "tags": [
+    "generative",
+    "music",
+    "art",
+    "ambient",
+    "calm",
+    "sensory",
+    "space"
+  ],
+  "permissions": [
+    "audio",
+    "haptics"
+  ],
+  "dependencies": []
+}

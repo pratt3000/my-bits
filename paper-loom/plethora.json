@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Paper Loom",
+  "description": "A print that lays itself out. The page cuts itself in two, then cuts each half in two, until the pieces are worth looking at — and every piece picks its own motif and colour. Truchet arcs, chevrons, half-discs and rings, composed by rule rather than by hand. Tap for a new seed and watch the page rebuild itself.",
+  "tags": [
+    "generative",
+    "art",
+    "design",
+    "abstract",
+    "pattern",
+    "calm",
+    "poster"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic"
+  ],
+  "dependencies": []
+}
