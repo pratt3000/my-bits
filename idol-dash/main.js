@@ -648,8 +648,8 @@ window.plethoraBit = {
     ctx.listen(canvas, "webglcontextrestored", () => { try { renderer.resetState(); } catch (_) {} });
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x8a6a3a, 62, 210);
-    const camera = new THREE.PerspectiveCamera(68, ctx.width / Math.max(1, ctx.height), 0.1, 320);
+    scene.fog = new THREE.Fog(0x8a6a3a, 95, 260);
+    const camera = new THREE.PerspectiveCamera(74, ctx.width / Math.max(1, ctx.height), 0.1, 340);
     camera.rotation.order = "YXZ";
     scene.add(camera);
 
@@ -959,9 +959,11 @@ window.plethoraBit = {
       // Every segment except the first ends in a corner; the corner direction
       // is chosen now so the *previous* segment can signpost it.
       seg.turn = forceStraight ? 0 : (Math.random() < 0.5 ? -1 : 1);
+      // right = forward x up, which is head+3; left is head+1. This was
+      // inverted, so swiping right sent you left and vice versa.
       seg.nextHead = seg.turn === 0
         ? seg.head
-        : ((seg.head + (seg.turn === 1 ? 1 : 3)) % 4 + 4) % 4;
+        : ((seg.head + (seg.turn === 1 ? 3 : 1)) % 4 + 4) % 4;
       populateSegment(seg);
       buildSegmentMeshes(seg, b);
       track.push(seg);
@@ -980,7 +982,11 @@ window.plethoraBit = {
       const usable = seg.len - startPad - endPad;
       if (usable < 12) return;
 
-      const gapMin = lerp(14, 6.5, D);
+      // Spacing is a REACTION TIME budget: as the run speeds up the metres
+      // between hazards grow, so the player always gets a usable window.
+      const speedHere = Math.min(41, 16.5 + (runDistance + seg.id * 40) * 0.0052);
+      const reaction = lerp(1.15, 0.78, D);
+      const gapMin = Math.max(9, speedHere * reaction);
       let z = startPad + rnd(2, 7);
       const kinds = [OB.ROOT, OB.GATE, OB.WALL];
       if (D > 0.1) kinds.push(OB.GAP);
@@ -1018,7 +1024,7 @@ window.plethoraBit = {
             });
           }
         }
-        z += gapMin + rnd(2, 9 - D * 4);
+        z += gapMin + rnd(1, Math.max(2, 8 - D * 4));
       }
 
       // Occasional gem — the currency that buys upgrades.
@@ -1114,15 +1120,15 @@ window.plethoraBit = {
       // Scenery walls beyond the kerbs, tiled so the pattern keeps its scale
       // and kept low enough that sky stays visible above the run.
       const WT = 12;
-      const wallMat = mat("wall" + b.id, b.wallColor, b.wallTex(), WT / 4, 6 / 4);
+      const wallMat = mat("wall" + b.id, b.wallColor, b.wallTex(), WT / 4, 4.2 / 4);
       const wStart = seg.id === 0 ? -8 : PATH_W / 2 + 0.2;
       const wEnd = L + (seg.turn !== 0 ? PATH_W / 2 + 0.2 : 6);
       const wallSpan = wEnd - wStart, wn = Math.max(1, Math.ceil(wallSpan / WT));
       const wstep = wallSpan / wn;
       for (const side of [-1, 1]) {
         for (let i = 0; i < wn; i++) {
-          const wall = meshOf(GEO.box, wallMat, 3.2, 6, wstep + 0.05);
-          place(wall, seg, wStart + wstep * (i + 0.5), side * (PATH_W / 2 + 2.4), 2.4);
+          const wall = meshOf(GEO.box, wallMat, 3.2, 4.2, wstep + 0.05);
+          place(wall, seg, wStart + wstep * (i + 0.5), side * (PATH_W / 2 + 2.4), 1.5);
           add(wall);
         }
       }
@@ -1136,7 +1142,7 @@ window.plethoraBit = {
       }
       // Far silhouettes: canopy / ridgeline receding into the fog.
       const farMat = mat("far" + b.id, b.wallColor, null, 1, 1);
-      for (let i = 0; i < Math.floor(L / 16); i++) {
+      for (let i = 0; i < Math.floor(L / 30); i++) {
         for (const side of [-1, 1]) {
           const z2 = 8 + i * 16 + rnd(-4, 4);
           const h2 = rnd(9, 22);
@@ -1150,8 +1156,8 @@ window.plethoraBit = {
       // Props along the sides — silhouette variety per biome.
       const propMat = mat("prop" + b.id, b.wallColor, b.wallTex(), 2, 3);
       const accentMat = mat("acc" + b.id, b.accent, null, 1, 1);
-      for (let i = 0; i < Math.floor(L / 5.5); i++) {
-        const z = 6 + i * 5.5 + rnd(-1.6, 1.6);
+      for (let i = 0; i < Math.floor(L / 13); i++) {
+        const z = 6 + i * 13 + rnd(-2.5, 2.5);
         const side = Math.random() < 0.5 ? -1 : 1;
         const lat = side * (PATH_W / 2 + rnd(3.4, 6.2));
         if (b.prop === "tree") {
@@ -1178,7 +1184,7 @@ window.plethoraBit = {
           place(sp, seg, z, lat, 4); add(sp);
         }
         // Small dressing right at the path edge: urns, rubble, vines, glyphs.
-        if (Math.random() < 0.7) {
+        if (Math.random() < 0.4) {
           const eside = Math.random() < 0.5 ? -1 : 1;
           const elat = eside * (PATH_W / 2 + rnd(0.7, 1.5));
           const roll = Math.random();
@@ -1200,8 +1206,8 @@ window.plethoraBit = {
         }
       }
       // Occasional arch spanning the path — depth cue and drama.
-      for (let i = 0; i < Math.floor(L / 52); i++) {
-        const z = 26 + i * 52 + rnd(-5, 5);
+      for (let i = 0; i < Math.floor(L / 90); i++) {
+        const z = 30 + i * 90 + rnd(-5, 5);
         if (z > L - 16) continue;
         for (const side of [-1, 1]) {
           const col = meshOf(GEO.cyl, propMat, 0.45, 8.4, 0.45);
@@ -1258,6 +1264,26 @@ window.plethoraBit = {
         seg.arrowMeshes = seg.meshes.filter((m) => m.userData.pulse !== undefined || m.userData.torch !== undefined);
       }
 
+      // Path-level decals: worn tracks, inlaid medallions, scattered leaves.
+      // Deliberately low-contrast: anything bright and round on the deck
+      // reads as a coin, which misleads the player.
+      const decalMat = mat("decal" + b.id, b.wallColor, null, 1, 1);
+      for (let i = 0; i < Math.floor(L / 14); i++) {
+        const dz2 = 10 + i * 14 + rnd(-3, 3);
+        if (dz2 > L - 8) continue;
+        const med = meshOf(GEO.box, decalMat, 1.5, 0.04, 1.5);
+        place(med, seg, dz2, pick([-1, 0, 1]) * LANE_W, 0.026);
+        med.rotation.y += 0.78;
+        add(med);
+        for (let k = 0; k < 3; k++) {
+          const chip = meshOf(GEO.box, mat("chip" + b.id, b.wallColor, null, 1, 1),
+            rnd(0.2, 0.5), 0.04, rnd(0.2, 0.5));
+          place(chip, seg, dz2 + rnd(-4, 4), rnd(-PATH_W / 2 + 0.4, PATH_W / 2 - 0.4), 0.028);
+          chip.rotation.y += rnd(0, 3);
+          add(chip);
+        }
+      }
+
       // Obstacle meshes.
       for (const o of seg.obstacles) {
         if (o.kind === OB.GAP) continue;               // holes are floor-absence
@@ -1265,18 +1291,34 @@ window.plethoraBit = {
           const lat = lane * LANE_W;
           let m = null;
           if (o.kind === OB.ROOT) {
-            m = meshOf(GEO.cyl, mat("root", 0x6a4a24, TEX.wood("#6a4a24", "#4a3218"), 1, 2), 0.45, LANE_W, 0.45);
-            place(m, seg, o.z, lat, 0.42);
+            m = meshOf(GEO.cyl, mat("root", 0x6a4a24, TEX.wood("#6a4a24", "#4a3218"), 1, 2), 0.5, LANE_W, 0.5);
+            place(m, seg, o.z, lat, 0.46);
             m.rotation.x = Math.PI / 2;
             m.rotation.z = headYaw(seg.head);
+            // Knots either end so the log reads as a jumpable obstacle.
+            for (const e of [-1, 1]) {
+              const knot = meshOf(GEO.sphere, mat("root", 0x6a4a24, null, 1, 1), 0.3, 0.3, 0.3);
+              place(knot, seg, o.z, lat + e * (LANE_W / 2 - 0.1), 0.5);
+              add(knot);
+            }
+            const warn = meshOf(GEO.box, basicMat("warnJump", 0x7ee08a), LANE_W - 0.4, 0.05, 0.34);
+            place(warn, seg, o.z - 2.4, lat, 0.03); add(warn);
           } else if (o.kind === OB.GATE) {
             m = meshOf(GEO.box, mat("gate", 0x8a6a3a, TEX.carving("#8a6a3a", "#5c4526", "#d9b25a"), 2, 1), LANE_W - 0.1, 1.25, 0.45);
             place(m, seg, o.z, lat, 2.35);
-            const post = meshOf(GEO.box, mat("gate", 0x8a6a3a, null, 1, 1), 0.22, 1.7, 0.3);
-            place(post, seg, o.z, lat, 0.85); add(post);
+            for (const e of [-1, 1]) {
+              const post = meshOf(GEO.box, mat("gate", 0x8a6a3a, null, 1, 1), 0.24, 3, 0.32);
+              place(post, seg, o.z, lat + e * (LANE_W / 2 - 0.12), 1.5); add(post);
+            }
+            const warn2 = meshOf(GEO.box, basicMat("warnSlide", 0x8ac8ff), LANE_W - 0.4, 0.05, 0.34);
+            place(warn2, seg, o.z - 2.4, lat, 0.03); add(warn2);
           } else if (o.kind === OB.WALL) {
-            m = meshOf(GEO.box, mat("wallob", 0x7a6a54, TEX.stone("#7a6a54", "#4e4436", "#4a6b2c"), 1, 1), LANE_W - 0.1, 2.2, 0.7);
-            place(m, seg, o.z, lat, 1.1);
+            m = meshOf(GEO.box, mat("wallob", 0x7a6a54, TEX.stone("#7a6a54", "#4e4436", "#4a6b2c"), 1, 1), LANE_W - 0.1, 2.4, 0.7);
+            place(m, seg, o.z, lat, 1.2);
+            const cap = meshOf(GEO.box, mat("wallcap", 0x5e5142, null, 1, 1), LANE_W + 0.1, 0.28, 0.9);
+            place(cap, seg, o.z, lat, 2.5); add(cap);
+            const warn3 = meshOf(GEO.box, basicMat("warnMove", 0xff8a6a), LANE_W - 0.4, 0.05, 0.34);
+            place(warn3, seg, o.z - 2.4, lat, 0.03); add(warn3);
           } else if (o.kind === OB.FIRE) {
             m = meshOf(GEO.box, mat("brazier", 0x5a4a38, null, 1, 1), 1.1, 0.9, 1.1);
             place(m, seg, o.z, lat, 0.45);
@@ -1413,7 +1455,7 @@ window.plethoraBit = {
       matCache.clear();
       P.seg = 0; P.z = 0; P.lane = 0; P.laneX = 0; P.targetLane = 0;
       P.y = 0; P.vy = 0; P.jumping = false; P.sliding = 0;
-      P.dead = false; P.stumbleCd = 0; P.turnBank = 0; P.armedTurn = 0;
+      P.dead = false; P.stumbleCd = 0; P.turnBank = 0; P.armedTurn = 0; P.jumpG = 42;
       P.baseSpeed = SPEED_START; P.speed = SPEED_START;
       runDistance = 0; runScore = 0; runCoins = 0; runGems = 0;
       multiplier = 1; nextMultAt = 500;
@@ -1506,19 +1548,23 @@ window.plethoraBit = {
       P.laneX = P.lane * LANE_W;
       camYawTarget = camYawFor(track[P.seg].head);
     }
+    // Jumps and slides cover a roughly constant DISTANCE rather than a
+    // constant time, so they stay usable as the run speeds up: airtime
+    // shortens with speed while apex height stays readable.
+    const JUMP_DIST = 11, JUMP_APEX = 2.0, SLIDE_DIST = 9;
     function doJump() {
-      if (P.jumping || P.sliding > 0) {
-        if (P.sliding > 0) P.sliding = 0;   // cancel a slide early
-        if (P.jumping) return;
-      }
+      if (P.jumping) return;
+      if (P.sliding > 0) P.sliding = 0;     // cancel a slide early
       P.jumping = true;
-      P.vy = 9.2;
+      const T = clamp(JUMP_DIST / Math.max(6, P.speed), 0.40, 0.86);
+      P.jumpG = 8 * JUMP_APEX / (T * T);
+      P.vy = P.jumpG * T / 2;
       sfx.jump(); haptic("light");
     }
     function doSlide() {
       if (P.sliding > 0) return;
-      if (P.jumping) { P.vy = Math.min(P.vy, -6); }  // slam down into a slide
-      P.sliding = 0.62;
+      if (P.jumping) { P.vy = Math.min(P.vy, -P.jumpG * 0.28); }  // slam down
+      P.sliding = clamp(SLIDE_DIST / Math.max(6, P.speed), 0.32, 0.8);
       sfx.slide(); haptic("light");
     }
 
@@ -1585,50 +1631,59 @@ window.plethoraBit = {
       else toast("😰 Stumble!");
     }
 
-    function collide(dt) {
+    // Swept along the travel axis: at 40 m/s a frame covers most of a metre,
+    // so a point-in-window test would let the runner tunnel through hazards
+    // and miss coins outright.
+    function collide(dt, zFrom, yFrom) {
       const seg = track[P.seg];
       if (!seg) return;
       const laneOf = (x) => Math.round(x / LANE_W);
+      const z0 = Math.min(zFrom, P.z), z1 = Math.max(zFrom, P.z);
+      // Height at the moment the runner crosses a given z.
+      const yAt = (z) => {
+        if (z1 - z0 < 0.001) return P.y;
+        return lerp(yFrom, P.y, clamp((z - z0) / (z1 - z0), 0, 1));
+      };
 
       for (const o of seg.obstacles) {
         if (o.spent) continue;
-        const dz = o.z - P.z;
-        if (dz > 1.6 || dz < -1.6) continue;
+        const R = 1.45;
+        if (o.z + R < z0 || o.z - R > z1) continue;
         const inLane = o.lanes.indexOf(laneOf(P.laneX)) !== -1
           || o.lanes.some((L) => Math.abs(L * LANE_W - P.laneX) < LANE_W * 0.55);
         if (!inLane) continue;
+        const yc = yAt(o.z);
 
         if (o.kind === OB.GAP) {
-          if (P.y < 0.85 && pw.boost <= 0) die("fell");
+          if (yc < 0.85 && pw.boost <= 0) die("fell");
         } else if (o.kind === OB.GATE) {
-          if (P.sliding <= 0 && P.y < 1.4) hitObstacle(o);
+          if (P.sliding <= 0 && yc < 1.4) hitObstacle(o);
         } else if (o.kind === OB.ROOT) {
-          if (P.y < 0.7) hitObstacle(o);
+          if (yc < 0.7) hitObstacle(o);
         } else if (o.kind === OB.WALL) {
-          if (P.y < 1.9) hitObstacle(o);
+          if (yc < 1.9) hitObstacle(o);
         } else if (o.kind === OB.FIRE) {
           const on = (Math.sin(runTime * 2.2 + o.phase) > -0.15);
-          if (on && P.y < 1.7 && P.sliding <= 0) hitObstacle(o);
+          if (on && yc < 1.7 && P.sliding <= 0) hitObstacle(o);
         } else if (o.kind === OB.BLADE) {
-          if (P.y < 2.4 && P.sliding <= 0) hitObstacle(o);
+          if (yc < 2.4 && P.sliding <= 0) hitObstacle(o);
         }
       }
 
-      // Pickups (current + next segment so nothing is missed at a boundary).
-      for (let si = P.seg; si <= P.seg + 1 && si < track.length; si++) {
+      for (let si = P.seg; si <= P.seg && si < track.length; si++) {
         const s2 = track[si];
-        const zOff = si === P.seg ? 0 : -(seg.len);
         for (const p of s2.pickups) {
           if (p.taken) continue;
-          const pz = p.z + zOff;
+          const pz = p.z;
+          const PR = 1.5;
+          const swept = !(pz + PR < z0 || pz - PR > z1);
           const dz = pz - P.z;
-          if (dz > 3.5 || dz < -2) continue;
           const lx = p.lane * LANE_W;
-          let reach = 1.1;
-          if (p.type === "coin" && pw.magnet > 0) reach = 5.2;
+          let reach = 1.25;
+          if (p.type === "coin" && pw.magnet > 0) reach = 5.4;
           const dx = Math.abs(lx - P.laneX);
-          const dy = Math.abs(p.y - (P.y + 0.9));
-          if (dx < reach && Math.abs(dz) < 1.5 && (dy < 1.6 || pw.magnet > 0)) {
+          const dy = Math.abs(p.y - (yAt(pz) + 0.9));
+          if (swept && dx < reach && (dy < 1.9 || pw.magnet > 0)) {
             p.taken = true;
             if (p.mesh) p.mesh.visible = false;
             if (p.type === "coin") {
@@ -1644,7 +1699,7 @@ window.plethoraBit = {
             } else {
               grantPower(p.kind);
             }
-          } else if (p.type === "coin" && pw.magnet > 0 && p.mesh && Math.abs(dz) < 9) {
+          } else if (p.type === "coin" && pw.magnet > 0 && p.mesh && Math.abs(dz) < 11) {
             // fly toward the runner
             const t = clamp(1 - Math.abs(dz) / 9, 0, 1);
             p.mesh.position.lerp(runner.position.clone().setY(P.y + 1), 0.12 + t * 0.2);
@@ -1856,6 +1911,7 @@ window.plethoraBit = {
 
         // --- forward ----------------------------------------------------
         const seg = track[P.seg];
+        const zSweepFrom = P.z, ySweepFrom = P.y, segBefore = P.seg;
         P.z += P.speed * dt;
         runDistance += P.speed * dt;
         runScore += P.speed * dt * multiplier * (pw.mult > 0 ? 2 : 1);
@@ -1904,7 +1960,7 @@ window.plethoraBit = {
 
         // --- vertical ---------------------------------------------------
         if (P.jumping) {
-          P.vy -= 26 * dt;
+          P.vy -= (P.jumpG || 42) * dt;
           P.y += P.vy * dt;
           if (P.y <= 0) { P.y = 0; P.vy = 0; P.jumping = false; sfx.land(); }
         }
@@ -1932,7 +1988,7 @@ window.plethoraBit = {
           } else el.turn.classList.remove("show");
         } else el.turn.classList.remove("show");
 
-        collide(dt);
+        collide(dt, P.seg === segBefore ? zSweepFrom : 0, ySweepFrom);
 
         // --- guardians --------------------------------------------------
         monkeyHeat = Math.max(0, monkeyHeat - dt * 0.075);
@@ -1986,16 +2042,16 @@ window.plethoraBit = {
         while (dy > Math.PI) dy -= Math.PI * 2;
         while (dy < -Math.PI) dy += Math.PI * 2;
         camYaw += dy * Math.min(1, dt * 7);
-        const back = 9.6 + (pw.boost > 0 ? 2.2 : 0);
+        const back = 11.2 + (pw.boost > 0 ? 2.4 : 0);
         const cd = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
         camShake = Math.max(0, camShake - dt * 2.2);
         const sh = camShake * 0.25;
         camera.position.set(
           wx + cd.x * back + rnd(-sh, sh),
-          P.y * 0.5 + 5.9 + rnd(-sh, sh),
+          P.y * 0.42 + 7.3 + rnd(-sh, sh),
           wz + cd.z * back + rnd(-sh, sh)
         );
-        camera.rotation.set(-0.315, camYaw, P.turnBank * 0.05);
+        camera.rotation.set(-0.36, camYaw, P.turnBank * 0.04);
 
         // ---- guardians follow ----------------------------------------
         const showMonkeys = monkeyHeat > 0.02;
@@ -2064,6 +2120,7 @@ window.plethoraBit = {
         } : null;
       };
       window.__idolKill = () => { if (state === "run") die("test"); };
+      window.__idolHead = () => { const g = track[P.seg]; return g ? g.head : null; };
       window.__idolNext = () => {
         const seg = track[P.seg];
         if (!seg) return null;

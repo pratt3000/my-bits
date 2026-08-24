@@ -13,8 +13,19 @@ genre, not the branding.
 - **Swipe left / right** — change lane, and **take the corner** when the path
   bends. Swiping near a bend *buffers* the turn until you reach it; run
   straight past and you're over the edge.
-- Speed climbs continuously (15.5 → 34 m/s) and the score multiplier steps up
-  every few hundred metres.
+- Speed climbs continuously (16.5 → 41 m/s) and is the main difficulty
+  driver; the score multiplier steps up every few hundred metres.
+
+### Physics scales with speed
+
+Jumps and slides cover a roughly constant **distance** rather than a
+constant time — airtime shortens as you speed up (gravity is recomputed per
+jump to hold apex height), so a jump stays a ~11 m commitment instead of
+ballooning to 30 m at top speed. Hazard spacing is a **reaction-time
+budget** (metres = seconds × current speed), so the window to react stays
+usable however fast you are going. Collision is **swept** along the travel
+axis: at 40 m/s a frame covers most of a metre, and a point test would let
+the runner tunnel straight through hazards and miss coins.
 
 ## Obstacles
 
@@ -80,6 +91,13 @@ the menu and lets the platform own the standings.
   camera yaw is the mesh yaw plus π. Getting this wrong points the camera
   backwards down the track and frustum-culls the entire level — worth
   remembering.
+- **Turn direction.** With Y up, right = forward × up, which is `head + 3`,
+  not `head + 1`. Using `+1` inverts every corner (swipe right, go left)
+  while lanes stay correct, because `place()` derives its right vector
+  independently — the two must agree.
+- **Camera framing.** The path ahead is always visible by construction:
+  camera 11.2 m back at 7.3 m height, pitched 20°, 74° FOV, with side walls
+  kept low (4.2 m) and arches rare and high so nothing occludes the run.
 - **Textures** are painted to `OffscreenCanvas` (the runtime rejects
   document-created canvases) and tiled at a fixed real-world scale so
   flagstones don't stretch along long spans. Without `OffscreenCanvas`
