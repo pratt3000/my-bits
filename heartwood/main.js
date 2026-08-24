@@ -36,47 +36,47 @@ window.plethoraBit = {
     const seedLabel = (s) => s.toString(36).toUpperCase().padStart(5, "0");
 
     // ---- seasons ------------------------------------------------------------
-    // sky: two gradient stops. bark: base and tip colour. leaf: the crown's
+    // sky: top and bottom colour as RGB. bark: base and tip colour. leaf: the crown's
     // palette, empty for a bare tree. fleck: what drifts through the air.
     const SEASONS = [
       {
-        name: "Spring", sky: ["#cfe4f2", "#f3e8ec"], ground: "#d8cfc4",
-        bark: ["#4a3b33", "#7d6455"], leaf: ["#f9c7d8", "#fbe0e8", "#f2a8c0", "#ffffff"],
+        name: "Spring", sky: [[207, 228, 242], [243, 232, 236]], ground: [216, 207, 196],
+        bark: [[74, 59, 51], [125, 100, 85]], leaf: ["#f9c7d8", "#fbe0e8", "#f2a8c0", "#ffffff"],
         fleck: "#f9c7d8", flecks: 46, glow: 0
       },
       {
-        name: "Summer", sky: ["#8fc6e8", "#dff0e4"], ground: "#c7c9a6",
-        bark: ["#3e3529", "#6f6046"], leaf: ["#2f6b34", "#3f8c40", "#6aa84f", "#8fbc5a"],
+        name: "Summer", sky: [[143, 198, 232], [223, 240, 228]], ground: [199, 201, 166],
+        bark: [[62, 53, 41], [111, 96, 70]], leaf: ["#2f6b34", "#3f8c40", "#6aa84f", "#8fbc5a"],
         fleck: "#f6f0b8", flecks: 30, glow: 0
       },
       {
-        name: "Autumn", sky: ["#e8c9a0", "#f5e3cd"], ground: "#c2a884",
-        bark: ["#3a2c22", "#6b5240"], leaf: ["#c8571f", "#e08b26", "#f0bb47", "#9c3b1c"],
+        name: "Autumn", sky: [[232, 201, 160], [245, 227, 205]], ground: [194, 168, 132],
+        bark: [[58, 44, 34], [107, 82, 64]], leaf: ["#c8571f", "#e08b26", "#f0bb47", "#9c3b1c"],
         fleck: "#e08b26", flecks: 52, glow: 0
       },
       {
-        name: "Winter", sky: ["#9db3c4", "#e4ecf2"], ground: "#e8eef2",
-        bark: ["#2f3138", "#585c66"], leaf: [],
+        name: "Winter", sky: [[157, 179, 196], [228, 236, 242]], ground: [232, 238, 242],
+        bark: [[47, 49, 56], [88, 92, 102]], leaf: [],
         fleck: "#ffffff", flecks: 70, glow: 0
       },
       {
-        name: "Jade", sky: ["#0d2b2a", "#164943"], ground: "#0a201f",
-        bark: ["#1b201d", "#3f5347"], leaf: ["#5fd6a8", "#9ff0c8", "#38b58c", "#d8fff0"],
+        name: "Jade", sky: [[13, 43, 42], [22, 73, 67]], ground: [10, 32, 31],
+        bark: [[27, 32, 29], [63, 83, 71]], leaf: ["#5fd6a8", "#9ff0c8", "#38b58c", "#d8fff0"],
         fleck: "#9ff0c8", flecks: 34, glow: 0.5
       },
       {
-        name: "Ember", sky: ["#140a08", "#3a140c"], ground: "#160b07",
-        bark: ["#140f0d", "#3a2a22"], leaf: ["#ff6b2c", "#ffb347", "#e03a1f", "#fff0b8"],
+        name: "Ember", sky: [[20, 10, 8], [58, 20, 12]], ground: [22, 11, 7],
+        bark: [[20, 15, 13], [58, 42, 34]], leaf: ["#ff6b2c", "#ffb347", "#e03a1f", "#fff0b8"],
         fleck: "#ff9d4d", flecks: 58, glow: 0.85
       },
       {
-        name: "Ghost", sky: ["#0b1026", "#1c2450"], ground: "#0a0e1e",
-        bark: ["#1a1f33", "#3d4670"], leaf: ["#dfe7ff", "#ffffff", "#a8b8ee", "#c9d4ff"],
+        name: "Ghost", sky: [[11, 16, 38], [28, 36, 80]], ground: [10, 14, 30],
+        bark: [[26, 31, 51], [61, 70, 112]], leaf: ["#dfe7ff", "#ffffff", "#a8b8ee", "#c9d4ff"],
         fleck: "#dfe7ff", flecks: 44, glow: 0.6
       },
       {
-        name: "Ink", sky: ["#efece6", "#ffffff"], ground: "#ddd8ce",
-        bark: ["#141414", "#4a4a4a"], leaf: ["#1c1c1c", "#3d3d3d", "#6a6a6a", "#8f8f8f"],
+        name: "Ink", sky: [[239, 236, 230], [255, 255, 255]], ground: [221, 216, 206],
+        bark: [[20, 20, 20], [74, 74, 74]], leaf: ["#1c1c1c", "#3d3d3d", "#6a6a6a", "#8f8f8f"],
         fleck: "#9a9a9a", flecks: 22, glow: 0
       }
     ];
@@ -97,6 +97,7 @@ window.plethoraBit = {
     let crown = { cx: 0, cy: 0, rx: 1, ry: 1 };
     let maxGen = 1;
     let tree = null, treeG = null, bakeScale = 1;
+    let bg = null;       // baked sky + ground
     let drawn = 0;       // how many segments have been committed to the bake
     let growth = 0;      // 0..1
     let clock = 0;
@@ -138,8 +139,7 @@ window.plethoraBit = {
       // Attractor cloud, rejection-sampled into the crown's shape.
       const want = 760 + Math.floor(r() * 520);
       const atts = [];
-      let guard = 0;
-      while (atts.length < want && guard++ < want * 26) {
+      for (let guard = 0; atts.length < want && guard < want * 26; guard++) {
         const u = r() * 2 - 1, v = r() * 2 - 1;
         if (u * u + v * v > 1) continue;
         let ax = crown.cx + u * crown.rx;
@@ -153,23 +153,32 @@ window.plethoraBit = {
 
       nodes = [{ x: base.x, y: base.y, parent: -1, gen: 0 }];
 
-      // Uniform grid over the nodes so each attractor only tests its neighbours.
+      // Uniform grid over the nodes so each attractor only tests its neighbours,
+      // as a plain object plus flat arrays: integer-keyed bracket lookup and a
+      // generation stamp beat a Map and need no clearing between iterations.
       const cellSize = attract;
-      const grid = new Map();
-      const cellKey = (ix, iy) => ix * 73856093 ^ iy * 19349663;
+      const grid = {};
+      const cellKey = (ix, iy) => (ix * 73856093) ^ (iy * 19349663);
       function indexNode(i) {
         const k = cellKey(Math.floor(nodes[i].x / cellSize), Math.floor(nodes[i].y / cellSize));
-        const bucket = grid.get(k);
-        if (bucket) bucket.push(i); else grid.set(k, [i]);
+        const bucket = grid[k];
+        if (bucket) bucket.push(i); else grid[k] = [i];
       }
       indexNode(0);
+
+      // Accumulated pull per node. pullGen marks the generation that last wrote
+      // an entry, so the arrays never need clearing between iterations.
+      const pullX = new Float32Array(NODE_CAP + 8);
+      const pullY = new Float32Array(NODE_CAP + 8);
+      const pullGen = new Int32Array(NODE_CAP + 8);
+      const touched = [];
 
       const attract2 = attract * attract;
       const kill2 = kill * kill;
       let remaining = atts.length;
 
       for (let gen = 1; gen <= 300 && remaining > 0 && nodes.length < NODE_CAP; gen++) {
-        const pull = new Map(); // node index -> [dx, dy]
+        touched.length = 0;
 
         for (const a of atts) {
           if (!a.live) continue;
@@ -177,7 +186,7 @@ window.plethoraBit = {
           let best = -1, bestD2 = attract2;
           for (let oy = -1; oy <= 1; oy++) {
             for (let ox = -1; ox <= 1; ox++) {
-              const bucket = grid.get(cellKey(gx + ox, gy + oy));
+              const bucket = grid[cellKey(gx + ox, gy + oy)];
               if (!bucket) continue;
               for (let bi = 0; bi < bucket.length; bi++) {
                 const ni = bucket[bi];
@@ -190,12 +199,17 @@ window.plethoraBit = {
           if (best < 0) continue;
           if (bestD2 < kill2) { a.live = false; remaining--; continue; }
           const d = Math.sqrt(bestD2);
-          const v = pull.get(best);
-          if (v) { v[0] += (a.x - nodes[best].x) / d; v[1] += (a.y - nodes[best].y) / d; }
-          else pull.set(best, [(a.x - nodes[best].x) / d, (a.y - nodes[best].y) / d]);
+          if (pullGen[best] !== gen) {
+            pullGen[best] = gen;
+            pullX[best] = 0;
+            pullY[best] = 0;
+            touched.push(best);
+          }
+          pullX[best] += (a.x - nodes[best].x) / d;
+          pullY[best] += (a.y - nodes[best].y) / d;
         }
 
-        if (pull.size === 0) {
+        if (touched.length === 0) {
           // Nothing in reach yet: this is the trunk, climbing toward the crown.
           let tip = 0;
           let bestD = Infinity;
@@ -220,9 +234,10 @@ window.plethoraBit = {
           continue;
         }
 
-        pull.forEach((v, ni) => {
-          if (nodes.length >= NODE_CAP) return;
-          let ux = v[0], uy = v[1];
+        for (let ti = 0; ti < touched.length; ti++) {
+          if (nodes.length >= NODE_CAP) break;
+          const ni = touched[ti];
+          let ux = pullX[ni], uy = pullY[ni];
           // A pinch of upward bias and jitter keeps limbs from collapsing onto
           // one another when several attractors pull the same way.
           uy -= 0.22;
@@ -234,14 +249,14 @@ window.plethoraBit = {
             parent: ni, gen
           });
           indexNode(nodes.length - 1);
-        });
+        }
       }
 
       // Thickness, bottom-up. Leonardo's rule: a limb's cross-section equals the
       // sum of the limbs it carries. Children always come after parents in the
       // array, so one reverse pass is enough.
       const EXP = 2.15;
-      const acc = new Float64Array(nodes.length);
+      const acc = new Float32Array(nodes.length);
       for (let i = nodes.length - 1; i >= 0; i--) {
         const own = acc[i] === 0 ? 1 : Math.pow(acc[i], 1 / EXP);
         nodes[i].width = own;
@@ -251,22 +266,23 @@ window.plethoraBit = {
       const trunkPx = Math.max(3.4, scaleUnit * 0.115);
       for (const n of nodes) n.width = Math.max(0.7, (n.width / rootW) * trunkPx);
 
-      // Segments, ordered by generation so the reveal grows outward.
+      // Segments, ordered by generation so the reveal grows outward. Nodes are
+      // appended one generation at a time, so index order is already generation
+      // order and no sort is needed.
       maxGen = 1;
       segments = [];
       for (let i = 1; i < nodes.length; i++) {
         const n = nodes[i], p = nodes[n.parent];
-        segments.push({ x0: p.x, y0: p.y, x1: n.x, y1: n.y, w0: p.width, w1: n.width, gen: n.gen, i });
+        segments.push({ x0: p.x, y0: p.y, x1: n.x, y1: n.y, w0: p.width, w1: n.width, gen: n.gen });
         if (n.gen > maxGen) maxGen = n.gen;
       }
-      segments.sort((a, b) => a.gen - b.gen || a.i - b.i);
 
       // Leaves sit on tips — nodes nothing else grew out of.
       const hasChild = new Uint8Array(nodes.length);
       for (let i = 1; i < nodes.length; i++) hasChild[nodes[i].parent] = 1;
       // Capped: past a few hundred, extra leaves cost frames and add nothing
       // the eye can pick out.
-      const LEAF_CAP = 1100;
+      const LEAF_CAP = 560;
       leaves = [];
       if (season.leaf.length) {
         for (let i = 1; i < nodes.length && leaves.length < LEAF_CAP; i++) {
@@ -274,12 +290,12 @@ window.plethoraBit = {
           // Leaves lie along the twig that carries them, not across it.
           const p = nodes[nodes[i].parent];
           const along = Math.atan2(nodes[i].y - p.y, nodes[i].x - p.x);
-          const count = 2 + Math.floor(r() * 3);
+          const count = 1 + Math.floor(r() * 3);
           for (let c = 0; c < count; c++) {
             leaves.push({
               x: nodes[i].x + (r() - 0.5) * step * 2.2,
               y: nodes[i].y + (r() - 0.5) * step * 2.2,
-              r: step * (0.18 + r() * 0.26),
+              r: step * (0.22 + r() * 0.3),
               rot: along + (r() - 0.5) * 1.6,
               color: season.leaf[Math.floor(r() * season.leaf.length)],
               phase: r() * TAU,
@@ -328,6 +344,7 @@ window.plethoraBit = {
       season = SEASONS[Math.floor(r() * SEASONS.length)];
       grow(r);
       makeBake();
+      bakeBackdrop();
       drawn = 0;
       growth = 0;
 
@@ -336,12 +353,10 @@ window.plethoraBit = {
     }
 
     // ---- drawing ------------------------------------------------------------
-    function mixHex(a, b, t) {
-      const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
-      const r1 = pa >> 16, g1 = (pa >> 8) & 255, b1 = pa & 255;
-      const r2 = pb >> 16, g2 = (pb >> 8) & 255, b2 = pb & 255;
-      return "rgb(" + Math.round(r1 + (r2 - r1) * t) + "," +
-        Math.round(g1 + (g2 - g1) * t) + "," + Math.round(b1 + (b2 - b1) * t) + ")";
+    function mixRgb(a, b, t) {
+      return "rgb(" + Math.round(a[0] + (b[0] - a[0]) * t) + "," +
+        Math.round(a[1] + (b[1] - a[1]) * t) + "," +
+        Math.round(a[2] + (b[2] - a[2]) * t) + ")";
     }
 
     // A tapered quad rather than a stroked line: the trunk has to be able to be
@@ -351,7 +366,7 @@ window.plethoraBit = {
       const len = Math.hypot(dx, dy) || 1;
       const nx = -dy / len, ny = dx / len;
       const w0 = s.w0 * 0.5, w1 = s.w1 * 0.5;
-      target.fillStyle = mixHex(season.bark[0], season.bark[1], tipT);
+      target.fillStyle = mixRgb(season.bark[0], season.bark[1], tipT);
       target.beginPath();
       target.moveTo(s.x0 + nx * w0, s.y0 + ny * w0);
       target.lineTo(s.x1 + nx * w1, s.y1 + ny * w1);
@@ -364,34 +379,66 @@ window.plethoraBit = {
       target.fill();
     }
 
-    function paintSky() {
-      const sky = g.createLinearGradient(0, 0, 0, ctx.height);
-      sky.addColorStop(0, season.sky[0]);
-      sky.addColorStop(1, season.sky[1]);
-      g.fillStyle = sky;
-      g.fillRect(0, 0, ctx.width, ctx.height);
+    // The sky and ground are painted as narrow bands, and the contact shadow as
+    // concentric discs, rather than with CanvasGradient objects.
+    //
+    // The upload validator rejects addColorStop() whenever it cannot resolve the
+    // colour argument to a literal, and these colours are chosen from the season
+    // table at runtime — it reports that (misleadingly) as "unsupported remote
+    // resources". Banding into an offscreen bake costs one drawImage a frame and
+    // is indistinguishable from the gradient it replaces.
+    function paintBackdrop(t, w, h, step) {
+      const s0 = season.sky[0], s1 = season.sky[1];
+      for (let y = 0; y < h; y += step) {
+        const k = h > 1 ? y / (h - 1) : 0;
+        t.fillStyle = "rgb(" + Math.round(s0[0] + (s1[0] - s0[0]) * k) + "," +
+          Math.round(s0[1] + (s1[1] - s0[1]) * k) + "," +
+          Math.round(s0[2] + (s1[2] - s0[2]) * k) + ")";
+        t.fillRect(0, y, w, step);
+      }
+      // Ground, fading in over its top edge so the tree stands on something.
+      const gr = season.ground;
+      const top = Math.max(0, Math.round(base.y - 26));
+      const fade = Math.max(1, (h - top) * 0.35);
+      for (let y = top; y < h; y += step) {
+        const a = Math.min(1, (y - top) / fade);
+        t.fillStyle = "rgba(" + gr[0] + "," + gr[1] + "," + gr[2] + "," + a.toFixed(3) + ")";
+        t.fillRect(0, y, w, step);
+      }
+    }
 
-      // Ground: a soft band and a contact shadow, so the tree is standing on
-      // something rather than floating.
-      const groundY = base.y;
-      const gg = g.createLinearGradient(0, groundY - 26, 0, ctx.height);
-      gg.addColorStop(0, "rgba(0,0,0,0)");
-      gg.addColorStop(0.35, season.ground);
-      gg.addColorStop(1, season.ground);
-      g.fillStyle = gg;
-      g.fillRect(0, groundY - 26, ctx.width, ctx.height - groundY + 26);
+    function bakeBackdrop() {
+      if (!hasOffscreen) { bg = null; return; }
+      try {
+        const w = Math.max(1, Math.round(ctx.width));
+        const h = Math.max(1, Math.round(ctx.height));
+        bg = new OffscreenCanvas(w, h);
+        paintBackdrop(bg.getContext("2d"), w, h, 1);
+      } catch (e) {
+        bg = null;
+      }
+    }
+
+    function paintSky() {
+      if (bg) {
+        g.globalAlpha = 1;
+        g.drawImage(bg, 0, 0, ctx.width, ctx.height);
+      } else {
+        paintBackdrop(g, ctx.width, ctx.height, 3);
+      }
 
       const shadowW = Math.min(ctx.width * 0.42, crown.rx * 1.1) * (0.35 + growth * 0.65);
-      const sh = g.createRadialGradient(base.x, groundY + 4, 0, base.x, groundY + 4, shadowW);
-      sh.addColorStop(0, "rgba(0,0,0,0.28)");
-      sh.addColorStop(1, "rgba(0,0,0,0)");
-      g.fillStyle = sh;
       g.save();
-      g.translate(base.x, groundY + 4);
+      g.translate(base.x, base.y + 4);
       g.scale(1, 0.24);
-      g.beginPath();
-      g.arc(0, 0, shadowW, 0, TAU);
-      g.fill();
+      const rings = 16;
+      for (let i = rings; i >= 1; i--) {
+        const k = i / rings;
+        g.fillStyle = "rgba(0,0,0," + (0.045 * (1 - k)).toFixed(4) + ")";
+        g.beginPath();
+        g.arc(0, 0, shadowW * k, 0, TAU);
+        g.fill();
+      }
       g.restore();
     }
 

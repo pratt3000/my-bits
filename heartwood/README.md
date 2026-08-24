@@ -59,6 +59,34 @@ the documented `ctx` SDK surface:
   frame — heavier, identical picture.
 - Limbs are tapered quads rather than stroked lines: a trunk can be forty times
   thicker than a twig without the joins showing.
+
+### What the upload validator rejects
+
+Like `cairn/`, this bit cost several upload rounds to a rule that is not in
+`sdk.md` and whose error message points somewhere else entirely:
+
+- **`gradient.addColorStop(offset, <colour it cannot resolve>)`** →
+  *"This bit uses unsupported remote resources. Use ctx.loadScript(),
+  ctx.importModule(), or ctx.loadFont()…"*. The message names the loader APIs;
+  the actual cause is a colour argument the validator cannot trace to a literal.
+  These colours come from the season table at runtime, so the sky, ground and
+  contact shadow are now painted as narrow bands and concentric discs instead of
+  with `CanvasGradient` objects. Gradients themselves are fine —
+  `orrery/` uses several — as long as every stop colour is resolvable.
+
+Two things worth knowing if you go hunting for one of these yourself:
+
+- **Bisect with a known-good corpus, not intuition.** `Map`, `.get()`, `.set()`,
+  `ellipse()`, `atan2`, `while`, `sort()` and `OffscreenCanvas` all read as
+  suspicious and are all innocent — they appear in `cairn/` and `perfect-drop/`,
+  which upload fine. Diffing against bits that already passed kills most
+  hypotheses for free.
+- **A rejected upload creates nothing**, so probes are cheap, and unreachable
+  code is still scanned — a minimal bit plus a chunk of the real source in a
+  never-called function localises the trigger without shipping anything. Just
+  don't assume a single culprit: a plain binary search reports the wrong
+  statement when the trigger is a *combination* (here, creating a gradient
+  **and** giving it an unresolvable stop).
 - Overlay markup is declared on the `ctx.createRoot()` element and queried back
   out via `data-el` attributes. No host-document access, no bare timers.
 

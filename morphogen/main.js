@@ -19,7 +19,7 @@ window.plethoraBit = {
 
   async init(ctx) {
     // ---- tunables -----------------------------------------------------------
-    const TARGET_CELLS = 30000; // grid budget; upscaled to the screen when drawn
+    const TARGET_CELLS = 24000; // grid budget; upscaled to the screen when drawn
     const DU = 0.16;            // how fast the feed chemical spreads
     const DV = 0.08;            // the killer spreads at half the speed — the whole trick
     const MIN_ITER = 3, MAX_ITER = 9;
@@ -136,6 +136,7 @@ window.plethoraBit = {
     let species = SPECIES[0], palette = PALETTES[0];
     let F = species.f, K = species.k;
     let iters = 6;
+    let sinceCheck = 0;
     let started = false, music = null;
     let lastW = 0, lastH = 0;
 
@@ -234,6 +235,14 @@ window.plethoraBit = {
       V = nv; NV = v;
     }
 
+    // A cheap strided sample of how much killer chemical is left. Near zero
+    // means the pattern has burned out.
+    function chemicalLevel() {
+      let sum = 0, n = 0;
+      for (let i = 0; i < V.length; i += 17) { sum += V[i]; n++; }
+      return n ? sum / n : 0;
+    }
+
     // ---- rendering ----------------------------------------------------------
     // The colour comes from V, and a cheap directional light off the gradient of
     // V gives the pattern relief, so it reads as carved shell rather than a map.
@@ -264,8 +273,10 @@ window.plethoraBit = {
       offG.putImageData(image, 0, 0);
       g.globalCompositeOperation = "source-over";
       g.globalAlpha = 1;
+      // Default (bilinear) smoothing, not "high". The grid is upscaled about
+      // fivefold every frame, and high-quality resampling at that ratio costs
+      // more than the chemistry does — on a pattern this soft it is invisible.
       g.imageSmoothingEnabled = true;
-      g.imageSmoothingQuality = "high";
       g.drawImage(off, 0, 0, ctx.width, ctx.height);
     }
 
@@ -469,6 +480,21 @@ window.plethoraBit = {
       else if (dtMs < 15 && iters < MAX_ITER) iters++;
 
       for (let i = 0; i < iters; i++) stepOnce();
+
+      // Some feed/kill pairs sit just outside the stable region — the seeded
+      // jitter can push one over the edge — and the reaction burns out to a flat
+      // field. Rather than leave the viewer looking at a blank colour, fall back
+      // to the species' published rates and drop fresh chemical in.
+      if (++sinceCheck >= 30) {
+        sinceCheck = 0;
+        if (chemicalLevel() < 0.006) {
+          F = species.f;
+          K = species.k;
+          inoculate(mulberry32((seed ^ 0x5bd1e995) >>> 0));
+          ctx.platform.emit("reaction_revived", { seed: seedLabel(seed), species: species.name });
+        }
+      }
+
       paint();
     });
 

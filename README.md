@@ -60,6 +60,22 @@ of truth, and they win over anything cached locally:
 Packaged assets are disabled (`maxAssets: 0`), so generate visuals and audio
 procedurally or use approved pinned registry libraries.
 
+### Upload-validator gotchas
+
+Several constraints are enforced at upload but are not in `sdk.md`, and their
+error messages point at the wrong thing. Found the hard way, documented where
+they bit:
+
+- [`cairn/`](cairn#what-the-upload-validator-rejects) — `document.createElement("canvas")`
+  and `canvas.getBoundingClientRect()`.
+- [`heartwood/`](heartwood#what-the-upload-validator-rejects) — `addColorStop()`
+  with a colour the validator cannot resolve to a literal, plus notes on how to
+  bisect one of these cheaply.
+
+A rejected upload creates nothing, so probe uploads are free; unreachable code
+is still scanned; and constructs that merely *look* exotic are usually fine if
+some already-uploaded bit in this repo uses them.
+
 ## Publishing
 
 Publishing stays manual. An agent pairs with the creator at

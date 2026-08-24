@@ -48,6 +48,17 @@ not twins.
 - **Adaptive step count.** The bit spends whatever the device can afford on
   chemistry (3–9 iterations per frame, steered by measured frame time), so a
   slow phone runs the reaction more gently instead of dropping frames.
+- **Burnout recovery.** A few feed/kill pairs sit just outside the stable region
+  — the seeded jitter can push one over the edge — and the reaction dies to a
+  flat field. The bit samples how much killer chemical is left every 30 frames
+  and, if it has burned out, falls back to the species' published rates and
+  drops fresh chemical in, so the screen never sits blank.
+
+The upscale uses default (bilinear) smoothing rather than
+`imageSmoothingQuality = "high"`. The grid is enlarged about fivefold every
+frame, and high-quality resampling at that ratio cost more than the whole
+reaction did — measured at 45ms a frame against 10ms — while being invisible on
+a pattern this soft.
 - Ambient music bed and light haptics on reseed, both capability-gated.
 
 ## Contract notes
