@@ -37,6 +37,13 @@ authored: the seed picks the map, its four constants and the colour ramp.
 ## Features
 
 - **Tap anywhere for a new seed** — new equation, new constants, new colours.
+- **Drag to bend the equation.** Two of the four constants follow your finger
+  sideways and two follow it up and down, and the figure redraws every frame
+  while you move — fewer points than a settled print, so it reads as a live
+  thing under your hand rather than a slideshow. The view eases to follow the
+  figure as it grows and shrinks instead of snapping and jittering. A ✎ beside
+  the seed means you have steered off it; release and it settles back to full
+  quality.
 - **Reproducible.** The seed shown at the top is the whole painting; the PRNG is
   `mulberry32`, so the same seed paints the same picture on any device.
 - **Progressive bloom** — ~1.2M orbit steps land over about a hundred frames,

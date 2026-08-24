@@ -165,6 +165,7 @@ window.plethoraBit = {
     let lastW = 0, lastH = 0;
     let started = false;
     let music = null;
+    let steered = false;   // true once the constants have been dragged by hand
 
     // Compose a run from a seed: choose the map, its constants, the palette, and
     // fit the orbit's extent to the screen. Some constants collapse the orbit to
@@ -264,6 +265,7 @@ window.plethoraBit = {
       g.globalAlpha = 1;
       g.fillStyle = `rgb(${ink[0]},${ink[1]},${ink[2]})`;
       g.fillRect(0, 0, ctx.width, ctx.height);
+      steered = false;
       if (seedChip) seedChip.textContent = seedLabel(seed);
       if (famChip) famChip.textContent = family.name;
     }
@@ -351,6 +353,61 @@ window.plethoraBit = {
       g.drawImage(off, 0, 0, ctx.width, ctx.height);
     }
 
+    // ---- steering -----------------------------------------------------------
+    // Measure where the orbit currently reaches, so the view can follow the
+    // figure as its constants change instead of letting it wander off-frame.
+    function measureFit() {
+      let x = 0.1, y = 0.1;
+      for (let i = 0; i < 300; i++) {
+        const n = family.step(x, y, params);
+        x = n[0]; y = n[1];
+      }
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let i = 0; i < 2500; i++) {
+        const n = family.step(x, y, params);
+        x = n[0]; y = n[1];
+        if (!isFinite(x) || !isFinite(y)) return null;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      const spanU = Math.max(0.2, swap ? maxY - minY : maxX - minX);
+      const spanV = Math.max(0.2, swap ? maxX - minX : maxY - minY);
+      const midU = swap ? (minY + maxY) / 2 : (minX + maxX) / 2;
+      const midV = swap ? (minX + maxX) / 2 : (minY + maxY) / 2;
+      const fit = Math.min(bufW / spanU, bufH / spanV) * 0.98;
+      return { scale: fit, panX: bufW / 2 - midU * fit, panY: bufH / 2 - midV * fit };
+    }
+
+    // One frame of steering: fewer points than a settled print, redrawn from
+    // scratch, so the figure reads as a live thing being bent rather than a
+    // series of stills.
+    const STEER_BATCH = 9000;
+
+    function stepSteer() {
+      const target = measureFit();
+      if (target) {
+        // Ease the view rather than snapping it, or the figure jitters as the
+        // constants move.
+        scale += (target.scale - scale) * 0.18;
+        panX += (target.panX - panX) * 0.18;
+        panY += (target.panY - panY) * 0.18;
+      }
+      if (acc) acc.fill(0);
+      maxDensity = 1;
+      ox = 0.1;
+      oy = 0.1;
+      for (let i = 0; i < 400; i++) {
+        const n = family.step(ox, oy, params);
+        ox = n[0]; oy = n[1];
+        if (!isFinite(ox) || !isFinite(oy)) { ox = 0.1; oy = 0.1; break; }
+      }
+      accumulate(STEER_BATCH);
+      tonemap();
+      blit();
+    }
+
     // ---- overlay ------------------------------------------------------------
     // Bits may not reach into the host document, so the whole overlay is declared
     // as markup on the runtime-owned root and the handles are queried back out.
@@ -388,7 +445,7 @@ window.plethoraBit = {
         'bottom:calc(' + ctx.safeArea.bottom + 'px + 26px);text-align:center;' +
         'pointer-events:none;color:rgba(255,255,255,0.6);font:500 13px/1 ' + FONT + ';' +
         'letter-spacing:0.08em;transition:opacity 700ms ease;text-shadow:0 1px 8px rgba(0,0,0,0.6);">' +
-        'tap anywhere for a new seed</div>' +
+        'tap for a new seed · drag to bend the equation</div>' +
       '<div data-el="panel" style="position:absolute;inset:0;display:none;' +
         'align-items:center;justify-content:center;padding:28px;pointer-events:auto;' +
         'background:rgba(6,6,12,0.8);backdrop-filter:blur(6px);' +
@@ -400,7 +457,9 @@ window.plethoraBit = {
             'where its orbit spent time.</p>' +
           '<ul style="list-style:none;display:grid;gap:11px;">' +
             '<li>• <b>Tap anywhere</b> for a new seed — a new equation, new constants, new colours.</li>' +
-            '<li>• The seed shown at the top is the whole painting. The same seed always paints the same picture.</li>' +
+            '<li>• <b>Drag</b> to take hold of the equation — two of its four constants ' +
+              'follow your finger sideways, two follow it up and down. The figure bends and folds live.</li>' +
+            '<li>• The seed at the top is the whole painting; a ✎ means you have steered it off that seed.</li>' +
             '<li>• Bright threads are places the orbit returns to again and again.</li>' +
           '</ul>' +
           '<p style="margin-top:18px;opacity:0.55;font-size:13px;">Tap to close.</p>' +
@@ -452,11 +511,68 @@ window.plethoraBit = {
       hint.style.opacity = "0";
     }
 
+    // Tap throws a new seed; dragging takes hold of the equation itself. Two of
+    // the four constants follow your finger horizontally and two vertically, so
+    // the filigree bends, folds and tears while you move.
+    let pointerDown = false, moved = 0, dragging = false;
+    let dragBase = null, dragX = 0, dragY = 0;
+
     ctx.listen(canvas, "pointerdown", (e) => {
       e.preventDefault();
       firstGesture();
-      reseed("canvas");
+      pointerDown = true;
+      moved = 0;
+      dragging = false;
+      dragX = e.offsetX;
+      dragY = e.offsetY;
+      dragBase = params.slice();
     }, { passive: false });
+
+    ctx.listen(canvas, "pointermove", (e) => {
+      if (!pointerDown) return;
+      e.preventDefault();
+      moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+      if (moved <= 8) return;
+      if (!dragging) {
+        dragging = true;
+        hint.style.opacity = "0";
+      }
+      // A full screen of travel is about a unit and a half of parameter space —
+      // the range over which these maps change character rather than wobble.
+      const dx = ((e.offsetX - dragX) / Math.max(1, ctx.width)) * 1.5;
+      const dy = ((e.offsetY - dragY) / Math.max(1, ctx.height)) * 1.5;
+      params[0] = dragBase[0] + dx;
+      params[1] = dragBase[1] + dy;
+      params[2] = dragBase[2] + dx * 0.6;
+      params[3] = dragBase[3] - dy * 0.6;
+      if (!steered) {
+        steered = true;
+        seedChip.textContent = seedLabel(seed) + " ✎";
+      }
+    }, { passive: false });
+
+    function releaseSteer() {
+      if (!pointerDown) return;
+      pointerDown = false;
+      if (!dragging) { reseed("canvas"); return; }
+      dragging = false;
+      // Let the steered figure settle back to full quality.
+      if (acc) acc.fill(0);
+      maxDensity = 1;
+      framesDone = 0;
+      settled = false;
+      ox = 0.1;
+      oy = 0.1;
+      for (let i = 0; i < WARMUP; i++) {
+        const n = family.step(ox, oy, params);
+        ox = n[0]; oy = n[1];
+        if (!isFinite(ox) || !isFinite(oy)) { ox = 0.1; oy = 0.1; break; }
+      }
+      if (ctx.capabilities.haptics) ctx.platform.haptic("light");
+      ctx.platform.interact({ type: "steer", family: family.name, seed: seedLabel(seed) });
+    }
+    ctx.listen(canvas, "pointerup", releaseSteer);
+    ctx.listen(canvas, "pointercancel", releaseSteer);
 
     ctx.listen(againBtn, "click", (e) => {
       e.stopPropagation();
@@ -494,6 +610,8 @@ window.plethoraBit = {
         resetRun(seed);
       }
 
+      if (dragging) { stepSteer(); return; }
+
       if (settled) return;
 
       accumulate(BATCH);
@@ -507,7 +625,7 @@ window.plethoraBit = {
       }
     });
 
-    flashHint("tap anywhere for a new seed");
+    flashHint("tap for a new seed · drag to bend the equation");
     ctx.platform.ready();
   }
 };

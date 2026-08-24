@@ -35,6 +35,11 @@ is entirely a consequence of the orbits.
 ## Features
 
 - **Tap to listen**, then tap again for a new sky — new orbits, key and colours.
+- **Drag to play it.** Up and down drives how fast the whole mechanism turns;
+  left and right darkens or brightens the bells. Both axes are exponential, so
+  equal finger travel is an equal musical interval, which is what the ear
+  expects of a speed or a filter. At a hard scrub several bodies can cross in
+  one frame, so the voices are capped at four per frame — a chord, not a clang.
 - **Watch for the realignment.** Every body meets at the top at once, once per
   loop; the whole piece is the walk out of that unison and back into it.
 - Mute toggle, comet trails, expanding ring on each chime, and a downbeat haptic

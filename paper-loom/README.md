@@ -38,6 +38,11 @@ a designer would use, which is why the output composes rather than just tiles:
 ## Features
 
 - **Tap anywhere** for a new seed — new cuts, motifs, palette and reveal order.
+- **Drag to shuffle.** The stroke is a brush that re-rolls only the pieces you
+  sweep across, each arriving again with the same ease-in. Re-rolls stay inside
+  the page's own palette and motif vocabulary, so an edited composition still
+  reads as one design rather than a scrapbook — you can push a layout around
+  until it sits right instead of throwing the whole page away.
 - **Staggered arrival.** Pieces land over about a second, in one of four seeded
   orders (random, wipe, radial, columns), each with a small ease and scale-up.
 - **Paper grain** — a noise tile laid over the finished page in `overlay` mode,

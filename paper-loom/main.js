@@ -65,6 +65,9 @@ window.plethoraBit = {
     let palette = PALETTES[0];
     let cells = [];
     let art = { x: 0, y: 0, w: 1, h: 1 };
+    let vocab = [];      // the motifs this page draws from
+    let density = 0.6;   // how much of the page is patterned rather than flat
+    let edited = false;  // true once pieces have been shuffled by hand
     let grain = null;
     let elapsed = 0;
     let settled = false;
@@ -125,10 +128,10 @@ window.plethoraBit = {
 
       // How much of the page stays quiet. A composition that patterns every
       // single piece reads as noise; empty ground is what makes the rest land.
-      const density = 0.5 + r() * 0.35;
+      density = 0.5 + r() * 0.35;
       // Each composition draws from a subset of the vocabulary, so a page has a
       // recognisable accent instead of showing off every motif at once.
-      const vocab = [];
+      vocab = [];
       const vocabSize = 3 + Math.floor(r() * 4);
       const pool = MOTIFS.slice();
       for (let i = 0; i < vocabSize && pool.length; i++) {
@@ -165,6 +168,7 @@ window.plethoraBit = {
 
       elapsed = 0;
       settled = false;
+      edited = false;
       buildGrain(r);
 
       if (seedChip) seedChip.textContent = seedLabel(seed);
@@ -445,7 +449,7 @@ window.plethoraBit = {
         'bottom:calc(' + ctx.safeArea.bottom + 'px + 18px);text-align:center;' +
         'pointer-events:none;color:rgba(120,120,130,0.95);font:500 12px/1 ' + FONT + ';' +
         'letter-spacing:0.12em;text-transform:uppercase;transition:opacity 700ms ease;">' +
-        'tap for a new composition</div>' +
+        'tap for a new page · drag to shuffle pieces</div>' +
       '<div data-el="panel" style="position:absolute;inset:0;display:none;' +
         'align-items:center;justify-content:center;padding:28px;pointer-events:auto;' +
         'background:rgba(10,10,14,0.86);backdrop-filter:blur(6px);' +
@@ -457,6 +461,8 @@ window.plethoraBit = {
             'then picks a motif and a colour on its own.</p>' +
           '<ul style="list-style:none;display:grid;gap:11px;">' +
             '<li>• <b>Tap anywhere</b> for a new seed — new cuts, new motifs, new palette.</li>' +
+            '<li>• <b>Drag across the page</b> to shuffle just the pieces you touch, ' +
+              'keeping the palette and motif vocabulary. Nudge a composition until it sits right.</li>' +
             '<li>• Watch the pieces arrive: the order they land in is part of the seed too.</li>' +
             '<li>• Ten palettes, thirteen motifs, and a page that never repeats.</li>' +
           '</ul>' +
@@ -497,11 +503,72 @@ window.plethoraBit = {
       ctx.platform.interact({ type: "reseed", source, seed: seedLabel(seed), palette: palette.name });
     }
 
+    // Re-roll a single piece, staying inside this page's vocabulary and palette
+    // so a hand-edited composition still reads as one design rather than a
+    // scrapbook. The piece arrives again with the same little ease-in.
+    function rerollCell(c) {
+      const rnd = Math.random;
+      const n = palette.colors.length;
+      c.k = [rnd(), rnd(), rnd(), rnd(), rnd(), rnd()];
+      c.motif = rnd() < density ? vocab[Math.floor(rnd() * vocab.length)] : "flat";
+      const onColor = rnd() < 0.6;
+      const bgIdx = Math.floor(rnd() * n);
+      c.bg = onColor ? palette.colors[bgIdx] : palette.paper;
+      let fgIdx = Math.floor(rnd() * n);
+      if (onColor && fgIdx === bgIdx) fgIdx = (bgIdx + 1 + Math.floor(rnd() * (n - 1))) % n;
+      c.fg = palette.colors[fgIdx];
+      c.fg2 = palette.colors[(fgIdx + 2) % n];
+      c.delay = elapsed;
+      settled = false;
+    }
+
+    function cellAt(x, y) {
+      for (const c of cells) {
+        if (x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h) return c;
+      }
+      return null;
+    }
+
+    // Tap re-rolls the whole page; dragging is a shuffle brush that re-rolls
+    // only the pieces you sweep across, so you can push one composition around
+    // until it sits right instead of throwing the whole thing away.
+    let pointerDown = false, moved = 0;
+    const stroke = [];
+
     ctx.listen(canvas, "pointerdown", (e) => {
       e.preventDefault();
       firstGesture();
-      reseed("canvas");
+      pointerDown = true;
+      moved = 0;
+      stroke.length = 0;
     }, { passive: false });
+
+    ctx.listen(canvas, "pointermove", (e) => {
+      if (!pointerDown) return;
+      e.preventDefault();
+      moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+      if (moved <= 8) return;
+      const c = cellAt(e.offsetX, e.offsetY);
+      if (!c || stroke.indexOf(c) >= 0) return;
+      stroke.push(c);
+      rerollCell(c);
+      if (!edited) {
+        edited = true;
+        nameChip.textContent = palette.name + " · shuffled";
+      }
+      // Every piece buzzing turns a sweep into a rattle; every third reads as
+      // texture.
+      if (ctx.capabilities.haptics && stroke.length % 3 === 1) ctx.platform.haptic("light");
+    }, { passive: false });
+
+    function releaseStroke() {
+      if (!pointerDown) return;
+      pointerDown = false;
+      if (moved <= 8) reseed("canvas");
+      else ctx.platform.interact({ type: "shuffle", pieces: stroke.length });
+    }
+    ctx.listen(canvas, "pointerup", releaseStroke);
+    ctx.listen(canvas, "pointercancel", releaseStroke);
 
     ctx.listen(againBtn, "click", (e) => { e.stopPropagation(); firstGesture(); reseed("button"); });
     ctx.listen(helpBtn, "click", (e) => {

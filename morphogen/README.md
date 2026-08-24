@@ -3,8 +3,8 @@
 A mobile-first [Plethora Bit](https://create.plethora.studio) — Turing's 1952
 answer to why a leopard has spots, running live in your hand. Two chemicals, one
 that feeds itself and one that eats it, diffusing at different speeds. Nothing
-in the maths knows what a spot is, yet spots appear. Drag to pour more in; tap
-for a new seed.
+in the maths knows what a spot is, yet spots appear. Drag to pour more in, put
+two fingers down to slide between species, tap for a new seed.
 
 ## Files
 
@@ -16,7 +16,7 @@ for a new seed.
 ## The autonomous system
 
 The **Gray–Scott** form of a reaction–diffusion system, integrated on a wrapped
-grid of ~30,000 cells:
+grid of ~24,000 cells:
 
 ```
 u' = u + Du·∇²u − uv² + F(1 − u)
@@ -42,6 +42,12 @@ not twins.
 ## Features
 
 - **Drag to pour** more chemical in and grow the pattern out of your finger.
+- **Two fingers take hold of the two rates.** Sliding walks continuously
+  between species, so spots stretch into worms and worms close into a maze
+  while you watch. The gesture slides along a nearest-neighbour *path* through
+  the ten species rather than roaming free in (F, K): most of that rectangle
+  is dead space where the reaction just burns out, and every point on the path
+  sits between two settings known to produce a pattern.
 - **Tap for a new seed** — new species, palette and starting drop. Tap and drag
   are told apart on release by distance travelled, so a tap never leaves a
   stray blob behind.
@@ -54,12 +60,13 @@ not twins.
   and, if it has burned out, falls back to the species' published rates and
   drops fresh chemical in, so the screen never sits blank.
 
+- Ambient music bed and light haptics on reseed, both capability-gated.
+
 The upscale uses default (bilinear) smoothing rather than
 `imageSmoothingQuality = "high"`. The grid is enlarged about fivefold every
 frame, and high-quality resampling at that ratio cost more than the whole
 reaction did — measured at 45ms a frame against 10ms — while being invisible on
 a pattern this soft.
-- Ambient music bed and light haptics on reseed, both capability-gated.
 
 ## Contract notes
 

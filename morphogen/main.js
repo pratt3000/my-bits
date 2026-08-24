@@ -53,6 +53,15 @@ window.plethoraBit = {
       { name: "Flicker",     f: 0.0620, k: 0.0609 }
     ];
 
+    // The species ordered into a walk, nearest-neighbour in (F, K). Two-finger
+    // dragging slides along this path and interpolates, so every point you can
+    // reach sits between two settings known to produce a pattern — free-roaming
+    // F and K puts most of the rectangle in dead space where the reaction just
+    // burns out.
+    const PATH = ["Waves", "Moss", "Labyrinth", "Solitons", "Mitosis",
+                  "Fingerprint", "Holes", "Coral", "Worms", "Flicker"]
+      .map((n) => SPECIES.filter((sp) => sp.name === n)[0]);
+
     // ---- palettes -----------------------------------------------------------
     // Hand-picked ramps rather than random colour: reaction–diffusion reads as a
     // material — shell, ember, patina — and materials have particular colours.
@@ -137,6 +146,9 @@ window.plethoraBit = {
     let F = species.f, K = species.k;
     let iters = 6;
     let sinceCheck = 0;
+    let reviveStreak = 0;
+    let pathT = 0;       // position along the species walk
+    let kNudge = 0;      // small perpendicular exploration off the walk
     let started = false, music = null;
     let lastW = 0, lastH = 0;
 
@@ -204,8 +216,12 @@ window.plethoraBit = {
       F = species.f + (r() - 0.5) * 0.0016;
       K = species.k + (r() - 0.5) * 0.0010;
       palette = PALETTES[Math.floor(r() * PALETTES.length)];
+      pathT = Math.max(0, PATH.indexOf(species));
+      kNudge = 0;
       lut = buildLut(palette, r() < 0.22);
       inoculate(r);
+      handTuned = false;
+      reviveStreak = 0;
       if (seedChip) seedChip.textContent = seedLabel(seed);
       if (nameChip) nameChip.textContent = species.name + " · " + palette.name;
     }
@@ -233,6 +249,20 @@ window.plethoraBit = {
       }
       U = nu; NU = u;
       V = nv; NV = v;
+    }
+
+    // Blend the two species either side of the current path position.
+    function applyPath() {
+      const i = Math.min(PATH.length - 2, Math.floor(pathT));
+      const t = Math.min(1, Math.max(0, pathT - i));
+      const a = PATH[i], b = PATH[i + 1];
+      F = a.f + (b.f - a.f) * t;
+      K = a.k + (b.k - a.k) * t + kNudge;
+      if (nameChip) {
+        nameChip.textContent = t < 0.12 ? a.name
+          : t > 0.88 ? b.name
+          : a.name + " → " + b.name + " " + Math.round(t * 100) + "%";
+      }
     }
 
     // A cheap strided sample of how much killer chemical is left. Near zero
@@ -335,7 +365,7 @@ window.plethoraBit = {
         'bottom:calc(' + ctx.safeArea.bottom + 'px + 26px);text-align:center;' +
         'pointer-events:none;color:rgba(255,255,255,0.66);font:500 13px/1 ' + FONT + ';' +
         'letter-spacing:0.08em;transition:opacity 700ms ease;text-shadow:0 1px 8px rgba(0,0,0,0.7);">' +
-        'drag to pour · tap for a new seed</div>' +
+        'drag to pour · two fingers to morph · tap to reseed</div>' +
       '<div data-el="panel" style="position:absolute;inset:0;display:none;' +
         'align-items:center;justify-content:center;padding:28px;pointer-events:auto;' +
         'background:rgba(5,7,12,0.82);backdrop-filter:blur(6px);' +
@@ -348,7 +378,9 @@ window.plethoraBit = {
           '<ul style="list-style:none;display:grid;gap:11px;">' +
             '<li>• <b>Drag</b> to pour more chemical in and grow the pattern from your finger.</li>' +
             '<li>• <b>Tap</b> for a new seed — a different species, colour and starting drop.</li>' +
-            '<li>• Ten species, all the same equation. Only the feed and kill rates differ.</li>' +
+            '<li>• <b>Two fingers</b> take hold of the feed and kill rates themselves. Slide ' +
+              'them and the pattern walks between species: spots stretch into worms, worms close into a maze.</li>' +
+            '<li>• Ten named species, all the same equation. Only those two numbers differ.</li>' +
           '</ul>' +
           '<p style="margin-top:18px;opacity:0.55;font-size:13px;">Tap to close.</p>' +
         '</div>' +
@@ -381,7 +413,13 @@ window.plethoraBit = {
     // ---- interaction --------------------------------------------------------
     // A tap reseeds; a drag pours. They are told apart on release by how far the
     // finger travelled, so a tap never leaves a stray blob behind.
-    let pointerDown = false, moved = 0, downAt = 0;
+    const touches = {};
+    let touchCount = 0;
+    let moved = 0;
+    let morphing = false;      // two fingers are down right now
+    let gestureMorphed = false; // this gesture changed the rates
+    let handTuned = false;      // the rates have been moved off the species
+    let morphBaseT = 0, morphBaseNudge = 0, morphX = 0, morphY = 0;
 
     function pourAt(px, py) {
       // event.offsetX/offsetY are already canvas-relative, and asking the layout
@@ -421,29 +459,70 @@ window.plethoraBit = {
       ctx.platform.interact({ type: "reseed", seed: seedLabel(seed), species: species.name, source });
     }
 
+    // One finger pours chemical in. Two fingers take hold of the only two numbers
+    // that matter — the feed and kill rates — and sliding them walks continuously
+    // between species, so spots stretch into worms and worms close into a maze
+    // while you watch. A tap with neither still throws a new seed.
+    function midpoint() {
+      let sx = 0, sy = 0, n = 0;
+      for (const id in touches) { sx += touches[id].x; sy += touches[id].y; n++; }
+      return n ? { x: sx / n, y: sy / n } : { x: 0, y: 0 };
+    }
+
     ctx.listen(canvas, "pointerdown", (e) => {
       e.preventDefault();
       firstGesture();
-      pointerDown = true;
-      moved = 0;
-      downAt = 0;
+      if (!touches[e.pointerId]) touchCount++;
+      touches[e.pointerId] = { x: e.offsetX, y: e.offsetY };
+      if (touchCount === 1) { moved = 0; gestureMorphed = false; }
+      if (touchCount === 2) {
+        morphing = true;
+        const m = midpoint();
+        morphX = m.x; morphY = m.y;
+        morphBaseT = pathT;
+        morphBaseNudge = kNudge;
+      }
     }, { passive: false });
 
     ctx.listen(canvas, "pointermove", (e) => {
-      if (!pointerDown) return;
+      if (!touches[e.pointerId]) return;
       e.preventDefault();
+      touches[e.pointerId] = { x: e.offsetX, y: e.offsetY };
       moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+
+      if (morphing) {
+        const m = midpoint();
+        const dx = (m.x - morphX) / Math.max(1, ctx.width);
+        const dy = (m.y - morphY) / Math.max(1, ctx.height);
+        // One screen of travel walks the whole path; the vertical axis is a much
+        // finer nudge off it, for hunting the edges of a species.
+        pathT = Math.min(PATH.length - 1, Math.max(0, morphBaseT + dx * (PATH.length - 1)));
+        kNudge = Math.min(0.0022, Math.max(-0.0022, morphBaseNudge + dy * 0.006));
+        applyPath();
+        gestureMorphed = true;
+        handTuned = true;
+        seedChip.textContent = seedLabel(seed) + " ✎";
+        return;
+      }
       if (moved > 8) pourAt(e.offsetX, e.offsetY);
     }, { passive: false });
 
-    function release() {
-      if (!pointerDown) return;
-      pointerDown = false;
-      if (moved <= 8) reseed("canvas");
-      else ctx.platform.interact({ type: "pour" });
+    function lift(e) {
+      if (!touches[e.pointerId]) return;
+      delete touches[e.pointerId];
+      touchCount = Math.max(0, touchCount - 1);
+      if (touchCount < 2 && morphing) {
+        morphing = false;
+        applyPath();
+        ctx.platform.interact({ type: "morph", f: Number(F.toFixed(4)), k: Number(K.toFixed(4)) });
+      }
+      if (touchCount === 0) {
+        if (!gestureMorphed && moved <= 8) reseed("canvas");
+        else if (!gestureMorphed) ctx.platform.interact({ type: "pour" });
+      }
     }
-    ctx.listen(canvas, "pointerup", release);
-    ctx.listen(canvas, "pointercancel", release);
+    ctx.listen(canvas, "pointerup", lift);
+    ctx.listen(canvas, "pointercancel", lift);
 
     ctx.listen(againBtn, "click", (e) => { e.stopPropagation(); firstGesture(); reseed("button"); });
     ctx.listen(helpBtn, "click", (e) => {
@@ -488,17 +567,32 @@ window.plethoraBit = {
       if (++sinceCheck >= 30) {
         sinceCheck = 0;
         if (chemicalLevel() < 0.006) {
-          F = species.f;
-          K = species.k;
+          reviveStreak++;
+          // Rates you set by hand are yours: a mix that blooms and dies is a
+          // real property of that corner of the parameter space, so just pour
+          // again and let it happen. Only give up after it fails three times.
+          if (!handTuned || reviveStreak >= 3) {
+            F = species.f;
+            K = species.k;
+            pathT = Math.max(0, PATH.indexOf(species));
+            kNudge = 0;
+            if (handTuned) {
+              handTuned = false;
+              nameChip.textContent = species.name + " · " + palette.name;
+              flashHint("that mix burns out — back to " + species.name);
+            }
+          }
           inoculate(mulberry32((seed ^ 0x5bd1e995) >>> 0));
           ctx.platform.emit("reaction_revived", { seed: seedLabel(seed), species: species.name });
+        } else {
+          reviveStreak = 0;
         }
       }
 
       paint();
     });
 
-    flashHint("drag to pour · tap for a new seed");
+    flashHint("drag to pour · two fingers to morph the rates");
     ctx.platform.ready();
   }
 };

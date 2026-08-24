@@ -20,6 +20,7 @@ window.plethoraBit = {
   async init(ctx) {
     const TAU = Math.PI * 2;
     const NODE_CAP = 2400;
+    const LEAF_CAP = 560;
     const GROW_MS = 2600; // how long the tree takes to reach full size
 
     // ---- seeded randomness --------------------------------------------------
@@ -98,6 +99,7 @@ window.plethoraBit = {
     let maxGen = 1;
     let tree = null, treeG = null, bakeScale = 1;
     let bg = null;       // baked sky + ground
+    let wg = null;       // persistent space-colonization state
     let drawn = 0;       // how many segments have been committed to the bake
     let growth = 0;      // 0..1
     let clock = 0;
@@ -166,27 +168,52 @@ window.plethoraBit = {
       }
       indexNode(0);
 
-      // Accumulated pull per node. pullGen marks the generation that last wrote
-      // an entry, so the arrays never need clearing between iterations.
-      const pullX = new Float32Array(NODE_CAP + 8);
-      const pullY = new Float32Array(NODE_CAP + 8);
-      const pullGen = new Int32Array(NODE_CAP + 8);
-      const touched = [];
+      // All of this is kept rather than discarded when the first growth run
+      // finishes, so painting light later can add attractors and let the same
+      // machinery carry on from where it stopped.
+      wg = {
+        rng: r, step, cellSize, grid, cellKey, indexNode, atts, scaleUnit,
+        attract2: attract * attract,
+        kill2: kill * kill,
+        remaining: atts.length,
+        gen: 0,
+        bootstrap: true,   // the trunk may still climb toward the crown
+        // Accumulated pull per node. pullGen marks the generation that last
+        // wrote an entry, so the arrays never need clearing between iterations.
+        pullX: new Float32Array(NODE_CAP + 8),
+        pullY: new Float32Array(NODE_CAP + 8),
+        pullGen: new Int32Array(NODE_CAP + 8),
+        touched: []
+      };
 
-      const attract2 = attract * attract;
-      const kill2 = kill * kill;
-      let remaining = atts.length;
+      growGenerations(300);
+      wg.bootstrap = false;
+      finalizeTree();
+      leaves = [];
+      syncLeaves(r);
+      buildFlecks(r);
+    }
 
-      for (let gen = 1; gen <= 300 && remaining > 0 && nodes.length < NODE_CAP; gen++) {
-        touched.length = 0;
+    // One or more generations of space colonization against the current
+    // attractor cloud. Returns how many nodes it managed to add.
+    function growGenerations(count) {
+      const w = wg;
+      if (!w) return 0;
+      const r = w.rng;
+      const before = nodes.length;
 
-        for (const a of atts) {
+      for (let it = 0; it < count && w.remaining > 0 && nodes.length < NODE_CAP; it++) {
+        w.gen++;
+        const gen = w.gen;
+        w.touched.length = 0;
+
+        for (const a of w.atts) {
           if (!a.live) continue;
-          const gx = Math.floor(a.x / cellSize), gy = Math.floor(a.y / cellSize);
-          let best = -1, bestD2 = attract2;
+          const gx = Math.floor(a.x / w.cellSize), gy = Math.floor(a.y / w.cellSize);
+          let best = -1, bestD2 = w.attract2;
           for (let oy = -1; oy <= 1; oy++) {
             for (let ox = -1; ox <= 1; ox++) {
-              const bucket = grid[cellKey(gx + ox, gy + oy)];
+              const bucket = w.grid[w.cellKey(gx + ox, gy + oy)];
               if (!bucket) continue;
               for (let bi = 0; bi < bucket.length; bi++) {
                 const ni = bucket[bi];
@@ -197,20 +224,23 @@ window.plethoraBit = {
             }
           }
           if (best < 0) continue;
-          if (bestD2 < kill2) { a.live = false; remaining--; continue; }
+          if (bestD2 < w.kill2) { a.live = false; w.remaining--; continue; }
           const d = Math.sqrt(bestD2);
-          if (pullGen[best] !== gen) {
-            pullGen[best] = gen;
-            pullX[best] = 0;
-            pullY[best] = 0;
-            touched.push(best);
+          if (w.pullGen[best] !== gen) {
+            w.pullGen[best] = gen;
+            w.pullX[best] = 0;
+            w.pullY[best] = 0;
+            w.touched.push(best);
           }
-          pullX[best] += (a.x - nodes[best].x) / d;
-          pullY[best] += (a.y - nodes[best].y) / d;
+          w.pullX[best] += (a.x - nodes[best].x) / d;
+          w.pullY[best] += (a.y - nodes[best].y) / d;
         }
 
-        if (touched.length === 0) {
-          // Nothing in reach yet: this is the trunk, climbing toward the crown.
+        if (w.touched.length === 0) {
+          // Nothing in reach. During the first run that means the trunk has not
+          // arrived at the crown yet, so climb. Afterwards it just means the
+          // light you painted is out of reach of any branch, and we stop.
+          if (!w.bootstrap) break;
           let tip = 0;
           let bestD = Infinity;
           for (let i = 0; i < nodes.length; i++) {
@@ -218,7 +248,7 @@ window.plethoraBit = {
             const d = dx * dx + dy * dy;
             if (d < bestD) { bestD = d; tip = i; }
           }
-          if (bestD < step * step) break;
+          if (bestD < w.step * w.step) break;
           const dx = crown.cx - nodes[tip].x, dy = crown.cy - nodes[tip].y;
           const len = Math.hypot(dx, dy) || 1;
           // Mostly straight up, biased toward the crown, with a little wander.
@@ -226,35 +256,39 @@ window.plethoraBit = {
           const uy = (dy / len) * 0.5 - 0.62;
           const ul = Math.hypot(ux, uy) || 1;
           nodes.push({
-            x: nodes[tip].x + (ux / ul) * step,
-            y: nodes[tip].y + (uy / ul) * step,
+            x: nodes[tip].x + (ux / ul) * w.step,
+            y: nodes[tip].y + (uy / ul) * w.step,
             parent: tip, gen
           });
-          indexNode(nodes.length - 1);
+          w.indexNode(nodes.length - 1);
           continue;
         }
 
-        for (let ti = 0; ti < touched.length; ti++) {
+        for (let ti = 0; ti < w.touched.length; ti++) {
           if (nodes.length >= NODE_CAP) break;
-          const ni = touched[ti];
-          let ux = pullX[ni], uy = pullY[ni];
+          const ni = w.touched[ti];
+          let ux = w.pullX[ni], uy = w.pullY[ni];
           // A pinch of upward bias and jitter keeps limbs from collapsing onto
           // one another when several attractors pull the same way.
           uy -= 0.22;
           ux += (r() - 0.5) * 0.18;
           const len = Math.hypot(ux, uy) || 1;
           nodes.push({
-            x: nodes[ni].x + (ux / len) * step,
-            y: nodes[ni].y + (uy / len) * step,
+            x: nodes[ni].x + (ux / len) * w.step,
+            y: nodes[ni].y + (uy / len) * w.step,
             parent: ni, gen
           });
-          indexNode(nodes.length - 1);
+          w.indexNode(nodes.length - 1);
         }
       }
+      return nodes.length - before;
+    }
 
-      // Thickness, bottom-up. Leonardo's rule: a limb's cross-section equals the
-      // sum of the limbs it carries. Children always come after parents in the
-      // array, so one reverse pass is enough.
+    // Thickness, bottom-up. Leonardo's rule: a limb's cross-section equals the
+    // sum of the limbs it carries. Children always come after parents in the
+    // array, so one reverse pass is enough. Rebuilds the drawable segments too,
+    // since every width upstream of new growth changes.
+    function finalizeTree() {
       const EXP = 2.15;
       const acc = new Float32Array(nodes.length);
       for (let i = nodes.length - 1; i >= 0; i--) {
@@ -263,12 +297,11 @@ window.plethoraBit = {
         if (nodes[i].parent >= 0) acc[nodes[i].parent] += Math.pow(own, EXP);
       }
       const rootW = nodes[0].width || 1;
-      const trunkPx = Math.max(3.4, scaleUnit * 0.115);
+      const trunkPx = Math.max(3.4, (wg ? wg.scaleUnit : 60) * 0.115);
       for (const n of nodes) n.width = Math.max(0.7, (n.width / rootW) * trunkPx);
 
-      // Segments, ordered by generation so the reveal grows outward. Nodes are
-      // appended one generation at a time, so index order is already generation
-      // order and no sort is needed.
+      // Nodes are appended one generation at a time, so index order is already
+      // generation order and no sort is needed.
       maxGen = 1;
       segments = [];
       for (let i = 1; i < nodes.length; i++) {
@@ -276,38 +309,65 @@ window.plethoraBit = {
         segments.push({ x0: p.x, y0: p.y, x1: n.x, y1: n.y, w0: p.width, w1: n.width, gen: n.gen });
         if (n.gen > maxGen) maxGen = n.gen;
       }
+    }
 
-      // Leaves sit on tips — nodes nothing else grew out of.
+    // Append just the segments for nodes added since `fromNode`, at a provisional
+    // twig width. Used while a stroke is in progress so new growth appears under
+    // the finger without re-thickening and re-baking the whole tree every frame.
+    function appendSegments(fromNode) {
+      const provisional = Math.max(0.8, (wg ? wg.step : 6) * 0.22);
+      for (let i = fromNode; i < nodes.length; i++) {
+        const n = nodes[i], p = nodes[n.parent];
+        if (n.width === undefined) n.width = provisional;
+        if (p.width === undefined) p.width = provisional;
+        segments.push({ x0: p.x, y0: p.y, x1: n.x, y1: n.y, w0: p.width, w1: n.width, gen: n.gen });
+        if (n.gen > maxGen) maxGen = n.gen;
+      }
+    }
+
+    // Leaves live on tips. Keep the ones whose node is still a tip, drop the ones
+    // that have since grown a branch, and leaf any new tips — so foliage does not
+    // reshuffle every time the tree is added to.
+    function syncLeaves(r) {
+      if (!season.leaf.length) { leaves = []; return; }
       const hasChild = new Uint8Array(nodes.length);
       for (let i = 1; i < nodes.length; i++) hasChild[nodes[i].parent] = 1;
-      // Capped: past a few hundred, extra leaves cost frames and add nothing
-      // the eye can pick out.
-      const LEAF_CAP = 560;
-      leaves = [];
-      if (season.leaf.length) {
-        for (let i = 1; i < nodes.length && leaves.length < LEAF_CAP; i++) {
-          if (hasChild[i]) continue;
-          // Leaves lie along the twig that carries them, not across it.
-          const p = nodes[nodes[i].parent];
-          const along = Math.atan2(nodes[i].y - p.y, nodes[i].x - p.x);
-          const count = 1 + Math.floor(r() * 3);
-          for (let c = 0; c < count; c++) {
-            leaves.push({
-              x: nodes[i].x + (r() - 0.5) * step * 2.2,
-              y: nodes[i].y + (r() - 0.5) * step * 2.2,
-              r: step * (0.22 + r() * 0.3),
-              rot: along + (r() - 0.5) * 1.6,
-              color: season.leaf[Math.floor(r() * season.leaf.length)],
-              phase: r() * TAU,
-              speed: 0.6 + r() * 0.9,
-              amp: 0.6 + r() * 1.7,
-              gen: nodes[i].gen
-            });
-          }
+
+      const kept = [];
+      for (const lf of leaves) {
+        if (lf.node < nodes.length && !hasChild[lf.node]) kept.push(lf);
+      }
+      leaves = kept;
+
+      const leafed = new Uint8Array(nodes.length);
+      for (const lf of leaves) leafed[lf.node] = 1;
+
+      const step = wg ? wg.step : 6;
+      for (let i = 1; i < nodes.length && leaves.length < LEAF_CAP; i++) {
+        if (hasChild[i] || leafed[i]) continue;
+        // Leaves lie along the twig that carries them, not across it.
+        const p = nodes[nodes[i].parent];
+        const along = Math.atan2(nodes[i].y - p.y, nodes[i].x - p.x);
+        const count = 1 + Math.floor(r() * 3);
+        for (let c = 0; c < count; c++) {
+          leaves.push({
+            node: i,
+            x: nodes[i].x + (r() - 0.5) * step * 2.2,
+            y: nodes[i].y + (r() - 0.5) * step * 2.2,
+            r: step * (0.22 + r() * 0.3),
+            rot: along + (r() - 0.5) * 1.6,
+            color: season.leaf[Math.floor(r() * season.leaf.length)],
+            phase: r() * TAU,
+            speed: 0.6 + r() * 0.9,
+            amp: 0.6 + r() * 1.7,
+            gen: nodes[i].gen
+          });
         }
       }
+    }
 
-      // Drifting air: petals, snow, embers, pollen.
+    // Drifting air: petals, snow, embers, pollen.
+    function buildFlecks(r) {
       flecks = [];
       for (let i = 0; i < season.flecks; i++) {
         flecks.push({
@@ -320,6 +380,14 @@ window.plethoraBit = {
           alpha: 0.25 + r() * 0.5
         });
       }
+    }
+
+    // Throw away the baked limbs so the next frame re-commits every segment at
+    // its corrected width.
+    function rebake() {
+      if (!treeG) { drawn = 0; return; }
+      treeG.clearRect(0, 0, ctx.width, ctx.height);
+      drawn = 0;
     }
 
     function makeBake() {
@@ -540,7 +608,7 @@ window.plethoraBit = {
         'bottom:calc(' + ctx.safeArea.bottom + 'px + 14px);text-align:center;' +
         'pointer-events:none;color:rgba(255,255,255,0.82);font:500 12px/1 ' + FONT + ';' +
         'letter-spacing:0.12em;text-transform:uppercase;transition:opacity 700ms ease;' +
-        'text-shadow:0 1px 6px rgba(0,0,0,0.5);">tap to grow another</div>' +
+        'text-shadow:0 1px 6px rgba(0,0,0,0.5);">tap to grow another · drag to paint light</div>' +
       '<div data-el="panel" style="position:absolute;inset:0;display:none;' +
         'align-items:center;justify-content:center;padding:28px;pointer-events:auto;' +
         'background:rgba(8,10,12,0.86);backdrop-filter:blur(6px);' +
@@ -552,6 +620,8 @@ window.plethoraBit = {
             'are nearest, using each one up as it arrives — roughly what a real tree does.</p>' +
           '<ul style="list-style:none;display:grid;gap:11px;">' +
             '<li>• <b>Tap anywhere</b> to grow another — new crown, new season, new silhouette.</li>' +
+            '<li>• <b>Drag anywhere</b> to paint light. Points land under your finger and the ' +
+              'nearest wood reaches for them — the same rule it grew by, so what you draw is real growth.</li>' +
             '<li>• Limbs compete for the same points. That competition is what makes the forks.</li>' +
             '<li>• Every branch is as thick as the branches it carries, the way Leonardo noticed.</li>' +
           '</ul>' +
@@ -593,11 +663,65 @@ window.plethoraBit = {
       ctx.platform.interact({ type: "reseed", source, seed: seedLabel(seed), season: season.name });
     }
 
+    // Tap grows a whole new tree. Dragging paints light: attractor points land
+    // under your finger and the nearest wood reaches for them, which is the
+    // same rule the tree grew by in the first place — so a branch you draw is
+    // indistinguishable from one it grew on its own.
+    let pointerDown = false, moved = 0, painting = false;
+
+    function paintLight(px, py) {
+      if (!wg) return;
+      const spread = wg.step * 2.6;
+      for (let i = 0; i < 5; i++) {
+        const a = Math.random() * TAU;
+        const rad = Math.sqrt(Math.random()) * spread;
+        const ay = py + Math.sin(a) * rad;
+        if (ay > base.y - wg.step) continue; // nothing grows into the ground
+        wg.atts.push({ x: px + Math.cos(a) * rad, y: ay, live: true });
+        wg.remaining++;
+      }
+      const before = nodes.length;
+      growGenerations(3);
+      if (nodes.length > before) appendSegments(before);
+    }
+
     ctx.listen(canvas, "pointerdown", (e) => {
       e.preventDefault();
       firstGesture();
-      reseed("canvas");
+      pointerDown = true;
+      moved = 0;
+      painting = false;
     }, { passive: false });
+
+    ctx.listen(canvas, "pointermove", (e) => {
+      if (!pointerDown) return;
+      e.preventDefault();
+      moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+      if (moved <= 8) return;
+      if (!painting) {
+        painting = true;
+        hint.style.opacity = "0";
+        growth = 1; // you have taken over; stop the intro reveal mid-stride
+      }
+      paintLight(e.offsetX, e.offsetY);
+    }, { passive: false });
+
+    function releasePaint() {
+      if (!pointerDown) return;
+      pointerDown = false;
+      if (!painting) { reseed("canvas"); return; }
+      painting = false;
+      // Now that the stroke is done, re-thicken every limb that gained weight
+      // and repaint the bake once, rather than on every frame of the drag.
+      finalizeTree();
+      syncLeaves(Math.random);
+      rebake();
+      if (nameChip) nameChip.textContent = season.name + " · " + nodes.length + " nodes";
+      if (ctx.capabilities.haptics) ctx.platform.haptic("light");
+      ctx.platform.interact({ type: "paint_light", nodes: nodes.length });
+    }
+    ctx.listen(canvas, "pointerup", releasePaint);
+    ctx.listen(canvas, "pointercancel", releasePaint);
 
     ctx.listen(againBtn, "click", (e) => { e.stopPropagation(); firstGesture(); reseed("button"); });
     ctx.listen(helpBtn, "click", (e) => {

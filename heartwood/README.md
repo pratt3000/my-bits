@@ -38,6 +38,13 @@ look like a copy of themselves at a smaller scale.
 ## Features
 
 - **Tap anywhere** to grow another — new crown, season and silhouette.
+- **Drag to paint light.** Attractor points land under your finger and the
+  nearest wood reaches for them — the same rule the tree grew by, so a branch
+  you draw is real growth, not a decal. During the stroke new twigs appear at a
+  provisional width; on release every limb upstream is re-thickened by
+  Leonardo's rule and the bake is repainted once, rather than on every frame.
+  Leaves are keyed to their node, so foliage does not reshuffle when you add to
+  a tree: tips that grew a branch lose their leaves, new tips gain some.
 - **It grows in front of you.** The tree is solved instantly, then revealed
   generation by generation over ~2.6 s so you watch it reach outward.
 - **Wind.** The whole tree pivots at its base like a real one, and each leaf
@@ -59,6 +66,8 @@ the documented `ctx` SDK surface:
   frame — heavier, identical picture.
 - Limbs are tapered quads rather than stroked lines: a trunk can be forty times
   thicker than a twig without the joins showing.
+- Overlay markup is declared on the `ctx.createRoot()` element and queried back
+  out via `data-el` attributes. No host-document access, no bare timers.
 
 ### What the upload validator rejects
 
@@ -87,8 +96,6 @@ Two things worth knowing if you go hunting for one of these yourself:
   don't assume a single culprit: a plain binary search reports the wrong
   statement when the trigger is a *combination* (here, creating a gradient
   **and** giving it an unresolvable stop).
-- Overlay markup is declared on the `ctx.createRoot()` element and queried back
-  out via `data-el` attributes. No host-document access, no bare timers.
 
 ## Uploading a draft
 

@@ -126,7 +126,7 @@ window.plethoraBit = {
       voice.gain.value = level;
       const lp = AC.createBiquadFilter();
       lp.type = "lowpass";
-      lp.frequency.value = Math.min(7800, Math.max(1100, freq * 7));
+      lp.frequency.value = Math.min(9000, Math.max(500, freq * 7 * tone));
       lp.Q.value = 0.4;
       voice.connect(lp);
       lp.connect(dry);
@@ -219,6 +219,9 @@ window.plethoraBit = {
     let corePulse = 0;
     let started = false;
     let lastW = 0, lastH = 0;
+    let rate = 1;          // how fast the whole mechanism turns
+    let tone = 1;          // how far open the bells' filter sits
+    let ringsThisFrame = 0;
 
     function layout() {
       const cx = ctx.width / 2;
@@ -296,6 +299,10 @@ window.plethoraBit = {
     }
 
     function ring(body) {
+      // At a hard scrub several bodies can cross in one frame. Four voices is a
+      // chord; ten at once is a clang.
+      if (ringsThisFrame >= 4) return;
+      ringsThisFrame++;
       // Only the outermost body taps the phone. Buzzing on every chime in a
       // ten-body polyrhythm is a vibrating brick, not a downbeat.
       if (started && body === bodies[0] && ctx.capabilities.haptics) ctx.platform.haptic("light");
@@ -457,7 +464,7 @@ window.plethoraBit = {
         'bottom:calc(' + ctx.safeArea.bottom + 'px + 26px);text-align:center;' +
         'pointer-events:none;color:rgba(255,255,255,0.68);font:500 13px/1 ' + FONT + ';' +
         'letter-spacing:0.08em;transition:opacity 700ms ease;text-shadow:0 1px 8px rgba(0,0,0,0.8);">' +
-        'tap to listen</div>' +
+        'tap to listen · then drag to play it</div>' +
       '<div data-el="panel" style="position:absolute;inset:0;display:none;' +
         'align-items:center;justify-content:center;padding:28px;pointer-events:auto;' +
         'background:rgba(4,5,12,0.86);backdrop-filter:blur(6px);' +
@@ -471,6 +478,8 @@ window.plethoraBit = {
           '<ul style="list-style:none;display:grid;gap:11px;">' +
             '<li>• <b>Tap anywhere</b> for a new sky — new orbits, new key, new colours.</li>' +
             '<li>• Outer bodies are slower and lower. Inner ones run fast and high.</li>' +
+            '<li>• <b>Drag up and down</b> to drive how fast the mechanism turns, and ' +
+              '<b>left and right</b> to darken or brighten the bells. Both are live.</li>' +
             '<li>• Wait for the loop to come around: every body meets at the top at once.</li>' +
           '</ul>' +
           '<p style="margin-top:18px;opacity:0.55;font-size:13px;">Tap to close.</p>' +
@@ -524,16 +533,71 @@ window.plethoraBit = {
       });
     }
 
+    // Tap throws a new sky. Dragging plays the mechanism: up and down drives how
+    // fast it turns, left and right opens or closes the bells. Both are live, so
+    // you can pull the piece from a slow chime into a shimmer and back.
+    let pointerDown = false, moved = 0, dragging = false, firstTap = false;
+    let dragX = 0, dragY = 0, baseRate = 1, baseTone = 1;
+
+    function showDrive() {
+      const speed = rate >= 0.98 && rate <= 1.02 ? "×1" : "×" + rate.toFixed(2);
+      const colour = tone > 1.25 ? "bright" : tone < 0.8 ? "dark" : "even";
+      nameChip.textContent = speed + " · " + colour;
+    }
+
+    function restoreChip() {
+      nameChip.textContent =
+        NOTE_NAMES[((rootMidi % 12) + 12) % 12] + " " + scaleUsed.name + " · " + bodies.length + " bodies";
+    }
+
     ctx.listen(canvas, "pointerdown", (e) => {
       e.preventDefault();
-      const wasSilent = !started;
+      firstTap = !started;   // read before firstGesture() flips it
       firstGesture();
-      if (wasSilent) {
-        flashHint("tap again for a new sky");
-        return; // let the first tap simply turn the sound on
-      }
-      reseed("canvas");
+      pointerDown = true;
+      moved = 0;
+      dragging = false;
+      dragX = e.offsetX;
+      dragY = e.offsetY;
+      baseRate = rate;
+      baseTone = tone;
     }, { passive: false });
+
+    ctx.listen(canvas, "pointermove", (e) => {
+      if (!pointerDown) return;
+      e.preventDefault();
+      moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+      if (moved <= 8) return;
+      if (!dragging) {
+        dragging = true;
+        hint.style.opacity = "0";
+      }
+      // Exponential in both axes: equal finger travel is an equal musical
+      // interval, which is what the ear expects from a speed or a filter.
+      const dy = (dragY - e.offsetY) / Math.max(1, ctx.height);
+      const dx = (e.offsetX - dragX) / Math.max(1, ctx.width);
+      rate = Math.min(3.2, Math.max(0.22, baseRate * Math.exp(dy * 2.2)));
+      tone = Math.min(2.4, Math.max(0.35, baseTone * Math.exp(dx * 1.6)));
+      showDrive();
+    }, { passive: false });
+
+    function releaseDrive() {
+      if (!pointerDown) return;
+      pointerDown = false;
+      if (!dragging) {
+        if (firstTap) {
+          flashHint("tap again for a new sky · drag to play it");
+          return; // the first tap just turns the sound on
+        }
+        reseed("canvas");
+        return;
+      }
+      dragging = false;
+      restoreChip();
+      ctx.platform.interact({ type: "drive", rate: Number(rate.toFixed(2)), tone: Number(tone.toFixed(2)) });
+    }
+    ctx.listen(canvas, "pointerup", releaseDrive);
+    ctx.listen(canvas, "pointercancel", releaseDrive);
 
     ctx.listen(againBtn, "click", (e) => { e.stopPropagation(); firstGesture(); reseed("button"); });
 
@@ -580,7 +644,8 @@ window.plethoraBit = {
       }
 
       const dt = Math.min(0.05, dtMs / 1000); // clamp so a stall cannot skip laps
-      clock += dt;
+      ringsThisFrame = 0;
+      clock += dt * rate;
 
       for (const b of bodies) {
         const progress = clock / b.period;
