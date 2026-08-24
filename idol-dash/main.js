@@ -103,6 +103,12 @@ window.plethoraBit = {
       .id-pwbar { width:44px; height:5px; border-radius:3px; background:rgba(255,255,255,.2); overflow:hidden; }
       .id-pwbar i { display:block; height:100%; width:100%; background:#ffd979; transform-origin:left; }
 
+      .id-turn { position:absolute; left:50%; top:38%; transform:translate(-50%,-50%); z-index:21;
+        font-size:80px; font-weight:900; color:#ffe14a; opacity:0; pointer-events:none;
+        text-shadow:0 0 26px rgba(255,190,40,.9), 0 4px 14px rgba(0,0,0,.6);
+        transition:opacity .12s ease; }
+      .id-turn.show { opacity:.95; animation:idTurnPulse .5s ease infinite; }
+      @keyframes idTurnPulse { 0%,100% { transform:translate(-50%,-50%) scale(1); } 50% { transform:translate(-50%,-50%) scale(1.18); } }
       .id-toast { position:absolute; left:50%; top:26%; transform:translate(-50%,-50%) scale(.9); z-index:22;
         padding:9px 18px; border-radius:999px; font-size:15px; font-weight:900; white-space:nowrap;
         background:rgba(20,12,4,.8); border:1px solid rgba(255,220,160,.3);
@@ -234,6 +240,7 @@ window.plethoraBit = {
         </div>
       </div>
 
+      <div class="id-turn" id="idTurn"><span id="idTurnArrow">➡</span></div>
       <div class="id-toast" id="idToast"></div>
       <div class="id-flash hurt" id="idFlashHurt"></div>
       <div class="id-flash good" id="idFlashGood"></div>
@@ -295,7 +302,8 @@ window.plethoraBit = {
       bg: $("idBg"), menu: $("scrMenu"), hud: $("idHud"), hint: $("idHint"),
       score: $("hScore"), dist: $("hDist"), mult: $("hMult"),
       coins: $("hCoins"), gems: $("hGems"), gemWrap: $("hGemWrap"), pw: $("hPw"),
-      toast: $("idToast"), flashHurt: $("idFlashHurt"), flashGood: $("idFlashGood"),
+      toast: $("idToast"), turn: $("idTurn"), turnArrow: $("idTurnArrow"),
+      flashHurt: $("idFlashHurt"), flashGood: $("idFlashGood"),
       how: $("ovHow"), pause: $("ovPause"), shop: $("ovShop"), boards: $("ovBoards"),
       dead: $("ovDead"), deadPanel: $("deadPanel"),
       shopList: $("shopList"), lbTabs: $("lbTabs"), lbList: $("lbList"),
@@ -1017,7 +1025,7 @@ window.plethoraBit = {
     // --- what goes ON a segment -------------------------------------------
     function difficultyAt(dist) {
       // 0 at the start, 1 by ~3km — governs obstacle density and variety.
-      return clamp(dist / 3000, 0, 1);
+      return clamp(dist / 1800, 0, 1);
     }
     function populateSegment(seg) {
       const D = difficultyAt(runDistance + seg.id * 10);
@@ -1026,12 +1034,12 @@ window.plethoraBit = {
       const usable = seg.len - startPad - endPad;
       if (usable < 12) return;
 
-      const gapMin = lerp(15, 8.5, D);
+      const gapMin = lerp(14, 6.5, D);
       let z = startPad + rnd(2, 7);
       const kinds = [OB.ROOT, OB.GATE, OB.WALL];
-      if (D > 0.14) kinds.push(OB.GAP);
-      if (D > 0.3) kinds.push(OB.FIRE);
-      if (D > 0.5) kinds.push(OB.BLADE);
+      if (D > 0.1) kinds.push(OB.GAP);
+      if (D > 0.22) kinds.push(OB.FIRE);
+      if (D > 0.38) kinds.push(OB.BLADE);
 
       while (z < startPad + usable) {
         const kind = pick(kinds);
@@ -1064,7 +1072,7 @@ window.plethoraBit = {
             });
           }
         }
-        z += gapMin + rnd(3, 12);
+        z += gapMin + rnd(2, 9 - D * 4);
       }
 
       // Occasional gem — the currency that buys upgrades.
@@ -1093,7 +1101,9 @@ window.plethoraBit = {
       // built as spans between the gap hazards.
       const gaps = seg.obstacles.filter((o) => o.kind === OB.GAP);
       const spans = [];
-      let cursor = -6;
+      // Segments after the first begin past the corner deck they turn out of,
+      // so their floor neither overlaps nor gaps.
+      let cursor = seg.id === 0 ? -6 : PATH_W / 2 - 0.4;
       for (const g of gaps) {
         const gs = g.z - 1.6, ge = g.z + 1.6;
         // full-width gaps split the floor; partial gaps punch single lanes
@@ -1134,11 +1144,24 @@ window.plethoraBit = {
         }
       }
 
+      // Lane dividers: faint inlaid strips so the three lanes are legible.
+      const trimMat = mat("trim" + b.id, b.pathColor, null, 1, 1);
+      for (const lx of [-LANE_W / 2, LANE_W / 2]) {
+        const nTrim = Math.max(1, Math.ceil(L / 6));
+        for (let i = 0; i < nTrim; i++) {
+          const t = meshOf(GEO.box, trimMat, 0.07, 0.055, 2.4);
+          place(t, seg, i * 6 + 2, lx, 0.03);
+          add(t);
+        }
+      }
+
       // Side rails / kerbs so the path edge reads clearly.
       const kerbMat = mat("kerb" + b.id, b.wallColor, b.wallTex(), 6, 1);
+      const kStart = seg.id === 0 ? -6 : PATH_W / 2 - 0.4;
+      const kEnd = L + (seg.turn !== 0 ? PATH_W / 2 : 6);
       for (const side of [-1, 1]) {
-        const kerb = meshOf(GEO.box, kerbMat, 0.5, 0.55, L + 12);
-        place(kerb, seg, L / 2 - 3, side * (PATH_W / 2 + 0.2), 0.1);
+        const kerb = meshOf(GEO.box, kerbMat, 0.5, 0.55, kEnd - kStart);
+        place(kerb, seg, (kStart + kEnd) / 2, side * (PATH_W / 2 + 0.2), 0.1);
         add(kerb);
       }
 
@@ -1146,21 +1169,43 @@ window.plethoraBit = {
       // and kept low enough that sky stays visible above the run.
       const WT = 12;
       const wallMat = mat("wall" + b.id, b.wallColor, b.wallTex(), WT / 4, 6 / 4);
-      const wallSpan = L + 14, wn = Math.max(1, Math.ceil(wallSpan / WT));
+      const wStart = seg.id === 0 ? -8 : PATH_W / 2 + 0.2;
+      const wEnd = L + (seg.turn !== 0 ? PATH_W / 2 + 0.2 : 6);
+      const wallSpan = wEnd - wStart, wn = Math.max(1, Math.ceil(wallSpan / WT));
       const wstep = wallSpan / wn;
       for (const side of [-1, 1]) {
         for (let i = 0; i < wn; i++) {
           const wall = meshOf(GEO.box, wallMat, 3.2, 6, wstep + 0.05);
-          place(wall, seg, -8 + wstep * (i + 0.5), side * (PATH_W / 2 + 2.4), 2.4);
+          place(wall, seg, wStart + wstep * (i + 0.5), side * (PATH_W / 2 + 2.4), 2.4);
           add(wall);
+        }
+      }
+
+      // Ground plane beyond the walls, so the corridor sits in a world.
+      const groundMat = mat("gnd" + b.id, b.ground, null, 1, 1);
+      for (const side of [-1, 1]) {
+        const gp = meshOf(GEO.box, groundMat, 60, 0.4, L + 20);
+        place(gp, seg, L / 2, side * 36, -1.9);
+        add(gp);
+      }
+      // Far silhouettes: canopy / ridgeline receding into the fog.
+      const farMat = mat("far" + b.id, b.wallColor, null, 1, 1);
+      for (let i = 0; i < Math.floor(L / 16); i++) {
+        for (const side of [-1, 1]) {
+          const z2 = 8 + i * 16 + rnd(-4, 4);
+          const h2 = rnd(9, 22);
+          const far = meshOf(b.prop === "spire" || b.prop === "obelisk" ? GEO.cone : GEO.sphere,
+            farMat, rnd(5, 11), h2, rnd(5, 11));
+          place(far, seg, z2, side * rnd(20, 42), h2 * 0.4);
+          add(far);
         }
       }
 
       // Props along the sides — silhouette variety per biome.
       const propMat = mat("prop" + b.id, b.wallColor, b.wallTex(), 2, 3);
       const accentMat = mat("acc" + b.id, b.accent, null, 1, 1);
-      for (let i = 0; i < Math.floor(L / 11); i++) {
-        const z = 6 + i * 11 + rnd(-2.5, 2.5);
+      for (let i = 0; i < Math.floor(L / 5.5); i++) {
+        const z = 6 + i * 5.5 + rnd(-1.6, 1.6);
         const side = Math.random() < 0.5 ? -1 : 1;
         const lat = side * (PATH_W / 2 + rnd(3.4, 6.2));
         if (b.prop === "tree") {
@@ -1186,28 +1231,85 @@ window.plethoraBit = {
           const sp = meshOf(GEO.cone, propMat, 1.6, 8, 1.6);
           place(sp, seg, z, lat, 4); add(sp);
         }
+        // Small dressing right at the path edge: urns, rubble, vines, glyphs.
+        if (Math.random() < 0.7) {
+          const eside = Math.random() < 0.5 ? -1 : 1;
+          const elat = eside * (PATH_W / 2 + rnd(0.7, 1.5));
+          const roll = Math.random();
+          if (roll < 0.3) {
+            const urn = meshOf(GEO.cyl, accentMat, 0.34, 0.8, 0.34);
+            place(urn, seg, z + rnd(-2, 2), elat, 0.4); add(urn);
+          } else if (roll < 0.55) {
+            const rub = meshOf(GEO.box, propMat, rnd(0.4, 0.9), rnd(0.3, 0.6), rnd(0.4, 0.9));
+            place(rub, seg, z + rnd(-2, 2), elat, 0.2);
+            rub.rotation.y += rnd(0, 3); add(rub);
+          } else if (roll < 0.8) {
+            const vine = meshOf(GEO.box, wallMat, 0.3, rnd(2, 4.5), 0.3);
+            place(vine, seg, z + rnd(-2, 2), eside * (PATH_W / 2 + 2.2), 4.4); add(vine);
+          } else {
+            const glyph = meshOf(GEO.box, accentMat, 0.7, 0.7, 0.12);
+            place(glyph, seg, z + rnd(-2, 2), eside * (PATH_W / 2 + 2.3), rnd(1.4, 3.4));
+            add(glyph);
+          }
+        }
+      }
+      // Occasional arch spanning the path — depth cue and drama.
+      for (let i = 0; i < Math.floor(L / 52); i++) {
+        const z = 26 + i * 52 + rnd(-5, 5);
+        if (z > L - 16) continue;
+        for (const side of [-1, 1]) {
+          const col = meshOf(GEO.cyl, propMat, 0.45, 8.4, 0.45);
+          place(col, seg, z, side * (PATH_W / 2 + 0.5), 4.2); add(col);
+        }
+        const lintel = meshOf(GEO.box, propMat, PATH_W + 2.2, 0.7, 0.8);
+        place(lintel, seg, z, 0, 8.7); add(lintel);
+        const frieze = meshOf(GEO.box, accentMat, PATH_W + 1.0, 0.3, 0.5);
+        place(frieze, seg, z, 0, 9.3); add(frieze);
       }
 
       // Corner signposting: a wall straight ahead plus banners on the turn
       // side, so the player can read the corner before they reach it.
       if (seg.turn !== 0) {
-        const endWall = meshOf(GEO.box, wallMat, PATH_W + 6, 8, 2);
-        place(endWall, seg, L + 4.5, 0, 4);
-        add(endWall);
-        const sign = meshOf(GEO.box, accentMat, 1.2, 2.6, 0.3);
-        place(sign, seg, L + 3.2, seg.turn * (PATH_W / 2 - 0.6), 3.4);
-        add(sign);
-        // Arrow chevrons on the deck pointing the way.
-        for (let i = 0; i < 3; i++) {
-          const chev = meshOf(GEO.box, accentMat, 1.5, 0.06, 0.45);
-          place(chev, seg, L - 7 + i * 2.2, seg.turn * (1.1 + i * 0.5), 0.05);
-          chev.rotation.z = 0;
-          add(chev);
-        }
-        // The corner deck itself, so the turn has floor under it.
+        // The corner deck, so the turn has floor under it.
         const corner = meshOf(GEO.box, pathMat, PATH_W, 0.5, PATH_W);
         place(corner, seg, L + PATH_W / 2 - 0.5, 0, -0.25);
         add(corner);
+
+        // Dead-end wall well beyond the deck, so it never crowds the turn.
+        const endWall = meshOf(GEO.box, wallMat, PATH_W + 7, 9, 2.4);
+        place(endWall, seg, L + PATH_W + 2.6, 0, 4.5);
+        add(endWall);
+
+        // A big glowing arrow painted on the deck, unmistakable from range.
+        const arrowMat = basicMat("arrow", 0xffe14a);
+        const shaft = meshOf(GEO.box, arrowMat, 4.6, 0.08, 1.15);
+        place(shaft, seg, L + 1.0, seg.turn * 0.9, 0.06);
+        add(shaft);
+        for (let i = 0; i < 2; i++) {
+          const barb = meshOf(GEO.box, arrowMat, 2.0, 0.08, 1.0);
+          place(barb, seg, L + 1.0 + (i ? 1.5 : -1.5), seg.turn * 2.7, 0.06);
+          barb.rotation.y += (i ? -1 : 1) * seg.turn * 0.85;
+          add(barb);
+        }
+        // Approach chevrons stepping toward the turn side.
+        for (let i = 0; i < 3; i++) {
+          const chev = meshOf(GEO.box, arrowMat, 1.5, 0.07, 0.38);
+          place(chev, seg, L - 17 + i * 5, seg.turn * (0.6 + i * 0.55), 0.05);
+          chev.rotation.y += seg.turn * 0.5;
+          add(chev);
+          chev.userData.pulse = i * 0.35;
+        }
+        // Torches marking the exit, on the side you must turn toward.
+        for (let i = 0; i < 3; i++) {
+          const post = meshOf(GEO.cyl, mat("torchpost", 0x3a2a1a, null, 1, 1), 0.16, 2.6, 0.16);
+          place(post, seg, L - 6 + i * 4.2, seg.turn * (PATH_W / 2 + 0.8), 1.3);
+          add(post);
+          const fire = meshOf(GEO.sphere, basicMat("torchfire", 0xffa63a), 0.42, 0.62, 0.42);
+          place(fire, seg, L - 6 + i * 4.2, seg.turn * (PATH_W / 2 + 0.8), 2.8);
+          add(fire);
+          fire.userData.torch = i * 1.1;
+        }
+        seg.arrowMeshes = seg.meshes.filter((m) => m.userData.pulse !== undefined || m.userData.torch !== undefined);
       }
 
       // Obstacle meshes.
@@ -1303,6 +1405,14 @@ window.plethoraBit = {
     body.idol.position.set(0.42, 1.0, 0.2);
     for (const k in body) runner.add(body[k]);
 
+    // Contact shadow — makes jump height and lane position readable.
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.55, 18),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.36, depthWrite: false })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    scene.add(shadow);
+
     // Shield bubble.
     const shieldMesh = new THREE.Mesh(GEO.sphere, new THREE.MeshBasicMaterial({
       color: 0x6fc8ff, transparent: true, opacity: 0.3
@@ -1347,7 +1457,7 @@ window.plethoraBit = {
     let biomeChangeAt = 900;
     const pw = { shield: 0, magnet: 0, boost: 0, mult: 0 };
 
-    const SPEED_START = 15.5, SPEED_MAX = 34;
+    const SPEED_START = 16.5, SPEED_MAX = 41;
 
     function resetRunState() {
       for (const s of track) disposeSegment(s);
@@ -1427,7 +1537,9 @@ window.plethoraBit = {
       if (!seg) return;
       // Inside the corner window a sideways swipe is a TURN, not a lane move.
       const toEnd = seg.len - P.z;
-      if (seg.turn !== 0 && toEnd < 14) {
+      // Roughly a second and a half of warning, whatever the speed.
+      const window = Math.max(20, P.speed * 1.5);
+      if (seg.turn !== 0 && toEnd < window) {
         // Inside the corner window a sideways swipe is a TURN, buffered until
         // the bend is actually reached.
         P.armedTurn = dir;
@@ -1609,6 +1721,7 @@ window.plethoraBit = {
       el.pauseBtn.classList.remove("id-hidden");
       el.bg.style.opacity = "0";
       el.gemWrap.classList.add("id-hidden");
+      el.turn.classList.remove("show");
       resetRunState();
       runTime = 0;
       state = "run";
@@ -1684,6 +1797,7 @@ window.plethoraBit = {
     function showDeath(cause) {
       state = "dead";
       el.hud.classList.add("id-hidden");
+      el.turn.classList.remove("show");
       const reviveCost = Math.max(2, Math.round(upVal("revive")));
       const canRevive = !revived && wallet.gems + runGems >= reviveCost;
       const score = Math.floor(runScore);
@@ -1693,8 +1807,10 @@ window.plethoraBit = {
       const isBest = score > bestScore;
 
       el.deadPanel.innerHTML = `
-        <div class="big">${cause === "fell" ? "🕳️" : cause === "caught" ? "🐒" : "💥"}</div>
-        <h2>${cause === "fell" ? "Over the edge" : cause === "caught" ? "Caught!" : "Wiped out"}</h2>
+        <div class="big">${cause === "missed" ? "↪️" : cause === "fell" ? "🕳️" : cause === "caught" ? "🐒" : "💥"}</div>
+        <h2>${cause === "missed" ? "Missed the turn" : cause === "fell" ? "Over the edge"
+          : cause === "caught" ? "Caught!" : "Wiped out"}</h2>
+        ${cause === "missed" ? '<div style="font-size:12.5px;opacity:.7;margin:-2px 0 8px;">Swipe the way the arrow points before you reach the bend.</div>' : ""}
         ${isBest ? '<div class="id-best">NEW BEST</div>' : ""}
         <div class="id-stat"><span>Score</span><b>${fmt(score)}</b></div>
         <div class="id-stat"><span>Distance</span><b>${fmt(dist)} m</b></div>
@@ -1791,7 +1907,7 @@ window.plethoraBit = {
 
       if (running && !P.dead) {
         // --- speed ramp -------------------------------------------------
-        P.baseSpeed = Math.min(SPEED_MAX, SPEED_START + runDistance * 0.0032);
+        P.baseSpeed = Math.min(SPEED_MAX, SPEED_START + runDistance * 0.0052);
         const want = pw.boost > 0 ? P.baseSpeed * 1.7 : P.baseSpeed;
         P.speed += (want - P.speed) * Math.min(1, dt * (pw.boost > 0 ? 4 : 1.4));
 
@@ -1826,7 +1942,7 @@ window.plethoraBit = {
               while (track.length < P.seg + 4) buildSegment(track[track.length - 1], false);
               while (P.seg > 2) { disposeSegment(track.shift()); P.seg -= 1; }
             } else if (P.z > seg.len + 1.4) {
-              die("fell");                          // straight over the edge
+              die("missed");                        // straight past the bend
             }
           } else if (seg.turn === 0 && P.z > seg.len) {
             P.seg += 1; P.z -= seg.len;
@@ -1834,7 +1950,7 @@ window.plethoraBit = {
             while (P.seg > 2) { disposeSegment(track.shift()); P.seg -= 1; }
           }
           // The arm expires if you drift far from the corner.
-          if (seg.turn !== 0 && seg.len - P.z > 16) P.armedTurn = 0;
+          if (seg.turn !== 0 && seg.len - P.z > Math.max(22, P.speed * 1.6)) P.armedTurn = 0;
         }
 
         // --- lateral ----------------------------------------------------
@@ -1862,6 +1978,16 @@ window.plethoraBit = {
         }
         shieldMesh.visible = pw.shield > 0;
         if (pw.boost > 0 && Math.random() < dt * 6) sfx.boostLoop();
+
+        // Corner prompt: show which way to swipe while the window is open.
+        if (seg && seg.turn !== 0 && !P.armedTurn) {
+          const toEnd2 = seg.len - P.z;
+          const win2 = Math.max(20, P.speed * 1.5);
+          if (toEnd2 > 0 && toEnd2 < win2) {
+            el.turnArrow.textContent = seg.turn > 0 ? "➡" : "⬅";
+            el.turn.classList.add("show");
+          } else el.turn.classList.remove("show");
+        } else el.turn.classList.remove("show");
 
         collide(dt);
 
@@ -1905,6 +2031,13 @@ window.plethoraBit = {
         body.legR.position.y = slide ? 0.22 : 0.36;
         shieldMesh.position.y = slide ? 0.5 : 1.05;
 
+        // Shadow sits on the deck under the runner, shrinking with height.
+        const hs = clamp(1 - P.y / 4.2, 0.35, 1);
+        shadow.position.set(wx, 0.03, wz);
+        shadow.scale.set(hs, hs, hs);
+        shadow.material.opacity = 0.38 * hs;
+        shadow.visible = state === "run" || state === "paused" || state === "dying";
+
         // ---- camera --------------------------------------------------
         let dy = camYawTarget - camYaw;
         while (dy > Math.PI) dy -= Math.PI * 2;
@@ -1942,6 +2075,17 @@ window.plethoraBit = {
       const tsec = timeMs * 0.001;
       for (let si = 0; si < track.length; si++) {
         const s2 = track[si];
+        if (s2.arrowMeshes) {
+          for (const am of s2.arrowMeshes) {
+            if (am.userData.pulse !== undefined) {
+              const k = 0.55 + 0.45 * Math.sin(tsec * 5 - am.userData.pulse * 2);
+              am.material = k > 0.75 ? basicMat("arrow", 0xffe14a) : basicMat("arrowdim", 0xb8892a);
+            } else if (am.userData.torch !== undefined) {
+              const f = 0.85 + Math.sin(tsec * 12 + am.userData.torch) * 0.16;
+              am.scale.set(0.42 * f, 0.62 * f, 0.42 * f);
+            }
+          }
+        }
         for (const o of s2.obstacles) {
           if (o.bladeMesh) for (const bm of o.bladeMesh) bm.rotation.z += dt * 4.5;
           if (o.flameMesh) {
