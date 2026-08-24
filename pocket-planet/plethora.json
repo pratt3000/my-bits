@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Pocket Planet",
+  "description": "A tiny world that is yours. Walk your little character right around a low-poly globe — over beaches, through forests, up snowy peaks — and shape it one tile at a time. Plant trees that keep growing in real time while you are away, lay winding paths, raise cottages, hang lanterns that glow at dusk. Spin the globe, swim the sea, watch clouds drift over your hills. Your planet is saved, so every visit picks up exactly where you left it.",
+  "tags": [
+    "3d",
+    "planet",
+    "builder",
+    "cozy",
+    "sandbox",
+    "garden",
+    "relaxing",
+    "creative",
+    "world",
+    "trees"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic",
+    "audio",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "local": {
+      "planet": {
+        "label": "Your planet"
+      }
+    },
+    "records": {
+      "life": {
+        "label": "Planet Life",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
