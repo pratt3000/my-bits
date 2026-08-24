@@ -121,7 +121,7 @@ window.plethoraBit = {
       .pp-toast.show { opacity:1; transform:translate(-50%,0) scale(1); }
 
       /* ---------- joystick ---------- */
-      .pp-joy { position:absolute; width:118px; height:118px; margin:-59px 0 0 -59px; border-radius:50%;
+      .pp-joy { position:absolute; width:150px; height:150px; margin:-75px 0 0 -75px; border-radius:50%;
         border:2px solid rgba(255,255,255,.66); background:rgba(255,255,255,.2);
         box-shadow:0 4px 16px rgba(24,66,92,.16); opacity:0; transition:opacity .16s ease; }
       .pp-joy.show { opacity:1; }
@@ -340,8 +340,8 @@ window.plethoraBit = {
     const LIFE_PTS = [1, 2, 4, 7, 12];   // Planet Life value of a tree per stage
 
     const DAY_MS = 300e3;               // one full day/night cycle
-    const WALK_SPEED = 2.55;            // world units per second on land
-    const SWIM_SPEED = 1.55;
+    const WALK_SPEED = 2.2;             // world units per second on land
+    const SWIM_SPEED = 1.4;
     const BUILD_RANGE = 4.2;            // how many tiles away you may build
 
     // =====================================================================
@@ -943,7 +943,7 @@ window.plethoraBit = {
       if (Math.abs(c.y) > 0.9) _hB.set(1, 0, 0);
       const e1 = _hC.crossVectors(_hB, c).normalize();
       const e2 = _hD.crossVectors(c, e1).normalize();
-      const rIn = Math.tan(TILE_ANG * 0.30), rOut = Math.tan(TILE_ANG * 0.44);
+      const rIn = Math.tan(TILE_ANG * 0.28), rOut = Math.tan(TILE_ANG * 0.47);
       let w = 0;
       const inner = [], outer = [];
       for (let k = 0; k <= HL_SEG; k++) {
@@ -952,7 +952,7 @@ window.plethoraBit = {
         for (let side = 0; side < 2; side++) {
           const rr = side ? rOut : rIn;
           _hP.copy(c).addScaledVector(e1, ca * rr).addScaledVector(e2, sa * rr).normalize();
-          _hP.multiplyScalar(heightAt(_hP) + 0.045);
+          _hP.multiplyScalar(heightAt(_hP) + 0.075);
           (side ? outer : inner)[k] = _hP.clone();
         }
       }
@@ -2094,32 +2094,46 @@ window.plethoraBit = {
     //     Orbits the character in its own local frame, so walking over the
     //     horizon keeps the camera behind you and dragging spins the globe.
     // =====================================================================
-    let camYaw = 0, camPitch = 0.42, camDist = 17.5, camDistGoal = 17.5, camSnap = true;
-    const CAM_TILT = 0.12;         // aim slightly below the character
+    // Framing was worked out from the geometry rather than by eye. The old
+    // default (pitch 0.42, aimed at the character) left a band of only ~7% of
+    // screen height between the character and the horizon -- that band is the
+    // ground you are walking into, and it is where the build target sits.
+    // These values put the character at ~63% down, the horizon at ~39%, and
+    // give a ~24% band of visible ground ahead -- three times the old one,
+    // while still viewing the character from ~50 degrees rather than straight
+    // down onto the top of their head.
+    let camYaw = 0, camPitch = 0.85, camDist = 13, camDistGoal = 13, camSnap = true;
     const CAM_MIN = 9, CAM_MAX = 40;
+    const LOOK_AHEAD = 1.3;        // tiles past the character to centre on
     const camGoal = V(), camFocus = V();
+    const _cLook = V(), _cOd = V(), _cFocus = V(), _cAnchor = V();
 
     function updateCamera(dt) {
       const up = charPos;
-      const look = tmpA.copy(charHeading).applyAxisAngle(up, camYaw).normalize();
-      const od = tmpB.copy(up).multiplyScalar(Math.sin(camPitch))
+      const look = _cLook.copy(charHeading).applyAxisAngle(up, camYaw).normalize();
+      const od = _cOd.copy(up).multiplyScalar(Math.sin(camPitch))
                               .addScaledVector(look, -Math.cos(camPitch)).normalize();
-      const focus = tmpC.copy(up).multiplyScalar(charR + 0.62);
+      // The camera orbits the character but aims at the ground a couple of
+      // tiles beyond them. Aimed at the character, roughly two thirds of a
+      // portrait screen showed the ground they had already walked over, and
+      // the tile you were about to build on was squeezed against the sky.
+      const a = TILE_ANG * LOOK_AHEAD;
+      const focus = _cFocus.copy(up).multiplyScalar(Math.cos(a))
+                                    .addScaledVector(look, Math.sin(a))
+                                    .normalize().multiplyScalar(charR + 0.35);
+      const anchor = _cAnchor.copy(up).multiplyScalar(charR + 0.62);
       camDist += (camDistGoal - camDist) * damp(dt, 8);
-      camGoal.copy(focus).addScaledVector(od, camDist);
+      camGoal.copy(anchor).addScaledVector(od, camDist);
       if (camSnap) {
         camera.position.copy(camGoal);
         camFocus.copy(focus);
         camSnap = false;
       } else {
-        camera.position.lerp(camGoal, damp(dt, 9.5));
-        camFocus.lerp(focus, damp(dt, 13));
+        camera.position.lerp(camGoal, damp(dt, 7.5));
+        camFocus.lerp(focus, damp(dt, 9));
       }
       camera.up.copy(up);
       camera.lookAt(camFocus);
-      // Nudge the aim downward: looking straight at the character wasted the
-      // top third of a portrait screen on empty sky.
-      camera.rotateX(-CAM_TILT);
     }
 
     // =====================================================================
@@ -2190,12 +2204,12 @@ window.plethoraBit = {
 
       if (rec.mode === "joy") {
         const ox = p.x - rec.sx, oy = p.y - rec.sy;
-        const max = 56, len = Math.hypot(ox, oy);
+        const max = 74, len = Math.hypot(ox, oy);
         const k = len > max ? max / len : 1;
         joyVec.x = (ox * k) / max;
         joyVec.y = (oy * k) / max;
-        el.knob.style.left = (50 + joyVec.x * 46) + "%";
-        el.knob.style.top = (50 + joyVec.y * 46) + "%";
+        el.knob.style.left = (50 + joyVec.x * 40) + "%";
+        el.knob.style.top = (50 + joyVec.y * 40) + "%";
         if (len > 6) firstGesture();
         return;
       }
@@ -2208,8 +2222,8 @@ window.plethoraBit = {
         return;
       }
       // single-finger drag orbits
-      camYaw -= dx * 0.0062;
-      camPitch = clamp(camPitch - dy * 0.0052, 0.12, 1.32);
+      camYaw -= dx * 0.0028;
+      camPitch = clamp(camPitch - dy * 0.0024, 0.18, 1.32);
     });
 
     function endPointer(e) {
@@ -2479,7 +2493,7 @@ window.plethoraBit = {
       let amount = 0;
       let haveDir = false;
       const jlen = Math.hypot(joyVec.x, joyVec.y);
-      if (jlen > 0.12) {
+      if (jlen > 0.16) {
         const e = camera.matrixWorld.elements;
         _mR.set(e[0], e[1], e[2]).addScaledVector(charPos, -(e[0] * charPos.x + e[1] * charPos.y + e[2] * charPos.z));
         _mF.set(-e[8], -e[9], -e[10]);
@@ -2487,7 +2501,11 @@ window.plethoraBit = {
         if (_mR.lengthSq() > 1e-6 && _mF.lengthSq() > 1e-6) {
           _mR.normalize(); _mF.normalize();
           _mDir.set(0, 0, 0).addScaledVector(_mR, joyVec.x).addScaledVector(_mF, -joyVec.y);
-          if (_mDir.lengthSq() > 1e-6) { _mDir.normalize(); haveDir = true; amount = Math.min(1, jlen); }
+          if (_mDir.lengthSq() > 1e-6) {
+            _mDir.normalize();
+            haveDir = true;
+            amount = Math.pow(clamp((jlen - 0.16) / 0.84, 0, 1), 1.45);
+          }
         }
       } else if (walkTarget) {
         _mDir.copy(walkTarget).addScaledVector(charPos, -walkTarget.dot(charPos));
@@ -2509,7 +2527,7 @@ window.plethoraBit = {
           _mTmp.copy(_mDir).addScaledVector(charPos, -_mDir.dot(charPos));
           if (_mTmp.lengthSq() > 1e-8) {
             _mTmp.normalize();
-            turnToward(charHeading, _mTmp, charPos, 10 * dt);
+            turnToward(charHeading, _mTmp, charPos, 5.2 * dt);
           }
           orthoHeading();
         }
@@ -2582,7 +2600,7 @@ window.plethoraBit = {
       updateCamera(dt);
       if (camYaw > Math.PI) camYaw -= Math.PI * 2;
       else if (camYaw < -Math.PI) camYaw += Math.PI * 2;
-      if (moveAmt > 0.08 && camIds.length === 0) camYaw -= camYaw * damp(dt, 0.85);
+      if (moveAmt > 0.08 && camIds.length === 0) camYaw -= camYaw * damp(dt, 0.55);
 
       // ---- build target ----
       if (focusTile >= 0) {
@@ -2595,7 +2613,7 @@ window.plethoraBit = {
       setHighlight(targetTile);
       const ok = buildCheck(targetTile, tool).ok;
       hlMat.color.setHex(ok ? 0x9dffb0 : 0xff9c8a);
-      hlMat.opacity = 0.30 + Math.sin(timeMs * 0.005) * 0.10 + (ok ? 0.16 : 0);
+      hlMat.opacity = 0.48 + Math.sin(timeMs * 0.005) * 0.12 + (ok ? 0.14 : 0);
       el.build.classList.toggle("bad", !ok);
 
       // ---- growth ----
