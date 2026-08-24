@@ -1110,8 +1110,13 @@ window.plethoraBit = {
       // Side rails / kerbs so the path edge reads clearly.
       const kerbMat = mat("kerb" + b.id, b.wallColor, b.wallTex(), 6, 1);
       const kStart = seg.id === 0 ? -6 : PATH_W / 2 - 0.4;
-      const kEnd = L + (seg.turn !== 0 ? PATH_W / 2 : 6);
       for (const side of [-1, 1]) {
+        // On the side the path turns toward, the kerb and wall must STOP
+        // before the bend — otherwise the corner you turn into is fenced off
+        // and the runner ploughs straight through the hedge.
+        const turnSide = seg.turn !== 0 && side === seg.turn;
+        const kEnd = turnSide ? L - PATH_W / 2 - 0.5 : L + (seg.turn !== 0 ? PATH_W / 2 : 6);
+        if (kEnd - kStart < 1) continue;
         const kerb = meshOf(GEO.box, kerbMat, 0.5, 0.55, kEnd - kStart);
         place(kerb, seg, (kStart + kEnd) / 2, side * (PATH_W / 2 + 0.2), 0.1);
         add(kerb);
@@ -1122,10 +1127,13 @@ window.plethoraBit = {
       const WT = 12;
       const wallMat = mat("wall" + b.id, b.wallColor, b.wallTex(), WT / 4, 4.2 / 4);
       const wStart = seg.id === 0 ? -8 : PATH_W / 2 + 0.2;
-      const wEnd = L + (seg.turn !== 0 ? PATH_W / 2 + 0.2 : 6);
-      const wallSpan = wEnd - wStart, wn = Math.max(1, Math.ceil(wallSpan / WT));
-      const wstep = wallSpan / wn;
       for (const side of [-1, 1]) {
+        const turnSide = seg.turn !== 0 && side === seg.turn;
+        const wEnd = turnSide ? L - PATH_W / 2 - 0.5 : L + (seg.turn !== 0 ? PATH_W / 2 + 0.2 : 6);
+        const wallSpan = wEnd - wStart;
+        if (wallSpan < 1) continue;
+        const wn = Math.max(1, Math.ceil(wallSpan / WT));
+        const wstep = wallSpan / wn;
         for (let i = 0; i < wn; i++) {
           const wall = meshOf(GEO.box, wallMat, 3.2, 4.2, wstep + 0.05);
           place(wall, seg, wStart + wstep * (i + 0.5), side * (PATH_W / 2 + 2.4), 1.5);
@@ -1158,7 +1166,9 @@ window.plethoraBit = {
       const accentMat = mat("acc" + b.id, b.accent, null, 1, 1);
       for (let i = 0; i < Math.floor(L / 13); i++) {
         const z = 6 + i * 13 + rnd(-2.5, 2.5);
-        const side = Math.random() < 0.5 ? -1 : 1;
+        let side = Math.random() < 0.5 ? -1 : 1;
+        // Never plant scenery in the mouth of the turn.
+        if (seg.turn !== 0 && z > L - PATH_W - 8) side = -seg.turn;
         const lat = side * (PATH_W / 2 + rnd(3.4, 6.2));
         if (b.prop === "tree") {
           const trunk = meshOf(GEO.cyl, propMat, 0.5, 11, 0.5);
@@ -1184,7 +1194,7 @@ window.plethoraBit = {
           place(sp, seg, z, lat, 4); add(sp);
         }
         // Small dressing right at the path edge: urns, rubble, vines, glyphs.
-        if (Math.random() < 0.4) {
+        if (Math.random() < 0.4 && !(seg.turn !== 0 && z > L - PATH_W - 6)) {
           const eside = Math.random() < 0.5 ? -1 : 1;
           const elat = eside * (PATH_W / 2 + rnd(0.7, 1.5));
           const roll = Math.random();
@@ -1223,8 +1233,8 @@ window.plethoraBit = {
       // side, so the player can read the corner before they reach it.
       if (seg.turn !== 0) {
         // The corner deck, so the turn has floor under it.
-        const corner = meshOf(GEO.box, pathMat, PATH_W, 0.5, PATH_W);
-        place(corner, seg, L + PATH_W / 2 - 0.5, 0, -0.25);
+        const corner = meshOf(GEO.box, pathMat, PATH_W + 5, 0.5, PATH_W + 3);
+        place(corner, seg, L + PATH_W / 2 - 1.2, seg.turn * 2.5, -0.25);
         add(corner);
 
         // Dead-end wall well beyond the deck, so it never crowds the turn.
@@ -1254,10 +1264,10 @@ window.plethoraBit = {
         // Torches marking the exit, on the side you must turn toward.
         for (let i = 0; i < 3; i++) {
           const post = meshOf(GEO.cyl, mat("torchpost", 0x3a2a1a, null, 1, 1), 0.16, 2.6, 0.16);
-          place(post, seg, L - 6 + i * 4.2, seg.turn * (PATH_W / 2 + 0.8), 1.3);
+          place(post, seg, L - 14 + i * 4.2, seg.turn * (PATH_W / 2 + 1.9), 1.3);
           add(post);
           const fire = meshOf(GEO.sphere, basicMat("torchfire", 0xffa63a), 0.42, 0.62, 0.42);
-          place(fire, seg, L - 6 + i * 4.2, seg.turn * (PATH_W / 2 + 0.8), 2.8);
+          place(fire, seg, L - 14 + i * 4.2, seg.turn * (PATH_W / 2 + 1.9), 2.8);
           add(fire);
           fire.userData.torch = i * 1.1;
         }
@@ -1267,7 +1277,7 @@ window.plethoraBit = {
       // Path-level decals: worn tracks, inlaid medallions, scattered leaves.
       // Deliberately low-contrast: anything bright and round on the deck
       // reads as a coin, which misleads the player.
-      const decalMat = mat("decal" + b.id, b.wallColor, null, 1, 1);
+      const decalMat = mat("decal" + b.id, b.pathColor, null, 1, 1);
       for (let i = 0; i < Math.floor(L / 14); i++) {
         const dz2 = 10 + i * 14 + rnd(-3, 3);
         if (dz2 > L - 8) continue;
@@ -1276,7 +1286,7 @@ window.plethoraBit = {
         med.rotation.y += 0.78;
         add(med);
         for (let k = 0; k < 3; k++) {
-          const chip = meshOf(GEO.box, mat("chip" + b.id, b.wallColor, null, 1, 1),
+          const chip = meshOf(GEO.box, mat("chip" + b.id, b.pathColor, null, 1, 1),
             rnd(0.2, 0.5), 0.04, rnd(0.2, 0.5));
           place(chip, seg, dz2 + rnd(-4, 4), rnd(-PATH_W / 2 + 0.4, PATH_W / 2 - 0.4), 0.028);
           chip.rotation.y += rnd(0, 3);
