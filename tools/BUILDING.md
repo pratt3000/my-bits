@@ -156,9 +156,20 @@ cause is **not** characterised. What is established:
   no accepted bit regressed. Whatever it is, it is stable and it is not
   something the source was edited into.
 
+- It is not comments. Stripping every comment from `forehead` with a
+  string-aware stripper — 33KB down to 30KB, parses, identical behaviour —
+  changes nothing. (This was listed as ruled out before; it is now verified
+  directly rather than taken on trust.)
+- It is not the `ctx.loadFont` calls. Removing all three still fails.
+- A **6.5KB prefix** of `forehead` is accepted. So a valid, working bit built
+  from the same source, same manifest and same APIs uploads fine — whatever
+  the trigger is, it is somewhere in the rest of the file, and it is not any
+  single line, because both halves pass alone.
+
 This is worth reporting to Plethora with the reproduction rather than guessing
 at further: the message names no offending resource, and the five bits contain
-no remote URL of any kind.
+no remote URL of any kind. Two things would settle it in minutes on their side
+and cannot be settled from out here — which rule fired, and on what line.
 
 `504 deadline_exceeded` is different and is genuinely just a slow server: the
 draft is usually created anyway, and a retry reports `updated`. `tools/upload.mjs`
