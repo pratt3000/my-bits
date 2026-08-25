@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Turing Soup",
+  "description": "Two chemicals react and diffuse, and coral, worms and spirals grow out of the rule. Drag to inject, steer feed and kill on the pad, and watch the colony morph.",
+  "tags": [
+    "art",
+    "generative",
+    "simulation",
+    "fidget",
+    "sensory",
+    "touch",
+    "science"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic",
+    "storage"
+  ],
+  "dependencies": []
+}

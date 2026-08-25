@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Ball Pool",
+  "description": "Eight-ball pool built for one thumb. Drag anywhere to aim, put english on the cue ball, then pull the power bar and let go. Real rolling physics, pocket jaws that rattle a ball back out, and every clack, cushion thud and pocket drop synthesised live. Rack up against an Easy, Medium or Hard bot, or pass the phone for two players. Five global leaderboards: fewest shots to clear a rack at each difficulty, the longest run in a single visit, and the longest win streak.",
+  "tags": [
+    "pool",
+    "billiards",
+    "8-ball",
+    "game",
+    "sports",
+    "physics",
+    "arcade",
+    "multiplayer",
+    "leaderboard",
+    "bot"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "easy_shots": {
+        "label": "Shots to Win (Easy)",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "medium_shots": {
+        "label": "Shots to Win (Medium)",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "hard_shots": {
+        "label": "Shots to Win (Hard)",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "best_run": {
+        "label": "Longest Run",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "win_streak": {
+        "label": "Longest Win Streak",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

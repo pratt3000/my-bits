@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Last Straw",
+  "description": "Twenty thousand straws. One needle. Orbit a golden-hour haystack, pull straws out one at a time — or press and hold to burrow a shaft — and hunt for the needle buried deep inside. The hay runs warm when you get close, eight pieces of worthless junk glint exactly like the real thing and each has its own sad little story, and your dig saves itself so you can come back and keep suffering later.",
+  "tags": [
+    "3d",
+    "puzzle",
+    "search",
+    "haystack",
+    "relaxing",
+    "long-play"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic",
+    "audio",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "fewest_straws": {
+        "label": "Fewest Straws",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "fastest_find": {
+        "label": "Fastest Find",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    },
+    "local": {
+      "dig": {
+        "label": "Dig in progress"
+      }
+    }
+  }
+}
