@@ -787,6 +787,10 @@ window.plethoraBit = {
     let flash = { a: 0, ink: "#fff" };
     let banner = null;
     let bestMs = 0, lastSnap = null, winner = null, matchStart = 0;
+    // A sheet covering the screen stops the hand. Cards would otherwise keep
+    // flipping behind a settings panel nobody can slam through, and the open
+    // match window would charge whoever opened it for the reading time.
+    let sheetOpen = false, sheetSince = 0;
     const claims = [];             // every slam this match, in delivery order
 
     function makePlayers(n) {
@@ -895,10 +899,11 @@ window.plethoraBit = {
       if (matchOpen) { matchOpen = false; missPulse = 1; }
       if (!stock.length) { phase = "resolve"; resolveT = 1.4; return; }
       const card = stock.pop();
+      const a = Math.random() * TAU, d = 7 + Math.random() * 6;
       pile.push({
         card, landed: false, t0: now,
-        rot: (Math.random() - 0.5) * 0.30,
-        ox: (Math.random() - 0.5) * 11, oy: (Math.random() - 0.5) * 11,
+        rot: (Math.random() - 0.5) * 0.32,
+        ox: Math.cos(a) * d, oy: Math.sin(a) * d,
       });
       const prog = 1 - stock.length / DECK_N;
       // The deal quickens as the stock empties. Nothing dramatic — just enough
@@ -985,9 +990,10 @@ window.plethoraBit = {
         // Forfeited cards go under the pile, face down. On top they would blank
         // out the card the next flip has to match against, which would turn a
         // penalty into a shield.
+        const a = Math.random() * TAU, d = 7 + Math.random() * 6;
         pile.unshift({
           card: null, landed: true, t0: now - LAND_MS,
-          rot: (Math.random() - 0.5) * 0.3, ox: (Math.random() - 0.5) * 11, oy: (Math.random() - 0.5) * 11,
+          rot: (Math.random() - 0.5) * 0.32, ox: Math.cos(a) * d, oy: Math.sin(a) * d,
         });
       }
       flash.a = 0.42; flash.ink = "#ff4a4a";
@@ -1182,12 +1188,13 @@ window.plethoraBit = {
         const tx = L.px + e.ox, ty = L.py + e.oy;
         const x = lerp(L.sx, tx, p), y = lerp(L.sy, ty, p);
         const rot = lerp(-0.05, e.rot, p);
-        const grow = 1 + 0.20 * (1 - p);
+        const grow = 1 + 0.13 * (1 - p);
         if (t < 1 && e.card) {
           // The turn: the card is face down for the first half of the throw and
           // face up for the second, squashed through zero width in between.
-          const face = t >= 0.5;
-          const sx = Math.abs(Math.cos(t * Math.PI));
+          const f = clamp(t / 0.55, 0, 1);
+          const face = f >= 0.5;
+          const sx = Math.abs(Math.cos(f * Math.PI));
           g.save();
           g.translate(x, y);
           g.rotate(rot);
@@ -1278,8 +1285,8 @@ window.plethoraBit = {
       wash.addColorStop(0.62, hexA(p.ink, 0));
       g.fillStyle = wash;
       g.fill();
-      g.strokeStyle = hexA(p.ink, armed ? 0.95 : 0.42);
-      g.lineWidth = armed ? 2.4 : 1.4;
+      g.strokeStyle = p.lock > 0 ? "rgba(255,90,90,0.75)" : hexA(p.ink, armed ? 0.95 : 0.42);
+      g.lineWidth = armed || p.lock > 0 ? 2.4 : 1.4;
       g.stroke();
 
       // Inner tread, the concentric inset that makes it read as a pad you hit.
@@ -1330,8 +1337,8 @@ window.plethoraBit = {
         // progress bar would say the same thing in a language this table does
         // not speak.
         // The seat's own suit, pressed into the leather like a maker's mark.
-        g.fillStyle = hexA(p.ink, 0.20);
-        suitPath(g, p.suit, lw * 0.29, lh * 0.02, Math.min(lh * 0.20, 22));
+        g.fillStyle = hexA(p.ink, 0.22);
+        suitPath(g, p.suit, Math.min(lw * 0.30, 96), lh * 0.02, Math.min(lh * 0.115, 13));
 
         miniStack(-lw * 0.16, lh * 0.03, p.cards, clamp(lh / 140 * 0.52, 0.20, 0.38));
 
@@ -1518,7 +1525,7 @@ window.plethoraBit = {
       // whatever the frame rate, and a phone that drops to fifteen frames a
       // second must not quietly halve the speed everybody is racing against.
       const dt = Math.min(dtMs, 60) / 1000;
-      const dtG = Math.min(dtMs, 250) / 1000;
+      const dtG = sheetOpen ? 0 : Math.min(dtMs, 250) / 1000;
       const now = performance.now();
 
       shake *= Math.pow(0.0022, dt);
@@ -1588,7 +1595,7 @@ window.plethoraBit = {
     root.innerHTML =
       /* ---- chrome, in the corner both end pads were shortened to free ---- */
       '<div style="position:absolute;right:10px;top:' + (SAFE_T + 10) + 'px;display:flex;' +
-        'flex-direction:column;gap:7px;z-index:90;pointer-events:none;">' +
+        'flex-direction:column;gap:7px;z-index:65;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="' + btn + 'font-size:17px;">♪</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + btn + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
@@ -1658,7 +1665,7 @@ window.plethoraBit = {
       '<div data-el="helpp" style="' + sheet + '">' +
         '<div style="' + panel + '">' +
           '<div style="font-size:19px;font-weight:700;margin-bottom:12px;">How to play</div>' +
-          '<ul style="font-size:14px;line-height:1.7;opacity:0.86;padding-left:18px;margin:0;">' +
+          '<ul style="font-size:13.5px;line-height:1.62;opacity:0.86;padding-left:18px;margin:0;">' +
             '<li>Lay the phone flat. Everyone takes the pad on their own edge.</li>' +
             '<li>Cards flip onto the middle pile by themselves, one at a time.</li>' +
             '<li>The moment a card lands on <b>another of the same rank</b>, the ring turns gold — slam your pad.</li>' +
@@ -1735,10 +1742,22 @@ window.plethoraBit = {
       paintMute();
       paintAllPills();
     });
-    shell.tap(shell.el("cog"), () => { shell.el("cogp").style.display = "flex"; paintAllPills(); });
-    shell.tap(shell.el("cogp-close"), () => { shell.el("cogp").style.display = "none"; });
-    shell.tap(shell.el("help"), () => { shell.el("helpp").style.display = "flex"; });
-    shell.tap(shell.el("helpp-close"), () => { shell.el("helpp").style.display = "none"; });
+    /** Open or close a full-screen sheet, freezing the hand while it is up. */
+    function sheet(name, open) {
+      shell.el(name).style.display = open ? "flex" : "none";
+      if (open === sheetOpen) return;
+      sheetOpen = open;
+      if (open) { sheetSince = performance.now(); return; }
+      // Give back the time the panel was up, or the reaction clock would bill
+      // the reader for it and an open match window would expire unfairly.
+      const held = performance.now() - sheetSince;
+      matchAt += held;
+      graceUntil += held;
+    }
+    shell.tap(shell.el("cog"), () => { sheet("cogp", true); paintAllPills(); });
+    shell.tap(shell.el("cogp-close"), () => { sheet("cogp", false); });
+    shell.tap(shell.el("help"), () => { sheet("helpp", true); });
+    shell.tap(shell.el("helpp-close"), () => { sheet("helpp", false); });
 
     shell.tap(shell.el("deal"), async () => {
       ctx.platform.start({ players: settings.players });
@@ -1836,6 +1855,7 @@ window.plethoraBit = {
       get bestMs() { return bestMs; },
       get winner() { return winner ? winner.name : null; },
       get baked() { return BAKED; },
+      get paused() { return sheetOpen; },
       pad(seat) { return padCentre(seat); },
     };
     ctx.onDestroy(() => { try { delete window.__SNAP__; } catch (_) {} });

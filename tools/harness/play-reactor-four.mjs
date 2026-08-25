@@ -26,6 +26,18 @@ const until = (expr, ms = 20000) => bit.probe(([e, m]) => new Promise((res) => {
 await bit.wait(700);
 await bit.shot("r4-1-title");
 
+// --- chrome panels ---------------------------------------------------------
+await bit.tap(365, 105);                       // settings
+await bit.wait(320);
+await bit.shot("r4-0a-settings");
+await bit.tap(195, 520);                       // done
+await bit.wait(250);
+await bit.tap(365, 145);                       // how to play
+await bit.wait(320);
+await bit.shot("r4-0b-help");
+await bit.tap(195, 640);
+await bit.wait(250);
+
 // --- crew picker: four stations -------------------------------------------
 await bit.tap(293, 543);
 await bit.wait(500);
@@ -44,15 +56,23 @@ console.log("armed after simultaneous tap:",
 
 await until("R.phase === 'brief'", 4000);
 await bit.shot("r4-3-brief");
+console.log("phase when the brief shot landed:",
+  await probe(() => window.__REACTOR__.phase));
 
-// --- round 1: a deliberate false start on station 3 (left) ----------------
+// --- a deliberate false start on the left station -------------------------
+// Slapping while the signal is false must lock that station and nobody else.
 await until("R.phase === 'charge'", 8000);
-await bit.wait(320);
 await bit.shot("r4-4-charge");
-await bit.tap(taps[2].x, taps[2].y);
-await bit.wait(260);
-console.log("after false start — locked:",
-  JSON.stringify(await probe(() => window.__REACTOR__.locked)),
+let scrammed = false;
+for (let a = 0; a < 5 && !scrammed; a++) {
+  await until("R.phase === 'charge' && R.live === false", 26000);
+  await bit.tap(taps[2].x, taps[2].y);
+  await bit.wait(240);
+  scrammed = (await probe(() => window.__REACTOR__.locked))[2];
+  if (!scrammed) await until("R.phase === 'charge'", 26000);
+}
+console.log("false start ->", scrammed ? "station 3 scrammed" : "NEVER SCRAMMED",
+  "locked:", JSON.stringify(await probe(() => window.__REACTOR__.locked)),
   "scores:", JSON.stringify(await probe(() => window.__REACTOR__.scores)));
 await bit.shot("r4-5-scram");
 
@@ -116,7 +136,7 @@ console.log("after rematch:", JSON.stringify(await probe(() => ({
 await bit.shot("r4-9-rematch");
 
 const ok = final.phase === "over" && final.winner >= 0 &&
-  final.scores[final.winner] >= final.target;
+  final.scores[final.winner] >= final.target && scrammed;
 console.log(ok ? "PASS: match reached its win condition" : "FAIL: never reached a win");
 
 const errs = (await bit.errors()).filter(e => !/404/.test(e));

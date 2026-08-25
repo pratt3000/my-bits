@@ -453,6 +453,14 @@ window.plethoraBit = {
     // z=0, so this stays a straight linear scale.
     const P = (px) => px / (H / 2);
 
+    // The whole reactor hangs off one group, and every dimension inside it is a
+    // fraction of the port radius. A rotation changes the port, and rescaling
+    // the rig is then one number rather than rebuilt geometry.
+    const rig = new THREE.Group();
+    scene.add(rig);
+    const R0 = portR;
+    const K = (f) => P(R0 * f);
+
     /** A soft radial sprite, baked once. Used for the bloom and the motes. */
     function radialTexture(size, stops) {
       const c = surface(size, size);
@@ -516,14 +524,14 @@ window.plethoraBit = {
     // --- chamber wall ---------------------------------------------------
     const chamberTex = chamberTexture();
     const chamber = new THREE.Mesh(
-      new THREE.CircleGeometry(P(340), 64),
+      new THREE.CircleGeometry(K(3.0), 64),
       new THREE.MeshBasicMaterial({
         color: chamberTex ? 0xffffff : 0x0a0f18,
         map: chamberTex || null,
       })
     );
-    chamber.position.z = -P(185);
-    scene.add(chamber);
+    chamber.position.z = -K(1.7);
+    rig.add(chamber);
 
     /**
      * The core's skin. A flat emissive sphere reads as a sticker; this bakes a
@@ -589,8 +597,8 @@ window.plethoraBit = {
       color: 0x080b12, emissive: coreCol.clone(), emissiveIntensity: 1.0,
       emissiveMap: plasmaTex || null, roughness: 0.45, metalness: 0.15,
     });
-    const core = new THREE.Mesh(new THREE.SphereGeometry(P(70), 56, 40), coreMat);
-    scene.add(core);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(K(0.60), 56, 40), coreMat);
+    rig.add(core);
 
     // A faceted cage riding just off the surface. Counter-rotating, it makes
     // the core read as a contained reaction rather than a painted ball.
@@ -598,22 +606,22 @@ window.plethoraBit = {
       color: coreCol.clone(), wireframe: true, transparent: true, opacity: 0.30,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    const cage = new THREE.Mesh(new THREE.IcosahedronGeometry(P(84), 1), cageMat);
-    scene.add(cage);
+    const cage = new THREE.Mesh(new THREE.IcosahedronGeometry(K(0.735), 1), cageMat);
+    rig.add(cage);
 
     // Nested back-faced shells: the cheapest honest stand-in for volume. Each
     // one adds light where the sightline is longest, so the core has a falloff
     // instead of an edge.
     const halos = [];
-    for (const [r, op] of [[80, 0.11], [98, 0.068], [120, 0.040], [148, 0.022]]) {
+    for (const [r, op] of [[0.70, 0.11], [0.855, 0.068], [1.05, 0.040], [1.30, 0.022]]) {
       const m = new THREE.Mesh(
-        new THREE.SphereGeometry(P(r), 32, 24),
+        new THREE.SphereGeometry(K(r), 32, 24),
         new THREE.MeshBasicMaterial({
           color: coreCol.clone(), transparent: true, opacity: op, side: THREE.BackSide,
           blending: THREE.AdditiveBlending, depthWrite: false,
         })
       );
-      scene.add(m);
+      rig.add(m);
       halos.push({ mesh: m, base: op });
     }
 
@@ -626,9 +634,9 @@ window.plethoraBit = {
       color: coreCol.clone(), map: bloomTex || null, transparent: true,
       opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    const bloom = new THREE.Mesh(new THREE.PlaneGeometry(P(360), P(360)), bloomMat);
-    bloom.position.z = P(70);
-    scene.add(bloom);
+    const bloom = new THREE.Mesh(new THREE.PlaneGeometry(K(3.2), K(3.2)), bloomMat);
+    bloom.position.z = K(0.62);
+    rig.add(bloom);
 
     // --- gyroscope rings -------------------------------------------------
     const ringMat = new THREE.MeshStandardMaterial({
@@ -636,12 +644,12 @@ window.plethoraBit = {
       emissive: coreCol.clone(), emissiveIntensity: 0.18,
     });
     const rings = [];
-    for (const [r, ax] of [[90, "x"], [99, "y"], [108, "z"]]) {
-      const m = new THREE.Mesh(new THREE.TorusGeometry(P(r), P(2.6), 10, 80), ringMat);
+    for (const [r, ax] of [[0.79, "x"], [0.875, "y"], [0.955, "z"]]) {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(K(r), K(0.024), 10, 80), ringMat);
       if (ax === "x") m.rotation.x = 0.5;
       if (ax === "y") { m.rotation.y = 0.9; m.rotation.x = 1.1; }
       if (ax === "z") { m.rotation.x = 1.5; m.rotation.z = 0.4; }
-      scene.add(m);
+      rig.add(m);
       rings.push({ mesh: m, ax });
     }
 
@@ -654,11 +662,11 @@ window.plethoraBit = {
     });
     const rods = [];
     for (let k = 0; k < 8; k++) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(P(4.5), P(34), P(4.5)), rodMat);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(K(0.042), K(0.31), K(0.042)), rodMat);
       const a = k * TAU / 8;
       m.userData.a = a;
       m.rotation.z = -a + Math.PI / 2;
-      scene.add(m);
+      rig.add(m);
       rods.push(m);
     }
 
@@ -671,52 +679,52 @@ window.plethoraBit = {
     const moteState = [];
     for (let k = 0; k < MOTES; k++) {
       moteState.push({
-        a: Math.random() * TAU, r: P(60 + Math.random() * 90),
-        y: (Math.random() - 0.5) * P(160), sp: 0.5 + Math.random() * 1.4,
+        a: Math.random() * TAU, r: K(0.55 + Math.random() * 0.82),
+        y: (Math.random() - 0.5) * K(1.45), sp: 0.5 + Math.random() * 1.4,
         vr: 0, vy: 0, blast: 0,
       });
     }
     const moteGeo = new THREE.BufferGeometry();
     moteGeo.setAttribute("position", new THREE.BufferAttribute(motePos, 3));
     const moteMat = new THREE.PointsMaterial({
-      size: P(7), map: moteTex || null, color: coreCol.clone(),
+      size: K(0.065), map: moteTex || null, color: coreCol.clone(),
       transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending,
       depthWrite: false, sizeAttenuation: true,
     });
     const motes = new THREE.Points(moteGeo, moteMat);
-    scene.add(motes);
+    rig.add(motes);
 
     // --- discharge shockwave --------------------------------------------
     const waveMat = new THREE.MeshBasicMaterial({
       color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    const wave = new THREE.Mesh(new THREE.RingGeometry(P(88), P(100), 96), waveMat);
-    wave.position.z = P(60);
+    const wave = new THREE.Mesh(new THREE.RingGeometry(K(0.80), K(0.91), 96), waveMat);
+    wave.position.z = K(0.55);
     wave.visible = false;
-    scene.add(wave);
+    rig.add(wave);
     let waveT = 0;
 
     // --- readout plate ---------------------------------------------------
     // The master gauge. Smoked glass across the core's face, carrying whatever
     // the round asks people to read. GO rounds hide it, so the bare core is
     // itself the signal.
-    const plateW = 170, plateH = 98;
+    const plateW = 1.52, plateH = 0.86;      // port radii
     const plateSurf = surface(512, 295);
     const plateTex = plateSurf ? new THREE.CanvasTexture(plateSurf) : null;
     if (plateTex) { plateTex.colorSpace = THREE.SRGBColorSpace; ctx.onDestroy(() => plateTex.dispose()); }
     // depthTest off and a late renderOrder: the additive halos live in front of
     // the core's surface, and without this the master gauge reads through them.
     const plate = new THREE.Mesh(
-      new THREE.PlaneGeometry(P(plateW), P(plateH)),
+      new THREE.PlaneGeometry(K(plateW), K(plateH)),
       new THREE.MeshBasicMaterial({
         map: plateTex || null, transparent: true, depthWrite: false, depthTest: false,
       })
     );
     plate.renderOrder = 40;
-    plate.position.z = P(150);
+    plate.position.z = K(1.35);
     plate.visible = false;
-    scene.add(plate);
+    rig.add(plate);
 
     function paintPlate(sig) {
       if (!plateSurf || !plateTex) return;
@@ -773,7 +781,7 @@ window.plethoraBit = {
 
     // --- lights -----------------------------------------------------------
     scene.add(new THREE.AmbientLight(0x24344f, 0.55));
-    const coreLight = new THREE.PointLight(IDLE.hex, 1.2, P(520), 2);
+    const coreLight = new THREE.PointLight(IDLE.hex, 1.2, K(4.6), 2);
     scene.add(coreLight);
     const rim = new THREE.DirectionalLight(0x9fc4ff, 0.5);
     rim.position.set(0.6, 0.9, 1.2);
@@ -1255,7 +1263,7 @@ window.plethoraBit = {
       setSignal({ kind: null, on: false });
       phase = "brief";
       roundStart = now();
-      phaseUntil = roundStart + 1650 * pace();
+      phaseUntil = roundStart + 2200 * pace();
       sound.sting("tap");
       sound.heat(0.2);
       updateChrome();
@@ -1411,8 +1419,8 @@ window.plethoraBit = {
     function blastMotes() {
       for (const m of moteState) {
         m.blast = 1;
-        m.vr = P(120 + Math.random() * 260);
-        m.vy = (Math.random() - 0.5) * P(220);
+        m.vr = K(1.1 + Math.random() * 2.4);
+        m.vy = (Math.random() - 0.5) * K(2.0);
       }
     }
 
@@ -1788,7 +1796,7 @@ window.plethoraBit = {
       // Rods pull out as the core heats: the tension made mechanical.
       rodMat.emissive.copy(coreCol);
       rodMat.emissiveIntensity = 0.3 + charge * 1.1;
-      const rr = P(82) + charge * P(24);
+      const rr = K(0.71) + charge * K(0.21);
       for (const m of rods) {
         const a = m.userData.a + t * 0.00006 * (1 + charge * 4);
         m.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0);
@@ -1798,7 +1806,7 @@ window.plethoraBit = {
       // Motes: drawn inward while charging, thrown outward on discharge.
       moteMat.color.copy(coreCol);
       moteMat.opacity = 0.25 + charge * 0.45;
-      const inner = P(46), outer = P(150);
+      const inner = K(0.42), outer = K(1.36);
       for (let k = 0; k < MOTES; k++) {
         const m = moteState[k];
         if (m.blast > 0) {
@@ -1806,12 +1814,12 @@ window.plethoraBit = {
           m.r += m.vr * dt;
           m.y += m.vy * dt;
           m.vr *= 0.94; m.vy *= 0.94;
-          if (m.r > P(250)) { m.r = inner + Math.random() * (outer - inner); m.blast = 0; m.y = (Math.random() - 0.5) * P(150); }
+          if (m.r > K(2.3)) { m.r = inner + Math.random() * (outer - inner); m.blast = 0; m.y = (Math.random() - 0.5) * K(1.35); }
         } else {
           m.a += dt * m.sp * (0.35 + charge * 2.4);
           m.r -= dt * (0.02 + charge * 0.32) * m.sp;
           m.y *= 1 - dt * 0.25 * charge;
-          if (m.r < inner) { m.r = outer * (0.8 + Math.random() * 0.45); m.y = (Math.random() - 0.5) * P(170); }
+          if (m.r < inner) { m.r = outer * (0.8 + Math.random() * 0.45); m.y = (Math.random() - 0.5) * K(1.55); }
         }
         motePos[k * 3] = Math.cos(m.a) * m.r;
         motePos[k * 3 + 1] = Math.sin(m.a) * m.r * 0.85 + m.y * 0.25;
@@ -1954,6 +1962,21 @@ window.plethoraBit = {
       gr.addColorStop(1, rgba(cc, 0));
       fx.fillStyle = gr;
       fx.fillRect(cx - r1, cy - r1, r1 * 2, r1 * 2);
+      // Pulses running out of the port, faster as the core winds up. The whole
+      // feel of the game is the build, and the plating has to carry it too.
+      if (phase === "charge" || phase === "armed") {
+        const period = 1500 - charge * 950;
+        for (let k = 0; k < 2; k++) {
+          const ph = (((t + k * period * 0.5) % period) + period) % period / period;
+          const rr = portR + 4 + ph * Math.max(W, H) * 0.42;
+          fx.strokeStyle = rgba(cc, (1 - ph) * (1 - ph) * 0.34 * charge);
+          fx.lineWidth = 1.6 + ph * 5;
+          fx.beginPath();
+          fx.arc(cx, cy, rr, 0, TAU);
+          fx.stroke();
+        }
+      }
+
       // A hot ring right at the bezel — concentric strokes, never a blur filter.
       for (const [w, al] of [[13, 0.09], [7, 0.18], [3, 0.42], [1.4, 0.9]]) {
         fx.strokeStyle = rgba(cc, al * (0.35 + charge * 0.65));
@@ -1983,6 +2006,7 @@ window.plethoraBit = {
       renderer.setSize(W, H, false);
       camera.aspect = W / H;
       camera.updateProjectionMatrix();
+      rig.scale.setScalar(portR / R0);
       fxc.width = Math.round(W * ctx.dpr);
       fxc.height = Math.round(H * ctx.dpr);
       bakeFrame();

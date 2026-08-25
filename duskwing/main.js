@@ -108,11 +108,11 @@ window.plethoraBit = {
     const HOURS = [
       {
         id: "DAWN",
-        base: [[0.00, "#06222B"], [0.26, "#0C3A3E"], [0.52, "#1E4F43"], [0.74, "#5C5C28"], [0.90, "#8E4E12"], [1.00, "#240C0C"]],
+        base: [[0.00, "#062A3C"], [0.28, "#0C4C58"], [0.52, "#136058"], [0.72, "#3D6438"], [0.88, "#96540F"], [1.00, "#2A0E08"]],
         blooms: [
-          { x: 0.66, y: 0.50, r: 1.00, stops: [[0, "rgba(253,254,231,0.95)"], [0.16, "rgba(252,252,60,0.50)"], [0.44, "rgba(203,79,6,0.26)"], [1, "rgba(203,79,6,0)"]] },
-          { x: 0.16, y: 0.20, r: 0.58, stops: [[0, "rgba(226,246,236,0.42)"], [0.3, "rgba(110,200,180,0.18)"], [1, "rgba(110,200,180,0)"]] },
-          { x: 0.34, y: 0.92, r: 0.52, stops: [[0, "rgba(250,110,30,0.36)"], [0.4, "rgba(190,50,10,0.14)"], [1, "rgba(190,50,10,0)"]] },
+          { x: 0.70, y: 0.66, r: 0.94, stops: [[0, "rgba(253,254,231,0.95)"], [0.14, "rgba(252,236,96,0.52)"], [0.42, "rgba(214,104,10,0.26)"], [1, "rgba(203,79,6,0)"]] },
+          { x: 0.22, y: 0.17, r: 0.70, stops: [[0, "rgba(196,252,246,0.55)"], [0.20, "rgba(46,206,200,0.34)"], [0.52, "rgba(20,150,160,0.16)"], [1, "rgba(20,150,160,0)"]] },
+          { x: 0.36, y: 0.96, r: 0.56, stops: [[0, "rgba(255,150,40,0.44)"], [0.4, "rgba(190,50,10,0.16)"], [1, "rgba(190,50,10,0)"]] },
         ],
         ray: [255, 240, 170], mote: [255, 238, 198], ink: "#FFEFCD", fog: [230, 200, 130],
       },
@@ -161,9 +161,9 @@ window.plethoraBit = {
 
     // Gentle / Normal / Brutal: scroll speed, how fast it ramps, hazard density.
     const DIFF = [
-      { name: "GENTLE", v0: 0.58, ramp: 0.0055, cap: 1.28, dens: 0.78 },
-      { name: "NORMAL", v0: 0.70, ramp: 0.0085, cap: 1.62, dens: 1.00 },
-      { name: "BRUTAL", v0: 0.86, ramp: 0.0130, cap: 2.00, dens: 1.26 },
+      { name: "GENTLE", v0: 0.52, ramp: 0.0050, cap: 1.18, dens: 0.76 },
+      { name: "NORMAL", v0: 0.62, ramp: 0.0080, cap: 1.50, dens: 1.00 },
+      { name: "BRUTAL", v0: 0.78, ramp: 0.0125, cap: 1.92, dens: 1.28 },
     ];
 
     /* ===============================================================
@@ -206,7 +206,9 @@ window.plethoraBit = {
     // tracking, which is what actually produces the airy look.
     const DISP = "'Bebas Neue','Oswald','Anton','Arial Narrow',Impact,system-ui,sans-serif";
     const BODY = "'Nunito Sans','Nunito',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
-    try { ctx.loadFont("Bebas Neue"); ctx.loadFont("Nunito Sans"); } catch (_) {}
+    for (const fam of ["Bebas Neue", "Nunito Sans"]) {
+      try { const p = ctx.loadFont(fam); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+    }
 
     /* ===============================================================
      * LAYOUT
@@ -415,42 +417,44 @@ window.plethoraBit = {
     }
 
     /**
-     * One bloom sprite, reused for every glow in the game: the halo behind a
-     * hazard so its silhouette reads, the halo behind an eye, the white
-     * flash on a death. Blitted with globalAlpha under 'lighter', which is
-     * how you get soft light when ctx.filter = blur() is rejected at upload.
+     * One bloom sprite per colour, reused for every glow in the game: the halo
+     * behind a hazard so its silhouette reads, the halo behind an eye, the
+     * white flash on a death. Blitted with globalAlpha under 'lighter', which
+     * is how you get soft light when ctx.filter = blur() is rejected at
+     * upload. A white sprite cannot be recoloured at blit time under
+     * 'lighter' — tinting has to happen in the bake — and there are only nine
+     * colours in the whole game, so they are cached by colour.
      */
-    let bloomSprite = null;
-    function bakeBloom() {
-      const S = 160;
+    const bloomCache = {};
+    function bloomSprite(col) {
+      const key = col[0] + "," + col[1] + "," + col[2];
+      if (bloomCache[key] !== undefined) return bloomCache[key];
+      const S = 128;
       const c = surface(S, S);
-      if (!c) { bloomSprite = null; return; }
-      const t = c.getContext("2d");
-      const grd = t.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-      grd.addColorStop(0.00, "rgba(255,255,255,1)");
-      grd.addColorStop(0.16, "rgba(255,255,255,0.62)");
-      grd.addColorStop(0.42, "rgba(255,255,255,0.20)");
-      grd.addColorStop(0.72, "rgba(255,255,255,0.045)");
-      grd.addColorStop(1.00, "rgba(255,255,255,0)");
-      t.fillStyle = grd;
-      t.fillRect(0, 0, S, S);
-      bloomSprite = c;
+      if (c) {
+        const t = c.getContext("2d");
+        const grd = t.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+        grd.addColorStop(0.00, rgba(col, 1));
+        grd.addColorStop(0.14, rgba(col, 0.60));
+        grd.addColorStop(0.40, rgba(col, 0.20));
+        grd.addColorStop(0.70, rgba(col, 0.05));
+        grd.addColorStop(1.00, rgba(col, 0));
+        t.fillStyle = grd;
+        t.fillRect(0, 0, S, S);
+      }
+      bloomCache[key] = c;                                 // null → live gradient
+      return c;
     }
 
     /** Draw a soft light disc in `col` at (x,y). Falls back to a live gradient. */
     function bloom(x, y, r, col, alpha) {
+      if (!(alpha > 0.004) || !(r > 0)) return;
+      const sp = bloomSprite(col);
       g.save();
       g.globalCompositeOperation = "lighter";
-      g.globalAlpha = alpha;
-      if (bloomSprite) {
-        // A white sprite cannot be recoloured by alpha alone, so the colour is
-        // laid down first and the sprite multiplies it into a soft falloff.
-        g.fillStyle = rgba(col, 1);
-        g.globalCompositeOperation = "lighter";
-        g.drawImage(bloomSprite, x - r, y - r, r * 2, r * 2);
-        g.globalAlpha = alpha * 0.55;
-        g.fillStyle = rgba(col, 1);
-        g.beginPath(); g.arc(x, y, r * 0.30, 0, TAU); g.fill();
+      g.globalAlpha = clamp(alpha, 0, 1);
+      if (sp) {
+        g.drawImage(sp, x - r, y - r, r * 2, r * 2);
       } else {
         const grd = g.createRadialGradient(x, y, 0, x, y, r);
         grd.addColorStop(0, rgba(col, 0.9));
@@ -462,7 +466,7 @@ window.plethoraBit = {
       g.restore();
     }
 
-    function bakeAll() { bakeForest(); bakeGrain(); bakeBloom(); for (const k in skyCache) delete skyCache[k]; }
+    function bakeAll() { bakeForest(); bakeGrain(); for (const k in skyCache) delete skyCache[k]; }
     bakeAll();
 
     /* ===============================================================
@@ -474,8 +478,8 @@ window.plethoraBit = {
      * which makes the cave self-similar — two tall bands and four short
      * ones present exactly the same shapes at the same relative sizes.
      * ============================================================= */
-    const MIN_ROCK = 0.085;                            // thinnest rock between tunnels
-    const MIN_GAP  = 0.215;                            // tightest a tunnel is allowed to be
+    const MIN_ROCK = 0.075;                            // thinnest rock between tunnels
+    const MIN_GAP  = 0.250;                            // tightest a tunnel is allowed to be
 
     let pinches = [];                                  // closing gaps, pushed by the spawner
 
@@ -488,7 +492,7 @@ window.plethoraBit = {
       for (let k = -1; k <= 1; k++) {
         const i = i0 + k;
         const cx = (i + 0.5 + (hf(i, salt) - 0.5) * 0.7) * cell;
-        const amp = 0.018 + hf(i, salt + 1) * 0.058;
+        const amp = 0.012 + hf(i, salt + 1) * 0.040;
         const wid = 0.24 + hf(i, salt + 2) * 0.38;
         const t = (d - cx) / wid;
         if (t > -1 && t < 1) { const q = 1 - t * t; s += amp * q * q; }
@@ -498,8 +502,8 @@ window.plethoraBit = {
 
     /** Tunnel ceiling and floor at world position `d`, in band units 0..1. */
     function profile(d, out) {
-      let c = 0.5 + 0.112 * Math.sin(d * 0.78) + 0.054 * Math.sin(d * 1.93 + 1.9) + 0.026 * Math.sin(d * 4.10 + 0.4);
-      let gp = 0.60 + 0.082 * Math.sin(d * 1.21 + 2.7);
+      let c = 0.5 + 0.072 * Math.sin(d * 0.78) + 0.036 * Math.sin(d * 1.93 + 1.9) + 0.018 * Math.sin(d * 4.10 + 0.4);
+      let gp = 0.68 + 0.058 * Math.sin(d * 1.21 + 2.7);
       for (let i = 0; i < pinches.length; i++) {
         const p = pinches[i];
         const t = 1 - Math.abs(d - p.d) / p.w;
@@ -543,7 +547,7 @@ window.plethoraBit = {
         pinches.push({
           d, w: 1.5 + r(2) * 1.4,
           c: clamp((_pf[0] + _pf[1]) / 2 + (r(3) - 0.5) * 0.22, 0.30, 0.70),
-          g: lerp(0.44, 0.27, heat * (0.4 + r(4) * 0.6)),
+          g: lerp(0.47, 0.31, heat * (0.4 + r(4) * 0.6)),
         });
         if (pinches.length > 24) pinches.shift();
         return;
@@ -552,7 +556,7 @@ window.plethoraBit = {
         const mount = r(5) < 0.5 ? "ceil" : "floor";
         hazards.push({
           type: "saw", x: gate, mount,
-          rr: 0.15 + r(6) * 0.11,
+          rr: 0.115 + r(6) * 0.085,
           spin: (r(7) < 0.5 ? -1 : 1) * (2.2 + r(8) * 3.4),
           bob: r(9) < 0.35 ? 0.07 + r(10) * 0.07 : 0,
           bobF: 0.9 + r(11) * 1.1, ph: r(12) * TAU,
@@ -561,7 +565,7 @@ window.plethoraBit = {
           hazards.push({
             type: "saw", x: gate + U * (0.55 + r(13) * 0.4),
             mount: mount === "ceil" ? "floor" : "ceil",
-            rr: 0.13 + r(14) * 0.09,
+            rr: 0.10 + r(14) * 0.07,
             spin: (r(15) < 0.5 ? -1 : 1) * (2.4 + r(16) * 3.0),
             bob: 0, bobF: 1, ph: r(17) * TAU,
           });
@@ -572,7 +576,7 @@ window.plethoraBit = {
         hazards.push({
           type: "rotor", x: gate,
           n: 0.5 + (r(18) - 0.5) * 0.22,
-          len: 0.20 + r(19) * 0.13 + heat * 0.05,
+          len: 0.13 + r(19) * 0.09 + heat * 0.03,
           wdt: 0.028 + r(20) * 0.016,
           blades: r(21) < 0.4 ? 3 : 2,
           spin: (r(22) < 0.5 ? -1 : 1) * (1.5 + r(23) * 2.6 + heat * 1.4),
@@ -585,7 +589,7 @@ window.plethoraBit = {
           type: "crusher", x: gate,
           from: r(25) < 0.5 ? "ceil" : "floor",
           wdt: 0.16 + r(26) * 0.16,
-          reach: 0.34 + r(27) * 0.20 + heat * 0.08,
+          reach: 0.24 + r(27) * 0.12 + heat * 0.05,
           period: 2.4 - heat * 0.9 + r(28) * 0.6,
           ph: r(29),
         });
@@ -609,14 +613,14 @@ window.plethoraBit = {
         spawnX += gap;
       }
       while (hazards.length && hazards[0].x < camX - U * 1.2) hazards.shift();
-      while (pinches.length && pinches[0].d < camX / U - 3) pinches.shift();
+      while (pinches.length && pinches[0].d < camX / U - 4) pinches.shift();
     }
 
     /* ===============================================================
      * STATE
      * ============================================================= */
     let phase = "title";               // title | claim | countdown | play | over
-    let camX = 0, scroll = 0, elapsed = 0, overAt = 0;
+    let camX = 0, originX = 0, scroll = 0, elapsed = 0, overAt = 0;
     let hourIdx = 0, hourPrev = 0, hourFade = 1;
     let shake = 0, flash = 0;
     let winner = -1, roundBest = 0;
@@ -648,7 +652,7 @@ window.plethoraBit = {
     seedMotes();
 
     function resetWorld(seed) {
-      camX = 0; scroll = 0; elapsed = 0;
+      camX = 0; originX = 0; scroll = 0; elapsed = 0;
       hazards = []; pinches = []; particles = [];
       spawnX = W * 0.95;                                // a clear run-up before the first blade
       courseSeed = seed;
@@ -666,8 +670,8 @@ window.plethoraBit = {
      * in band units per second, so the feel is identical whether the band
      * is 350px tall (two players) or 170px (four).
      * ============================================================= */
-    const GRAV = 6.2, FLAP_DV = 1.14, FLAP_HZ = 9.5, VUP = 1.18, VDOWN = 1.62;
-    const R_N = 0.072;                                 // creature radius, band units
+    const GRAV = 2.6, FLAP_DV = 0.42, FLAP_HZ = 9.5, VUP = 0.62, VDOWN = 0.95;
+    const R_N = 0.066;                                 // creature radius, band units
 
     function flap(b, loud) {
       b.vn -= FLAP_DV;
@@ -821,18 +825,37 @@ window.plethoraBit = {
 
     function step(dt, t) {
       const attract = phase === "title";
-      const running = phase === "play" || attract || phase === "countdown";
+      const pre = phase === "claim" || phase === "countdown";
+      const running = phase === "play" || attract || pre || phase === "over";
 
       if (running) {
         const D = DIFF[settings.diff];
         if (phase === "play") elapsed += dt;
         const rel = attract ? 0.62 : clamp(D.v0 + D.ramp * elapsed, 0, D.cap);
         scroll = clamp(rel * U, 0, W * 0.62);
-        camX += scroll * (phase === "countdown" ? 0.35 : 1) * dt;
+        const slow = phase === "countdown" ? 0.32 : phase === "claim" ? 0.16 : phase === "over" ? 0.22 : 1;
+        camX += scroll * slow * dt;
         ensureCourse(camX + W);
       }
 
-      for (const b of birds) {
+      // Before the round starts the creatures hover, unhurt, at the hatch
+      // point. Real gravity from the moment the band is claimed would drop
+      // every one of them into the floor before the countdown finished.
+      if (pre) {
+        for (const b of birds) {
+          const band = bands[b.i];
+          b.n = 0.5 + 0.035 * Math.sin(t * 2.2 + b.i * 1.4);
+          b.vn = 0; b.sx = HOME; b.vx = 0;
+          if (b.held && b.wingV > -3) b.wingV = -7;
+          b.wing += b.wingV * dt;
+          b.wingV += (0 - b.wing) * 92 * dt;
+          b.wingV *= Math.pow(0.02, dt);
+          b.trail.unshift({ x: b.sx, y: band.top + b.n * U });
+          if (b.trail.length > 7) b.trail.pop();
+        }
+      }
+
+      for (const b of pre ? [] : birds) {
         const band = bands[b.i];
         if (!b.alive) {
           if (attract && now() > b.respawnAt) {
@@ -877,7 +900,7 @@ window.plethoraBit = {
         if (b.trail.length > 7) b.trail.pop();
 
         if (phase === "play") {
-          b.dist = (camX + b.sx - HOME) / U * 8;
+          b.dist = (camX - originX + b.sx - HOME) / U * 8;
           if (b.dist > b.best) b.best = b.dist;
           if (b.best > b.milestone + 250) {
             b.milestone = Math.floor(b.best / 250) * 250;
@@ -919,7 +942,8 @@ window.plethoraBit = {
         roundBest = Math.max(roundBest, ...birds.map((b) => b.best));
         const nextHour = Math.min(HOURS.length - 1, Math.floor(roundBest / 320)) % HOURS.length;
         if (nextHour !== hourIdx) { hourPrev = hourIdx; hourIdx = nextHour; hourFade = 0; sound.sting("powerup"); }
-        sound.heat(clamp(elapsed / 70 + (alive.length === 1 ? 0.35 : 0), 0, 1));
+        const heat = clamp(elapsed / 70 + (alive.length === 1 ? 0.35 : 0), 0, 1);
+        if (Math.abs(heat - lastHeat) > 0.06) { lastHeat = heat; sound.heat(heat); }
         if (alive.length === 0) endRound();
       }
     }
@@ -929,7 +953,7 @@ window.plethoraBit = {
     /* ===============================================================
      * ROUND FLOW
      * ============================================================= */
-    let claimUntil = 0, countFrom = 0;
+    let claimUntil = 0, countFrom = 0, lastHeat = -1;
 
     function beginFlight() {
       resetWorld((Math.random() * 100000) | 0);
@@ -949,6 +973,7 @@ window.plethoraBit = {
     function goLive() {
       phase = "play";
       elapsed = 0;
+      originX = camX;
       for (const b of birds) b.hatch = 1;
       ctx.platform.start({ players: settings.players, difficulty: DIFF[settings.diff].name });
       sound.sting("powerup");
@@ -1091,7 +1116,7 @@ window.plethoraBit = {
         // The player's own distance, huge and ghosted, sitting in their own
         // sky. Drawn before the rock so the cave silhouettes across it.
         g.save();
-        g.globalAlpha = dim ? 0.10 : 0.15;
+        g.globalAlpha = dim ? 0.11 : 0.19;
         g.fillStyle = crew.ink;
         g.font = "700 " + Math.round(U * 0.62) + "px " + DISP;
         g.textAlign = "right";
@@ -1216,10 +1241,10 @@ window.plethoraBit = {
         g.drawImage(grain, -5 + ((t * 37) % 9), -5 + ((t * 53) % 9));
         g.restore();
       }
-      const vg = g.createRadialGradient(W * 0.5, H * 0.48, H * 0.18, W * 0.5, H * 0.5, H * 0.78);
+      const vg = g.createRadialGradient(W * 0.5, H * 0.48, H * 0.26, W * 0.5, H * 0.5, H * 0.80);
       vg.addColorStop(0, "rgba(0,0,0,0)");
-      vg.addColorStop(0.62, "rgba(0,0,0,0.34)");
-      vg.addColorStop(1, "rgba(0,0,0,0.86)");
+      vg.addColorStop(0.66, "rgba(0,0,0,0.20)");
+      vg.addColorStop(1, "rgba(0,0,0,0.66)");
       g.fillStyle = vg;
       g.fillRect(0, 0, W, H);
 
@@ -1642,7 +1667,7 @@ window.plethoraBit = {
           '<div data-el="hour" style="' + capLine + 'margin-left:7px;">dawn</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;">' +
-          '<button data-el="mute" aria-label="Sound" style="' + btn + '">&#128266;</button>' +
+          '<button data-el="mute" aria-label="Sound" style="' + btn + 'font-size:16px;">&#9835;</button>' +
           '<button data-el="cog" aria-label="Settings" style="' + btn + '">&#9881;</button>' +
           '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
         '</div>' +
@@ -1651,11 +1676,11 @@ window.plethoraBit = {
       /* --- title ------------------------------------------------------ */
       '<div data-el="title" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         'flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:26px;' +
-        'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.86) 0%,rgba(4,7,10,0.42) 34%,' +
-        'rgba(4,7,10,0.42) 62%,rgba(4,7,10,0.92) 100%);">' +
+        'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.74) 0%,rgba(4,7,10,0.30) 30%,' +
+        'rgba(4,7,10,0.34) 64%,rgba(4,7,10,0.86) 100%);">' +
         '<div style="' + capLine + 'opacity:0.6;">Hold your band · fly or fall</div>' +
-        '<div style="font-family:' + DISP + ';font-size:70px;line-height:0.94;font-weight:700;' +
-          'letter-spacing:0.14em;margin:10px 0 2px 6px;background:linear-gradient(178deg,#FFF6DE 8%,#FCDC5A 44%,#FA6E1E 88%);' +
+        '<div style="font-family:' + DISP + ';font-size:50px;line-height:1.0;font-weight:700;white-space:nowrap;' +
+          'letter-spacing:0.11em;margin:12px 0 2px 5px;background:linear-gradient(178deg,#FFF6DE 8%,#FCDC5A 46%,#FA6E1E 92%);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
           'color:#FCDC5A;">DUSKWING</div>' +
         '<div style="font-size:13.5px;line-height:1.6;opacity:0.66;max-width:264px;margin-top:8px;">' +
@@ -1768,16 +1793,22 @@ window.plethoraBit = {
       () => settings.diff, (v) => { settings.diff = v; });
     const paintMute = pills(shell.el("setmute"), [0, 1], ["ON", "MUTED"],
       () => (settings.mute ? 1 : 0), (v) => {
-        if (!!v !== settings.mute) { sound.toggle(); shell.el("mute").innerHTML = settings.mute ? "&#128263;" : "&#128266;"; }
+        if (!!v !== settings.mute) {
+          sound.toggle();
+          const mb = shell.el("mute");
+          mb.style.textDecoration = settings.mute ? "line-through" : "none";
+          mb.style.opacity = settings.mute ? "0.5" : "1";
+        }
       });
 
     shell.tap(shell.el("mute"), (e) => {
       const m = sound.toggle();
       const b = e.currentTarget || e.target;
-      b.innerHTML = m ? "&#128263;" : "&#128266;";
+      b.style.textDecoration = m ? "line-through" : "none";
+      b.style.opacity = m ? "0.5" : "1";
       paintMute && paintMute();
     });
-    if (settings.mute) shell.el("mute").innerHTML = "&#128263;";
+    if (settings.mute) { shell.el("mute").style.textDecoration = "line-through"; shell.el("mute").style.opacity = "0.5"; }
     shell.tap(shell.el("cog"), () => { shell.el("cogp").style.display = "flex"; });
     shell.tap(shell.el("cogp-close"), () => { shell.el("cogp").style.display = "none"; });
     shell.tap(shell.el("help"), () => { shell.el("helpp").style.display = "flex"; });
@@ -1823,7 +1854,7 @@ window.plethoraBit = {
       owners.set(e.pointerId, i);
       b.held = true;
       b.claimed = true;
-      if (phase === "play" || phase === "countdown") { flap(b, true); b.flapT = 0; }
+      if (phase === "play") { flap(b, true); b.flapT = 0; }
       else { sound.haptic("light"); }
       if (phase === "claim") {
         sound.sting("tap");

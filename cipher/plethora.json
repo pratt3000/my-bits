@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Cipher",
+  "description": "Twenty-five codewords, two teams and one phone. A hidden key marks nine words red, eight blue, seven bystanders and one assassin. Each team's spymaster gives one word and one number; their operatives arm a codeword and confirm the contact. The key is never on screen unheld — every turn opens with the phone shuttered closed and a pass instruction, and the key appears only while a finger is held on the fingerprint pad, gone the frame it lifts. Printed like a 1960s dossier: card stock, stencil ink and a turning sunburst, with every codeword set twice so both sides of the table read the grid the right way up.",
+  "tags": ["word", "party", "local-multiplayer", "teams", "spy", "deduction", "family", "2d"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "fewest_guesses": {
+        "label": "Fewest Guesses to Win",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

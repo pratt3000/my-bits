@@ -342,14 +342,16 @@ window.plethoraBit = {
         // areas sets it, and the surplus becomes margin at the near edge.
         bandU: Math.max(110, bandH - Math.max(SAFE_T, SAFE_B)),
       };
-      // The spymaster's own controls own everything below the grid.
-      const R0 = L.spineY, R1 = H - SAFE_B;
+      // The spymaster's own controls own everything below the grid. The first
+      // 40px of that stays clear of the utility chrome parked in the spine.
+      const R0 = L.spineY, R1 = H - SAFE_B, room = R1 - R0;
       L.sm = {
-        pills: { x: 10, y: R0 + 6, w: W - 20, h: 40 },
-        chip:  { x: 12, y: R0 + 52, w: W - 24, h: 34 },
-        pad:   { x: 66, y: Math.min(R0 + 148, R1 - 62), r: 40 },
-        trans: { x: 122, y: Math.min(R0 + 118, R1 - 92), w: W - 136, h: 54 },
-        hintY: Math.min(R0 + 200, R1 - 6),
+        numLabelY: R0 + 22,
+        pills: { x: 10, y: R0 + 44, w: W - 20, h: Math.min(38, room * 0.17) },
+        chip:  { x: 12, y: R0 + 88, w: W - 24, h: Math.min(32, room * 0.15) },
+        pad:   { x: 62, y: R0 + room * 0.71, r: Math.min(34, room * 0.16) },
+        trans: { x: 112, y: R0 + room * 0.575, w: W - 126, h: Math.min(50, room * 0.23) },
+        padLabelY: R0 + room * 0.905,
       };
       L.tileArt = null;   // cell size changed: every baked face is stale
     }
@@ -684,7 +686,7 @@ window.plethoraBit = {
     function bakeSunburst() {
       const s = surface(W, H);
       if (!s) { sunburst = null; return; }
-      const gg = s.g, cx = W / 2, cy = H * 0.42, R = Math.hypot(W, H) * 0.75;
+      const gg = s.g, cx = W / 2, cy = H * 0.40, R = Math.hypot(W, H) * 0.60;
       const rg = gg.createRadialGradient(cx, cy, 0, cx, cy, R);
       rg.addColorStop(0, SUN[0]); rg.addColorStop(0.10, SUN[1]); rg.addColorStop(0.28, SUN[2]);
       rg.addColorStop(0.50, SUN[3]); rg.addColorStop(0.72, SUN[4]); rg.addColorStop(1, SUN[5]);
@@ -702,7 +704,7 @@ window.plethoraBit = {
     bakeSunburst();
 
     function drawBackground() {
-      const cx = W / 2, cy = H * 0.42, R = Math.hypot(W, H) * 0.75;
+      const cx = W / 2, cy = H * 0.40, R = Math.hypot(W, H) * 0.60;
       if (sunburst) blit(g, sunburst, 0, 0);
       else {
         const rg = g.createRadialGradient(cx, cy, 0, cx, cy, R);
@@ -912,7 +914,7 @@ window.plethoraBit = {
         g.fillStyle = TEAM[team].ink; g.fill();
         g.fillStyle = "#fff"; g.font = "700 22px " + DISPLAY;
         g.textAlign = "center";
-        g.fillText(clue.unlimited ? "∞" : String(clue.num), cx, cy + 1);
+        g.fillText(clue.display, cx, cy + 1);
       } else {
         chamferRect(g, b.x, b.y, b.w, b.h, 10);
         g.fillStyle = "rgba(255,255,255,0.03)"; g.fill();
@@ -1082,11 +1084,16 @@ window.plethoraBit = {
       }
       g.restore();
 
-      g.fillStyle = peek ? GOLD : "rgba(241,231,210,0.75)";
-      g.font = "700 12px " + DISPLAY; g.textAlign = "left"; g.textBaseline = "middle";
-      tracked(g, peek ? "KEY EXPOSED — HOLD" : "HOLD TO READ THE KEY", p.x + p.r + 14, p.y - 8, 2, "left");
-      g.fillStyle = "rgba(241,231,210,0.42)"; g.font = "400 9px " + MONO;
-      tracked(g, "LET GO AND IT HIDES", p.x + p.r + 14, p.y + 10, 1.2, "left");
+      // The label sits under the pad, not beside it: the pad has to keep the
+      // same coordinates on the handoff screen and the clue screen so the
+      // shutters can open under a finger that is already down, and the space
+      // to its right belongs to TRANSMIT.
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillStyle = peek ? GOLD : "rgba(241,231,210,0.78)";
+      g.font = "700 11px " + DISPLAY;
+      tracked(g, peek ? "KEY EXPOSED" : "HOLD TO READ", p.x, L.sm.padLabelY, 1.6, "center");
+      g.fillStyle = "rgba(241,231,210,0.45)"; g.font = "400 8px " + MONO;
+      tracked(g, peek ? "LET GO TO HIDE" : "THE KEY", p.x, L.sm.padLabelY + 12, 1, "center");
     }
 
     /** A hard red frame and a rubber stamp, for as long as the key is up. */
@@ -1136,9 +1143,9 @@ window.plethoraBit = {
         g.font = "700 17px " + DISPLAY; g.textAlign = "center"; g.textBaseline = "middle";
         g.fillText(i === 10 ? "∞" : String(i), r.x + r.w / 2, r.y + r.h / 2 + 1);
       }
-      g.fillStyle = "rgba(241,231,210,0.4)";
+      g.fillStyle = "rgba(241,231,210,0.45)";
       g.font = "400 8px " + MONO; g.textAlign = "left"; g.textBaseline = "middle";
-      tracked(g, "HOW MANY WORDS DOES YOUR CLUE POINT AT?", 12, L.sm.pills.y - 0, 1.2, "left");
+      tracked(g, "HOW MANY WORDS DOES IT POINT AT?", 12, L.sm.numLabelY, 1.2, "left");
 
       const c = L.sm.chip;
       roundRect(g, c.x, c.y, c.w, c.h, 7);
@@ -1158,11 +1165,8 @@ window.plethoraBit = {
       drawPad();
       decoButton(g, L.sm.trans, "TRANSMIT", {
         fill: GOLD, stroke: GOLD, ink: NOIR, glow: GOLD, size: 20, track: 3,
+        sub: clueNum === 10 ? "UNLIMITED" : clueNum === 0 ? "ZERO — A WARNING" : "",
       });
-      g.fillStyle = "rgba(241,231,210,0.45)";
-      g.font = "400 8.5px " + MONO; g.textAlign = "center"; g.textBaseline = "middle";
-      tracked(g, "ONE WORD AND ONE NUMBER. NOTHING ABOUT SPELLING OR POSITION.",
-              W / 2, L.sm.hintY, 0.8, "center");
     }
 
     function drawSpymasterHeader() {
@@ -1179,11 +1183,15 @@ window.plethoraBit = {
       // The two agent stacks, so the spymaster can see the state of the board
       // without leaving this screen.
       g.save();
-      g.translate(W / 2 - 92, L.gy * 0.44 + 46);
+      g.translate(W / 2 - 92, L.gy * 0.44 + 44);
       drawStack(g, 0, 0, "red", 7);
       g.translate(96, 0);
       drawStack(g, 0, 0, "blue", 7);
       g.restore();
+      g.fillStyle = "rgba(255,194,28,0.6)"; g.font = "400 8px " + MONO;
+      g.textAlign = "center";
+      tracked(g, "ONE WORD · ONE NUMBER · NOTHING ABOUT SPELLING OR POSITION",
+              W / 2, L.gy - 16, 0.7, "center");
     }
 
     /* ===============================================================
@@ -1328,7 +1336,7 @@ window.plethoraBit = {
       if (phase === "board" || phase === "over") {
         drawBand("red"); drawBand("blue"); drawSpine();
       } else if (phase === "clue") {
-        drawSpymasterHeader(); drawSpine(); drawCluePanel();
+        drawSpymasterHeader(); drawCluePanel();
       }
 
       drawShutters();
@@ -1343,48 +1351,92 @@ window.plethoraBit = {
      * a speech balloon, drawn straight rather than modelled.
      * ============================================================= */
     function drawMenuArt() {
-      const baseY = H * 0.50;
-      g.save();
-      g.fillStyle = "rgba(11,11,13,0.92)";
-      // three flat figures standing on a deco rule
+      const baseY = H * 0.485;
+
+      /**
+       * Three flat figures on a deco rule. Each is a handful of separate
+       * closed paths — coat, neck, head, hat — filled in the same ink so they
+       * read as one silhouette, then stroked again along their left contour
+       * inside a clip, which is the single rim light the whole cover style
+       * runs on. No modelling, no cartoon outline.
+       */
       const fig = (cx, s, kind) => {
+        const parts = [];
+        let detail = null;
+        if (kind === 0) {                                  // skirt suit
+          parts.push((p) => {                              // shoulders, waist, A-line skirt
+            p.moveTo(-29, 0); p.lineTo(-11, -50);
+            p.lineTo(-18, -71);
+            p.quadraticCurveTo(-20, -78, -12, -80);
+            p.lineTo(12, -80);
+            p.quadraticCurveTo(20, -78, 18, -71);
+            p.lineTo(11, -50);
+            p.lineTo(29, 0); p.closePath();
+          });
+          parts.push((p) => { p.moveTo(-5, -86); p.lineTo(5, -86); p.lineTo(5, -76); p.lineTo(-5, -76); p.closePath(); });
+          parts.push((p) => { p.ellipse(0, -97, 12.5, 14, 0, 0, TAU); });   // bobbed hair
+          parts.push((p) => { p.moveTo(-12.5, -97); p.lineTo(-10, -79); p.lineTo(-3, -85); p.closePath(); });
+        } else if (kind === 1) {                           // suit
+          parts.push((p) => {
+            p.moveTo(-19, 0); p.lineTo(-21, -52);
+            p.quadraticCurveTo(-24, -73, -14, -78);
+            p.lineTo(14, -78);
+            p.quadraticCurveTo(24, -73, 21, -52);
+            p.lineTo(19, 0); p.closePath();
+          });
+          parts.push((p) => { p.moveTo(-5, -84); p.lineTo(5, -84); p.lineTo(5, -74); p.lineTo(-5, -74); p.closePath(); });
+          parts.push((p) => { p.ellipse(0, -95, 11.5, 13.5, 0, 0, TAU); });
+          detail = (p) => {                                // collar and tie, one stroke
+            p.beginPath();
+            p.moveTo(-9, -78); p.lineTo(0, -66); p.lineTo(9, -78);
+            p.lineWidth = 2; p.lineJoin = "round";
+            p.strokeStyle = "rgba(255,206,124,0.85)"; p.stroke();
+          };
+        } else {                                           // fedora and trench coat
+          parts.push((p) => {
+            p.moveTo(-37, 2); p.lineTo(-31, -56);
+            p.quadraticCurveTo(-33, -78, -14, -84);
+            p.lineTo(14, -84);
+            p.quadraticCurveTo(33, -78, 31, -56);
+            p.lineTo(37, 2); p.closePath();
+          });
+          detail = (p) => {                                // lapel notch, one V
+            p.beginPath();
+            p.moveTo(-13, -83); p.lineTo(0, -63); p.lineTo(13, -83);
+            p.lineWidth = 2.2; p.lineJoin = "round";
+            p.strokeStyle = "rgba(255,206,124,0.9)"; p.stroke();
+          };
+          parts.push((p) => { p.ellipse(0, -96, 11.5, 13, 0, 0, TAU); });
+          parts.push((p) => { p.ellipse(0, -105, 29, 4.6, 0, 0, TAU); });   // brim
+          parts.push((p) => {                              // crown
+            p.moveTo(-15, -105); p.lineTo(-12, -124);
+            p.quadraticCurveTo(0, -128, 12, -124); p.lineTo(15, -105); p.closePath();
+          });
+        }
         g.save();
         g.translate(cx, baseY);
         g.scale(s, s);
-        g.beginPath();
-        if (kind === 0) {                                  // skirt suit
-          g.moveTo(-34, 0); g.lineTo(-15, -74);
-          g.bezierCurveTo(-24, -84, -22, -102, -8, -104);
-          g.bezierCurveTo(6, -106, 14, -92, 8, -78);
-          g.lineTo(30, 0);
-        } else if (kind === 1) {                           // suit
-          g.moveTo(-28, 0); g.lineTo(-24, -78);
-          g.bezierCurveTo(-30, -88, -26, -106, -10, -106);
-          g.bezierCurveTo(6, -106, 10, -88, 4, -78);
-          g.lineTo(28, 0);
-        } else {                                           // fedora and trench
-          g.moveTo(-38, 0); g.lineTo(-30, -80);
-          g.lineTo(-24, -92); g.lineTo(-44, -96); g.lineTo(-40, -102);
-          g.lineTo(-22, -104); g.lineTo(-18, -120); g.lineTo(10, -120);
-          g.lineTo(14, -104); g.lineTo(32, -102); g.lineTo(36, -96);
-          g.lineTo(16, -92); g.lineTo(22, -80); g.lineTo(32, 0);
-        }
-        g.closePath();
-        g.fill();
-        g.save();                                          // single rim light
-        g.clip();
-        g.strokeStyle = "rgba(255,214,140,0.85)"; g.lineWidth = 5;
-        g.beginPath(); g.moveTo(-42, -130); g.lineTo(-22, 6); g.stroke();
+        // The rim light is the same silhouette, filled once in warm light and
+        // offset up-left, then covered by the ink copy. Stroking the parts
+        // instead would draw every interior seam — a head ringed like a coin.
+        g.fillStyle = "rgba(255,206,124,0.92)";
+        g.save();
+        g.translate(-2.6, -1.6);
+        for (const part of parts) { g.beginPath(); part(g); g.fill(); }
         g.restore();
+        g.fillStyle = "rgba(9,9,12,0.96)";
+        for (const part of parts) { g.beginPath(); part(g); g.fill(); }
+        if (detail) detail(g);
         g.restore();
       };
-      fig(W * 0.24, 0.82, 0);
-      fig(W * 0.50, 0.94, 2);
-      fig(W * 0.76, 0.80, 1);
-      g.restore();
+      // The lapel triangle sits inside the coat, so the middle figure keeps
+      // its notch even though every part shares one ink.
+      fig(W * 0.18, 0.92, 0);
+      fig(W * 0.50, 1.12, 2);
+      fig(W * 0.82, 0.90, 1);
 
       // a white balloon with red caps, straight off the cover
-      const bw = Math.min(232, W - 72), bh = 52, bx = (W - bw) / 2, by = H * 0.20;
+      const bw = Math.min(232, W - 72), bh = 52, bx = (W - bw) / 2, by = H * 0.17;
       g.save();
       g.fillStyle = PLAQUE;
       drawBalloon(g, bx, by, bw, bh, 14);
@@ -1608,8 +1660,13 @@ window.plethoraBit = {
     }
 
     function transmit() {
+      // Zero and infinity are the two official special numbers: both lift the
+      // guess cap, and zero additionally means "none of ours" — a pure warning.
       const unlimited = clueNum === 0 || clueNum === 10;
-      clue = { word: clueDraft, num: clueNum === 10 ? 0 : clueNum, unlimited };
+      clue = {
+        word: clueDraft, num: clueNum === 10 ? 0 : clueNum, unlimited,
+        display: clueNum === 10 ? "∞" : String(clueNum),
+      };
       guessesLeft = unlimited ? 99 : clueNum + (settings.bonus ? 1 : 0);
       guessedThisTurn = 0;
       peek = false; holdOn = false; holdT = 0;
@@ -1656,13 +1713,13 @@ window.plethoraBit = {
         'padding:0 24px ' + (ctx.safeArea.bottom + 18) + 'px;background:linear-gradient(180deg,' +
         'rgba(9,6,10,0) 40%,rgba(9,6,10,0.55) 52%,rgba(9,6,10,0.94) 64%,rgba(9,6,10,0.99) 100%);">' +
         '<div style="' + label + 'margin-bottom:4px;">Dossier 25 · Classified</div>' +
-        '<div style="font-family:' + DISPLAY + ';font-size:72px;font-weight:700;letter-spacing:0.10em;' +
-          'line-height:0.9;background:linear-gradient(178deg,#FFF0C2 8%,#FFC21C 48%,#D9482E);' +
+        '<div style="font-family:' + DISPLAY + ';font-size:64px;font-weight:700;letter-spacing:0.09em;' +
+          'line-height:0.94;background:linear-gradient(178deg,#FFF0C2 8%,#FFC21C 48%,#D9482E);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
           'color:transparent;text-shadow:0 10px 34px rgba(0,0,0,0.55);">CIPHER</div>' +
-        '<div style="font-size:13.5px;line-height:1.55;opacity:0.72;max-width:270px;margin-top:8px;">' +
-          'Twenty-five codewords. Two spymasters who know the key, everyone else guessing ' +
-          'from one word and one number — and one assassin nobody may touch.</div>' +
+        '<div style="font-size:13.5px;line-height:1.55;opacity:0.72;max-width:262px;margin-top:6px;">' +
+          'Two spymasters know which of the twenty-five words are theirs. ' +
+          'Everyone else has one word and one number — and one assassin to avoid.</div>' +
         '<div style="' + label + 'margin:18px 0 8px;">How many players?</div>' +
         '<div data-el="counts" style="display:flex;gap:6px;"></div>' +
         '<div data-el="modenote" style="font-size:11.5px;opacity:0.6;margin-top:9px;min-height:16px;' +
@@ -1869,8 +1926,6 @@ window.plethoraBit = {
       m.textContent = head;
       m.style.color = t.style.color;
       el("over").style.display = "block";
-      // The full key is turned over behind the sheet, one card at a time.
-      revealAll = -1;
     }
 
     /* ===============================================================

@@ -25,42 +25,63 @@ const snap = () => bit.probe(() => {
   const s = window.__SNAP__;
   return s && {
     phase: s.phase, stock: s.stock, pile: s.pile, matchOpen: s.matchOpen,
-    counts: s.counts, claims: s.claims, best: s.bestMs, winner: s.winner, baked: s.baked,
+    counts: s.counts, claims: s.claims, best: s.bestMs, winner: s.winner,
+    baked: s.baked, paused: s.paused,
   };
 });
 
-/** Wait inside the page for a condition — one step instead of a polling loop. */
+/**
+ * Wait inside the page for a condition and hand back the state at the instant
+ * it became true. One step instead of a polling loop, and — the reason it
+ * returns the state — no extra round trip before acting on it: a match window
+ * at Blitz speed is half a second long and a second probe can outlast it.
+ */
 const until = (fn, ms) => bit.probe(({ src, limit }) => new Promise((res) => {
   const test = new Function("s", "return (" + src + ")(s)");
   const t0 = Date.now();
   const id = setInterval(() => {
+    const s = window.__SNAP__;
     let hit = false;
-    try { hit = !!test(window.__SNAP__); } catch (_) {}
-    if (hit || Date.now() - t0 > limit) { clearInterval(id); res(hit); }
-  }, 25);
+    try { hit = !!test(s); } catch (_) {}
+    if (hit) { clearInterval(id); res({ ok: true, pile: s.pile, phase: s.phase, counts: s.counts }); }
+    else if (Date.now() - t0 > limit) { clearInterval(id); res({ ok: false }); }
+  }, 20);
 }), { src: fn.toString(), limit: ms });
+const reached = async (fn, ms) => (await until(fn, ms)).ok;
 
 await bit.wait(700);
 await bit.shot("snap-1-title");
 console.log("baked deck art:", (await snap()).baked);
 
-/* --- Blitz, so a 52-card deck finishes inside a headless run. --- */
-await bit.tap(361, 121);                                  // cog
-await bit.wait(260);
-await bit.shot("snap-2-settings");
-const blitz = await pill("speeds", 2);
-await bit.tap(blitz.x, blitz.y);
-await bit.wait(150);
-const done = await bit.probe(() => {
+const cog = await bit.probe(() => {
+  const r = document.querySelector('[data-el="cog"]').getBoundingClientRect();
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+});
+const doneBtn = async () => bit.probe(() => {
   const r = document.querySelector('[data-el="cogp-close"]').getBoundingClientRect();
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
 });
+/** Open settings, hit one pill, close again. */
+async function setSpeed(i) {
+  await bit.tap(cog.x, cog.y);
+  await bit.wait(220);
+  const b = await pill("speeds", i);
+  await bit.tap(b.x, b.y);
+  await bit.wait(120);
+  return b;
+}
+
+/* --- Slow first: the simultaneous-slam test needs a window wide enough to
+       survive the round trip out to Node and back through CDP. --- */
+await setSpeed(0);
+await bit.shot("snap-2-settings");
+let done = await doneBtn();
 await bit.tap(done.x, done.y);
 await bit.wait(180);
 
 /* --- Deal. --- */
 await bit.tap(W / 2, 759);
-check(await until((s) => s && s.phase === "playing", 6000), "reached the playing phase");
+check(await reached((s) => s && s.phase === "playing", 9000), "reached the playing phase");
 await bit.wait(400);
 await bit.shot("snap-3-deal");
 
@@ -68,15 +89,22 @@ const padB = await bit.probe(() => window.__SNAP__.pad("bottom"));
 const padT = await bit.probe(() => window.__SNAP__.pad("top"));
 
 /* --- THE TEST: two hands land in the same frame on a live match. --- */
-check(await until((s) => s && s.matchOpen, 20000), "a match window opened");
-const pileBefore = (await snap()).pile;
-await bit.tapTogether([{ x: padB.x, y: padB.y }, { x: padT.x, y: padT.y }]);
+let pileBefore = 0, snaps = [], lates = [], opened = false;
+for (let attempt = 0; attempt < 4 && snaps.length === 0; attempt++) {
+  const w = await until((s) => s && s.matchOpen, 20000);
+  if (!w.ok) break;
+  opened = true;
+  pileBefore = w.pile;
+  await bit.tapTogether([{ x: padB.x, y: padB.y }, { x: padT.x, y: padT.y }]);
+  const c = await bit.probe(() => window.__SNAP__.claims);
+  snaps = c.filter((x) => x.verdict === "snap");
+  lates = c.filter((x) => x.verdict === "late");
+}
+check(opened, "a match window opened");
 await bit.wait(300);
 await bit.shot("snap-4-slam");
 
 let st = await snap();
-const snaps = st.claims.filter((c) => c.verdict === "snap");
-const lates = st.claims.filter((c) => c.verdict === "late");
 check(snaps.length === 1, "exactly one winner from a simultaneous slam (got " + snaps.length + ")");
 check(lates.length >= 1, "the other hand was recorded late, not penalised (got " + lates.length + ")");
 // The pile is not asserted empty: at this speed the next card may already have
@@ -89,7 +117,7 @@ check(lost.cards === 0 && lost.lock === 0, "the late hand was not penalised");
 console.log("  claims:", JSON.stringify(st.claims));
 
 /* --- A false snap must cost a card and lock that pad. --- */
-check(await until((s) => s && !s.matchOpen && s.pile > 0, 8000), "table has cards and no match open");
+check(await reached((s) => s && !s.matchOpen && s.pile > 0, 8000), "table has cards and no match open");
 const before = (await snap()).counts;
 await bit.tap(padB.x, padB.y);
 await bit.wait(220);
@@ -102,9 +130,24 @@ check(!wasBottomWinner || st.counts[bIdx].cards === before[bIdx].cards - 1,
 check(st.counts[bIdx].lock > 0, "that pad locked out");
 await bit.shot("snap-5-false");
 
+/* --- A sheet must freeze the hand, then Blitz to run the deck out. --- */
+await bit.tap(cog.x, cog.y);
+await bit.wait(260);
+const frozen = (await snap()).stock;
+await bit.wait(1600);
+const stillFrozen = await snap();
+check(stillFrozen.paused && stillFrozen.stock === frozen, "settings froze the hand (" + frozen + " -> " + stillFrozen.stock + ")");
+const blitz = await pill("speeds", 2);
+await bit.tap(blitz.x, blitz.y);
+await bit.wait(120);
+done = await doneBtn();
+await bit.tap(done.x, done.y);
+await bit.wait(200);
+check(!(await snap()).paused, "closing settings resumed the hand");
+
 /* --- Run the deck out. Slam whenever a match opens, alternating ends. --- */
-for (let i = 0; i < 14; i++) {
-  const got = await until((s) => s && (s.matchOpen || s.phase === "over"), 4200);
+for (let i = 0; i < 16; i++) {
+  const got = await reached((s) => s && (s.matchOpen || s.phase === "over"), 4200);
   const now = await snap();
   if (now.phase === "over") break;
   if (got) {
@@ -113,7 +156,7 @@ for (let i = 0; i < 14; i++) {
   }
   if (i === 6) await bit.shot("snap-6-midgame");
 }
-check(await until((s) => s && s.phase === "over", 26000), "the hand reached its end state");
+check(await reached((s) => s && s.phase === "over", 26000), "the hand reached its end state");
 
 await bit.wait(400);
 await bit.shot("snap-7-over");
@@ -133,6 +176,17 @@ for (const k of kinds) tally[k] = (tally[k] || 0) + 1;
 console.log("events:", JSON.stringify(tally));
 check(kinds.includes("complete"), "ctx.platform.complete fired");
 check(kinds.includes("memory.record.submit"), "the record was submitted");
+
+/* --- The rematch path has to work from the end state. --- */
+const again = await bit.probe(() => {
+  const r = document.querySelector('[data-el="again"]').getBoundingClientRect();
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+});
+await bit.tap(again.x, again.y);
+check(await reached((s) => s && s.phase !== "over" && s.stock === 52, 5000), "rematch dealt a fresh deck");
+st = await snap();
+check(st.counts.every((c) => c.cards === 0), "rematch reset every count");
+await bit.shot("snap-8-rematch");
 
 const errs = (await bit.errors()).filter((e) => !/404/.test(e));
 console.log(errs.length ? "ERRORS:\n  " + errs.join("\n  ") : "errors: none");

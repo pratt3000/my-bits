@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Forehead",
+  "description": "Hold the phone sideways against your forehead and let the room shout at you. You cannot see the word — everyone else can. Tilt down when you get it, tilt up to skip, or just tap: the right half is a hit, the left half a pass. Five decks of fifty cards each, a clock that speeds the music up as it runs out, and a round score that goes to the global board.",
+  "tags": ["party", "multiplayer", "local-multiplayer", "charades", "words", "social", "fast"],
+  "permissions": ["backgroundMusic", "haptics", "motion", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "round_score": {
+        "label": "Cards In One Round",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
