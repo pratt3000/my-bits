@@ -48,18 +48,6 @@ window.plethoraBit = {
 
   async init(ctx) {
 
-    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
-     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
-     * button's own colour, and they are the one thing on screen that is not
-     * set in the game's typeface. currentColor keeps this one in step. */
-    const SPK = (on) =>
-      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
-        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
-        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
-        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
-        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
-            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
-      '</svg>';
 
     /* Every game in this set is set in lowercase Inter. Canvas text comes from
      * a few hundred call sites, so the case change goes in at the one place
@@ -262,11 +250,9 @@ window.plethoraBit = {
      * reliably — so this is a floor, not a preference. A board sized first and
      * a strip given the leftovers looks right on the phone it was built
      * against and stacks the masthead on top of the button on a shorter one. */
-    const CHROME = 8          // padding against the board
-                 + 12         // territory bar
-                 + 10 + 13    // gap, caption
-                 + 14 + 44    // gap, score chips
-                 + 14 + 44    // gap, controls
+    const CHROME = 7          // padding against the board
+                 + 7          // territory bar
+                 + 9 + 44     // gap, the one control row
                  + 6 + SAFE;  // padding against the hardware
 
     /* The title band carries different furniture in the same space. Everything
@@ -905,19 +891,26 @@ window.plethoraBit = {
       "font-size:14px;font-weight:700;letter-spacing:0.16em;text-transform:lowercase;" +
       "padding:14px 18px;background:" + bg + ";color:" + fg + ";-webkit-tap-highlight-color:transparent;";
 
-    function chip(who, side) {
-      const p = P[who === "b" ? BLACK : WHITE];
-      const own = side === "own";
-      return '<div data-el="chip-' + side + '" data-who="' + p.key + '" style="flex:' + (own ? "1.25" : "1") + ';' +
-        'display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:15px;' +
-        'background:#171C1E;border:' + HAIR + ';box-sizing:border-box;">' +
-        '<span style="width:18px;height:18px;border-radius:50%;background:' + p.swatch + ';' +
-          'box-shadow:inset 0 0 0 1.5px ' + RIMC + ',0 1px 2px rgba(0,0,0,0.6);flex:none;"></span>' +
-        '<span style="font-family:' + BODY + ';font-size:9.5px;font-weight:600;letter-spacing:0.2em;' +
-          'text-transform:lowercase;color:rgba(207,224,212,0.55);">' + esc(p.name) + '</span>' +
-        '<span data-el="count-' + side + '" style="margin-left:auto;font-family:' + DISP + ';' +
-          'font-size:' + (own ? 30 : 24) + 'px;font-weight:700;line-height:1;letter-spacing:0.01em;' +
-          'color:#EDF3EE;">2</span>' +
+    /**
+     * Both scores on one plate, this end's colour first and lit. Two separate
+     * chips carrying a swatch, a name and a number cost a row of their own,
+     * and the name was never the thing anybody read — the swatch says which
+     * colour it is more directly than the word does.
+     */
+    function scorePlate(who) {
+      const mine = P[who === "b" ? BLACK : WHITE], theirs = P[who === "b" ? WHITE : BLACK];
+      const half = (p, side) =>
+        '<div data-el="chip-' + side + '" data-who="' + p.key + '" style="display:flex;' +
+          'align-items:center;gap:6px;padding:0 9px;height:100%;box-sizing:border-box;' +
+          'border-radius:12px;">' +
+          '<span style="width:15px;height:15px;border-radius:50%;background:' + p.swatch + ';' +
+            'box-shadow:inset 0 0 0 1.4px ' + RIMC + ',0 1px 2px rgba(0,0,0,0.6);flex:none;"></span>' +
+          '<span data-el="count-' + side + '" style="font-family:' + DISP + ';font-size:19px;' +
+            'font-weight:700;line-height:1;color:#EDF3EE;">2</span>' +
+        '</div>';
+      return '<div style="display:flex;align-items:stretch;gap:2px;height:44px;flex:none;' +
+        'background:#171C1E;border:' + HAIR + ';border-radius:13px;box-sizing:border-box;">' +
+        half(mine, "own") + half(theirs, "opp") +
       '</div>';
     }
 
@@ -931,45 +924,45 @@ window.plethoraBit = {
       const ownGrad = GRAD[who];
       const oppGrad = GRAD[who === "b" ? "w" : "b"];
       const box = top
-        ? "top:0;height:" + L.strip + "px;transform:rotate(180deg);padding:8px 15px " + (SAFE_T + 6) + "px;"
-        : "bottom:0;height:" + L.strip + "px;padding:8px 15px " + (SAFE_B + 6) + "px;";
-      // The deck fades out toward the board so the table it sits on stays
-      // visible. The rotation carries the gradient with it, so one
-      // declaration reads correctly from both seats.
+        ? "top:0;height:" + L.strip + "px;transform:rotate(180deg);padding:7px 12px " + (SAFE_T + 6) + "px;"
+        : "bottom:0;height:" + L.strip + "px;padding:7px 12px " + (SAFE_B + 6) + "px;";
+      /* One row of chrome per end, not three.
+       *
+       * This used to be a territory bar, a caption, a row of two score chips
+       * and a row of four buttons — about 165px of furniture at each end of
+       * the screen, held to that height whatever the screen was. On a phone
+       * the board is limited by the width and it did not show; inside a card,
+       * where the height is what binds, those two blocks took most of the
+       * screen and left the board at a third of its width. The board is the
+       * game, so the chrome takes what it needs and no more: a hairline
+       * territory bar, both scores on one plate, the action, one settings
+       * key. Sound and how-to-play live inside settings, where they were
+       * already duplicated. */
       return '<div data-el="strip" data-who="' + who + '" style="position:absolute;left:0;right:0;' + box +
-        'display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;' +
+        'display:flex;flex-direction:column;justify-content:flex-end;gap:9px;box-sizing:border-box;' +
         'pointer-events:none;transition:opacity 240ms ease;' +
         'background:linear-gradient(to top,#0C1011 46%,rgba(12,16,17,0) 100%);">' +
 
         // Territory. This strip's owner grows from the near edge, the
         // opponent from the far one, and the unclaimed felt shows between
         // them — so each player watches the board fill toward themselves.
-        '<div>' +
-          '<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:#0C2419;' +
-            'border:' + HAIR + ';box-sizing:border-box;">' +
-            '<div data-el="terr-a" style="width:3%;background:' + ownGrad + ';' +
-              'transition:width 420ms cubic-bezier(.22,.8,.28,1);"></div>' +
-            '<div style="flex:1;"></div>' +
-            '<div data-el="terr-b" style="width:3%;background:' + oppGrad + ';' +
-              'transition:width 420ms cubic-bezier(.22,.8,.28,1);"></div>' +
-          '</div>' +
-          '<div data-el="caption" style="margin-top:8px;text-align:center;font-family:' + BODY + ';' +
-            'font-size:9.5px;font-weight:600;letter-spacing:0.22em;text-transform:lowercase;' +
-            'color:rgba(207,224,212,0.38);">Opening position</div>' +
+        '<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;background:#0C2419;' +
+          'border:' + HAIR + ';box-sizing:border-box;flex:none;">' +
+          '<div data-el="terr-a" style="width:3%;background:' + ownGrad + ';' +
+            'transition:width 420ms cubic-bezier(.22,.8,.28,1);"></div>' +
+          '<div style="flex:1;"></div>' +
+          '<div data-el="terr-b" style="width:3%;background:' + oppGrad + ';' +
+            'transition:width 420ms cubic-bezier(.22,.8,.28,1);"></div>' +
         '</div>' +
 
-        '<div style="display:flex;gap:8px;align-items:stretch;">' +
-          chip(who, "own") + chip(who === "b" ? "w" : "b", "opp") +
-        '</div>' +
-
-        '<div style="display:flex;gap:7px;align-items:stretch;">' +
-          '<button data-el="mute" aria-label="Sound" style="' + iconBtn + '">' + SPK(true) + '</button>' +
-          '<button data-el="cog" aria-label="Settings" style="' + iconBtn + '">&#9881;</button>' +
-          '<button data-el="help" aria-label="How to play" style="' + iconBtn + '">?</button>' +
-          '<button data-el="act" style="pointer-events:auto;flex:1;border-radius:12px;border:' + HAIR + ';' +
-            'background:#191E20;color:#CFE0D4;font-family:' + BODY + ';font-size:11.5px;font-weight:700;' +
-            'letter-spacing:0.16em;text-transform:lowercase;padding:0 6px;height:44px;' +
+        '<div style="display:flex;gap:7px;align-items:stretch;flex:none;">' +
+          scorePlate(who) +
+          '<button data-el="act" style="pointer-events:auto;flex:1;min-width:0;border-radius:13px;' +
+            'border:' + HAIR + ';background:#191E20;color:#CFE0D4;font-family:' + BODY + ';' +
+            'font-size:11.5px;font-weight:700;letter-spacing:0.12em;text-transform:lowercase;' +
+            'padding:0 6px;height:44px;overflow:hidden;white-space:nowrap;' +
             '-webkit-tap-highlight-color:transparent;">Black to play</button>' +
+          '<button data-el="cog" aria-label="Settings" style="' + iconBtn + '">&#9881;</button>' +
         '</div>' +
       '</div>';
     }
@@ -1108,7 +1101,8 @@ window.plethoraBit = {
             'Confirm arms a ghost disc first and shows what would flip. Either end&rsquo;s button commits it.</div>' +
           '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Legal move rings</div>' +
           '<div data-el="set-hints" style="display:flex;gap:7px;margin:9px 0 5px;"></div>' +
-          '<button data-el="cogp-close" style="' + bigBtn("#232A2C", "#E4EDE6") + 'width:100%;margin-top:18px;">Done</button>' +
+          '<button data-el="to-help" style="' + bigBtn("#1B2123", "#CFE0D4") + 'width:100%;margin-top:18px;">How to play</button>' +
+          '<button data-el="cogp-close" style="' + bigBtn("#232A2C", "#E4EDE6") + 'width:100%;margin-top:9px;">Done</button>' +
         '</div>' +
       '</div>' +
 
@@ -1249,15 +1243,7 @@ window.plethoraBit = {
       }
     }
 
-    function paintCaption() {
-      let text;
-      if (phase === "over") text = "Final position · " + moveNo + " moves";
-      else if (lastMove < 0) text = "Opening position";
-      else text = "Move " + moveNo + " · " + P[lastMover].name + " played " + cellName(lastMove);
-      for (const n of all("caption")) n.textContent = text;
-    }
-
-    function paintHud() { paintChips(); paintCounts(); paintAction(); paintCaption(); }
+    function paintHud() { paintChips(); paintCounts(); paintAction(); }
 
     /* =================================================================
      * MARKERS
@@ -1370,7 +1356,6 @@ window.plethoraBit = {
       legal = new Map();
       paintMarkers();
       paintAction();
-      paintCaption();
 
       sound.sting("coin");
       sound.haptic("medium");
@@ -1561,21 +1546,18 @@ window.plethoraBit = {
 
     /* --- chrome --- */
     pressAll("act", () => { if (armed) commit(); });
-    pressAll("mute", () => {
-      const m = sound.toggle();
-      for (const n of all("mute")) n.innerHTML = SPK(!m);
-    });
-    if (settings.mute) for (const n of all("mute")) n.innerHTML = SPK(false);
     // A panel opened from the far end turns to face that end, the same way a
     // real player would spin a rulebook round rather than lean over the table.
     const farCog = () => stripOf("b") && stripOf("b").querySelector('[data-el="cog"]');
-    const farHelp = () => stripOf("b") && stripOf("b").querySelector('[data-el="help"]');
     function openPanel(name, fromFar) {
       el(name + "-card").style.transform = fromFar ? "rotate(180deg)" : "none";
       el(name).style.display = "flex";
     }
-    pressAll("cog", (node) => openPanel("cogp", node === farCog()));
-    pressAll("help", (node) => openPanel("helpp", node === farHelp()));
+    let panelFromFar = false;
+    pressAll("cog", (node) => { panelFromFar = node === farCog(); openPanel("cogp", panelFromFar); });
+    // How to play now hangs off settings, and keeps whichever way settings
+    // was facing when it was opened.
+    press(el("to-help"), () => { el("cogp").style.display = "none"; openPanel("helpp", panelFromFar); });
     press(el("cogp-close"), () => { el("cogp").style.display = "none"; });
     press(el("helpp-close"), () => { el("helpp").style.display = "none"; });
     pressAll("again", () => { newGame(); ctx.platform.interact({ type: "rematch" }); });
@@ -1607,10 +1589,7 @@ window.plethoraBit = {
     }
     pills(el("set-mute"), ["false", "true"], ["On", "Muted"],
       () => String(settings.mute), (v) => {
-        if (String(settings.mute) !== v) {
-          const m = sound.toggle();
-          for (const n of all("mute")) n.innerHTML = SPK(!m);
-        }
+        if (String(settings.mute) !== v) sound.toggle();
       });
     pills(el("set-confirm"), ["true", "false"], ["Confirm", "Instant"],
       () => String(settings.confirm), (v) => {

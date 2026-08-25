@@ -85,8 +85,13 @@ await bit.tap(done.x, done.y);
 await bit.wait(240);
 
 // The rules, opened from the FAR end: the card should turn to face it.
-const help = await hit('[data-el="help"]', 0);
-await bit.tap(help.x, help.y);
+// How to play now hangs off settings rather than carrying its own key in the
+// strip, so it is two taps and it inherits the way settings was facing.
+const farCog = await hit('[data-el="cog"]', 0);
+await bit.tap(farCog.x, farCog.y);
+await bit.wait(280);
+const toHelp = await hit('[data-el="to-help"]', 0);
+await bit.tap(toHelp.x, toHelp.y);
 await bit.wait(320);
 await bit.shot("othello-8-help");
 const rot = await bit.probe(() =>
@@ -95,6 +100,7 @@ check(/matrix\(-1,/.test(rot), "a panel opened from the far end turns to face it
 const gotit = await hit('[data-el="helpp-close"]');
 await bit.tap(gotit.x, gotit.y);
 await bit.wait(240);
+
 
 /* ---- the shortest wipe-out in Othello: nine plies --------------- */
 for (const mv of ["c3", "b3", "d2", "e1", "d6", "d7", "e3", "f4"]) {

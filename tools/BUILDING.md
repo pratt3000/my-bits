@@ -306,3 +306,22 @@ other quadrants against the top-left.
 
 WebGL bits are not affected in the same way — they cap the drawing buffer and
 let CSS stretch it, which costs sharpness but still fills the screen.
+
+## Boot is not a test
+
+Deleting a helper and leaving one of its call sites behind parses, validates,
+boots, and screenshots perfectly. It throws the first time that code path
+runs — and for a board game that is the first *move*, not the first frame.
+Removing Othello's caption row left one `paintCaption()` inside `commit()`;
+the title screen was flawless and every move after the first died silently in
+a pointer handler.
+
+Nothing static caught it. A regex that flags "a call to a name this file never
+binds" drowns in false positives — `let a = null, b = null`, method shorthand,
+getters, destructured parameters, and function declarations themselves all
+bind names in forms a regex cannot separate from a call, and a check nobody
+trusts is worse than no check. Getting it right needs a parser.
+
+What caught it in one run was the play script, because it plays nine plies
+instead of taking a photograph of the first. That is the whole argument for
+writing one per bit: booting is not testing.
