@@ -190,11 +190,21 @@ window.plethoraBit = {
     const L = {};
     function measure() {
       W = ctx.width; H = ctx.height;
-      L.bandH = Math.max(160, (H - 210) / 2);
+      // The middle band carries up to three order rows and the hull bar, and
+      // it used to be given 97px to do it in — the third row ran out of the
+      // band and into the console below. Reserve what the rows actually need,
+      // then let the consoles have the rest.
+      const need = 6 + 3 * 34 + 2 * 6 + 22;          // rows, gaps, hull bar
       L.topY = ctx.safeArea.top + 6;
+      const free = H - L.topY - (ctx.safeArea.bottom + 6) - need - 20;
+      L.bandH = Math.max(160, free / 2);
       L.botY = H - ctx.safeArea.bottom - 6 - L.bandH;
       L.orderY = L.topY + L.bandH + 10;
       L.orderH = L.botY - L.orderY - 10;
+      // How many rows actually fit, and how tall. On a short phone this shows
+      // two and counts the rest, rather than drawing three that do not fit.
+      L.rowH = Math.min(38, Math.max(24, (L.orderH - 28 - 12) / 3));
+      L.rows = Math.max(1, Math.min(3, Math.floor((L.orderH - 22) / (L.rowH + 6))));
     }
     measure();
 
@@ -227,6 +237,10 @@ window.plethoraBit = {
     let spawnAt = 0, shake = 0, banner = null;
 
     const PER_CONSOLE = 4;
+
+    /* Width kept clear down the left of the order band for the chrome
+     * column, which is pinned to the middle of that same edge. */
+    const GUTTER = 46;
 
     function startGame(n) {
       const boxes = consoles(n);
@@ -461,6 +475,7 @@ window.plethoraBit = {
       for (const c of controls) drawControl(c);
       drawOrders();
       drawHull();
+      drawBanner();
       g.restore();
     }
 
@@ -472,62 +487,78 @@ window.plethoraBit = {
      * of the crew member whose hands it needs.
      */
     function drawOrders() {
-      const rowH = Math.min(46, L.orderH / 3.2);
-      const n = Math.min(orders.length, 3);
+      const rowH = L.rowH;
+      // The chrome column is pinned to the middle of the left edge, which is
+      // this band — so the rows start after it rather than under it.
+      const n = Math.min(orders.length, L.rows);
       for (let i = 0; i < n; i++) {
         const o = orders[i];
         const owner = crew[o.control.owner];
         const y = L.orderY + 6 + i * (rowH + 6);
-        const w = W - 26;
-        roundRect(g, 13, y, w, rowH, 9);
+        const w = W - 26 - GUTTER;
+        roundRect(g, 13 + GUTTER, y, w, rowH, 9);
         g.fillStyle = "rgba(255,255,255,0.055)";
         g.fill();
         // Its clock, draining left to right.
         const f = clamp((o.expiresAt - performance.now()) / (o.life * 1000), 0, 1);
         g.save();
-        roundRect(g, 13, y, w, rowH, 9); g.clip();
+        roundRect(g, 13 + GUTTER, y, w, rowH, 9); g.clip();
         g.fillStyle = f < 0.3 ? "rgba(255,77,109,0.30)" : owner.css + "26";
-        g.fillRect(13, y, w * f, rowH);
+        g.fillRect(13 + GUTTER, y, w * f, rowH);
         g.restore();
         g.strokeStyle = owner.css; g.lineWidth = 1.6;
-        roundRect(g, 13, y, w, rowH, 9); g.stroke();
+        roundRect(g, 13 + GUTTER, y, w, rowH, 9); g.stroke();
 
         g.fillStyle = owner.css;
-        roundRect(g, 20, y + rowH / 2 - 7, 5, 14, 2.5);
+        roundRect(g, 20 + GUTTER, y + rowH / 2 - 7, 5, 14, 2.5);
         g.fill();
         g.fillStyle = "#eef4ff";
         g.font = "800 " + Math.min(16, w * 0.045) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "left"; g.textBaseline = "middle";
-        g.fillText(o.text, 34, y + rowH / 2);
+        g.fillText(o.text, 34 + GUTTER, y + rowH / 2);
         g.fillStyle = owner.css;
         g.font = "700 10px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "right";
-        g.fillText(owner.name.toLowerCase(), 13 + w - 12, y + rowH / 2);
+        g.fillText(owner.name.toLowerCase(), 13 + GUTTER + w - 12, y + rowH / 2);
       }
-      if (orders.length > 3) {
+      if (orders.length > n) {
         g.fillStyle = "rgba(238,244,255,0.45)";
         g.font = "700 11px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-        g.textAlign = "center"; g.textBaseline = "top";
-        g.fillText("+" + (orders.length - 3) + " more", W / 2, L.orderY + 6 + 3 * (rowH + 6) + 2);
+        g.textAlign = "right"; g.textBaseline = "middle";
+        g.fillText("+" + (orders.length - n), W - 15, L.orderY + L.orderH - 22);
       }
     }
 
     function drawHull() {
-      const y = L.orderY + L.orderH - 12, w = W - 26;
-      roundRect(g, 13, y, w, 7, 3.5);
+      const y = L.orderY + L.orderH - 12, w = W - 26 - GUTTER;
+      roundRect(g, 13 + GUTTER, y, w, 7, 3.5);
       g.fillStyle = "rgba(255,255,255,0.09)"; g.fill();
       const f = clamp(hull / 100, 0, 1);
-      roundRect(g, 13, y, w * f, 7, 3.5);
+      roundRect(g, 13 + GUTTER, y, w * f, 7, 3.5);
       g.fillStyle = f > 0.5 ? "#3ddc97" : f > 0.25 ? "#ffd166" : "#ff4d6d";
       g.fill();
-      if (banner && banner.t > 0) {
-        g.globalAlpha = clamp(banner.t, 0, 1);
-        g.fillStyle = "#eef4ff";
-        g.font = "900 30px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-        g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillText(banner.text, W / 2, L.orderY + L.orderH / 2 - 14);
-        g.globalAlpha = 1;
-      }
+      // The wave call-out used to be painted at the centre of this band, which
+      // is exactly where the live orders are — the two read as one garbled
+      // line. It covers the band instead, as a title card that clears.
+    }
+
+    /** The wave call-out. Drawn after the orders, over its own plate: painted
+     *  under them it showed through the gaps as a ghost, and painted without
+     *  a plate it landed straight across a live order and the two read as one
+     *  garbled line. */
+    function drawBanner() {
+      if (!banner || banner.t <= 0) return;
+      g.save();
+      g.globalAlpha = clamp(banner.t, 0, 1);
+      roundRect(g, 13 + GUTTER, L.orderY + 4, W - 26 - GUTTER, L.orderH - 20, 12);
+      g.fillStyle = "rgba(9,13,24,0.94)"; g.fill();
+      g.strokeStyle = "rgba(238,244,255,0.14)"; g.lineWidth = 1.4; g.stroke();
+      g.fillStyle = "#eef4ff";
+      g.font = "900 " + Math.round(Math.min(30, (L.orderH - 20) * 0.42)) +
+               "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(banner.text, (W + GUTTER) / 2, L.orderY + 4 + (L.orderH - 20) / 2);
+      g.restore();
     }
 
     /* ---------------------------------------------------------------
