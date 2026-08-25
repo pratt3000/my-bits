@@ -55,6 +55,34 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const TAU = Math.PI * 2;
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
     const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
@@ -84,9 +112,9 @@ window.plethoraBit = {
     // No remote fonts: a bit may not reach a font CDN, so the display voice is
     // the most condensed face the device already has and every size is chosen
     // by measureText rather than assumed.
-    const DISPLAY = "'Bebas Neue','Oswald','Arial Narrow','Roboto Condensed','Helvetica Neue',Impact,sans-serif";
-    const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace";
-    const BODY = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const DISPLAY = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const MONO = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const BODY = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
 
     const TEAM = {
       red:  { name: "RED",  ink: RED,  deep: RED_DEEP,  lit: RED_LIT,  agents: 9 },
@@ -285,12 +313,20 @@ window.plethoraBit = {
     }
 
     /** Letter-spaced type, drawn a character at a time so it works everywhere. */
+    // Set lowercase like the rest of the game. This helper draws one
+    // character at a time for its own tracking, and single characters slip
+    // past the case fold that every other canvas string goes through.
     function trackWidth(g, str, track) {
+      str = typeof str === "string" ? str.toLowerCase() : str;
       let t = 0;
       for (let i = 0; i < str.length; i++) t += g.measureText(str[i]).width + track;
       return t - track;
     }
+    // Set lowercase like the rest of the game. This helper draws one
+    // character at a time for its own tracking, and single characters slip
+    // past the case fold that every other canvas string goes through.
     function tracked(g, str, x, y, track, align) {
+      str = typeof str === "string" ? str.toLowerCase() : str;
       const total = trackWidth(g, str, track);
       let cx = align === "center" ? x - total / 2 : align === "right" ? x - total : x;
       const prev = g.textAlign;
@@ -1997,7 +2033,7 @@ window.plethoraBit = {
       "font-family:inherit;padding:0;box-shadow:inset 0 0 0 1px rgba(255,194,28,0.32);";
     const bigBtn = (bg, fg) => "width:100%;padding:14px;border:none;border-radius:4px;font-family:inherit;" +
       "font-size:15px;font-weight:700;letter-spacing:0.14em;background:" + bg + ";color:" + fg + ";" +
-      "margin-top:10px;pointer-events:auto;text-transform:uppercase;";
+      "margin-top:10px;pointer-events:auto;text-transform:lowercase;";
     // A sheet is a column: fixed head, scrolling body, and the button pinned
     // at the foot — a rules list long enough to scroll must never push its own
     // way out of reach.
@@ -2009,10 +2045,22 @@ window.plethoraBit = {
     const scroller = "flex:1 1 auto;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch;";
     const sheet = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
       "background:rgba(6,4,3,0.90);z-index:70;padding:22px;pointer-events:auto;";
-    const label = "font-size:10px;letter-spacing:0.28em;text-transform:uppercase;opacity:0.5;font-family:" + MONO + ";";
+    const label = "font-size:10px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.5;font-family:" + MONO + ";";
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + BODY + ";color:" + CREAM + ";pointer-events:none;";
+    root.style.cssText += ";font-family:" + BODY + ";color:" + CREAM + ";pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       /* ---- utility chrome, parked in the spine that belongs to nobody ---- */
       '<div data-el="chrome" style="position:absolute;right:8px;top:0;display:flex;gap:6px;' +
@@ -2046,10 +2094,10 @@ window.plethoraBit = {
         '<div style="display:flex;gap:8px;margin-top:10px;">' +
           '<button data-el="mhelp" style="pointer-events:auto;padding:9px 14px;border:none;border-radius:4px;' +
             'background:rgba(255,255,255,0.08);color:' + CREAM + ';font-family:inherit;font-size:12px;' +
-            'letter-spacing:0.12em;text-transform:uppercase;">How to play</button>' +
+            'letter-spacing:0.12em;text-transform:lowercase;">How to play</button>' +
           '<button data-el="mcog" style="pointer-events:auto;padding:9px 14px;border:none;border-radius:4px;' +
             'background:rgba(255,255,255,0.08);color:' + CREAM + ';font-family:inherit;font-size:12px;' +
-            'letter-spacing:0.12em;text-transform:uppercase;">Settings</button>' +
+            'letter-spacing:0.12em;text-transform:lowercase;">Settings</button>' +
         '</div>' +
       '</div>' +
 
@@ -2318,6 +2366,11 @@ window.plethoraBit = {
       if (ctx.width === W && ctx.height === H) return;
       canvas.width = Math.round(ctx.width * dpr);
       canvas.height = Math.round(ctx.height * dpr);
+      // Writing canvas.width RESETS the 2D transform to the identity, so the
+      // DPR scale ctx.createCanvas2D() installed at boot is gone and every
+      // following frame draws at 1:1 in physical pixels — the whole game
+      // shrinks into the top-left corner. It has to be re-applied here.
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
       layout();
       bakeSunburst();
       if (words.length) bakeTiles();
@@ -2378,11 +2431,12 @@ window.plethoraBit = {
     ctx.markVisualReady("dossier open");
     ctx.platform.ready();
 
-    // The condensed display face, if this device happens to have it in the
-    // registry. Every size is chosen by measureText, so a failure just leaves
-    // the system stack in place and nothing reflows wrongly.
+    // Wait for the real face before baking, or the tiles are measured in the
+    // fallback stack and every codeword is set at the wrong size. Sizes come
+    // from measureText, so a failure just leaves the fallback in place and
+    // nothing reflows wrongly.
     try {
-      await ctx.loadFont("Bebas Neue", "bebas-neue", "1.0.0", { weight: "400" });
+      await ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" });
       if (words.length) bakeTiles();
     } catch (_) { /* the fallback stack is already carrying the screen */ }
   },

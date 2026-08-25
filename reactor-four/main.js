@@ -53,6 +53,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const THREE = await ctx.importModule("three", "0.164.1");
 
     const TAU = Math.PI * 2;
@@ -263,7 +304,11 @@ window.plethoraBit = {
 
     /** Letter-spaced caps, drawn per glyph so the tracking is identical on
      *  every engine — ctx.letterSpacing is not universally present. */
+    // Set lowercase like the rest of the game. This helper draws one
+    // character at a time for its own tracking, and single characters slip
+    // past the case fold that every other canvas string goes through.
     function tracked(g, text, x, y, size, track, align, maxW) {
+      text = typeof text === "string" ? text.toLowerCase() : text;
       const chars = String(text).split("");
       let total = 0;
       // Shrink until it fits, tracking included — fitting the glyphs alone and
@@ -297,8 +342,8 @@ window.plethoraBit = {
       return s;
     }
 
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-    const MONO = "ui-monospace,SFMono-Regular,Menlo,'Roboto Mono',monospace";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const MONO = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
 
     /* ---------------------------------------------------------------
      * Signal glyphs. Six shapes that stay distinguishable from any seat:
@@ -1497,13 +1542,25 @@ window.plethoraBit = {
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT + ";color:#dbe6f5;pointer-events:none;" +
-      "-webkit-user-select:none;user-select:none;";
+      "-webkit-user-select:none;user-select:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       /* --- chrome, faded out while a round is live so a corner slap still counts --- */
       '<div data-el="chrome" style="position:absolute;right:8px;top:' + (safeT + 4) + 'px;' +
         'display:flex;flex-direction:column;gap:6px;z-index:60;pointer-events:none;' +
         'transition:opacity .25s;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + btn + '">' + (settings.mute ? "&#128263;" : "&#128266;") + "</button>" +
+        '<button data-el="mute" aria-label="Sound" style="' + btn + '">' + SPK(!settings.mute) + '</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + btn + '">&#9881;</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
       "</div>" +
@@ -1518,7 +1575,7 @@ window.plethoraBit = {
         'background:linear-gradient(180deg,rgba(3,5,10,0.96) 0%,rgba(3,5,10,0.90) 22%,' +
         'rgba(4,7,13,0.20) 38%,rgba(4,7,13,0.16) 60%,rgba(3,5,10,0.90) 76%,rgba(3,5,10,0.97) 100%);">' +
         "<div>" +
-          '<div style="font-size:9.5px;letter-spacing:0.52em;text-transform:uppercase;opacity:0.42;' +
+          '<div style="font-size:9.5px;letter-spacing:0.52em;text-transform:lowercase;opacity:0.42;' +
             'font-family:' + MONO + ';">Reaction Duel</div>' +
           '<div style="font-size:52px;font-weight:800;letter-spacing:-0.03em;line-height:0.95;margin-top:12px;' +
             'background:linear-gradient(102deg,' + STATIONS[0].ink + ',' + STATIONS[2].ink + ' 38%,' +
@@ -1529,7 +1586,7 @@ window.plethoraBit = {
             "and not one beat before.</div>" +
         "</div>" +
         "<div>" +
-          '<div style="font-size:9.5px;letter-spacing:0.36em;text-transform:uppercase;opacity:0.45;' +
+          '<div style="font-size:9.5px;letter-spacing:0.36em;text-transform:lowercase;opacity:0.45;' +
             'font-family:' + MONO + ';">Crew</div>' +
           '<div style="display:flex;gap:9px;margin-top:12px;width:100%;max-width:300px;">' +
             crewBtn(2, "TOP&middot;BOT") + crewBtn(3, "+LEFT") + crewBtn(4, "ALL EDGES") +
@@ -1563,7 +1620,7 @@ window.plethoraBit = {
         '<div style="width:100%;max-width:252px;box-sizing:border-box;' +
           'background:rgba(9,13,21,0.975);border-radius:22px;' +
           'border:1px solid rgba(150,190,240,0.16);padding:22px 20px 18px;">' +
-          '<div style="font-size:9.5px;letter-spacing:0.44em;text-transform:uppercase;opacity:0.45;">Core secured by</div>' +
+          '<div style="font-size:9.5px;letter-spacing:0.44em;text-transform:lowercase;opacity:0.45;">Core secured by</div>' +
           '<div data-el="over-name" style="font-size:42px;font-weight:800;letter-spacing:-0.01em;margin-top:4px;line-height:1.05;"></div>' +
           '<div data-el="over-stat" style="font-size:10.5px;letter-spacing:0.16em;margin-top:8px;"></div>' +
           '<div data-el="over-rows" style="width:100%;margin-top:16px;' +
@@ -1662,12 +1719,12 @@ window.plethoraBit = {
       () => (settings.mute ? 1 : 0), (v) => {
         const wantMute = v === "1";
         if (wantMute !== sound.muted) sound.toggle();
-        shell.el("mute").innerHTML = sound.muted ? "&#128263;" : "&#128266;";
+        shell.el("mute").innerHTML = SPK(!sound.muted);
       });
 
     shell.tap(shell.el("mute"), () => {
       const m = sound.toggle();
-      shell.el("mute").innerHTML = m ? "&#128263;" : "&#128266;";
+      shell.el("mute").innerHTML = SPK(!m);
       paintMutes();
     });
     shell.tap(shell.el("cog"), () => { shell.el("cogp").style.display = "flex"; sound.haptic("light"); });

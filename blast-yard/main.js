@@ -40,6 +40,34 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const THREE = await ctx.importModule("three", "0.164.1");
 
     const TAU = Math.PI * 2;
@@ -1018,8 +1046,8 @@ window.plethoraBit = {
      * every touch meant for a control. Only the pads and the panels opt
      * back in.
      * ============================================================= */
-    const FONT = "ui-rounded,'SF Pro Rounded','Nunito Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
-    const MONO = "'SF Mono',ui-monospace,'Space Mono',Menlo,monospace";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const MONO = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
 
     function padMarkup(i) {
       const b = L.pads[i], G = padGeo(i), p = PL[i];
@@ -1081,7 +1109,7 @@ window.plethoraBit = {
               p.ink + ';text-shadow:0 2px 0 rgba(0,0,0,0.5);">' + esc(p.name) + '</div>' +
             '<div data-el="pips' + i + '" style="display:flex;gap:4px;"></div>' +
             '<div data-el="st' + i + '" style="font-size:' + (small ? 9 : 10.5) + 'px;font-weight:700;' +
-              'letter-spacing:0.16em;text-transform:uppercase;color:rgba(234,243,230,0.5);' +
+              'letter-spacing:0.16em;text-transform:lowercase;color:rgba(234,243,230,0.5);' +
               'white-space:nowrap;">hold to arm</div>' +
           '</div>' +
         '</div>';
@@ -1108,7 +1136,19 @@ window.plethoraBit = {
     };
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:" + OFFWHITE + ";pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:" + OFFWHITE + ";pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       // --- vignette: the void closing in on the lit slab ---
       '<div style="position:absolute;inset:0;pointer-events:none;z-index:1;background:' +
@@ -1131,9 +1171,9 @@ window.plethoraBit = {
       '<div data-el="roundpill" style="position:absolute;right:' + (W - L.arena.x - L.arena.w + 6) + 'px;top:' +
         (L.arena.y + 4) + 'px;z-index:45;pointer-events:none;display:none;text-align:right;">' +
         '<div data-el="roundno" style="font-size:12px;font-weight:800;letter-spacing:0.18em;' +
-          'text-transform:uppercase;color:rgba(234,243,230,0.62);">Round 1</div>' +
+          'text-transform:lowercase;color:rgba(234,243,230,0.62);">Round 1</div>' +
         '<div data-el="warn" style="font-size:11px;font-weight:800;letter-spacing:0.14em;' +
-          'text-transform:uppercase;color:#FF7A3C;opacity:0;font-family:' + MONO + ';">rim falling</div>' +
+          'text-transform:lowercase;color:#FF7A3C;opacity:0;font-family:' + MONO + ';">rim falling</div>' +
       '</div>' +
 
       // --- centre banner ---
@@ -1145,14 +1185,14 @@ window.plethoraBit = {
         '<div data-el="banner-big" style="font-size:44px;font-weight:800;letter-spacing:-0.02em;' +
           'text-shadow:0 5px 0 rgba(0,0,0,0.55),0 0 40px rgba(255,180,60,0.4);"></div>' +
         '<div data-el="banner-sub" style="font-size:14px;font-weight:700;letter-spacing:0.22em;' +
-          'text-transform:uppercase;opacity:0.66;margin-top:4px;"></div>' +
+          'text-transform:lowercase;opacity:0.66;margin-top:4px;"></div>' +
       '</div>' +
 
       // --- title ---
       '<div data-el="title" style="position:absolute;inset:0;z-index:60;pointer-events:auto;' +
         'background:radial-gradient(ellipse at 50% 34%,#241A12 0%,#0C0906 70%);">' +
         '<div style="position:absolute;left:0;right:0;top:' + Math.round(H * 0.165) + 'px;text-align:center;">' +
-          '<div style="font-size:12px;font-weight:800;letter-spacing:0.44em;text-transform:uppercase;' +
+          '<div style="font-size:12px;font-weight:800;letter-spacing:0.44em;text-transform:lowercase;' +
             'color:rgba(234,243,230,0.42);">Blow up your friends</div>' +
           '<div style="margin-top:8px;font-size:58px;line-height:1.02;font-weight:800;letter-spacing:-0.025em;' +
             'color:' + OFFWHITE + ';text-shadow:0 5px 0 #8A5C26,0 9px 0 rgba(0,0,0,0.5),0 0 46px rgba(255,196,77,0.35);">' +
@@ -1162,7 +1202,7 @@ window.plethoraBit = {
             'the last one still on the wood takes the round.</div>' +
         '</div>' +
         '<div style="position:absolute;left:0;right:0;top:' + Math.round(H * 0.515) + 'px;text-align:center;' +
-          'font-size:11.5px;font-weight:800;letter-spacing:0.30em;text-transform:uppercase;' +
+          'font-size:11.5px;font-weight:800;letter-spacing:0.30em;text-transform:lowercase;' +
           'color:rgba(234,243,230,0.42);">How many players?</div>' +
         [2, 3, 4].map((n, k) =>
           '<button data-el="count' + n + '" data-n="' + n + '" style="pointer-events:auto;position:absolute;' +
@@ -1182,7 +1222,7 @@ window.plethoraBit = {
               '<div style="height:34px;border-radius:14px;background:linear-gradient(180deg,' + q.lit + ',' +
                 q.ink + ');box-shadow:0 3px 0 rgba(0,0,0,0.45);"></div>' +
               '<div style="margin-top:6px;font-size:10px;font-weight:800;letter-spacing:0.12em;' +
-                'text-transform:uppercase;color:rgba(234,243,230,0.5);">' + esc(q.name) + '</div>' +
+                'text-transform:lowercase;color:rgba(234,243,230,0.5);">' + esc(q.name) + '</div>' +
             '</div>').join("") +
         '</div>' +
         '<div style="position:absolute;left:34px;right:34px;bottom:' + (ctx.safeArea.bottom + 16) + 'px;' +
@@ -1209,7 +1249,7 @@ window.plethoraBit = {
           'background:linear-gradient(180deg,rgba(38,30,22,0.93),rgba(16,12,8,0.95));' +
           'box-shadow:inset 0 2px 0 rgba(255,255,255,0.10),0 8px 24px rgba(0,0,0,0.6);' +
           'border:1.5px solid rgba(234,243,230,0.12);">' +
-          '<div style="font-size:11px;font-weight:800;letter-spacing:0.26em;text-transform:uppercase;' +
+          '<div style="font-size:11px;font-weight:800;letter-spacing:0.26em;text-transform:lowercase;' +
             'color:rgba(234,243,230,0.45);">Take your seat</div>' +
           '<div style="margin-top:8px;font-size:19px;line-height:1.25;font-weight:800;">Everyone press<br>your bomb button</div>' +
           '<div data-el="seatcount" style="margin-top:10px;font-size:13px;font-weight:800;letter-spacing:0.18em;' +
@@ -1228,20 +1268,20 @@ window.plethoraBit = {
         'background:radial-gradient(ellipse at 50% 40%,rgba(30,20,12,0.975),rgba(6,4,3,0.99));">' +
         '<div style="position:absolute;left:0;right:0;top:20%;text-align:center;' +
           'transform:rotate(180deg);">' +
-          '<div style="font-size:10.5px;font-weight:800;letter-spacing:0.32em;text-transform:uppercase;' +
+          '<div style="font-size:10.5px;font-weight:800;letter-spacing:0.32em;text-transform:lowercase;' +
             'color:rgba(234,243,230,0.36);">Match over</div>' +
           '<div data-el="over-title2" style="margin-top:4px;font-size:26px;font-weight:800;' +
             'letter-spacing:-0.01em;opacity:0.85;text-shadow:0 3px 0 rgba(0,0,0,0.55);"></div>' +
         '</div>' +
         '<div style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;padding:0 26px;">' +
-          '<div style="font-size:12px;font-weight:800;letter-spacing:0.36em;text-transform:uppercase;' +
+          '<div style="font-size:12px;font-weight:800;letter-spacing:0.36em;text-transform:lowercase;' +
             'color:rgba(234,243,230,0.42);">Match over</div>' +
           '<div data-el="over-title" style="margin-top:6px;font-size:46px;font-weight:800;letter-spacing:-0.02em;' +
             'text-shadow:0 4px 0 rgba(0,0,0,0.55);"></div>' +
           '<div data-el="over-line" style="margin:22px auto 0;display:flex;gap:9px;justify-content:center;"></div>' +
           '<div data-el="over-streak" style="margin:22px auto 0;display:inline-block;padding:9px 16px;' +
             'border-radius:999px;background:rgba(255,240,116,0.12);border:1.5px solid rgba(255,240,116,0.35);' +
-            'font-size:12px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:' + HOT + ';"></div>' +
+            'font-size:12px;font-weight:800;letter-spacing:0.14em;text-transform:lowercase;color:' + HOT + ';"></div>' +
           '<div style="max-width:250px;margin:26px auto 0;">' +
             '<button data-el="again" style="' + CTA + '">Rematch</button>' +
             '<button data-el="newp" style="' + bigBtn("rgba(255,224,180,0.10)", OFFWHITE) +
@@ -1259,15 +1299,15 @@ window.plethoraBit = {
           '0 9px 0 rgba(0,0,0,0.45),0 18px 40px rgba(0,0,0,0.55);border:2px solid ' + RIM + ';">' +
           '<div style="position:absolute;left:0;right:0;top:18px;text-align:center;font-size:19px;font-weight:800;">Settings</div>' +
           '<div style="position:absolute;left:16px;top:62px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
-            'text-transform:uppercase;opacity:0.5;">Rounds to win</div>' +
+            'text-transform:lowercase;opacity:0.5;">Rounds to win</div>' +
           pillRow("rounds", ["2", "3", "5"], 84) +
           '<div style="position:absolute;left:16px;top:146px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
-            'text-transform:uppercase;opacity:0.5;">Pace</div>' +
+            'text-transform:lowercase;opacity:0.5;">Pace</div>' +
           '<div style="position:absolute;left:16px;top:163px;font-size:10.5px;opacity:0.36;">' +
             'how soon the rim starts falling away</div>' +
           pillRow("pace", ["Chill", "Normal", "Frantic"], 182) +
           '<div style="position:absolute;left:16px;top:244px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
-            'text-transform:uppercase;opacity:0.5;">Sound</div>' +
+            'text-transform:lowercase;opacity:0.5;">Sound</div>' +
           '<button data-el="mute2" style="pointer-events:auto;position:absolute;left:14px;top:262px;width:' +
             (CARD_W - 28) + 'px;height:44px;border:1.5px solid ' + RIM + ';border-radius:14px;' +
             'font-family:inherit;font-size:14.5px;font-weight:800;background:rgba(255,224,180,0.07);' +
@@ -1275,7 +1315,7 @@ window.plethoraBit = {
             'padding:0 16px;box-sizing:border-box;">' +
             '<span style="pointer-events:none;">Music &amp; effects</span>' +
             '<span data-el="mute2v" style="pointer-events:none;font-size:12px;letter-spacing:0.14em;' +
-              'text-transform:uppercase;color:' + HOT + ';">On</span>' +
+              'text-transform:lowercase;color:' + HOT + ';">On</span>' +
           '</button>' +
           '<button data-el="cogp-close" style="pointer-events:auto;position:absolute;left:14px;top:320px;width:' +
             (CARD_W - 28) + 'px;height:46px;border:none;border-radius:15px;font-family:inherit;font-size:15px;' +
@@ -1642,7 +1682,7 @@ window.plethoraBit = {
             ',' + PL[q.i].ink + ');box-shadow:0 3px 0 rgba(0,0,0,0.5);display:flex;align-items:center;' +
             'justify-content:center;font-size:19px;font-weight:800;color:rgba(24,13,4,0.92);">' + q.wins + '</div>' +
           '<div style="margin-top:5px;font-size:10px;font-weight:800;letter-spacing:0.1em;' +
-            'text-transform:uppercase;color:rgba(234,243,230,0.55);">' + esc(PL[q.i].name) + '</div>' +
+            'text-transform:lowercase;color:rgba(234,243,230,0.55);">' + esc(PL[q.i].name) + '</div>' +
         '</div>').join("");
       el("over-streak").textContent = "Longest streak · " + bestStreak +
         (bestStreak === 1 ? " round" : " rounds");

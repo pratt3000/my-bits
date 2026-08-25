@@ -41,6 +41,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
     const TAU = Math.PI * 2;
 
@@ -356,7 +397,7 @@ window.plethoraBit = {
       } else {
         score[who]++;
         cars[1 - who].dead = true;
-        msg = { text: P[who].name.toUpperCase() + " SCORES", t: 1.4 };
+        msg = { text: P[who].name.toLowerCase() + " SCORES", t: 1.4 };
         sound.sting("coin");
         ctx.platform.setScore(Math.max(score[0], score[1]));
       }
@@ -480,7 +521,7 @@ window.plethoraBit = {
         if (msg && msg.t > 0) {
           g.globalAlpha = clamp(msg.t, 0, 1);
           g.fillStyle = "#fff4e0";
-          g.font = "900 " + (34 * L.scale) + "px -apple-system, system-ui, sans-serif";
+          g.font = "900 " + (34 * L.scale) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
           g.textAlign = "center"; g.textBaseline = "middle";
           g.fillText(msg.text, W / 2, L.top + 70 * L.scale);
           g.globalAlpha = 1;
@@ -498,7 +539,7 @@ window.plethoraBit = {
      * with a hand on their own end of the phone, so their thumbs stay in
      * their own corner and their forearms never meet in the middle.
      * ------------------------------------------------------------- */
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const ST = 10, SB = 10;   // landscape: the notch and home bar are now side insets
     const BIG = "width:100%;padding:15px;border:none;border-radius:15px;font-family:inherit;" +
       "font-size:16px;font-weight:800;";
@@ -520,7 +561,19 @@ window.plethoraBit = {
     }
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:#fff4e0;pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:#fff4e0;pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     // The overlay turns with the game. Sized to the LOGICAL landscape box and
     // rotated a quarter turn about its own origin, so every coordinate written
     // below is landscape and matches what the canvas draws underneath it.
@@ -540,7 +593,7 @@ window.plethoraBit = {
         'text-align:center;pointer-events:none;font-size:26px;font-weight:900;"></div>' +
       '<div style="position:absolute;left:0;right:0;bottom:' + (SB + 104) + 'px;display:flex;' +
         'gap:8px;justify-content:center;z-index:40;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">🔊</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + BTN + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
@@ -563,7 +616,7 @@ window.plethoraBit = {
               '<path d="M44 46 l5 6 -7 3 z" fill="#ff5a45"/>' +
             '</svg>' +
           '</div>' +
-          '<div style="font-size:10.5px;letter-spacing:0.28em;text-transform:uppercase;' +
+          '<div style="font-size:10.5px;letter-spacing:0.28em;text-transform:lowercase;' +
             'color:#ff5a45;opacity:0.9;">Turn the phone sideways</div>' +
           '<div style="font-size:40px;font-weight:900;letter-spacing:-0.02em;line-height:1.04;' +
             'margin:4px 0 6px;background:linear-gradient(96deg,#ff5a45,#4cc9f0);' +
@@ -575,9 +628,9 @@ window.plethoraBit = {
         '</div>' +
         '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:7px;align-items:stretch;' +
           'min-width:196px;">' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">First to</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">First to</div>' +
           '<div data-el="tc" style="display:flex;gap:7px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;margin-top:5px;">Arena</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;margin-top:5px;">Arena</div>' +
           '<div data-el="ac" style="display:flex;gap:7px;"></div>' +
           '<button data-el="go" style="' + BIG + 'margin-top:11px;' +
             'background:linear-gradient(96deg,#ff5a45,#4cc9f0);color:#140d1c;">Start</button>' +
@@ -596,9 +649,9 @@ window.plethoraBit = {
         '<div style="max-width:320px;width:100%;background:rgba(30,18,42,0.98);border-radius:20px;' +
           'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:14px;">Settings</div>' +
-          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.55;">First to</div>' +
+          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">First to</div>' +
           '<div data-el="tc2" style="display:flex;gap:8px;margin:9px 0 16px;"></div>' +
-          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.55;">Arena</div>' +
+          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">Arena</div>' +
           '<div data-el="ac2" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
           '<button data-el="cogp-close" style="' + BIG + 'margin-top:18px;' +
             'background:rgba(255,255,255,0.14);color:#fff4e0;">Done</button>' +
@@ -629,8 +682,8 @@ window.plethoraBit = {
       ctx.listen(node, "pointerdown", (e) => e.stopPropagation());
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
-    tap(el("mute"), (e) => { e.target.textContent = sound.toggle() ? "🔇" : "🔊"; });
-    if (settings.mute) el("mute").textContent = "🔇";
+    tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); });
+    if (settings.mute) el("mute").innerHTML = SPK(false);
     tap(el("cog"), () => { el("cogp").style.display = "flex"; });
     tap(el("cogp-close"), () => { el("cogp").style.display = "none"; });
     tap(el("help"), () => { el("helpp").style.display = "flex"; });

@@ -35,6 +35,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     /* ---------------------------------------------------------------
      * Prompts. Each has a hole and a true answer. They are chosen to be
      * guessable-but-not-obvious: a good prompt is one where a confident
@@ -231,7 +272,7 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------
      * Overlay
      * ------------------------------------------------------------- */
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const ST = ctx.safeArea.top, SB = ctx.safeArea.bottom;
     const CARD = "background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);" +
       "border-radius:22px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);";
@@ -242,7 +283,19 @@ window.plethoraBit = {
 
     const root = ctx.createRoot({ touchAction: "manipulation" });
     // The overlay covers the canvas, so the root itself must not eat pointers.
-    root.style.cssText += ";font-family:" + FONT + ";color:#eef1ff;pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:#eef1ff;pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       '<div data-el="stage" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         // Top padding clears the floating chrome, which would otherwise sit on
@@ -250,7 +303,7 @@ window.plethoraBit = {
         'flex-direction:column;padding:' + (ST + 54) + 'px 18px ' + (SB + 14) + 'px;"></div>' +
       '<div style="position:absolute;right:12px;top:' + (ST + 8) + 'px;display:flex;gap:7px;' +
         'z-index:60;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">🔊</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
       '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
@@ -277,8 +330,8 @@ window.plethoraBit = {
       if (!node) return;
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
-    tap(el("mute"), (e) => { e.target.textContent = sound.toggle() ? "🔇" : "🔊"; });
-    if (settings.mute) el("mute").textContent = "🔇";
+    tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); });
+    if (settings.mute) el("mute").innerHTML = SPK(false);
     tap(el("help"), () => { el("helpp").style.display = "flex"; });
     tap(el("helpp-close"), () => { el("helpp").style.display = "none"; });
 
@@ -294,7 +347,7 @@ window.plethoraBit = {
       phase = "setup";
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:12px;">' +
-          '<div style="font-size:11px;letter-spacing:0.42em;text-transform:uppercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;' +
             'text-align:center;">Pass and lie</div>' +
           '<div style="font-size:58px;font-weight:900;letter-spacing:-0.03em;text-align:center;' +
             'background:linear-gradient(96deg,#ff5470,#ffd166,#2ec4b6);-webkit-background-clip:text;' +
@@ -302,10 +355,10 @@ window.plethoraBit = {
           '<div style="font-size:14.5px;opacity:0.62;text-align:center;line-height:1.5;' +
             'max-width:270px;margin:0 auto;">Fill the blank with a lie. Score for fooling people, ' +
             'and for spotting the truth.</div>' +
-          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;' +
             'margin-top:14px;">Players</div>' +
           '<div data-el="pc" style="display:flex;gap:7px;flex-wrap:wrap;"></div>' +
-          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;' +
             'margin-top:6px;">Rounds</div>' +
           '<div data-el="rc" style="display:flex;gap:7px;"></div>' +
           '<button data-el="names" style="' + BIG + 'margin-top:14px;' +
@@ -381,9 +434,9 @@ window.plethoraBit = {
       const p = players[cursor];
       const what = phase === "write" ? "type a lie" : "pick the truth";
       stage.innerHTML = wrap(
-        '<div style="text-align:center;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;' +
+        '<div style="text-align:center;font-size:11px;letter-spacing:0.28em;text-transform:lowercase;' +
           'opacity:0.5;">Round ' + round + ' of ' + settings.rounds + '</div>' +
-        '<div style="text-align:center;font-size:13px;letter-spacing:0.2em;text-transform:uppercase;' +
+        '<div style="text-align:center;font-size:13px;letter-spacing:0.2em;text-transform:lowercase;' +
           'opacity:0.5;margin-top:14px;">Pass the phone to</div>' +
         '<div style="text-align:center;font-size:40px;font-weight:900;color:' + p.colour + ';' +
           'line-height:1.1;">' + esc(p.name) + '</div>' +
@@ -411,7 +464,7 @@ window.plethoraBit = {
     function renderWrite() {
       const p = players[cursor];
       stage.innerHTML = wrap(
-        '<div style="text-align:center;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;' +
+        '<div style="text-align:center;font-size:12px;letter-spacing:0.2em;text-transform:lowercase;' +
           'color:' + p.colour + ';">' + esc(p.name) + '</div>' +
         promptCard() +
         '<input data-el="lie" maxlength="42" placeholder="your lie…" autocomplete="off" ' +
@@ -465,10 +518,10 @@ window.plethoraBit = {
       const p = players[cursor];
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;gap:10px;overflow-y:auto;">' +
-          '<div style="text-align:center;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;' +
+          '<div style="text-align:center;font-size:12px;letter-spacing:0.2em;text-transform:lowercase;' +
             'color:' + p.colour + ';">' + esc(p.name) + '</div>' +
           promptCard() +
-          '<div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.5;' +
+          '<div style="font-size:12px;letter-spacing:0.18em;text-transform:lowercase;opacity:0.5;' +
             'margin-top:2px;">Which one is true?</div>' +
           board.map((b, i) =>
             // Your own lie is shown but not tappable, so nobody can vote for
@@ -534,7 +587,7 @@ window.plethoraBit = {
 
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;gap:9px;overflow-y:auto;">' +
-          '<div style="text-align:center;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;' +
+          '<div style="text-align:center;font-size:11px;letter-spacing:0.28em;text-transform:lowercase;' +
             'opacity:0.5;">Round ' + round + '</div>' +
           promptCard() +
           board.map((b, i) => {
@@ -545,7 +598,7 @@ window.plethoraBit = {
               (truth ? 'rgba(46,196,182,0.14)' : 'rgba(255,255,255,0.05)') + ';">' +
               '<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;">' +
                 '<span style="font-size:16px;font-weight:700;">' + esc(b.text) + '</span>' +
-                '<span style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;flex:none;' +
+                '<span style="font-size:11px;letter-spacing:0.14em;text-transform:lowercase;flex:none;' +
                   'color:' + (truth ? '#2ec4b6' : 'rgba(238,241,255,0.42)') + ';">' +
                   (truth ? 'the truth' : esc(players[b.by].name)) + '</span>' +
               '</div>' +
@@ -589,7 +642,7 @@ window.plethoraBit = {
       const ranked = players.map((p, i) => ({ p, i })).sort((a, b) => b.p.score - a.p.score);
       const top = ranked[0].p;
       stage.innerHTML = wrap(
-        '<div style="text-align:center;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;' +
+        '<div style="text-align:center;font-size:11px;letter-spacing:0.32em;text-transform:lowercase;' +
           'opacity:0.5;">Best liar</div>' +
         '<div style="text-align:center;font-size:44px;font-weight:900;color:' + top.colour + ';' +
           'line-height:1.1;">' + esc(top.name) + '</div>' +

@@ -41,7 +41,8 @@ export async function openBit(dir, opts = {}) {
 
   // Served over HTTP rather than file://, because ES module imports from a
   // file:// origin are blocked by CORS and every 3D bit needs importModule.
-  const MIME = { ".js": "text/javascript", ".html": "text/html", ".json": "application/json" };
+  const MIME = { ".js": "text/javascript", ".html": "text/html", ".json": "application/json",
+                 ".ttf": "font/ttf", ".woff2": "font/woff2" };
   const server = createServer((req, res) => {
     const url = req.url.split("?")[0];
     let file = null;
@@ -155,6 +156,45 @@ export async function openBit(dir, opts = {}) {
     },
 
     wait: (ms) => page.waitForTimeout(ms),
+
+    /**
+     * Resize the viewport, which fires the bit's resize handler.
+     *
+     * Worth doing on every bit: a resize handler that rewrites canvas.width
+     * silently resets the 2D transform, and the game then draws at 1:1 in
+     * physical pixels — shrunk into the top-left corner. A boot screenshot
+     * never catches it because no resize has happened yet, but on a phone one
+     * fires for the keyboard, the URL bar, or a rotation.
+     */
+    async resize(w, h) {
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForTimeout(320);
+    },
+
+    /**
+     * How much of the frame the bit actually paints, as four quadrant
+     * coverage ratios. A bit drawing into the top-left only is the signature
+     * of a lost DPR transform.
+     */
+    coverage() {
+      return page.evaluate(() => {
+        const c = document.querySelector("canvas");
+        if (!c) return null;
+        const q = c.getContext("2d", { willReadFrequently: true });
+        if (!q) return null;
+        const W = c.width, H = c.height;
+        const out = [];
+        for (const [x0, y0] of [[0, 0], [W / 2, 0], [0, H / 2], [W / 2, H / 2]]) {
+          const d = q.getImageData(x0 | 0, y0 | 0, (W / 2) | 0, (H / 2) | 0).data;
+          let lit = 0;
+          for (let i = 0; i < d.length; i += 4 * 97) {          // sparse sample
+            if (d[i] + d[i + 1] + d[i + 2] > 24 && d[i + 3] > 8) lit++;
+          }
+          out.push(+(lit / (d.length / (4 * 97))).toFixed(3));
+        }
+        return out;                                     // [TL, TR, BL, BR]
+      });
+    },
 
     /** Everything the bit told the platform, in order. */
     events: () => page.evaluate(() => window.__BIT_LOG__.map(e => ({ kind: e.kind, args: e.args }))),

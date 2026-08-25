@@ -47,6 +47,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const THREE = await ctx.importModule("three", "0.164.1");
 
     const TAU = Math.PI * 2;
@@ -323,7 +364,7 @@ window.plethoraBit = {
       const g = c.getContext("2d");
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.font = "600 46px 'Bebas Neue','Oswald','Arial Narrow',system-ui,sans-serif";
+      g.font = "600 46px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       const draw = (dy, fill) => {
         g.fillStyle = fill;
         let x = TW / 2 - 128;
@@ -821,8 +862,8 @@ window.plethoraBit = {
      * child order — bar, scores, controls — puts the bar against the board
      * and the controls under the player's own thumb at both ends.
      * ============================================================= */
-    const DISP = "'Bebas Neue','Oswald','Anton','Arial Narrow','Roboto Condensed',Impact,system-ui,sans-serif";
-    const BODY = "'Space Grotesk','Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+    const DISP = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const BODY = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const PANEL_BG = "#121618";
     const HAIR = "1px solid rgba(233,240,234,0.09)";
 
@@ -830,7 +871,7 @@ window.plethoraBit = {
       "border:" + HAIR + ";background:#191E20;color:#CFE0D4;font-size:15px;line-height:1;" +
       "font-family:inherit;padding:0;-webkit-tap-highlight-color:transparent;";
     const bigBtn = (bg, fg) => "pointer-events:auto;border:none;border-radius:14px;font-family:" + BODY + ";" +
-      "font-size:14px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" +
+      "font-size:14px;font-weight:700;letter-spacing:0.16em;text-transform:lowercase;" +
       "padding:14px 18px;background:" + bg + ";color:" + fg + ";-webkit-tap-highlight-color:transparent;";
 
     function chip(who, side) {
@@ -842,7 +883,7 @@ window.plethoraBit = {
         '<span style="width:18px;height:18px;border-radius:50%;background:' + p.swatch + ';' +
           'box-shadow:inset 0 0 0 1.5px ' + RIMC + ',0 1px 2px rgba(0,0,0,0.6);flex:none;"></span>' +
         '<span style="font-family:' + BODY + ';font-size:9.5px;font-weight:600;letter-spacing:0.2em;' +
-          'text-transform:uppercase;color:rgba(207,224,212,0.55);">' + esc(p.name) + '</span>' +
+          'text-transform:lowercase;color:rgba(207,224,212,0.55);">' + esc(p.name) + '</span>' +
         '<span data-el="count-' + side + '" style="margin-left:auto;font-family:' + DISP + ';' +
           'font-size:' + (own ? 30 : 24) + 'px;font-weight:700;line-height:1;letter-spacing:0.01em;' +
           'color:#EDF3EE;">2</span>' +
@@ -882,7 +923,7 @@ window.plethoraBit = {
               'transition:width 420ms cubic-bezier(.22,.8,.28,1);"></div>' +
           '</div>' +
           '<div data-el="caption" style="margin-top:8px;text-align:center;font-family:' + BODY + ';' +
-            'font-size:9.5px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;' +
+            'font-size:9.5px;font-weight:600;letter-spacing:0.22em;text-transform:lowercase;' +
             'color:rgba(207,224,212,0.38);">Opening position</div>' +
         '</div>' +
 
@@ -891,12 +932,12 @@ window.plethoraBit = {
         '</div>' +
 
         '<div style="display:flex;gap:7px;align-items:stretch;">' +
-          '<button data-el="mute" aria-label="Sound" style="' + iconBtn + '">&#128266;</button>' +
+          '<button data-el="mute" aria-label="Sound" style="' + iconBtn + '">' + SPK(true) + '</button>' +
           '<button data-el="cog" aria-label="Settings" style="' + iconBtn + '">&#9881;</button>' +
           '<button data-el="help" aria-label="How to play" style="' + iconBtn + '">?</button>' +
           '<button data-el="act" style="pointer-events:auto;flex:1;border-radius:12px;border:' + HAIR + ';' +
             'background:#191E20;color:#CFE0D4;font-family:' + BODY + ';font-size:11.5px;font-weight:700;' +
-            'letter-spacing:0.16em;text-transform:uppercase;padding:0 6px;height:44px;' +
+            'letter-spacing:0.16em;text-transform:lowercase;padding:0 6px;height:44px;' +
             '-webkit-tap-highlight-color:transparent;">Black to play</button>' +
         '</div>' +
       '</div>';
@@ -932,7 +973,7 @@ window.plethoraBit = {
       '<div style="background:' + PANEL_BG + 'F5;border:' + HAIR + ';border-radius:19px;padding:15px 16px 14px;' +
         'text-align:center;box-shadow:0 14px 40px rgba(0,0,0,0.6);">' +
         '<div data-el="over-title" style="font-family:' + DISP + ';font-size:29px;font-weight:700;' +
-          'line-height:1;letter-spacing:0.07em;text-transform:uppercase;color:' + BRASS + ';">Black wins</div>' +
+          'line-height:1;letter-spacing:0.07em;text-transform:lowercase;color:' + BRASS + ';">Black wins</div>' +
         '<div style="display:flex;align-items:center;justify-content:center;gap:11px;margin-top:11px;' +
           'font-family:' + DISP + ';font-size:26px;font-weight:700;line-height:1;color:#EDF3EE;">' +
           swatch(BLACK, 15) + '<span data-el="over-b">2</span>' +
@@ -948,51 +989,67 @@ window.plethoraBit = {
       '<div style="background:' + PANEL_BG + 'F2;border:' + HAIR + ';border-radius:18px;padding:15px 16px;' +
         'text-align:center;box-shadow:0 12px 34px rgba(0,0,0,0.5);">' +
         '<div data-el="pass-who" style="font-family:' + DISP + ';font-size:27px;font-weight:700;line-height:1;' +
-          'letter-spacing:0.05em;text-transform:uppercase;color:' + BRASS + ';">White passes</div>' +
+          'letter-spacing:0.05em;text-transform:lowercase;color:' + BRASS + ';">White passes</div>' +
         '<div style="font-family:' + BODY + ';font-size:11.5px;line-height:1.5;margin-top:7px;' +
           'color:rgba(207,224,212,0.62);">No legal move &mdash; the turn goes straight back.</div>' +
       '</div>';
+
+    /**
+     * The masthead, emitted once per seat and rotated to face its own player.
+     * Identical at both ends by design: the only thing that differs is which
+     * colour the line names, because that is the one fact that really is
+     * different about the two ends of the table.
+     */
+    function titleBand(who) {
+      const top = who === "b";
+      const box = top
+        ? "top:0;transform:rotate(180deg);padding:10px 20px " + (SAFE_T + 8) + "px;"
+        : "bottom:0;padding:10px 20px " + (SAFE_B + 8) + "px;";
+      const line = top ? "Black &middot; this end &middot; moves first"
+                       : "White &middot; this end &middot; moves second";
+      return '<div data-el="tstrip" style="position:absolute;left:0;right:0;' + box +
+          'height:' + L.strip + 'px;box-sizing:border-box;display:flex;flex-direction:column;' +
+          'align-items:center;justify-content:space-between;text-align:center;' +
+          'background:linear-gradient(to top,#070B0C 52%,rgba(7,11,12,0));">' +
+          '<div style="font-family:' + BODY + ';font-size:9px;letter-spacing:0.3em;' +
+            'color:' + BRASS + ';opacity:0.9;">Reversi &middot; two players &middot; one phone</div>' +
+          '<div style="font-family:' + DISP + ';font-size:44px;font-weight:700;line-height:1;' +
+            'letter-spacing:0.14em;text-indent:0.14em;color:#F2F6F1;">OTHELLO</div>' +
+          '<div style="display:flex;align-items:center;gap:9px;font-family:' + BODY + ';font-size:10px;' +
+            'letter-spacing:0.24em;color:rgba(207,224,212,0.6);">' +
+            swatch(top ? BLACK : WHITE, 13) + line + '</div>' +
+          '<button data-el="start" style="' + bigBtn(BRASS, "#1A1508") + 'width:100%;max-width:300px;">Start game</button>' +
+        '</div>';
+    }
 
     const root = ctx.createRoot({ touchAction: "none" });
     // The overlay is created after the canvas, so it sits on top and would
     // swallow every tap meant for the board. It is transparent to pointers;
     // only the chrome that is meant to be pressed opts back in.
     root.style.cssText += ";font-family:" + BODY + ";color:#E4EDE6;pointer-events:none;" +
-      "background:transparent;overflow:hidden;";
+      "background:transparent;overflow:hidden;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       strip("b") + strip("w") +
 
       // --- title. The dressed board with its opening four is the best thing
-      //     this bit has to show, so nothing covers it: the copy lives in the
-      //     two strips instead, one line for the far seat and the whole
-      //     masthead for the near one. ---
+      //     this bit has to show, so nothing covers it: the masthead lives in
+      //     the two strips instead. Both ends get the same one — a seat that
+      //     is handed the compressed version reads it as the broken half of
+      //     the screen, and on a shared phone there is no "far" player. ---
       '<div data-el="title" style="position:absolute;inset:0;pointer-events:auto;z-index:50;">' +
-        '<div data-el="tstrip" style="position:absolute;left:0;right:0;top:0;height:' + L.strip + 'px;box-sizing:border-box;' +
-          'transform:rotate(180deg);padding:10px 20px ' + (SAFE_T + 8) + 'px;display:flex;' +
-          'flex-direction:column;align-items:center;justify-content:center;gap:14px;' +
-          'background:linear-gradient(to top,#070B0C 52%,rgba(7,11,12,0));">' +
-          '<div style="font-family:' + DISP + ';font-size:26px;font-weight:700;line-height:1;' +
-            'letter-spacing:0.16em;color:rgba(242,246,241,0.5);">OTHELLO</div>' +
-          '<div style="display:flex;align-items:center;gap:9px;font-family:' + BODY + ';font-size:10px;' +
-            'letter-spacing:0.24em;text-transform:uppercase;color:rgba(207,224,212,0.6);">' +
-            swatch(BLACK, 13) + 'Black &middot; this end &middot; moves first</div>' +
-          // Every other control in this bit exists at both ends; the seat that
-          // moves first should not have to reach across the table to begin.
-          '<button data-el="start" style="' + bigBtn(BRASS, "#1A1508") + 'width:100%;max-width:300px;">Start game</button>' +
-        '</div>' +
-        '<div data-el="tstrip" style="position:absolute;left:0;right:0;bottom:0;height:' + L.strip + 'px;box-sizing:border-box;' +
-          'padding:10px 20px ' + (SAFE_B + 8) + 'px;display:flex;flex-direction:column;align-items:center;' +
-          'justify-content:space-between;text-align:center;' +
-          'background:linear-gradient(to top,#070B0C 52%,rgba(7,11,12,0));">' +
-          '<div style="font-family:' + BODY + ';font-size:9px;letter-spacing:0.3em;text-transform:uppercase;' +
-            'color:' + BRASS + ';opacity:0.9;">Reversi &middot; two players &middot; one phone</div>' +
-          '<div style="font-family:' + DISP + ';font-size:44px;font-weight:700;line-height:1;' +
-            'letter-spacing:0.14em;text-indent:0.14em;color:#F2F6F1;">OTHELLO</div>' +
-          '<div style="display:flex;align-items:center;gap:9px;font-family:' + BODY + ';font-size:10px;' +
-            'letter-spacing:0.24em;text-transform:uppercase;color:rgba(207,224,212,0.6);">' +
-            swatch(WHITE, 13) + 'White &middot; this end</div>' +
-          '<button data-el="start" style="' + bigBtn(BRASS, "#1A1508") + 'width:100%;max-width:300px;">Start game</button>' +
-        '</div>' +
+        titleBand("b") + titleBand("w") +
       '</div>' +
 
       // --- forced pass, shown at both ends ---
@@ -1010,15 +1067,15 @@ window.plethoraBit = {
         '<div data-el="cogp-card" style="width:100%;max-width:318px;background:' + PANEL_BG + ';border:' + HAIR + ';' +
           'border-radius:22px;padding:21px;">' +
           '<div style="font-family:' + DISP + ';font-size:25px;font-weight:700;letter-spacing:0.07em;' +
-            'text-transform:uppercase;">Settings</div>' +
+            'text-transform:lowercase;">Settings</div>' +
           '<div style="width:44px;height:2px;background:' + BRASS + ';opacity:0.8;margin:11px 0 15px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.5;">Sound</div>' +
+          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Sound</div>' +
           '<div data-el="set-mute" style="display:flex;gap:7px;margin:9px 0 17px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.5;">Placing a disc</div>' +
+          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Placing a disc</div>' +
           '<div data-el="set-confirm" style="display:flex;gap:7px;margin:9px 0 5px;"></div>' +
           '<div style="font-size:10.5px;line-height:1.5;opacity:0.45;margin-bottom:15px;">' +
             'Confirm arms a ghost disc first and shows what would flip. Either end&rsquo;s button commits it.</div>' +
-          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.5;">Legal move rings</div>' +
+          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Legal move rings</div>' +
           '<div data-el="set-hints" style="display:flex;gap:7px;margin:9px 0 5px;"></div>' +
           '<button data-el="cogp-close" style="' + bigBtn("#232A2C", "#E4EDE6") + 'width:100%;margin-top:18px;">Done</button>' +
         '</div>' +
@@ -1030,7 +1087,7 @@ window.plethoraBit = {
         '<div data-el="helpp-card" style="width:100%;max-width:318px;background:' + PANEL_BG + ';border:' + HAIR + ';' +
           'border-radius:22px;padding:21px;">' +
           '<div style="font-family:' + DISP + ';font-size:25px;font-weight:700;letter-spacing:0.07em;' +
-            'text-transform:uppercase;">How to play</div>' +
+            'text-transform:lowercase;">How to play</div>' +
           '<div style="width:44px;height:2px;background:' + BRASS + ';opacity:0.8;margin:11px 0 14px;"></div>' +
           '<ul style="font-size:11.5px;line-height:1.62;opacity:0.84;padding-left:15px;margin:0;">' +
             '<li style="margin-bottom:7px;">Phone flat on the table. <b>Black</b> takes the top edge, ' +
@@ -1475,9 +1532,9 @@ window.plethoraBit = {
     pressAll("act", () => { if (armed) commit(); });
     pressAll("mute", () => {
       const m = sound.toggle();
-      for (const n of all("mute")) n.textContent = m ? "🔇" : "🔊";
+      for (const n of all("mute")) n.innerHTML = SPK(!m);
     });
-    if (settings.mute) for (const n of all("mute")) n.textContent = "🔇";
+    if (settings.mute) for (const n of all("mute")) n.innerHTML = SPK(false);
     // A panel opened from the far end turns to face that end, the same way a
     // real player would spin a rulebook round rather than lean over the table.
     const farCog = () => stripOf("b") && stripOf("b").querySelector('[data-el="cog"]');
@@ -1503,7 +1560,7 @@ window.plethoraBit = {
       host.innerHTML = values.map((v, i) =>
         '<button data-v="' + v + '" style="pointer-events:auto;flex:1;padding:11px 0;border-radius:11px;' +
         'border:' + HAIR + ';font-family:' + BODY + ';font-size:12px;font-weight:700;letter-spacing:0.1em;' +
-        'text-transform:uppercase;">' + labels[i] + '</button>').join("");
+        'text-transform:lowercase;">' + labels[i] + '</button>').join("");
       const paint = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
@@ -1521,7 +1578,7 @@ window.plethoraBit = {
       () => String(settings.mute), (v) => {
         if (String(settings.mute) !== v) {
           const m = sound.toggle();
-          for (const n of all("mute")) n.textContent = m ? "🔇" : "🔊";
+          for (const n of all("mute")) n.innerHTML = SPK(!m);
         }
       });
     pills(el("set-confirm"), ["true", "false"], ["Confirm", "Instant"],
@@ -1682,11 +1739,5 @@ window.plethoraBit = {
     ctx.markVisualReady("board set");
     ctx.platform.ready();
 
-    // The condensed display face, if this device happens to have it in the
-    // registry. Every size falls back to a system stack that already carries
-    // the screen, so a failure changes nothing that has been laid out.
-    for (const fam of ["Bebas Neue", "Space Grotesk"]) {
-      try { const p = ctx.loadFont(fam); if (p && p.catch) p.catch(() => {}); } catch (_) {}
-    }
   },
 };

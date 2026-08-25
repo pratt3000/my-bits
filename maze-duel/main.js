@@ -60,6 +60,34 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const THREE = await ctx.importModule("three", "0.164.1");
 
     const TAU = Math.PI * 2;
@@ -168,14 +196,8 @@ window.plethoraBit = {
     // factor) and a high-contrast old-style serif for the three ceremonial
     // moments. Fired and forgotten — the fallback stacks are real, and the
     // first frame must not wait on a font.
-    if (typeof ctx.loadFont === "function") {
-      try {
-        ctx.loadFont("Space Grotesk").catch(() => {});
-        ctx.loadFont("Cormorant Garamond").catch(() => {});
-      } catch (_) {}
-    }
-    const FONT_UI = "'Space Grotesk',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
-    const FONT_D = "'Cormorant Garamond',Georgia,'Times New Roman',serif";
+    const FONT_UI = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const FONT_D = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
 
     /* ---------------------------------------------------------------
      * Layout. One world unit is half the screen height, exactly as in a
@@ -1182,7 +1204,19 @@ window.plethoraBit = {
      * ------------------------------------------------------------- */
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT_UI + ";color:#f3ede0;pointer-events:none;" +
-      "-webkit-user-select:none;user-select:none;";
+      "-webkit-user-select:none;user-select:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
 
     const plate = "background:linear-gradient(180deg,#2b4a7d,#1d3660);border:1.5px solid rgba(255,193,0,0.55);" +
       "border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,0.45);";
@@ -1191,7 +1225,7 @@ window.plethoraBit = {
     // kind of few-pixel drift that stops the winner card's two faces sitting
     // the same distance from their own edge.
     const bigBtn = (bg, fg, edge) => "pointer-events:auto;display:block;width:100%;padding:15px;border-radius:23px;" +
-      "font-family:inherit;font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;" +
+      "font-family:inherit;font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:lowercase;" +
       "border:" + (edge ? "1.5px solid " + edge : "none") + ";" +
       "background:" + bg + ";color:" + fg + ";margin-top:10px;";
     const quietBtn = bigBtn("rgba(36,64,110,0.92)", "#ffe9a8", "rgba(255,193,0,0.55)");
@@ -1207,9 +1241,9 @@ window.plethoraBit = {
     /** One face of the winner card. `sfx` is "r" for the copy the far seats read. */
     const overFace = (sfx) =>
       '<div style="' + (sfx ? "transform:rotate(180deg);" : "") + '">' +
-        '<div style="font-size:9.5px;letter-spacing:0.32em;text-transform:uppercase;opacity:0.5;">The heart is taken by</div>' +
+        '<div style="font-size:9.5px;letter-spacing:0.32em;text-transform:lowercase;opacity:0.5;">The heart is taken by</div>' +
         '<div data-el="over-name' + sfx + '" style="font-family:' + FONT_D + ';font-style:italic;font-weight:600;' +
-          'font-size:50px;line-height:1.08;margin-top:3px;white-space:nowrap;"></div>' +
+          'font-size:42px;line-height:1.08;margin-top:3px;white-space:nowrap;"></div>' +
         '<div data-el="over-stats' + sfx + '" style="display:flex;margin-top:13px;"></div>' +
       '</div>';
     /** One cell of the winner card's stat strip. Split into three so the line
@@ -1217,7 +1251,7 @@ window.plethoraBit = {
     const statCell = (v, l, edge) =>
       '<div style="flex:1;min-width:0;' + (edge ? "border-left:1px solid rgba(255,193,0,0.18);" : "") + '">' +
         '<div style="font-size:15px;font-weight:700;color:#ffe9a8;">' + esc(v) + '</div>' +
-        '<div style="font-size:8px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.46;margin-top:3px;">' +
+        '<div style="font-size:8px;letter-spacing:0.18em;text-transform:lowercase;opacity:0.46;margin-top:3px;">' +
           esc(l) + '</div>' +
       '</div>';
 
@@ -1245,7 +1279,7 @@ window.plethoraBit = {
         '<div data-el="home-' + idx + '" style="position:absolute;left:0;top:0;width:0;height:0;' +
           'box-sizing:border-box;border-radius:50%;border:2px dashed;display:none;"></div>' +
         '<div data-el="hint-' + idx + '" style="position:absolute;display:none;' + rot +
-          'font-size:8.5px;font-weight:600;letter-spacing:0.13em;text-transform:uppercase;white-space:nowrap;">' +
+          'font-size:8.5px;font-weight:600;letter-spacing:0.13em;text-transform:lowercase;white-space:nowrap;">' +
           'Drag to run &middot; tap to plant</div>'
       );
     }
@@ -1285,13 +1319,13 @@ window.plethoraBit = {
           'background:linear-gradient(180deg,rgba(26,45,74,0.93),rgba(16,28,47,0.95));' +
           'border:1.5px solid rgba(255,193,0,0.45);border-radius:22px;padding:24px 20px;' +
           'box-shadow:0 26px 70px rgba(0,0,0,0.68);">' +
-          '<div style="font-size:10px;letter-spacing:0.38em;text-transform:uppercase;opacity:0.5;">A garden race for 2-4</div>' +
-          '<div style="font-family:' + FONT_D + ';font-style:italic;font-weight:600;font-size:54px;line-height:1.02;' +
+          '<div style="font-size:10px;letter-spacing:0.38em;text-transform:lowercase;opacity:0.5;">A garden race for 2-4</div>' +
+          '<div style="font-family:' + FONT_D + ';font-style:italic;font-weight:600;font-size:45px;line-height:1.02;' +
             'margin-top:6px;background:linear-gradient(96deg,#91cd53,#ffc100 60%,#f2a50c);' +
             '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Maze&nbsp;Duel</div>' +
           '<div style="font-size:13px;opacity:0.68;line-height:1.6;margin-top:10px;">' +
             'Lay the phone flat. Take a corner each. Everybody runs at once — first peg into the heart takes it.</div>' +
-          '<div style="font-size:10px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.45;margin-top:20px;">How many walk the maze?</div>' +
+          '<div style="font-size:10px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.45;margin-top:20px;">How many walk the maze?</div>' +
           '<div data-el="counts" style="display:flex;gap:11px;margin-top:11px;justify-content:center;"></div>' +
           '<button data-el="go" style="' + bigBtn("linear-gradient(96deg,#41761a,#7cb93a)", "#081a00") +
             'margin-top:20px;">Enter the garden</button>' +
@@ -1327,12 +1361,12 @@ window.plethoraBit = {
         '<div style="max-width:322px;width:100%;max-height:100%;overflow:auto;background:#16283f;' +
           'border-radius:18px;padding:22px;box-sizing:border-box;' +
           'border:1.5px solid rgba(255,193,0,0.35);box-shadow:0 22px 60px rgba(0,0,0,0.6);">' +
-          '<div style="font-size:15px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:18px;">Settings</div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">Garden size</div>' +
+          '<div style="font-size:15px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;margin-bottom:18px;">Settings</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Garden size</div>' +
           '<div data-el="sizes" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">Briars</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Briars</div>' +
           '<div data-el="briarset" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">Sound</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Sound</div>' +
           '<div data-el="muteset" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
           '<button data-el="cogp-close" style="' + quietBtn + 'margin-top:20px;">Done</button>' +
         '</div>' +
@@ -1343,7 +1377,7 @@ window.plethoraBit = {
         '<div style="max-width:322px;width:100%;max-height:100%;overflow:auto;background:#16283f;' +
           'border-radius:18px;padding:20px;box-sizing:border-box;' +
           'border:1.5px solid rgba(255,193,0,0.35);box-shadow:0 22px 60px rgba(0,0,0,0.6);">' +
-          '<div style="font-size:15px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:12px;">How to play</div>' +
+          '<div style="font-size:15px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;margin-bottom:12px;">How to play</div>' +
           '<ul style="font-size:12.5px;line-height:1.62;opacity:0.88;padding-left:17px;margin:0;">' +
             '<li>Phone flat on the table. Sit at the corner your colour starts in.</li>' +
             '<li>Press and drag anywhere in <b>your own corner of the screen</b> — a stick appears under your thumb.</li>' +
@@ -1465,7 +1499,7 @@ window.plethoraBit = {
         shell.el("home-" + i).style.display = on && held[i] === null ? "block" : "none";
         if (!on) return;
         shell.el("sw-" + i).style.background = hexStr(s.hex);
-        shell.el("nm-" + i).textContent = esc(s.name.toUpperCase());
+        shell.el("nm-" + i).textContent = esc(s.name.toLowerCase());
         shell.el("nm-" + i).style.color = hexStr(shade(s.hex, 0.55));
         let pips = "";
         for (let k = 0; k < MAX_BRIARS; k++) pips += k < p.briars ? "●" : "○";
@@ -1485,7 +1519,7 @@ window.plethoraBit = {
         // "STANDARD" set at the two-up size fills every one of them edge to
         // edge, so the row steps down a size rather than going cramped.
         '<button data-v="' + v + '" style="pointer-events:auto;flex:1;padding:11px 2px;border:none;' +
-        'border-radius:12px;font-family:inherit;font-weight:700;text-transform:uppercase;' +
+        'border-radius:12px;font-family:inherit;font-weight:700;text-transform:lowercase;' +
         'font-size:' + (values.length > 2 ? "10px" : "11px") + ';' +
         'letter-spacing:' + (values.length > 2 ? "0.07em" : "0.12em") + ';">' +
         esc(labels[i]) + '</button>').join("");

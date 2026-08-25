@@ -43,6 +43,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     /* ---- The 52-card deck, lifted verbatim from tools/kit/kit.js so every
      * card bit in this repo draws exactly the same cards. ---- */
     function roundRect(g, x, y, w, h, r) {
@@ -171,7 +212,7 @@ window.plethoraBit = {
         g.save();
         if (flip) { g.translate(w, h); g.rotate(Math.PI); }
         g.fillStyle = ink;
-        g.font = `700 ${cs}px ui-serif, Georgia, serif`;
+        g.font = `700 ${cs}px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif`;
         g.textAlign = "center"; g.textBaseline = "alphabetic";
         g.fillText(rank, w * 0.135, h * 0.135);
         suitPath(g, suitId, w * 0.135, h * 0.208, cs * 0.44);
@@ -886,7 +927,7 @@ function payout(S, res) {
       panelHi: "#1d1510", panelLow: "#0a0705",
       seat: ["#f0b429", "#e0644a", "#54bdd8", "#9b83f0", "#5fc188", "#ef7ab8"],
     };
-    const F = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const F = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
 
     /* ---------------------------------------------------------------
      * Layout. A portrait phone with six seats and a five-card board is
@@ -1162,7 +1203,7 @@ function payout(S, res) {
         g.fillStyle = o.face === false ? "#1d4f7a" : "#fdfcf7"; g.fill();
         if (o.face !== false && card) {
           g.fillStyle = card.red ? "#c8202f" : "#1b1b22";
-          g.font = "700 " + (w * 0.4) + "px ui-serif, Georgia, serif";
+          g.font = "700 " + (w * 0.4) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
           g.textAlign = "center"; g.textBaseline = "middle";
           g.fillText(card.rank, 0, 0);
         }
@@ -1619,11 +1660,23 @@ function payout(S, res) {
       "background:rgba(243,231,207,0.06);color:#f3e7cf;font-family:inherit;font-size:14px;font-weight:700;width:100%;";
 
     const root = ctx.createRoot({ touchAction: "manipulation" });
-    root.style.cssText += ";font-family:" + F + ";color:#f3e7cf;pointer-events:none;";
+    root.style.cssText += ";font-family:" + F + ";color:#f3e7cf;pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       '<div style="position:absolute;right:11px;top:' + (ST + 9) + 'px;display:flex;gap:7px;' +
         'z-index:60;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">🔊</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="gear" aria-label="Settings" style="' + BTN + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
@@ -1678,14 +1731,14 @@ function payout(S, res) {
         'flex-direction:column;align-items:center;justify-content:center;gap:9px;z-index:50;' +
         'overflow-y:auto;background:rgba(6,11,8,0.88);' +
         'padding:' + (ST + 16) + 'px 22px ' + (SB + 16) + 'px;">' +
-        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:uppercase;opacity:0.5;">One phone, pass and play</div>' +
+        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;">One phone, pass and play</div>' +
         '<div style="font-size:56px;font-weight:900;letter-spacing:-0.035em;line-height:1;' +
           'background:linear-gradient(100deg,#f3e7cf,#e8bd6a 55%,#b3803a);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Hold’em</div>' +
         '<div style="font-size:13.5px;opacity:0.6;line-height:1.5;max-width:270px;text-align:center;">' +
           'Everyone starts on 1,000. Your two cards live behind a cover with your name on it — ' +
           'the board, the pot and every bet stay on the table.</div>' +
-        '<div style="font-size:10px;letter-spacing:0.3em;text-transform:uppercase;opacity:0.5;margin-top:12px;">Players</div>' +
+        '<div style="font-size:10px;letter-spacing:0.3em;text-transform:lowercase;opacity:0.5;margin-top:12px;">Players</div>' +
         '<div data-el="pc" style="display:flex;gap:6px;width:100%;max-width:300px;"></div>' +
         '<div data-el="names" style="display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%;' +
           'max-width:300px;margin-top:6px;"></div>' +
@@ -1700,7 +1753,7 @@ function payout(S, res) {
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'flex-direction:column;align-items:center;justify-content:center;z-index:58;' +
         'overflow-y:auto;background:rgba(6,11,8,0.94);padding:' + (ST + 16) + 'px 22px ' + (SB + 16) + 'px;">' +
-        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:uppercase;opacity:0.5;">Last one with chips</div>' +
+        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;">Last one with chips</div>' +
         '<div data-el="over-name" style="font-size:46px;font-weight:900;line-height:1.1;margin:6px 0 2px;"></div>' +
         '<div data-el="over-sub" style="font-size:14px;opacity:0.62;"></div>' +
         '<div data-el="over-body" style="' + CARD + 'padding:16px 18px;margin-top:18px;width:100%;max-width:300px;"></div>' +
@@ -1714,9 +1767,9 @@ function payout(S, res) {
         'padding:' + (ST + 20) + 'px 22px ' + (SB + 20) + 'px;">' +
         '<div style="max-width:330px;width:100%;margin:auto;' + CARD + 'padding:22px;">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:14px;">Settings</div>' +
-          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:uppercase;opacity:0.5;">Blinds up every</div>' +
+          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.5;">Blinds up every</div>' +
           '<div data-el="be" style="display:flex;gap:6px;margin:9px 0 18px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:uppercase;opacity:0.5;">Sound</div>' +
+          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.5;">Sound</div>' +
           '<div data-el="sn" style="display:flex;gap:6px;margin:9px 0 6px;"></div>' +
           '<div style="font-size:12.5px;opacity:0.5;line-height:1.5;margin-bottom:16px;">' +
             'Blinds climb through 10/20, 15/30, 25/50, 50/100 and on up, so a big ' +
@@ -1758,8 +1811,8 @@ function payout(S, res) {
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
 
-    tap(el("mute"), (e) => { e.target.textContent = sound.toggle() ? "🔇" : "🔊"; paintSettings(); });
-    if (settings.mute) el("mute").textContent = "🔇";
+    tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); paintSettings(); });
+    if (settings.mute) el("mute").innerHTML = SPK(false);
     tap(el("help"), () => {
       const h = el("helpp");
       if (h.style.display === "flex") { h.style.display = "none"; return; }
@@ -1832,7 +1885,7 @@ function payout(S, res) {
           () => (sound.muted ? "off" : "on"), (v) => {
             if ((v === "off") !== sound.muted) {
               sound.toggle();
-              el("mute").textContent = sound.muted ? "🔇" : "🔊";
+              el("mute").innerHTML = SPK(!sound.muted);
             }
           });
       } else { repaintBlinds(); repaintSound(); }
@@ -2178,7 +2231,7 @@ function payout(S, res) {
       el("over-name").style.color = C.seat[win.i % C.seat.length];
       el("over-sub").textContent = S.handNo + " hands · blinds finished at " + S.sb + " / " + S.bb;
       el("over-body").innerHTML =
-        '<div style="font-size:10px;letter-spacing:0.26em;text-transform:uppercase;opacity:0.5;">Biggest pot of the night</div>' +
+        '<div style="font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.5;">Biggest pot of the night</div>' +
         '<div style="font-size:34px;font-weight:900;color:#e8bd6a;line-height:1.2;">' +
           S.biggestPot.toLocaleString() + '</div>' +
         '<div style="height:1px;background:rgba(243,231,207,0.12);margin:12px 0;"></div>' +

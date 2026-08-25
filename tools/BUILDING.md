@@ -165,3 +165,52 @@ booting is not testing.
 `validate.mjs` is deliberately stricter than the server: it rejects
 `document.createElement` outright, where the server currently tolerates a
 literal `"div"`/`"button"`. Staying inside the strict set is free.
+
+## Typography traps
+
+Four things bite when a whole set of bits is retyped in one face.
+
+**Form controls do not inherit `text-transform`.** The UA stylesheet pins
+`text-transform:none` on `button`, `input`, `select` and `textarea`, so a
+`text-transform:lowercase` on the overlay root cascades to every label and
+caption and then stops dead at every button — which is exactly where the
+loudest text on the screen lives. Stamp the controls directly. A
+`MutationObserver` on the bit's own root does it once for panels that are
+rebuilt by `innerHTML` later:
+
+```js
+const lowercaseControls = () => {
+  for (const el of root.querySelectorAll("button,input,select,textarea"))
+    if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+};
+lowercaseControls();
+new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
+```
+
+**A case fold on `fillText` misses letter-tracked text.** Patching
+`CanvasRenderingContext2D.prototype.fillText` covers a few hundred call sites
+at once, but any helper that draws its own tracking emits one character per
+call, and a one-character string is deliberately left alone (card ranks and
+piece letters are symbols — a lowercase `k` on a king reads as a bug). Fold
+the case inside those helpers instead, at the top, where the whole string is
+still in one piece. Patch `measureText` the same way as `fillText`, or centred
+text is measured at its uppercase width and drifts off its own anchor.
+
+**Inter is much wider than a condensed display face.** Swapping Bebas Neue or
+Cormorant Garamond for Inter at the same `font-size` overflows headings that
+were tuned to fit, and a heading painted with `-webkit-background-clip:text`
+does not overflow visibly — it simply loses the glyphs outside its own box, so
+it reads as a truncated title rather than a layout bug.
+`tools/harness/check-overflow.mjs` compares every leaf element's Range width
+against its content box and catches both. (It false-positives on a root that
+is rotated for landscape, where `clientWidth` is the pre-rotation width.)
+
+**A stubbed `loadFont` hides the whole problem.** The harness caches the real
+registry faces under `tools/harness/libcache/` and injects them through
+`FontFace`. A mock that returns `{status:"loaded"}` without loading anything
+renders the system fallback, so a font change looks applied when nothing has
+changed.
+
+Two things are deliberately left in their own case: `lob` sets its chrome in a
+5x7 pixel face that has no lowercase glyphs (seven rows cannot carry both
+ascenders and descenders), and card ranks stay uppercase everywhere.

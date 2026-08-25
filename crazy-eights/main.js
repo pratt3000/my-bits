@@ -48,6 +48,34 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const TAU = Math.PI * 2;
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
     const lerp = (a, b, t) => a + (b - a) * t;
@@ -85,8 +113,8 @@ window.plethoraBit = {
       { name: "Cobalt",  ink: "#5cb0ff" },
       { name: "Jade",    ink: "#57d9a3" },
     ];
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-    const SERIF = "ui-serif,Georgia,'Times New Roman',serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const SERIF = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
 
     const SUITS = [
       { id: "S", red: false }, { id: "H", red: true },
@@ -209,7 +237,11 @@ window.plethoraBit = {
      * of the few canvas calls that is not cheap.
      */
     const trackCache = new Map();
+    // Set lowercase like the rest of the game. This helper draws one
+    // character at a time for its own tracking, and single characters slip
+    // past the case fold that every other canvas string goes through.
     function trackPlan(g2, text, spacing) {
+      text = typeof text === "string" ? text.toLowerCase() : text;
       const key = g2.font + "|" + text + "|" + spacing;
       let plan = trackCache.get(key);
       if (!plan) {
@@ -1040,7 +1072,7 @@ window.plethoraBit = {
 
       if (p.hand.length === 1) {
         p.pulse = 1;
-        say(p.name.toUpperCase() + " HAS ONE CARD", "one card left", p.ink, 1500);
+        say(p.name.toLowerCase() + " HAS ONE CARD", "one card left", p.ink, 1500);
         sound.sting("danger");
         sound.haptic("warning");
       }
@@ -1070,7 +1102,7 @@ window.plethoraBit = {
       phase = "play";
       flash.a = 0.5; flash.ink = isRed(s) ? "#ff6f7d" : "#ffe6bd";
       burst(L.discard.x, L.discard.y, isRed(s) ? "#ff6f7d" : CREAM, 22, 260);
-      say(SUIT_NAME[s].toUpperCase(), "named by " + players[turn].name, isRed(s) ? "#ff8b92" : CREAM, 1250);
+      say(SUIT_NAME[s].toLowerCase(), "named by " + players[turn].name, isRed(s) ? "#ff8b92" : CREAM, 1250);
       sound.sting("coin");
       sound.haptic("success");
       try { ctx.platform.interact({ type: "name_suit", suit: s }); } catch (_) {}
@@ -1726,7 +1758,7 @@ window.plethoraBit = {
         g.fillStyle = hexA(p.ink, 0.95);
         g.font = "800 " + (wide ? 10 : 9.5) + "px " + FONT;
         const nameSp = wide ? 1.7 : 1.5;
-        const nameTxt = p.name.toUpperCase();
+        const nameTxt = p.name.toLowerCase();
         trackedL(g, nameTxt, tx, y + (wide ? 23 : 21), nameSp);
 
         g.fillStyle = one ? "#ff9d6b" : CREAM;
@@ -1827,7 +1859,7 @@ window.plethoraBit = {
       g.fillStyle = p.ink; g.fill();
       g.fillStyle = hexA(p.ink, 0.95);
       g.font = "800 10.5px " + FONT;
-      g.fillText(p.name.toUpperCase(), x - w / 2 + 29, y - 9);
+      g.fillText(p.name.toLowerCase(), x - w / 2 + 29, y - 9);
 
       // What has to be matched, drawn rather than named, and laid out from the
       // right edge inward so the pieces cannot collide at any rank width. Its
@@ -2116,7 +2148,7 @@ window.plethoraBit = {
     const panel = "box-sizing:border-box;max-width:326px;width:100%;" +
       "background:linear-gradient(180deg,#4a2513,#261006);" +
       "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(232,185,95,0.30),0 20px 60px rgba(0,0,0,0.6);";
-    const label = "font-size:11px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.52;";
+    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.52;";
     const sheetCss = "box-sizing:border-box;position:absolute;inset:0;display:none;align-items:center;" +
       "align-items:safe center;justify-content:center;" +
       "background:rgba(12,5,2,0.90);z-index:80;padding:" + (SAFE_T + 14) + "px 24px " +
@@ -2127,7 +2159,19 @@ window.plethoraBit = {
       "background:radial-gradient(130% 62% at 50% 42%,rgba(34,15,6,0.80),rgba(9,3,1,0.965));";
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:" + CREAM + ";pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:" + CREAM + ";pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       /* ---- chrome: a horizontal strip, never a side column ---- */
       '<div style="position:absolute;right:10px;top:' + (SAFE_T + 6) + 'px;display:flex;' +
@@ -2176,7 +2220,7 @@ window.plethoraBit = {
         '<div data-el="cover-name" style="font-size:44px;font-weight:800;line-height:1.06;' +
           'letter-spacing:-0.02em;margin-top:2px;"></div>' +
         '<div data-el="cover-count" style="font-size:12.5px;font-weight:700;letter-spacing:0.16em;' +
-          'text-transform:uppercase;opacity:0.85;margin-top:4px;"></div>' +
+          'text-transform:lowercase;opacity:0.85;margin-top:4px;"></div>' +
         '<div style="width:100%;max-width:306px;">' +
           '<button data-el="cover-btn" style="' + bigBtn("#fff", "#1a0a03") +
             'margin-top:20px;font-size:15px;"></button>' +
@@ -2463,6 +2507,11 @@ window.plethoraBit = {
       if (ctx.width === W && ctx.height === H) return;
       canvas.width = Math.round(ctx.width * dpr);
       canvas.height = Math.round(ctx.height * dpr);
+      // Writing canvas.width RESETS the 2D transform to the identity, so the
+      // DPR scale ctx.createCanvas2D() installed at boot is gone and every
+      // following frame draws at 1:1 in physical pixels — the whole game
+      // shrinks into the top-left corner. It has to be re-applied here.
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
       layout();
       bakeTable();
     });

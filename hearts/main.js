@@ -48,6 +48,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     /* ---- The 52-card deck, lifted verbatim from tools/kit/kit.js so every
      * card bit in this repo draws exactly the same cards. ---- */
     function roundRect(g, x, y, w, h, r) {
@@ -176,7 +217,7 @@ window.plethoraBit = {
         g.save();
         if (flip) { g.translate(w, h); g.rotate(Math.PI); }
         g.fillStyle = ink;
-        g.font = `700 ${cs}px ui-serif, Georgia, serif`;
+        g.font = `700 ${cs}px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif`;
         g.textAlign = "center"; g.textBaseline = "alphabetic";
         g.fillText(rank, w * 0.135, h * 0.135);
         suitPath(g, suitId, w * 0.135, h * 0.208, cs * 0.44);
@@ -1002,7 +1043,7 @@ window.plethoraBit = {
         g.fill();
         if (!o.faceDown) {
           g.fillStyle = card.red ? "#B4202C" : "#16161C";
-          g.font = "700 " + (w * 0.4) + "px ui-serif, Georgia, serif";
+          g.font = "700 " + (w * 0.4) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
           g.textAlign = "center"; g.textBaseline = "middle";
           g.fillText(card.rank, 0, 0);
         }
@@ -1062,11 +1103,11 @@ window.plethoraBit = {
     function smallCaps(text, x, y, size, colour, ls, align, maxW) {
       g.save();
       g.fillStyle = colour;
-      const s = String(text).toUpperCase();
+      const s = String(text).toLowerCase();
       let sp = ls === undefined ? size * 0.24 : ls;
       let total = 0;
       const remeasure = () => {
-        g.font = "700 " + size + "px -apple-system, system-ui, 'Segoe UI', sans-serif";
+        g.font = "700 " + size + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         total = 0;
         for (const ch of s) total += g.measureText(ch).width + sp;
         total -= sp;
@@ -1090,7 +1131,7 @@ window.plethoraBit = {
     /** A line of text with a suit pip set into it at the right size. */
     function textWithSuit(text, suit, x, y, size, colour) {
       g.save();
-      g.font = "600 " + size + "px -apple-system, system-ui, 'Segoe UI', sans-serif";
+      g.font = "600 " + size + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.textBaseline = "middle";
       const tw = g.measureText(text).width;
       const gw = size * 1.15;
@@ -1145,11 +1186,11 @@ window.plethoraBit = {
       // Measure the score first: it is right-aligned and immovable, so it is
       // the score that decides how much of the plate the name may have.
       const scoreTxt = String(p.total);
-      g.font = "800 16px ui-serif, Georgia, serif";
+      g.font = "800 16px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       const scoreW = g.measureText(scoreTxt).width;
       smallCaps(p.name, -pw / 2 + 9, -ph / 2 + 12.5, 10, p.colour, 1.1, "left",
                 pw - 18 - scoreW - 7);
-      g.font = "800 16px ui-serif, Georgia, serif";
+      g.font = "800 16px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.textAlign = "right";
       g.fillStyle = IVORY;
       g.fillText(scoreTxt, pw / 2 - 9, -ph / 2 + 13.5);
@@ -1160,19 +1201,19 @@ window.plethoraBit = {
       g.textAlign = "left";
       let x = -pw / 2 + 9;
       if (hp > 0) {
-        g.font = "800 11.5px -apple-system, system-ui, sans-serif";
+        g.font = "800 11.5px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillStyle = CRIMSON_HI;
         g.fillText("+" + hp, x, ph / 2 - 11);
         x += g.measureText("+" + hp).width + 7;
       } else if (st && phase !== "menu") {
-        g.font = "600 10px -apple-system, system-ui, sans-serif";
+        g.font = "600 10px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillStyle = "rgba(242,233,210,0.34)";
         g.fillText("clean", x, ph / 2 - 11);
         x += g.measureText("clean").width + 7;
       }
       if (hasQueen(seat)) {
         g.fillStyle = CRIMSON_HI;
-        g.font = "800 11px ui-serif, Georgia, serif";
+        g.font = "800 11px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillText("Q", x, ph / 2 - 11);
         suitPath(g, "S", x + g.measureText("Q").width + 4, ph / 2 - 11.5, 4.6);
       }
@@ -1407,7 +1448,7 @@ window.plethoraBit = {
       g.fillRect(x0 + 40, y0 + 11, x1 - x0 - 80, 2);
       smallCaps("Pass the phone to", L.cx, y0 + 32, 10, "rgba(201,162,39,0.72)");
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.font = "900 36px ui-serif, Georgia, serif";
+      g.font = "900 36px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = p.colour;
       g.fillText(p.name, L.cx, mid - 12);
 
@@ -1429,7 +1470,7 @@ window.plethoraBit = {
       }
       if (suit) textWithSuit(line, suit, L.cx, mid + 16, 14, "rgba(242,233,210,0.66)");
       else {
-        g.font = "600 14px -apple-system, system-ui, sans-serif";
+        g.font = "600 14px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillStyle = "rgba(242,233,210,0.66)";
         g.fillText(line, L.cx, mid + 16);
       }
@@ -1459,7 +1500,7 @@ window.plethoraBit = {
       if (suit) textWithSuit(line, suit, L.cx, L.promptY, 14, "rgba(242,233,210,0.72)");
       else {
         g.textAlign = "center"; g.textBaseline = "middle";
-        g.font = "600 14px -apple-system, system-ui, sans-serif";
+        g.font = "600 14px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillStyle = "rgba(242,233,210,0.72)";
         g.fillText(line, L.cx, L.promptY);
       }
@@ -1473,15 +1514,15 @@ window.plethoraBit = {
       const to = players[passTarget(passSeat, passDir)];
       const lead = "Three cards to ";
       g.textAlign = "left"; g.textBaseline = "middle";
-      g.font = "600 15px -apple-system, system-ui, sans-serif";
+      g.font = "600 15px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       const lw = g.measureText(lead).width;
-      g.font = "800 15px -apple-system, system-ui, sans-serif";
+      g.font = "800 15px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       const nw = g.measureText(to.name).width;
       let x = L.cx - (lw + nw) / 2;
-      g.font = "600 15px -apple-system, system-ui, sans-serif";
+      g.font = "600 15px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = "rgba(242,233,210,0.66)";
       g.fillText(lead, x, L.promptY - 8);
-      g.font = "800 15px -apple-system, system-ui, sans-serif";
+      g.font = "800 15px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = to.colour;
       g.fillText(to.name, x + lw, L.promptY - 8);
     }
@@ -1501,10 +1542,10 @@ window.plethoraBit = {
       const mid = (y0 + y1) / 2;
       smallCaps("Trick taken", L.cx, y0 + 30, 10, "rgba(201,162,39,0.72)");
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.font = "900 30px ui-serif, Georgia, serif";
+      g.font = "900 30px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = w.colour;
       g.fillText(w.name, L.cx, mid - 14);
-      g.font = "600 14px -apple-system, system-ui, sans-serif";
+      g.font = "600 14px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = "rgba(242,233,210,0.66)";
       g.fillText(heavy ? "takes it, and the black lady with it" : "takes the trick", L.cx, mid + 12);
       if (lt.points > 0) {
@@ -1639,8 +1680,8 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------
      * Overlay — one markup string, pointers off on the root
      * ------------------------------------------------------------- */
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-    const SERIF = "ui-serif,Georgia,'Times New Roman',serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const SERIF = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const BIG = "width:100%;padding:15px;border:none;border-radius:14px;font-family:inherit;" +
       "font-size:16px;font-weight:800;letter-spacing:0.02em;";
     const BTN = "pointer-events:auto;width:34px;height:34px;border-radius:11px;border:none;" +
@@ -1652,16 +1693,28 @@ window.plethoraBit = {
     const SHEET = "box-sizing:border-box;background:linear-gradient(180deg,#0B3A29,#06231A);" +
       "border:1px solid rgba(201,162,39,0.42);" +
       "border-radius:20px;box-shadow:0 14px 44px rgba(0,0,0,0.55);";
-    const LABEL = "font-size:10px;letter-spacing:0.3em;text-transform:uppercase;color:rgba(201,162,39,0.7);";
+    const LABEL = "font-size:10px;letter-spacing:0.3em;text-transform:lowercase;color:rgba(201,162,39,0.7);";
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:" + IVORY + ";pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:" + IVORY + ";pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       // Chrome goes in the strip above the ring. Down the side it would sit on
       // the outermost cards: a 390px screen leaves seven pixels there.
       '<div data-el="chrome" style="position:absolute;left:10px;top:' + (ST + 10) + 'px;' +
         'display:none;gap:7px;z-index:40;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">&#128266;</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + BTN + '">&#9881;</button>' +
       '</div>' +
@@ -1787,8 +1840,8 @@ window.plethoraBit = {
       ctx.listen(node, "pointerdown", (e) => e.stopPropagation());
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
-    tap(el("mute"), (e) => { e.target.innerHTML = sound.toggle() ? "&#128263;" : "&#128266;"; });
-    if (settings.mute) el("mute").innerHTML = "&#128263;";
+    tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); });
+    if (settings.mute) el("mute").innerHTML = SPK(false);
     tap(el("help"), () => { el("helpp").style.display = "flex"; });
     tap(el("helpp-close"), () => { el("helpp").style.display = "none"; });
     tap(el("cog"), () => { el("setp").style.display = "flex"; });

@@ -56,6 +56,34 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const TAU = Math.PI * 2;
     const RAD = Math.PI / 180;
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -2234,7 +2262,7 @@ window.plethoraBit = {
      * pointers: it is created after the canvas and would otherwise
      * swallow every tap meant for a control deck.
      * ================================================================= */
-    const FONTF = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+    const FONTF = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const CHROME_Y = BF_TOP + 8;
     const START_Y = BOT_Y + Math.round(DECK_H * 0.42);
     const CARD_W = Math.min(334, W - 34);
@@ -2263,7 +2291,19 @@ window.plethoraBit = {
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONTF + ";color:#E8EEFB;pointer-events:none;" +
-      "-webkit-font-smoothing:antialiased;";
+      "-webkit-font-smoothing:antialiased;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       // chrome, tucked into the sky above the terrain where nothing is ever tapped
       '<div data-el="chrome" style="position:absolute;left:10px;top:' + CHROME_Y + 'px;display:flex;gap:6px;' +

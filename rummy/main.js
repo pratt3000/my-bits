@@ -48,6 +48,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     /* ---- The 52-card deck, lifted verbatim from tools/kit/kit.js so every
      * card bit in this repo draws exactly the same cards. ---- */
     function roundRect(g, x, y, w, h, r) {
@@ -176,7 +217,7 @@ window.plethoraBit = {
         g.save();
         if (flip) { g.translate(w, h); g.rotate(Math.PI); }
         g.fillStyle = ink;
-        g.font = `700 ${cs}px ui-serif, Georgia, serif`;
+        g.font = `700 ${cs}px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif`;
         g.textAlign = "center"; g.textBaseline = "alphabetic";
         g.fillText(rank, w * 0.135, h * 0.135);
         suitPath(g, suitId, w * 0.135, h * 0.208, cs * 0.44);
@@ -1414,9 +1455,13 @@ window.plethoraBit = {
     }
 
     /** Letter-spaced small caps; canvas letterSpacing is not safe on every WebView. */
+    // Set lowercase like the rest of the game. This helper draws one
+    // character at a time for its own tracking, and single characters slip
+    // past the case fold that every other canvas string goes through.
     function tracked(text, x, y, size, colour, spacing) {
+      text = typeof text === "string" ? text.toLowerCase() : text;
       g.save();
-      g.font = "800 " + size + "px -apple-system, system-ui, sans-serif";
+      g.font = "800 " + size + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = colour;
       g.textAlign = "center"; g.textBaseline = "middle";
       const chars = String(text).split("");
@@ -1462,7 +1507,7 @@ window.plethoraBit = {
         g.strokeStyle = "rgba(0,0,0,0.25)"; g.lineWidth = 1; g.stroke();
         if (s.face) {
           g.fillStyle = s.card.red ? "#c8202f" : "#1b1b22";
-          g.font = "700 " + (w * 0.38) + "px ui-serif, Georgia, serif";
+          g.font = "700 " + (w * 0.38) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
           g.textAlign = "center"; g.textBaseline = "middle";
           g.fillText(s.card.rank, 0, -h * 0.08);
           suitPath(g, s.card.suit, 0, h * 0.22, w * 0.16);
@@ -1494,7 +1539,7 @@ window.plethoraBit = {
       g.stroke();
       g.setLineDash([]);
       g.fillStyle = "rgba(246,235,216,0.26)";
-      g.font = "700 10px -apple-system, system-ui, sans-serif";
+      g.font = "700 10px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillText(label, x, y);
       g.restore();
@@ -1597,7 +1642,7 @@ window.plethoraBit = {
         const ry = view.ruleY;
         const caption = view.arr.melds.length ? "MELDS" : "NO MELDS YET";
         g.save();
-        g.font = "800 9.5px -apple-system, system-ui, sans-serif";
+        g.font = "800 9.5px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         const half = g.measureText(caption).width / 2 + caption.length * 0.9 + 13;
         g.strokeStyle = "rgba(201,160,92,0.22)";
         g.lineWidth = 1;
@@ -1628,15 +1673,15 @@ window.plethoraBit = {
         g.save();
         g.textBaseline = "middle";
         g.textAlign = "left";
-        g.font = "800 9.5px -apple-system, system-ui, sans-serif";
+        g.font = "800 9.5px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillStyle = "rgba(246,235,216,0.5)";
         let cx = L.feltX + 24;
         for (const ch of "DEADWOOD") { g.fillText(ch, cx, dy); cx += g.measureText(ch).width + 1.8; }
-        g.font = "900 16px -apple-system, system-ui, sans-serif";
+        g.font = "900 16px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillStyle = revealed ? (view.arr.deadwood <= 10 ? GOLD : PARCH) : "rgba(246,235,216,0.3)";
         g.fillText(revealed ? String(view.arr.deadwood) : "··", cx + 8, dy - 1);
         if (revealed && view.arr.deadwood <= 10 && phase === "discard" && selected) {
-          g.font = "800 11px -apple-system, system-ui, sans-serif";
+          g.font = "800 11px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
           g.fillStyle = GOLD;
           g.fillText(view.arr.deadwood === 0 ? "gin" : "knockable", cx + 34, dy);
         }
@@ -1651,7 +1696,7 @@ window.plethoraBit = {
       const k = players[show.knocker], d = players[show.defender];
       g.save();
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.font = "900 18px -apple-system, system-ui, sans-serif";
+      g.font = "900 18px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = k.css;
       g.fillText(show.gin ? k.name + " GOES GIN" : k.name + " KNOCKS", W / 2, view.headY);
       g.restore();
@@ -1663,15 +1708,15 @@ window.plethoraBit = {
       // the settlement are never mistaken for one long hand.
       const midY = view.dTop - 26;
       g.save();
-      g.font = "900 13px -apple-system, system-ui, sans-serif";
-      const half = g.measureText(d.name.toUpperCase()).width / 2 + 16;
+      g.font = "900 13px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+      const half = g.measureText(d.name.toLowerCase()).width / 2 + 16;
       g.strokeStyle = "rgba(201,160,92,0.22)";
       g.lineWidth = 1;
       g.beginPath(); g.moveTo(L.feltX + 24, midY); g.lineTo(W / 2 - half, midY); g.stroke();
       g.beginPath(); g.moveTo(W / 2 + half, midY); g.lineTo(L.feltX + L.feltW - 24, midY); g.stroke();
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillStyle = d.css;
-      g.fillText(d.name.toUpperCase(), W / 2, midY);
+      g.fillText(d.name.toLowerCase(), W / 2, midY);
       g.restore();
 
       drawBands(view.dBands, 1);
@@ -1681,7 +1726,7 @@ window.plethoraBit = {
       const undercutting = !show.gin && show.dDeadwood <= show.kDeadwood;
       g.save();
       g.textBaseline = "middle"; g.textAlign = "center";
-      g.font = "800 9.5px -apple-system, system-ui, sans-serif";
+      g.font = "800 9.5px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       let total = 0;
       const cap = "DEADWOOD";
       for (const ch2 of cap) total += g.measureText(ch2).width + 1.8;
@@ -1690,11 +1735,11 @@ window.plethoraBit = {
       g.textAlign = "left";
       g.fillStyle = "rgba(246,235,216,0.5)";
       for (const ch2 of cap) { g.fillText(ch2, cx, fy); cx += g.measureText(ch2).width + 1.8; }
-      g.font = "900 17px -apple-system, system-ui, sans-serif";
+      g.font = "900 17px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = undercutting ? "#FF9F7A" : PARCH;
       g.fillText(String(show.dDeadwood), cx + 9, fy - 1);
       if (undercutting) {
-        g.font = "800 10px -apple-system, system-ui, sans-serif";
+        g.font = "800 10px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.fillStyle = "#FF9F7A";
         g.fillText("UNDERCUT", cx + 9, fy + 17);
       }
@@ -1739,7 +1784,7 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------
      * Overlay — one markup string, root transparent to pointers.
      * ------------------------------------------------------------- */
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const ST = ctx.safeArea.top, SB = ctx.safeArea.bottom;
     const PANEL = "background:linear-gradient(180deg,rgba(58,32,18,0.98),rgba(34,18,9,0.99));" +
       "border:1px solid rgba(201,160,92,0.35);border-radius:22px;";
@@ -1751,14 +1796,26 @@ window.plethoraBit = {
       "background:rgba(0,0,0,0.28);color:#F6EBD8;font-family:inherit;font-size:16px;font-weight:700;";
 
     const root = ctx.createRoot({ touchAction: "manipulation" });
-    root.style.cssText += ";font-family:" + FONT + ";color:" + PARCH + ";pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:" + PARCH + ";pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       // ---- top strip: both scores, the hand number, the chrome ----
       '<div style="position:absolute;left:11px;right:11px;top:' + (ST + 7) + 'px;height:38px;' +
         'display:flex;align-items:center;gap:8px;pointer-events:none;">' +
         '<div data-el="s0" style="flex:1;min-width:0;"></div>' +
         '<div data-el="mid" style="text-align:center;font-size:9.5px;letter-spacing:0.18em;' +
-          'text-transform:uppercase;opacity:0.55;line-height:1.35;white-space:nowrap;"></div>' +
+          'text-transform:lowercase;opacity:0.55;line-height:1.35;white-space:nowrap;"></div>' +
         '<div data-el="s1" style="flex:1;min-width:0;text-align:right;"></div>' +
       '</div>' +
 
@@ -1766,7 +1823,7 @@ window.plethoraBit = {
       '<div data-el="ledge" style="position:absolute;left:0;right:0;bottom:0;' +
         'height:' + (134 + SB) + 'px;pointer-events:none;">' +
         '<div style="position:absolute;left:14px;top:9px;display:flex;gap:7px;">' +
-          '<button data-el="mute" aria-label="Sound" style="' + CHIP + '">🔊</button>' +
+          '<button data-el="mute" aria-label="Sound" style="' + CHIP + '">' + SPK(true) + '</button>' +
           '<button data-el="help" aria-label="How to play" style="' + CHIP + '">?</button>' +
           '<button data-el="cog" aria-label="Settings" style="' + CHIP + '">⚙</button>' +
         '</div>' +
@@ -1795,7 +1852,7 @@ window.plethoraBit = {
           'border:2px solid rgba(255,255,255,0.30);border-radius:18px;pointer-events:none;"></div>' +
         '<div data-el="cover-scores" style="position:absolute;left:0;right:0;top:' + (ST + 34) + 'px;' +
           'display:flex;justify-content:center;gap:22px;font-size:12px;font-weight:800;"></div>' +
-        '<div style="font-size:10px;letter-spacing:0.36em;text-transform:uppercase;opacity:0.62;">Pass the phone to</div>' +
+        '<div style="font-size:10px;letter-spacing:0.36em;text-transform:lowercase;opacity:0.62;">Pass the phone to</div>' +
         '<div data-el="cover-name" style="font-size:44px;font-weight:900;line-height:1.08;text-align:center;' +
           'text-shadow:0 2px 14px rgba(0,0,0,0.45);"></div>' +
         '<div data-el="cover-sub" style="font-size:13px;opacity:0.66;margin-bottom:24px;"></div>' +
@@ -1820,7 +1877,7 @@ window.plethoraBit = {
         
         'z-index:50;">' +
         '<div style="text-align:center;">' +
-          '<div style="font-size:10px;letter-spacing:0.44em;text-transform:uppercase;opacity:0.5;">Two players · one phone</div>' +
+          '<div style="font-size:10px;letter-spacing:0.44em;text-transform:lowercase;opacity:0.5;">Two players · one phone</div>' +
           '<div style="font-size:58px;font-weight:900;letter-spacing:-0.045em;line-height:0.92;margin-top:6px;' +
             'background:linear-gradient(120deg,#F0B347,#EFC96B 45%,#7FC6A4);-webkit-background-clip:text;' +
             'background-clip:text;-webkit-text-fill-color:transparent;">Gin<br>Rummy</div>' +
@@ -1849,7 +1906,7 @@ window.plethoraBit = {
         'background:rgba(14,7,3,0.72);z-index:65;">' +
         '<div style="max-width:330px;width:100%;' + PANEL + 'padding:24px 22px;text-align:center;' +
           'box-shadow:0 18px 60px rgba(0,0,0,0.55);">' +
-          '<div style="font-size:10px;letter-spacing:0.4em;text-transform:uppercase;opacity:0.45;">Match over</div>' +
+          '<div style="font-size:10px;letter-spacing:0.4em;text-transform:lowercase;opacity:0.45;">Match over</div>' +
           '<div data-el="over-name" style="font-size:40px;font-weight:900;line-height:1.05;margin-top:5px;"></div>' +
           '<div style="font-size:13.5px;opacity:0.6;margin-top:2px;">takes the match</div>' +
           '<div style="margin:15px 0 4px;font-size:13px;letter-spacing:0.5em;color:rgba(201,160,92,0.75);">' +
@@ -1868,11 +1925,11 @@ window.plethoraBit = {
         'padding:' + (ST + 14) + 'px 20px ' + (SB + 14) + 'px;">' +
         '<div style="max-width:330px;width:100%;' + PANEL + 'padding:21px;">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:14px;">Settings</div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">Match to</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Match to</div>' +
           '<div data-el="tc" style="display:flex;gap:8px;margin:7px 0 15px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">Baize</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Baize</div>' +
           '<div data-el="fc" style="display:flex;gap:8px;margin:7px 0 15px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">Hints</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Hints</div>' +
           '<div data-el="hc" style="display:flex;gap:8px;margin:7px 0 4px;"></div>' +
           '<div style="font-size:12px;opacity:0.5;line-height:1.5;">Rings the card that leaves you the least deadwood.</div>' +
           '<button data-el="cogp-close" style="' + BIG + 'margin-top:17px;background:' + GOLD + ';color:#3A2210;">Done</button>' +
@@ -1909,8 +1966,8 @@ window.plethoraBit = {
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
 
-    tap(el("mute"), (e) => { e.target.textContent = sound.toggle() ? "🔇" : "🔊"; });
-    if (settings.mute) el("mute").textContent = "🔇";
+    tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); });
+    if (settings.mute) el("mute").innerHTML = SPK(false);
     tap(el("help"), () => { el("helpp").style.display = "flex"; });
     tap(el("menu-help"), () => { el("helpp").style.display = "flex"; });
     tap(el("helpp-close"), () => { el("helpp").style.display = "none"; });
@@ -2115,14 +2172,14 @@ window.plethoraBit = {
       const s = el("sheet-body");
       if (result.dead) {
         s.innerHTML =
-          '<div style="font-size:10px;letter-spacing:0.3em;text-transform:uppercase;opacity:0.5;">Hand ' + result.hand + '</div>' +
+          '<div style="font-size:10px;letter-spacing:0.3em;text-transform:lowercase;opacity:0.5;">Hand ' + result.hand + '</div>' +
           '<div style="font-size:26px;font-weight:900;margin-top:3px;">Dead hand</div>' +
           '<div style="font-size:13.5px;opacity:0.62;line-height:1.5;margin-top:5px;">' +
             'The stock ran down to two cards with nobody knocking. Nobody scores; same dealer deals again.</div>';
       } else {
         const p = players[result.seat];
         const tagStyle = "display:inline-block;padding:3px 9px;border-radius:8px;font-size:10px;" +
-          "font-weight:900;letter-spacing:0.18em;text-transform:uppercase;";
+          "font-weight:900;letter-spacing:0.18em;text-transform:lowercase;";
         const tag = result.gin
           ? '<span style="' + tagStyle + 'background:' + GOLD + ';color:#3A2210;">Gin +25</span>'
           : result.undercut
@@ -2130,7 +2187,7 @@ window.plethoraBit = {
             : '<span style="' + tagStyle + 'background:rgba(246,235,216,0.14);color:' + PARCH + ';">Knock</span>';
         s.innerHTML =
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
-            '<div style="font-size:10px;letter-spacing:0.3em;text-transform:uppercase;opacity:0.5;">Hand ' + result.hand + '</div>' + tag +
+            '<div style="font-size:10px;letter-spacing:0.3em;text-transform:lowercase;opacity:0.5;">Hand ' + result.hand + '</div>' + tag +
           '</div>' +
           '<div style="font-size:27px;font-weight:900;margin-top:6px;color:' + p.css + ';line-height:1.15;">' +
             esc(p.name) + ' +' + result.points + '</div>' +

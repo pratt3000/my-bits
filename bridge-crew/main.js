@@ -36,6 +36,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
     const TAU = Math.PI * 2;
     const esc = (s) => String(s).replace(/[&<>"']/g,
@@ -347,7 +388,7 @@ window.plethoraBit = {
       g.fill();
 
       g.fillStyle = "rgba(240,246,255,0.86)";
-      g.font = "700 " + Math.min(10.5, c.w * 0.108) + "px -apple-system, system-ui, sans-serif";
+      g.font = "700 " + Math.min(10.5, c.w * 0.108) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.textAlign = "center"; g.textBaseline = "top";
       const words = c.name.split(" ");
       g.fillText(words[0], c.w / 2, 12);
@@ -368,7 +409,7 @@ window.plethoraBit = {
         g.strokeStyle = owner.css; g.lineWidth = s * 0.22;
         g.beginPath(); g.arc(cx, cy, s * 0.72, Math.PI * 0.75, a); g.stroke();
         g.fillStyle = "#f0f6ff";
-        g.font = "800 " + (s * 0.86) + "px -apple-system, system-ui, sans-serif";
+        g.font = "800 " + (s * 0.86) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillText(String(c.value), cx, cy + s * 0.04);
       } else if (c.kind === "slider") {
@@ -455,17 +496,17 @@ window.plethoraBit = {
         roundRect(g, 20, y + rowH / 2 - 7, 5, 14, 2.5);
         g.fill();
         g.fillStyle = "#eef4ff";
-        g.font = "800 " + Math.min(16, w * 0.045) + "px -apple-system, system-ui, sans-serif";
+        g.font = "800 " + Math.min(16, w * 0.045) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "left"; g.textBaseline = "middle";
         g.fillText(o.text, 34, y + rowH / 2);
         g.fillStyle = owner.css;
-        g.font = "700 10px -apple-system, system-ui, sans-serif";
+        g.font = "700 10px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "right";
-        g.fillText(owner.name.toUpperCase(), 13 + w - 12, y + rowH / 2);
+        g.fillText(owner.name.toLowerCase(), 13 + w - 12, y + rowH / 2);
       }
       if (orders.length > 3) {
         g.fillStyle = "rgba(238,244,255,0.45)";
-        g.font = "700 11px -apple-system, system-ui, sans-serif";
+        g.font = "700 11px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "center"; g.textBaseline = "top";
         g.fillText("+" + (orders.length - 3) + " more", W / 2, L.orderY + 6 + 3 * (rowH + 6) + 2);
       }
@@ -482,7 +523,7 @@ window.plethoraBit = {
       if (banner && banner.t > 0) {
         g.globalAlpha = clamp(banner.t, 0, 1);
         g.fillStyle = "#eef4ff";
-        g.font = "900 30px -apple-system, system-ui, sans-serif";
+        g.font = "900 30px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillText(banner.text, W / 2, L.orderY + L.orderH / 2 - 14);
         g.globalAlpha = 1;
@@ -563,31 +604,43 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------
      * Overlay
      * ------------------------------------------------------------- */
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const BIG = "width:100%;padding:15px;border:none;border-radius:15px;font-family:inherit;" +
       "font-size:16px;font-weight:800;";
     const BTN = "pointer-events:auto;width:34px;height:34px;border-radius:11px;border:none;" +
       "background:rgba(255,255,255,0.14);color:#eef4ff;font-size:14px;font-family:inherit;padding:0;";
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:#eef4ff;pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:#eef4ff;pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       '<div style="position:absolute;left:9px;top:50%;transform:translateY(-50%);display:flex;' +
         'flex-direction:column;gap:6px;z-index:40;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">🔊</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:10px;' +
         'background:rgba(8,14,28,0.94);z-index:50;padding:26px;text-align:center;">' +
-        '<div style="font-size:11px;letter-spacing:0.4em;text-transform:uppercase;opacity:0.5;">All hands</div>' +
+        '<div style="font-size:11px;letter-spacing:0.4em;text-transform:lowercase;opacity:0.5;">All hands</div>' +
         '<div style="font-size:50px;font-weight:900;letter-spacing:-0.02em;line-height:1.05;' +
           'background:linear-gradient(96deg,#ff4d6d,#ffd166,#4cc9f0);-webkit-background-clip:text;' +
           'background-clip:text;-webkit-text-fill-color:transparent;">Bridge Crew</div>' +
         '<div style="font-size:14.5px;opacity:0.68;max-width:285px;line-height:1.55;">' +
           'Everyone can read every order. Nobody can reach anybody else\'s controls. ' +
           'You are going to have to shout.</div>' +
-        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;margin-top:14px;">Crew</div>' +
+        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;margin-top:14px;">Crew</div>' +
         '<div data-el="pc" style="display:flex;gap:8px;"></div>' +
         '<button data-el="go" style="' + BIG + 'max-width:230px;margin-top:16px;' +
           'background:linear-gradient(96deg,#ff4d6d,#ffd166);color:#12101c;">Take stations</button>' +
@@ -595,9 +648,9 @@ window.plethoraBit = {
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:5px;' +
         'background:rgba(8,14,28,0.95);z-index:55;padding:26px;text-align:center;">' +
-        '<div style="font-size:12px;letter-spacing:0.32em;text-transform:uppercase;opacity:0.5;">Hull breached</div>' +
+        '<div style="font-size:12px;letter-spacing:0.32em;text-transform:lowercase;opacity:0.5;">Hull breached</div>' +
         '<div data-el="over-served" style="font-size:74px;font-weight:900;line-height:1;color:#ffd166;">0</div>' +
-        '<div style="font-size:13px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.55;">orders served</div>' +
+        '<div style="font-size:13px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">orders served</div>' +
         '<div data-el="over-line" style="font-size:13.5px;opacity:0.6;margin-top:6px;"></div>' +
         '<button data-el="again" style="' + BIG + 'max-width:230px;margin-top:22px;' +
           'background:rgba(255,255,255,0.16);color:#eef4ff;">Again</button>' +
@@ -627,8 +680,8 @@ window.plethoraBit = {
       ctx.listen(node, "pointerdown", (e) => e.stopPropagation());
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
-    tap(el("mute"), (e) => { e.target.textContent = sound.toggle() ? "🔇" : "🔊"; });
-    if (settings.mute) el("mute").textContent = "🔇";
+    tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); });
+    if (settings.mute) el("mute").innerHTML = SPK(false);
     tap(el("help"), () => { el("helpp").style.display = "flex"; });
     tap(el("helpp-close"), () => { el("helpp").style.display = "none"; });
 

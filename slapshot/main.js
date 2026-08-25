@@ -35,6 +35,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const THREE = await ctx.importModule("three", "0.164.1");
 
     /* ---------------------------------------------------------------
@@ -654,7 +695,7 @@ window.plethoraBit = {
      * because they are sitting at the other end of the table and would
      * otherwise be reading their own score upside down.
      * ------------------------------------------------------------- */
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const SAFE_T = ctx.safeArea.top, SAFE_B = ctx.safeArea.bottom;
 
     const btnCss = "pointer-events:auto;width:38px;height:38px;border-radius:13px;border:none;" +
@@ -667,7 +708,19 @@ window.plethoraBit = {
     // The overlay sits above the WebGL canvas, so it must be transparent to
     // pointers or it swallows every drag meant for a mallet. Only the chrome
     // that is meant to be pressed opts back in.
-    root.style.cssText += ";font-family:" + FONT + ";color:#dceaff;pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:#dceaff;pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       // --- top player's score, upside down for their seat ---
       '<div data-el="s2" style="position:absolute;right:20px;top:' + (SAFE_T + 30) + 'px;' +
@@ -680,11 +733,11 @@ window.plethoraBit = {
       // --- rally counter, on the centre line where it belongs to neither ---
       '<div data-el="rally" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);' +
         'text-align:center;pointer-events:none;font-size:12px;letter-spacing:0.3em;' +
-        'text-transform:uppercase;opacity:0;color:#9fd0ff;"></div>' +
+        'text-transform:lowercase;opacity:0;color:#9fd0ff;"></div>' +
       // --- chrome ---
       '<div style="position:absolute;right:11px;top:' + (SAFE_T + 8) + 'px;display:flex;gap:7px;' +
         'z-index:40;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + btnCss + '">🔊</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + btnCss + '">' + SPK(true) + '</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + btnCss + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btnCss + '">?</button>' +
       '</div>' +
@@ -696,7 +749,7 @@ window.plethoraBit = {
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;flex-direction:column;' +
         'align-items:center;justify-content:center;gap:8px;background:rgba(3,6,13,0.82);z-index:50;' +
         'padding:26px;text-align:center;">' +
-        '<div style="font-size:13px;letter-spacing:0.42em;text-transform:uppercase;opacity:0.5;">Air Hockey</div>' +
+        '<div style="font-size:13px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;">Air Hockey</div>' +
         '<div style="font-size:54px;font-weight:800;letter-spacing:-0.02em;background:linear-gradient(92deg,' +
           P1.ink + ',' + P2.ink + ');-webkit-background-clip:text;background-clip:text;' +
           '-webkit-text-fill-color:transparent;">Slapshot</div>' +
@@ -720,9 +773,9 @@ window.plethoraBit = {
         '<div style="max-width:320px;width:100%;background:rgba(14,22,38,0.98);border-radius:22px;' +
           'padding:22px;border:1px solid rgba(160,205,255,0.12);">' +
           '<div style="font-size:19px;font-weight:700;margin-bottom:16px;">Settings</div>' +
-          '<div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.5;">Play to</div>' +
+          '<div style="font-size:12px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Play to</div>' +
           '<div data-el="targets" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
-          '<div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.5;">Puck speed</div>' +
+          '<div style="font-size:12px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Puck speed</div>' +
           '<div data-el="speeds" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
           '<button data-el="cogp-close" style="' + bigBtn("rgba(160,205,255,0.16)", "#eaf4ff") + 'margin-top:20px;">Done</button>' +
         '</div>' +
@@ -785,9 +838,9 @@ window.plethoraBit = {
     /* --- chrome wiring --- */
     shell.tap(shell.el("mute"), (e) => {
       const m = sound.toggle();
-      e.target.textContent = m ? "🔇" : "🔊";
+      e.target.innerHTML = SPK(!m);
     });
-    if (settings.mute) shell.el("mute").textContent = "🔇";
+    if (settings.mute) shell.el("mute").innerHTML = SPK(false);
     shell.tap(shell.el("cog"), () => { shell.el("cogp").style.display = "flex"; });
     shell.tap(shell.el("cogp-close"), () => { shell.el("cogp").style.display = "none"; });
     shell.tap(shell.el("help"), () => { shell.el("helpp").style.display = "flex"; });

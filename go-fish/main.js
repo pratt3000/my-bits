@@ -55,6 +55,34 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     const TAU = Math.PI * 2;
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
     const lerp = (a, b, t) => a + (b - a) * t;
@@ -111,8 +139,8 @@ window.plethoraBit = {
       { name: "Angel", ink: "#c79bff", dim: "#7b4ad6" },
     ];
 
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-    const SERIF = "ui-serif,Georgia,'Times New Roman',serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const SERIF = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
 
     const RANK_WORD = {
       A: "ACES", 2: "TWOS", 3: "THREES", 4: "FOURS", 5: "FIVES", 6: "SIXES",
@@ -235,7 +263,11 @@ window.plethoraBit = {
      * frame and measureText is one of the few canvas calls that is not cheap.
      */
     const trackCache = new Map();
+    // Set lowercase like the rest of the game. This helper draws one
+    // character at a time for its own tracking, and single characters slip
+    // past the case fold that every other canvas string goes through.
     function trackPlan(g2, text, spacing) {
+      text = typeof text === "string" ? text.toLowerCase() : text;
       const key = g2.font + "|" + text + "|" + spacing;
       let plan = trackCache.get(key);
       if (!plan) {
@@ -2010,8 +2042,8 @@ window.plethoraBit = {
       g.save();
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillStyle = p.ink;
-      fitFont(g, p.name.toUpperCase(), L.innerW - 20, 52, "900");
-      g.fillText(p.name.toUpperCase(), cx, L.top + 296);
+      fitFont(g, p.name.toLowerCase(), L.innerW - 20, 52, "900");
+      g.fillText(p.name.toLowerCase(), cx, L.top + 296);
       g.restore();
 
       g.save();
@@ -2072,7 +2104,7 @@ window.plethoraBit = {
       }
 
       button("reveal", L.pad + 14, L.bot - 142, L.innerW - 28, 66,
-        "I'M " + p.name.toUpperCase() + " — SHOW MY HAND", {
+        "I'M " + p.name.toLowerCase() + " — SHOW MY HAND", {
           top: p.ink, bottom: p.dim, ink: "#0a1620",
           rim: "rgba(2,20,34,0.6)", edge: "rgba(255,255,255,0.6)", size: 17,
         });
@@ -2261,7 +2293,7 @@ window.plethoraBit = {
       // for, or a child taps it four times and decides the game is broken.
       const ready = selRank !== null && selTarget >= 0;
       const lbl = ready
-        ? "ASK " + players[selTarget].name.toUpperCase() + " FOR " + RANK_WORD[selRank]
+        ? "ASK " + players[selTarget].name.toLowerCase() + " FOR " + RANK_WORD[selRank]
         : selRank === null ? "PICK A RANK" : "NOW PICK WHO TO ASK";
       button("ask", L.pad, L.askBtnY, L.innerW, L.askBtnH, lbl, {
         enabled: ready,
@@ -2280,16 +2312,16 @@ window.plethoraBit = {
       const d = b.data || {};
       const a = players[d.a], tg = players[d.t];
       switch (b.id) {
-        case "ask": return a.name.toUpperCase() + " ASKS " + tg.name.toUpperCase() + " FOR " + RANK_WORD[d.rank];
-        case "give": return tg.name.toUpperCase() + " HANDS OVER " + d.n + " " +
+        case "ask": return a.name.toLowerCase() + " ASKS " + tg.name.toLowerCase() + " FOR " + RANK_WORD[d.rank];
+        case "give": return tg.name.toLowerCase() + " HANDS OVER " + d.n + " " +
           (d.n === 1 ? RANK_ONE[d.rank] : RANK_WORD[d.rank]);
-        case "fish": return tg.name.toUpperCase() + " SAYS GO FISH";
-        case "draw": return a.name.toUpperCase() + " TAKES ONE FROM THE OCEAN";
-        case "caught": return a.name.toUpperCase() + " FISHED IT OUT";
-        case "book": return players[d.p].name.toUpperCase() + " LANDS A BOOK OF " + RANK_WORD[d.rank];
-        case "again": return a.name.toUpperCase() + " GOES AGAIN";
-        case "refill": return a.name.toUpperCase() + " IS OUT OF CARDS — DRAWS ONE";
-        case "nobody": return "NOBODY LEFT TO ASK — " + a.name.toUpperCase() + " FISHES";
+        case "fish": return tg.name.toLowerCase() + " SAYS GO FISH";
+        case "draw": return a.name.toLowerCase() + " TAKES ONE FROM THE OCEAN";
+        case "caught": return a.name.toLowerCase() + " FISHED IT OUT";
+        case "book": return players[d.p].name.toLowerCase() + " LANDS A BOOK OF " + RANK_WORD[d.rank];
+        case "again": return a.name.toLowerCase() + " GOES AGAIN";
+        case "refill": return a.name.toLowerCase() + " IS OUT OF CARDS — DRAWS ONE";
+        case "nobody": return "NOBODY LEFT TO ASK — " + a.name.toLowerCase() + " FISHES";
         default: return "";
       }
     }
@@ -2334,15 +2366,15 @@ window.plethoraBit = {
       g.save();
       g.textAlign = "left"; g.textBaseline = "middle";
       g.font = "800 19px " + FONT;
-      const w1 = g.measureText(a.name.toUpperCase()).width;
-      const w2 = g.measureText(tg.name.toUpperCase()).width;
+      const w1 = g.measureText(a.name.toLowerCase()).width;
+      const w2 = g.measureText(tg.name.toLowerCase()).width;
       const arrow = 44;
       const total = 22 + w1 + arrow + w2 + 22;
       let x = cx - total / 2;
       seatFish(x + 10, y, 12, a, performance.now() / 1000, 1);
       x += 22;
       g.fillStyle = a.ink;
-      g.fillText(a.name.toUpperCase(), x, y);
+      g.fillText(a.name.toLowerCase(), x, y);
       x += w1;
       g.fillStyle = arrowCol || "rgba(242,253,255,0.6)";
       g.textAlign = "center";
@@ -2352,7 +2384,7 @@ window.plethoraBit = {
       g.textAlign = "left";
       g.font = "800 19px " + FONT;
       g.fillStyle = tg.ink;
-      g.fillText(tg.name.toUpperCase(), x, y);
+      g.fillText(tg.name.toLowerCase(), x, y);
       x += w2;
       seatFish(x + 12, y, 12, tg, performance.now() / 1000, 1);
       g.restore();
@@ -2453,7 +2485,7 @@ window.plethoraBit = {
         tracked(g, RANK_WORD[d.rank], cx, py + 140, 3);
         g.restore();
       } else if (b.id === "give") {
-        label(players[d.t].name.toUpperCase() + " HANDS OVER", cx, py - 118, { size: 12, track: 3, col: players[d.t].ink });
+        label(players[d.t].name.toLowerCase() + " HANDS OVER", cx, py - 118, { size: 12, track: 3, col: players[d.t].ink });
         g.save();
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillStyle = FOAM;
@@ -2488,7 +2520,7 @@ window.plethoraBit = {
         g.restore();
         drawFish(g, cx - 90 + Math.sin(beatT * 2.4) * 22, py + 76, 34, "#ffd166", 1, beatT * 9);
         drawFish(g, cx + 96 + Math.sin(beatT * 2.1 + 2) * 20, py + 106, 24, "#7de3ff", -1, beatT * 8);
-        label(players[d.a].name.toUpperCase() + " HAS NO " + RANK_WORD[d.rank] + " FROM " + players[d.t].name.toUpperCase(),
+        label(players[d.a].name.toLowerCase() + " HAS NO " + RANK_WORD[d.rank] + " FROM " + players[d.t].name.toLowerCase(),
           cx, py + 148, { size: 11, track: 2.2 });
       } else if (b.id === "draw" || b.id === "refill" || b.id === "nobody") {
         label(b.id === "refill" ? "HAND EMPTY" : b.id === "nobody" ? "NOBODY LEFT TO ASK" : "FROM THE OCEAN",
@@ -2496,8 +2528,8 @@ window.plethoraBit = {
         g.save();
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillStyle = players[d.a].ink;
-        const s = fitFont(g, players[d.a].name.toUpperCase() + " DRAWS", L.innerW - 30, 34, "900");
-        g.fillText(players[d.a].name.toUpperCase() + " DRAWS", cx, py - 48);
+        const s = fitFont(g, players[d.a].name.toLowerCase() + " DRAWS", L.innerW - 30, 34, "900");
+        g.fillText(players[d.a].name.toLowerCase() + " DRAWS", cx, py - 48);
         g.restore();
         seatFish(cx, py + 26, 40, players[d.a], now / 1000, 1);
       } else if (b.id === "caught") {
@@ -2509,15 +2541,15 @@ window.plethoraBit = {
         g.fillText("FISHED IT OUT!", cx, py - 96);
         g.restore();
         rankPlate(cx, py + 20, 152, 194, d.rank, "#8df0c8");
-        label(players[d.a].name.toUpperCase() + " GOES AGAIN", cx, py + 142, { size: 11.5, track: 3, col: players[d.a].ink });
+        label(players[d.a].name.toLowerCase() + " GOES AGAIN", cx, py + 142, { size: 11.5, track: 3, col: players[d.a].ink });
       } else if (b.id === "book") {
         drawBookBeat(now, d);
       } else if (b.id === "again") {
         g.save();
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillStyle = players[d.a].ink;
-        fitFont(g, players[d.a].name.toUpperCase(), L.innerW - 30, 46, "900");
-        g.fillText(players[d.a].name.toUpperCase(), cx, py - 24);
+        fitFont(g, players[d.a].name.toLowerCase(), L.innerW - 30, 46, "900");
+        g.fillText(players[d.a].name.toLowerCase(), cx, py - 24);
         g.restore();
         label("GOES AGAIN", cx, py + 22, { size: 14, track: 5, col: FOAM });
         seatFish(cx, py + 78, 34, players[d.a], now / 1000, 1);
@@ -2572,7 +2604,7 @@ window.plethoraBit = {
       const t = anim ? clamp((now - anim.t0) / anim.dur, 0, 1) : 1;
       const cards = anim ? anim.cards : (p.books[p.books.length - 1] || { cards: [] }).cards;
 
-      label(p.name.toUpperCase() + " LANDS A BOOK", cx, py - 150, { size: 12, track: 3.2, col: p.ink });
+      label(p.name.toLowerCase() + " LANDS A BOOK", cx, py - 150, { size: 12, track: 3.2, col: p.ink });
 
       // Phase 1: gather and rise. Phase 2: fan and flip. Phase 3: slam.
       const gather = clamp(t / 0.30, 0, 1);
@@ -2649,8 +2681,8 @@ window.plethoraBit = {
       panel(-L.innerW / 2, -30, L.innerW, 60, { radius: 18 });
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillStyle = winner ? winner.ink : FOAM;
-      fitFont(g, winner ? winner.name.toUpperCase() + " WINS" : "DEAD HEAT", L.innerW - 30, 22, "900");
-      g.fillText(winner ? winner.name.toUpperCase() + " WINS" : "DEAD HEAT", 0, -6);
+      fitFont(g, winner ? winner.name.toLowerCase() + " WINS" : "DEAD HEAT", L.innerW - 30, 22, "900");
+      g.fillText(winner ? winner.name.toLowerCase() + " WINS" : "DEAD HEAT", 0, -6);
       g.fillStyle = "rgba(242,253,255,0.6)";
       fitFont(g, players.map((p) => p.name + " " + p.books.length).join("   ·   "), L.innerW - 30, 11.5, "600");
       g.fillText(players.map((p) => p.name + " " + p.books.length).join("   ·   "), 0, 14);
@@ -2661,7 +2693,7 @@ window.plethoraBit = {
       g.save();
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillStyle = winner ? winner.ink : FOAM;
-      const title = winner ? winner.name.toUpperCase() + " WINS" : "DEAD HEAT";
+      const title = winner ? winner.name.toLowerCase() + " WINS" : "DEAD HEAT";
       fitFont(g, title, L.innerW - 20, 46, "900");
       g.fillText(title, cx, at(0.223));
       g.fillStyle = "rgba(242,253,255,0.6)";
@@ -2837,7 +2869,7 @@ window.plethoraBit = {
     const QUIET_EDGE = "rgba(242,253,255,0.35)";
     const sheetPanel = "max-width:326px;width:100%;background:linear-gradient(180deg,#0b4c72,#052236);" +
       "border-radius:24px;padding:22px;box-shadow:inset 0 0 0 1px rgba(242,253,255,0.20),0 20px 60px rgba(0,10,20,0.6);";
-    const lbl = "font-size:11px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.55;";
+    const lbl = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.55;";
     // overflow-y:auto so a long sheet on a short phone scrolls rather than
     // centring itself off both ends, which puts its close button out of reach.
     const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
@@ -2846,7 +2878,19 @@ window.plethoraBit = {
       (SAFE_B + 14) + "px;overflow-y:auto;pointer-events:auto;";
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:" + FOAM + ";pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:" + FOAM + ";pointer-events:none;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       '<div style="position:absolute;right:10px;top:' + (SAFE_T + 10) + 'px;display:flex;' +
         'gap:7px;z-index:65;pointer-events:none;">' +
@@ -3083,6 +3127,11 @@ window.plethoraBit = {
       if (ctx.width === W && ctx.height === H) return;
       canvas.width = Math.round(ctx.width * dpr);
       canvas.height = Math.round(ctx.height * dpr);
+      // Writing canvas.width RESETS the 2D transform to the identity, so the
+      // DPR scale ctx.createCanvas2D() installed at boot is gone and every
+      // following frame draws at 1:1 in physical pixels — the whole game
+      // shrinks into the top-left corner. It has to be re-applied here.
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
       layout();
       bakeWater();
     });

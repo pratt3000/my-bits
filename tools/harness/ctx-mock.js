@@ -34,6 +34,7 @@
   const tallyStore = {};        // channelId -> {option: count}
   const worldStore = {};        // channelId -> snapshot
   const localStore = {};
+  const loadedFonts = new Set();   // family/weight already injected
 
   const manifest = window.__BIT_MANIFEST__ || {};
   const declaredMemory = manifest.memory || {};
@@ -190,10 +191,27 @@
       note("importModule", name, version);
       return import(url);
     },
-    async loadFont(family) {
-      // The registry is unreachable offline. Report success so layout code that
-      // awaits a font still runs; the visual falls back to a system face.
-      note("loadFont", family);
+    async loadFont(family, id, version, opts) {
+      // The registry is unreachable offline, but the faces the bits actually
+      // ask for are cached on disk and served by the harness. Injecting them
+      // for real is the only way a font change is visible in a screenshot —
+      // a stub that returns "loaded" renders the system fallback and hides
+      // exactly the bug you are looking for.
+      const weight = String((opts && opts.weight) || "400");
+      const url = `/libcache/${String(id || family).toLowerCase()}-${weight}.ttf`;
+      const key = `${family}/${weight}`;
+      if (!loadedFonts.has(key)) {
+        loadedFonts.add(key);
+        try {
+          const face = new FontFace(family, `url(${url})`, { weight });
+          await face.load();
+          document.fonts.add(face);
+        } catch (err) {
+          note("loadFont:miss", family, weight, String(err && err.message));
+          return { family, status: "fallback" };
+        }
+      }
+      note("loadFont", family, weight);
       return { family, status: "loaded" };
     },
     registry: { async resources() { throw new Error("registry.resources unavailable in harness"); } },

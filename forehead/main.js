@@ -34,6 +34,47 @@ window.plethoraBit = {
   },
 
   async init(ctx) {
+
+    /* A drawn speaker rather than the emoji. Colour-emoji glyphs land as a
+     * blue-and-white blob beside otherwise monochrome chrome, they ignore the
+     * button's own colour, and they are the one thing on screen that is not
+     * set in the game's typeface. currentColor keeps this one in step. */
+    const SPK = (on) =>
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+        'style="display:block;margin:0 auto;overflow:visible;" aria-hidden="true">' +
+        '<path d="M4 9.4h3.5L12.2 5.4v13.2L7.5 14.6H4z" fill="currentColor" stroke="none"/>' +
+        (on ? '<path d="M15.8 9.2a4 4 0 0 1 0 5.6"/><path d="M18.4 6.6a7.7 7.7 0 0 1 0 10.8"/>'
+            : '<path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8"/>') +
+      '</svg>';
+
+    /* Every game in this set is set in lowercase Inter. Canvas text comes from
+     * a few hundred call sites, so the case change goes in at the one place
+     * they all pass through rather than at each of them. Single characters are
+     * left alone — card ranks and piece letters are symbols, not words, and
+     * "k" on a king reads as a bug. measureText is patched to match, or
+     * centred text would be measured at its uppercase width and drift off
+     * its own anchor. */
+    for (const Proto of [globalThis.CanvasRenderingContext2D,
+                         globalThis.OffscreenCanvasRenderingContext2D]) {
+      if (!Proto || Proto.prototype.__lcText) continue;
+      Proto.prototype.__lcText = true;
+      for (const method of ["fillText", "strokeText", "measureText"]) {
+        const original = Proto.prototype[method];
+        if (!original) continue;
+        Proto.prototype[method] = function (text, ...rest) {
+          const t = typeof text === "string" && text.length > 1 ? text.toLowerCase() : text;
+          return original.call(this, t, ...rest);
+        };
+      }
+    }
+    // Inter, from the Plethora font registry, in the three weights it serves.
+    // The calls are fire-and-forget with literal arguments: a font is a
+    // nicety and the first frame must never wait on one, and the upload
+    // validator only accepts loader arguments that are direct literals.
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "400" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "600" }); } catch (_) {}
+    try { ctx.loadFont("Inter", "inter", "1.0.0", { weight: "700" }); } catch (_) {}
     /* ---------------------------------------------------------------
      * Decks. Each is chosen for words a room can describe fast and out
      * loud — nothing that needs spelling, and nothing that only one
@@ -225,7 +266,7 @@ window.plethoraBit = {
     /* ---------------------------------------------------------------
      * Overlay
      * ------------------------------------------------------------- */
-    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const FONT = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const ST = ctx.safeArea.top, SB = ctx.safeArea.bottom;
     const BIG = "width:100%;padding:16px;border:none;border-radius:18px;font-family:inherit;" +
       "font-size:17px;font-weight:800;";
@@ -233,7 +274,19 @@ window.plethoraBit = {
       "background:rgba(255,255,255,0.16);color:#fff;font-size:15px;font-family:inherit;padding:0;";
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:#fff;pointer-events:none;overflow:hidden;";
+    root.style.cssText += ";font-family:" + FONT + ";color:#fff;pointer-events:none;overflow:hidden;text-transform:lowercase;";
+
+    /* Form controls do not inherit text-transform: the UA stylesheet pins
+     * `text-transform:none` on button/input/select, so the lowercase set on
+     * this root stops dead at every button. Stamp them as they are built,
+     * rather than threading the declaration through 250 style strings. */
+    const lowercaseControls = () => {
+      for (const el of root.querySelectorAll("button,input,select,textarea")) {
+        if (el.style.textTransform !== "lowercase") el.style.textTransform = "lowercase";
+      }
+    };
+    lowercaseControls();
+    new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       '<div data-el="sheet" style="position:absolute;inset:0;transition:background 260ms ease;' +
         'background:#12131f;"></div>' +
@@ -241,7 +294,7 @@ window.plethoraBit = {
         'flex-direction:column;padding:' + (ST + 52) + 'px 18px ' + (SB + 14) + 'px;"></div>' +
       '<div style="position:absolute;right:12px;top:' + (ST + 8) + 'px;display:flex;gap:7px;' +
         'z-index:60;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">🔊</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
       '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
@@ -267,8 +320,8 @@ window.plethoraBit = {
       if (!node) return;
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
-    tap(el("mute"), (e) => { e.target.textContent = sound.toggle() ? "🔇" : "🔊"; });
-    if (settings.mute) el("mute").textContent = "🔇";
+    tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); });
+    if (settings.mute) el("mute").innerHTML = SPK(false);
     tap(el("help"), () => { el("helpp").style.display = "flex"; });
     tap(el("helpp-close"), () => { el("helpp").style.display = "none"; });
 
@@ -293,17 +346,17 @@ window.plethoraBit = {
       const d = deckOf();
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:11px;">' +
-          '<div style="font-size:11px;letter-spacing:0.42em;text-transform:uppercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;' +
             'text-align:center;">On your head</div>' +
           '<div style="font-size:56px;font-weight:900;letter-spacing:-0.03em;text-align:center;' +
             'line-height:1;color:' + d.hue + ';">Forehead</div>' +
           '<div style="font-size:14.5px;opacity:0.6;text-align:center;line-height:1.5;max-width:270px;' +
             'margin:0 auto;">Hold the phone sideways on your forehead. Everyone else can see the word — ' +
             'you cannot.</div>' +
-          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;' +
             'margin-top:16px;">Deck</div>' +
           '<div data-el="decks" style="display:flex;gap:7px;flex-wrap:wrap;"></div>' +
-          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;' +
             'margin-top:6px;">Round length</div>' +
           '<div data-el="secs" style="display:flex;gap:7px;"></div>' +
           '<button data-el="go" style="' + BIG + 'margin-top:18px;background:' + d.hue + ';' +
@@ -497,7 +550,7 @@ window.plethoraBit = {
       const hits = results.filter((r) => r.hit).length;
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;gap:9px;overflow-y:auto;">' +
-          '<div style="text-align:center;font-size:11px;letter-spacing:0.3em;text-transform:uppercase;' +
+          '<div style="text-align:center;font-size:11px;letter-spacing:0.3em;text-transform:lowercase;' +
             'opacity:0.5;">Time</div>' +
           '<div style="text-align:center;font-size:78px;font-weight:900;line-height:1;color:' +
             deckOf().hue + ';">' + hits + '</div>' +
