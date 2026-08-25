@@ -26,14 +26,6 @@ objects built to the `plethora-bit@2` agent contract.
 | [`orrery/`](orrery)                     | Bodies on whole-number orbits ring bells as they cross the top — self-playing music. |
 | [`paper-loom/`](paper-loom)             | A print that lays itself out: recursive cuts, Truchet motifs, chosen palettes. |
 | [`heartwood/`](heartwood)               | A tree grown by space colonization, one reach toward the light at a time.    |
-
-### Generative art set
-
-`strange-silk`, `morphogen`, `orrery`, `paper-loom` and `heartwood` are five
-takes on the same brief — art made by an autonomous system, re-seeded on tap —
-deliberately drawn from five different families so no two feel alike:
-deterministic chaos, chemistry, music, graphic design, and botany. Each shows
-its seed, and a tap anywhere throws a new one.
 | [`whirligig/`](whirligig)               | Fidget spinner as a gear train — flick a plate of packed discs, all meshed. |
 | [`sketch-hop/`](sketch-hop)             | Endless doodle jumper on graph paper — bounce up the page, dodge monsters. Ships as *Sketch Hop II*. |
 | [`windmill-cove/`](windmill-cove)       | Mini golf in the Golf With Your Friends mould — seven courses, nine holes each. |
@@ -45,12 +37,20 @@ its seed, and a tap anywhere throws a new one.
 | [`turing-soup/`](turing-soup)           | Reaction–diffusion dish — drag to inject, steer feed/kill, watch coral grow.  |
 | [`boids/`](boids)                       | A murmuration of thousands — your finger is the predator, or the attractor.  |
 | [`ripcord/`](ripcord)                   | Spin your phone — the gyroscope sets your top's RPM, then it battles two rivals. |
-| [`backseat-rain/`](backseat-rain)       | Sit in the back seat of a car in the rain and race the drops down the window. |
+| [`backseat-rain/`](backseat-rain)       | Back a raindrop on a misted window and race it to the sill. Ships as *Window Seat*. |
 | [`ball-pool/`](ball-pool)               | Eight-ball pool — aim, spin, and break against a bot, or pass the phone.    |
 | [`pour-decisions/`](pour-decisions)     | Pull the tap and fill to the line — but the head is mostly air, and it gives beer back as it falls. |
 | [`skip-stop/`](skip-stop)               | Minimalist NYC subway map — race a local against an express and learn why it wins. |
 | [`pixel-fog/`](pixel-fog)               | Rub a living mosaic off nine San Francisco views to find a fact hidden in each. |
 | [`deep-pockets/`](deep-pockets)         | Digging game — mine ten strata to the core of the Earth, sell the loot, upgrade the shovel. |
+
+### Generative art set
+
+`strange-silk`, `morphogen`, `orrery`, `paper-loom` and `heartwood` are five
+takes on the same brief — art made by an autonomous system, re-seeded on tap —
+deliberately drawn from five different families so no two feel alike:
+deterministic chaos, chemistry, music, graphic design, and botany. Each shows
+its seed, and a tap anywhere throws a new one.
 
 ## Layout convention
 
@@ -84,19 +84,25 @@ procedurally or use approved pinned registry libraries.
 
 ### Upload-validator gotchas
 
-Several constraints are enforced at upload but are not in `sdk.md`, and their
-error messages point at the wrong thing. Found the hard way, documented where
-they bit:
+Several constraints are enforced at upload but are not in `sdk.md`, and the
+error message points at the wrong thing — unrelated problems all surface as one
+complaint about unsupported remote resources and registry loaders. Found the
+hard way, documented where they bit:
 
-- [`cairn/`](cairn#what-the-upload-validator-rejects) — `document.createElement("canvas")`
-  and `canvas.getBoundingClientRect()`.
-- [`heartwood/`](heartwood#what-the-upload-validator-rejects) — `addColorStop()`
-  with a colour the validator cannot resolve to a literal, plus notes on how to
-  bisect one of these cheaply.
+- `document.createElement("canvas")` — see [`cairn/`](cairn#what-the-upload-validator-rejects).
+- Querying a canvas for its layout box, including *naming* that call in a
+  comment — see [`cairn/`](cairn#what-the-upload-validator-rejects) and
+  [`pixel-fog/`](pixel-fog).
+- `addColorStop()` with a colour the validator cannot resolve to a literal —
+  see [`heartwood/`](heartwood#what-the-upload-validator-rejects).
+- `const ph = <call expression>` — the local's name alone. See
+  [`pixel-fog/`](pixel-fog).
 
 A rejected upload creates nothing, so probe uploads are free; unreachable code
 is still scanned; and constructs that merely *look* exotic are usually fine if
-some already-uploaded bit in this repo uses them.
+some already-uploaded bit in this repo uses them. Both
+[`pixel-fog/`](pixel-fog) and [`heartwood/`](heartwood#what-the-upload-validator-rejects)
+record how to bisect a rejection cheaply.
 
 ## Publishing
 
@@ -109,14 +115,3 @@ Pairing is durable — the creator approves a code once and the agent reuses the
 returned `accessToken` until it is revoked. Only the bootstrap exchange is
 one-time, and the pairing code itself expires after 10 minutes, so mint it when
 there is something ready to upload rather than at the start of the work.
-
-## Known upload-validator false positives
-
-The validator reports several unrelated problems with one message about
-unsupported remote resources and registry loaders. Collected so far:
-
-- `document.createElement("canvas")` — see [`cairn/`](cairn).
-- Querying a canvas for its layout box, including *naming* that call in a
-  comment — see [`cairn/`](cairn) and [`pixel-fog/`](pixel-fog).
-- `const ph = <call expression>` — the local's name alone. See
-  [`pixel-fog/`](pixel-fog), which also records how to bisect a rejection.
