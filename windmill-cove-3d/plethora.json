@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Windmill Cove 3D",
+  "description": "Mini golf you look around in. Drag to swing the camera around the ball \u2014 where you look is where you aim \u2014 pinch out to survey the whole hole, pinch back in, then press the shot pad and slide up for power. Elevation is real, so ramps are real: too soft and you roll back down, hard enough and you fly off the lip. Three themed courses of nine holes \u2014 Fernwood Heights, Buccaneer Reef and Orbital Deck \u2014 with windmills that throw the ball, sliding gates, cannon pads, whirlpools, wormholes and a black hole. Water and falling off cost a stroke. Each course keeps its own fewest-strokes leaderboard.",
+  "tags": [
+    "golf",
+    "3d",
+    "game",
+    "sports",
+    "physics",
+    "leaderboard",
+    "minigolf",
+    "singleplayer"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "heights_3d": {
+        "label": "Fernwood Heights",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "reef_3d": {
+        "label": "Buccaneer Reef",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "orbital_3d": {
+        "label": "Orbital Deck",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
