@@ -183,7 +183,6 @@ window.plethoraBit = {
     const settings = {
       players: clamp(saved.players || 4, 2, 8),
       redSeat: saved.redSeat === "top" ? "top" : "bottom",
-      bonus: saved.bonus === undefined ? true : !!saved.bonus,   // the number+1 guess
       mute: !!saved.mute,
     };
     function saveSettings() {
@@ -387,7 +386,10 @@ window.plethoraBit = {
       W = ctx.width; H = ctx.height;
       SAFE_T = ctx.safeArea.top || 0; SAFE_B = ctx.safeArea.bottom || 0;
       const spine = 40;
-      const gw = Math.min(W - 20, (H - spine) * 0.46, 430);
+      // The spymaster's controls used to be four rows — a number picker, a
+      // clue field, transmit, hold. Two of those are gone, so the board takes
+      // the room back. It is the only thing on this screen anybody looks at.
+      const gw = Math.min(W - 20, (H - spine) * 0.54, 460);
       const cell = (gw - 4 * GUT) / 5;
       const bandH = (H - spine - gw) / 2;
       L = {
@@ -406,14 +408,13 @@ window.plethoraBit = {
       // coordinates on the handoff screen too, so the shutters can open under
       // a finger that is already down.
       const R0 = L.spineY, R1 = H - SAFE_B, room = R1 - R0;
-      const rowH = Math.min(37, room * 0.164), gap = room * 0.040;
-      const top = R0 + room * 0.185;
+      const rowH = Math.min(52, room * 0.30), gap = room * 0.075;
+      const stack = rowH * 2 + gap;
+      const top = Math.max(R0 + 84, R0 + (room - stack) / 2);
       L.sm = {
-        numLabelY: R0 + room * 0.10,
-        pills: { x: 10, y: top, w: W - 20, h: rowH * 0.92 },
-        chip:  { x: 12, y: top + rowH + gap, w: W - 24, h: rowH * 0.86 },
-        trans: { x: 12, y: top + (rowH + gap) * 2, w: W - 24, h: rowH },
-        pad:   { x: 12, y: top + (rowH + gap) * 3, w: W - 24, h: rowH },
+        ruleY: R0 + 62,
+        trans: { x: 14, y: top, w: W - 28, h: rowH },
+        pad:   { x: 14, y: top + rowH + gap, w: W - 28, h: rowH },
       };
       L.tileArt = null;   // cell size changed: every baked face is stale
     }
@@ -508,10 +509,14 @@ window.plethoraBit = {
     let phase = "menu";                 // menu | handoff | clue | board | over
     let words = [], kinds = [], shown = [];
     let turn = "red", turnNo = 0;
-    let clue = null;                    // {word, num, unlimited}
-    const lastClue = { red: null, blue: null };   // shown, dimmed, in the idle band
-    let clueNum = 2, clueDraft = "", typing = false;
-    let guessesLeft = 0, guessedThisTurn = 0, totalGuesses = 0;
+    // The clue itself is spoken out loud, the way it is at a table — so the
+    // app never learns the word or the number, and there is nothing to type
+    // and nothing to set. `clue` is only the fact that the spymaster has
+    // finished briefing. Without a number there is no guess cap either: the
+    // team guesses until it is wrong or until it stops, which is the rule
+    // people actually play by anyway.
+    let clue = null;                    // null until the spymaster transmits
+    let guessedThisTurn = 0, totalGuesses = 0;
     let armed = -1, pressed = null;
     let anim = null;                    // tile turn-over
     let winner = null, ending = "";
@@ -544,9 +549,8 @@ window.plethoraBit = {
         const t = kinds[i]; kinds[i] = kinds[j]; kinds[j] = t;
       }
       shown = new Array(25).fill(false);
-      lastClue.red = null; lastClue.blue = null;
       turn = "red"; turnNo = 0; totalGuesses = 0;
-      winner = null; ending = ""; armed = -1; clue = null; clueNum = 2; clueDraft = "";
+      winner = null; ending = ""; armed = -1; clue = null;
       sparks = []; endFx = null; oppose = null; revealAll = -1;
       L.tileArt = null;
       bakeTiles();
@@ -559,8 +563,8 @@ window.plethoraBit = {
       // Turn the grid to face whichever team is about to guess. seatOf tells
       // us which physical edge they are at; the far edge needs the half turn.
       boardFlip = seatOf(team) === "top" ? Math.PI : 0;
-      clue = null; clueNum = 2; clueDraft = "";
-      guessedThisTurn = 0; guessesLeft = 0; armed = -1;
+      clue = null;
+      guessedThisTurn = 0; armed = -1;
       typed = 0;
       phase = "handoff";
       shutterTo = 1;
@@ -962,7 +966,12 @@ window.plethoraBit = {
         g.textAlign = "center"; g.textBaseline = "middle";
         const my = (t.h - 2) / 2, wx = t.x + t.w / 2, wy = t.y + my;
         tracked(g, cw, wx, wy + (t.h - 2) * 0.235, tk, "center");
+        // The same word again, upside down, for whoever is sitting on the
+        // other side. It is a courtesy, not the reading — printed at the same
+        // weight as the first it doubled the ink on every tile and the grid
+        // read as noise. Faint enough to find, quiet enough to ignore.
         g.save();
+        g.globalAlpha *= 0.26;
         g.translate(wx, wy); g.rotate(Math.PI); g.translate(-wx, -wy);
         tracked(g, cw, wx, wy + (t.h - 2) * 0.235, tk, "center");
         g.restore();
@@ -1083,62 +1092,18 @@ window.plethoraBit = {
       tracked(g, remaining(team) + " LEFT", R.hdr.x + nw + 10, R.hdr.y + R.hdr.h / 2 + 1, 1, "left");
       drawStack(g, W - 12 - (TEAM[team].agents * 10.2), R.hdr.y + 2, team, 7);
 
-      // clue balloon — the idle team keeps its own last clue on the table,
-      // dimmed, the way the spoken one hangs around in the room
+      /* One line of state where the clue balloon and the guess pips used to
+       * be. Neither had anything left to show: the clue is spoken in the room,
+       * and without a number there is no allowance to count down. */
       const b = R.balloon;
-      const show = active ? clue : lastClue[team];
-      if (show) {
-        g.fillStyle = active ? PLAQUE : "rgba(241,231,210,0.13)";
-        drawBalloon(g, b.x, b.y, b.w, b.h, 12);
-        if (!active) {
-          g.strokeStyle = "rgba(241,231,210,0.28)"; g.lineWidth = 1;
-          roundRect(g, b.x, b.y, b.w, b.h, 12); g.stroke();
-        }
-        const cw = show.word ? show.word : "SPOKEN ALOUD";
-        fitTracked(g, cw, b.w - 92, 32, DISPLAY, "700", 2);
-        g.fillStyle = show.word ? (active ? TEAM[team].ink : TEAM[team].lit)
-                                : (active ? "rgba(42,38,34,0.62)" : "rgba(241,231,210,0.5)");
-        g.textAlign = "left"; g.textBaseline = "middle";
-        tracked(g, cw, b.x + 16, b.y + b.h / 2, 2, "left");
-        const cx = b.x + b.w - 28, cy = b.y + b.h / 2;
-        g.beginPath(); g.arc(cx, cy, 18, 0, TAU);
-        g.fillStyle = TEAM[team].ink; g.fill();
-        g.fillStyle = "#fff"; g.font = "700 22px " + DISPLAY;
-        g.textAlign = "center";
-        g.fillText(show.display, cx, cy + 1);
-        if (!active) {                                    // tagged as history
-          g.fillStyle = "rgba(241,231,210,0.45)"; g.font = "400 7.5px " + MONO;
-          g.textAlign = "left"; g.textBaseline = "middle";
-          tracked(g, "LAST CLUE", b.x + 16, b.y + b.h - 12, 1.4, "left");
-        }
-      } else {
-        chamferRect(g, b.x, b.y, b.w, b.h, 10);
-        g.fillStyle = "rgba(255,255,255,0.03)"; g.fill();
-        g.strokeStyle = "rgba(255,255,255,0.10)"; g.lineWidth = 1; g.stroke();
-        g.fillStyle = "rgba(241,231,210,0.45)";
-        g.font = "400 10px " + MONO; g.textAlign = "center"; g.textBaseline = "middle";
-        tracked(g, active ? "AWAITING TRANSMISSION" : (coopBot ? "AUTOMATED" : "STANDING BY"),
-                b.x + b.w / 2, b.y + b.h / 2, 2, "center");
-      }
-
-      // guess allowance, one lozenge per guess, the bonus one hollow
-      if (active && clue) {
-        const total = clue.unlimited ? 0 : clue.num + (settings.bonus ? 1 : 0);
-        const used = guessedThisTurn;
-        if (clue.unlimited) {
-          g.fillStyle = "rgba(241,231,210,0.7)"; g.font = "400 10px " + MONO;
-          g.textAlign = "left"; g.textBaseline = "middle";
-          tracked(g, "UNLIMITED GUESSES", R.pips.x, R.pips.y + R.pips.h / 2, 1.6, "left");
-        } else {
-          for (let i = 0; i < total; i++) {
-            const x = R.pips.x + i * 22, bonus = settings.bonus && i === total - 1;
-            roundRect(g, x, R.pips.y + 3, 17, 9, 4.5);
-            if (i < used) { g.fillStyle = "rgba(255,255,255,0.10)"; g.fill(); }
-            else if (bonus) { g.strokeStyle = GOLD; g.lineWidth = 1.4; g.stroke(); }
-            else { g.fillStyle = GOLD; g.fill(); }
-          }
-        }
-      }
+      const line = !active
+        ? (phase === "board" ? TEAM[turn].name + " IS GUESSING" : "STANDING BY")
+        : clue ? "GUESS, THEN END THE TURN"
+        : "AWAITING THE BRIEFING";
+      g.fillStyle = active && clue ? "rgba(241,231,210,0.72)" : "rgba(241,231,210,0.34)";
+      g.font = "400 10px " + MONO;
+      g.textAlign = "center"; g.textBaseline = "middle";
+      tracked(g, line, b.x + b.w / 2, b.y + b.h / 2, 2.2, "center");
 
       // buttons — only the team whose turn it is gets any
       if (active) {
@@ -1412,53 +1377,35 @@ window.plethoraBit = {
      * THE CLUE PANEL — number first, because the number is the part the
      * table has to see; the word itself is usually just said out loud.
      * ============================================================= */
-    function pillRect(i) {
-      const p = L.sm.pills, n = 11, gap = 3;
-      const w = (p.w - gap * (n - 1)) / n;
-      return { x: p.x + i * (w + gap), y: p.y, w, h: p.h };
-    }
     function drawCluePanel() {
-      const R0 = L.spineY;
+      // The plate this sits on. The panel used to be four rows deep and
+      // covered everything under the board on its own; at two rows it does
+      // not, and the menu's sunburst was showing through underneath.
       g.save();
-      g.fillStyle = "rgba(20,18,16,0.94)";
-      chamferRect(g, 0, R0, W, H - R0, 16); g.fill();
-      g.strokeStyle = "rgba(255,194,28,0.22)"; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(16, R0 + 0.5); g.lineTo(W, R0 + 0.5); g.stroke();
+      chamferRect(g, 0, L.spineY + 2, W, H - L.spineY, 16);
+      const fg = g.createLinearGradient(0, L.spineY, 0, H);
+      fg.addColorStop(0, "rgba(26,23,20,0.96)");
+      fg.addColorStop(1, "rgba(9,8,7,0.99)");
+      g.fillStyle = fg; g.fill();
+      if (GRAIN) {
+        g.save(); chamferRect(g, 0, L.spineY + 2, W, H - L.spineY, 16); g.clip();
+        g.globalAlpha = 0.35; g.fillStyle = GRAIN; g.fillRect(0, L.spineY, W, H - L.spineY);
+        g.restore();
+      }
       g.restore();
 
-      for (let i = 0; i < 11; i++) {
-        const r = pillRect(i), on = clueNum === i;
-        roundRect(g, r.x, r.y, r.w, r.h, 5);
-        g.fillStyle = on ? TEAM[turn].ink : "rgba(255,255,255,0.05)"; g.fill();
-        if (!on) { g.strokeStyle = "rgba(255,255,255,0.12)"; g.lineWidth = 1; g.stroke(); }
-        g.fillStyle = on ? "#fff" : "rgba(241,231,210,0.62)";
-        g.font = "700 17px " + DISPLAY; g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillText(i === 10 ? "∞" : String(i), r.x + r.w / 2, r.y + r.h / 2 + 1);
-      }
-      g.fillStyle = "rgba(241,231,210,0.45)";
-      g.font = "400 8px " + MONO; g.textAlign = "left"; g.textBaseline = "middle";
-      tracked(g, "HOW MANY WORDS DOES IT POINT AT?", 12, L.sm.numLabelY, 1.2, "left");
+      // Two controls and one line of rules. There is nothing to type and
+      // nothing to set: the clue is said out loud, and the only thing the
+      // phone needs to know is when the briefing is over.
+      g.fillStyle = "rgba(241,231,210,0.34)";
+      g.font = "400 9px " + MONO;
+      g.textAlign = "center"; g.textBaseline = "middle";
+      tracked(g, "ONE WORD · ONE NUMBER · SAY IT OUT LOUD", W / 2, L.sm.ruleY, 1.6, "center");
 
-      const c = L.sm.chip;
-      roundRect(g, c.x, c.y, c.w, c.h, 7);
-      g.fillStyle = "rgba(255,255,255,0.05)"; g.fill();
-      g.strokeStyle = "rgba(255,255,255,0.16)"; g.lineWidth = 1; g.stroke();
-      g.textBaseline = "middle";
-      if (clueDraft) {
-        g.fillStyle = CREAM; g.font = "700 18px " + DISPLAY; g.textAlign = "left";
-        tracked(g, clueDraft, c.x + 12, c.y + c.h / 2, 2, "left");
-      } else {
-        g.fillStyle = "rgba(241,231,210,0.42)"; g.font = "400 10px " + MONO; g.textAlign = "left";
-        tracked(g, "TYPE THE CLUE, OR JUST SAY IT ALOUD", c.x + 12, c.y + c.h / 2, 1.2, "left");
-      }
-      g.fillStyle = GOLD; g.font = "700 11px " + DISPLAY; g.textAlign = "right";
-      tracked(g, clueDraft ? "EDIT" : "TYPE", c.x + c.w - 12, c.y + c.h / 2, 1.6, "right");
-
-      drawPad();
-      decoButton(g, L.sm.trans, "TRANSMIT", {
-        fill: GOLD, stroke: GOLD, ink: NOIR, glow: GOLD, size: 20, track: 3,
-        sub: clueNum === 10 ? "UNLIMITED" : clueNum === 0 ? "ZERO — A WARNING" : "",
+      decoButton(g, L.sm.trans, "BRIEFING DONE", {
+        fill: GOLD, ink: NOIR, glow: GOLD, size: 17, track: 2,
       });
+      drawPad();
     }
 
     function drawSpymasterHeader() {
@@ -1505,84 +1452,8 @@ window.plethoraBit = {
       }
       g.restore();
 
-      g.fillStyle = "rgba(255,194,28,0.55)"; g.font = "400 8px " + MONO;
-      g.textAlign = "center";
-      tracked(g, "ONE WORD · ONE NUMBER · NOTHING ABOUT SPELLING OR POSITION",
-              W / 2, h - 14, 0.7, "center");
     }
 
-    /* ===============================================================
-     * THE ON-CANVAS KEYBOARD
-     *
-     * No DOM inputs: a text field would summon the system keyboard over
-     * a phone that is deliberately being shielded. There is no space
-     * key, because a clue is exactly one word.
-     * ============================================================= */
-    const KB_ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
-    function keyRects() {
-      const out = [];
-      const kw = Math.min(34, (W - 16) / 10), kh = 44, gap = (W - 16 - kw * 10) / 9;
-      const y0 = H - SAFE_B - kh * 3 - 30;
-      for (let r = 0; r < 3; r++) {
-        const row = KB_ROWS[r];
-        const rowW = row.length * kw + (row.length - 1) * gap;
-        const x0 = (W - rowW) / 2;
-        for (let i = 0; i < row.length; i++) {
-          out.push({ id: "k:" + row[i], ch: row[i], x: x0 + i * (kw + gap), y: y0 + r * (kh + 6), w: kw, h: kh });
-        }
-      }
-      out.push({ id: "k:BS", ch: "⌫", x: 10, y: y0 + 2 * (kh + 6), w: kw * 1.4, h: kh });
-      out.push({ id: "k:OK", ch: "DONE", x: W - 10 - kw * 1.6, y: y0 + 2 * (kh + 6), w: kw * 1.6, h: kh });
-      return out;
-    }
-    function drawKeyboard() {
-      const keys = keyRects();
-      const kbTop = keys[0].y - 18;
-      g.save();
-      g.fillStyle = "rgba(6,5,8,0.988)"; g.fillRect(0, 0, W, H);
-
-      const fy = H * 0.19;
-      g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = TEAM[turn].ink; g.font = "700 11px " + MONO;
-      tracked(g, "CLUE WORD", W / 2, fy, 4, "center");
-      g.fillStyle = clueDraft ? CREAM : "rgba(241,231,210,0.22)";
-      const shownWord = clueDraft || "—";
-      const size = fitSize(g, shownWord, W - 60, 54, DISPLAY, "700");
-      g.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
-      tracked(g, shownWord, W / 2, fy + 44, 3, "center");
-      g.strokeStyle = "rgba(255,194,28,0.4)"; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(W * 0.14, fy + 76); g.lineTo(W * 0.86, fy + 76); g.stroke();
-      g.fillStyle = "rgba(241,231,210,0.4)"; g.font = "400 9px " + MONO;
-      tracked(g, "ONE WORD ONLY — THE NUMBER IS SET ON THE PREVIOUS SCREEN",
-              W / 2, fy + 92, 0.9, "center");
-
-      // The keys sit on their own slab, so the board behind never competes
-      // with them for contrast.
-      chamferRect(g, 0, kbTop, W, H - kbTop, 18);
-      const lg = g.createLinearGradient(0, kbTop, 0, H);
-      lg.addColorStop(0, "rgba(30,27,34,0.98)"); lg.addColorStop(1, "rgba(12,11,15,1)");
-      g.fillStyle = lg; g.fill();
-      g.strokeStyle = "rgba(255,194,28,0.20)"; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(18, kbTop + 0.5); g.lineTo(W, kbTop + 0.5); g.stroke();
-
-      for (const k of keys) {
-        const hot = pressed === k.id, wide = k.ch.length > 1;
-        roundRect(g, k.x, k.y, k.w, k.h, 6);
-        g.fillStyle = hot ? GOLD : wide ? "#332F3C" : "#26232D"; g.fill();
-        g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 1; g.stroke();
-        g.beginPath(); g.moveTo(k.x + 5, k.y + 1.5); g.lineTo(k.x + k.w - 5, k.y + 1.5);
-        g.strokeStyle = "rgba(255,255,255,0.20)"; g.stroke();
-        g.fillStyle = hot ? NOIR : "#E7E0D0";
-        g.font = (wide ? "700 11px " + MONO : "700 16px " + MONO);
-        g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillText(k.ch, k.x + k.w / 2, k.y + k.h / 2 + 1);
-      }
-      g.restore();
-    }
-
-    /* ===============================================================
-     * JUICE
-     * ============================================================= */
     function spark(i, colour, n) {
       const t = tileRect(i);
       for (let k = 0; k < n; k++) {
@@ -1676,7 +1547,6 @@ window.plethoraBit = {
       drawShutters();
       if (phase === "handoff") { drawHandoff(); drawPad(); }
       if (peek) drawExposed();
-      if (typing) drawKeyboard();
       if (endFx) drawEndFx();
     }
 
@@ -1821,8 +1691,8 @@ window.plethoraBit = {
         sound.sting("coin"); sound.haptic("light");
         sound.heat(clamp(1 - remaining(turn) / TEAM[turn].agents, 0.1, 1));
         if (remaining(turn) === 0) return endGame(turn, "agents");
-        guessesLeft--;
-        if (guessesLeft <= 0) return endTurn();
+        // No number, so no allowance: a right guess buys another one, and the
+        // turn ends when the team is wrong or decides it has had enough.
         return;
       }
       if (k === "neutral") {
@@ -1896,10 +1766,6 @@ window.plethoraBit = {
 
     function hitTest(x, y) {
       if (phase === "menu" || phase === "over") return null;
-      if (typing) {
-        for (const k of keyRects()) if (inRect(x, y, k)) return { zone: "kb", id: k.id };
-        return { zone: "kb", id: "none" };
-      }
       if (phase === "handoff") {
         if (inRect(x, y, L.sm.pad)) return { zone: "pad", id: "pad" };
         return null;
@@ -1908,8 +1774,6 @@ window.plethoraBit = {
         const s = L.sm;
         if (inRect(x, y, s.pad)) return { zone: "pad", id: "pad" };
         if (inRect(x, y, s.trans)) return { zone: "sm", id: "transmit" };
-        if (inRect(x, y, s.chip)) return { zone: "sm", id: "chip" };
-        for (let i = 0; i < 11; i++) if (inRect(x, y, pillRect(i))) return { zone: "sm", id: "pill:" + i };
         return null;
       }
       // board
@@ -1994,41 +1858,17 @@ window.plethoraBit = {
         }
         return;
       }
-      if (id.startsWith("pill:")) {
-        clueNum = Number(id.slice(5));
-        sound.sting("tap"); sound.haptic("light");
-        return;
-      }
-      if (id === "chip") { typing = true; sound.sting("tap"); return; }
       if (id === "transmit") return transmit();
-      if (id.startsWith("k:")) {
-        const k = id.slice(2);
-        if (k === "BS") clueDraft = clueDraft.slice(0, -1);
-        else if (k === "OK") typing = false;
-        else if (clueDraft.length < 12) clueDraft += k;
-        sound.sting("tap");
-        return;
-      }
-      if (id === "none") { typing = false; return; }
     }
 
     function transmit() {
-      // Zero and infinity are the two official special numbers: both lift the
-      // guess cap, and zero additionally means "none of ours" — a pure warning.
-      const unlimited = clueNum === 0 || clueNum === 10;
-      clue = {
-        word: clueDraft, num: clueNum === 10 ? 0 : clueNum, unlimited,
-        display: clueNum === 10 ? "∞" : String(clueNum),
-      };
-      guessesLeft = unlimited ? 99 : clueNum + (settings.bonus ? 1 : 0);
+      clue = { at: turnNo };
       guessedThisTurn = 0;
-      lastClue[turn] = clue;
       peek = false; holdOn = false; holdT = 0; holdSeq++;
-      typing = false;
       phase = "board";
       shutter = 1; shutterTo = 0;                        // a wipe, so the key is gone
       sound.sting("powerup"); sound.haptic("medium");
-      ctx.platform.interact({ type: "clue", team: turn, number: clueNum });
+      ctx.platform.interact({ type: "clue", team: turn });
       paintChrome();
     }
 
@@ -2144,10 +1984,6 @@ window.plethoraBit = {
             '<div data-el="seats" style="display:flex;gap:6px;"></div>' +
             '<div style="font-size:11.5px;opacity:0.5;margin-top:7px;line-height:1.5;">' +
               'Each team gets the band at its own edge of the phone, turned to face it.</div>' +
-            '<div style="' + label + 'margin:16px 0 7px;">Bonus guess</div>' +
-            '<div data-el="bonus" style="display:flex;gap:6px;"></div>' +
-            '<div style="font-size:11.5px;opacity:0.5;margin-top:7px;line-height:1.5;">' +
-              'The extra guess after the number, for picking up a word missed on an earlier clue.</div>' +
             '<div style="' + label + 'margin:16px 0 7px;">Players</div>' +
             '<div data-el="counts2" style="display:flex;gap:6px;flex-wrap:wrap;"></div>' +
             '<div style="font-size:11.5px;opacity:0.5;margin:7px 0 4px;line-height:1.5;">' +
@@ -2226,8 +2062,6 @@ window.plethoraBit = {
         pills(el("counts2"), COUNTS, COUNTS, () => settings.players, (v) => { settings.players = Number(v); }),
         pills(el("seats"), ["bottom", "top"], ["Bottom", "Top"], () => settings.redSeat,
           (v) => { settings.redSeat = v; paintChrome(); }),
-        pills(el("bonus"), ["true", "false"], ["On", "Off"], () => String(settings.bonus),
-          (v) => { settings.bonus = v === "true"; }),
         pills(el("mutes"), ["false", "true"], ["On", "Muted"], () => String(sound.muted),
           (v) => { if ((v === "true") !== sound.muted) sound.toggle(); }),
       ];
@@ -2397,15 +2231,14 @@ window.plethoraBit = {
     window.__CIPHER__ = {
       get phase() { return phase; },
       get turn() { return turn; },
-      get busy() { return busy() || typing; },
+      get busy() { return busy(); },
       get winner() { return winner; },
       get ending() { return ending; },
       get kinds() { return kinds.slice(); },
       get words() { return words.slice(); },
       get shown() { return shown.slice(); },
       get armed() { return armed; },
-      get clue() { return clue ? { word: clue.word, num: clue.num, unlimited: clue.unlimited } : null; },
-      get guessesLeft() { return guessesLeft; },
+      get clue() { return clue ? { given: true } : null; },
       get guessedThisTurn() { return guessedThisTurn; },
       get guesses() { return totalGuesses; },
       get peek() { return peek; },
@@ -2419,12 +2252,6 @@ window.plethoraBit = {
       },
       padXY() { const r = L.sm.pad; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
       transmitXY() { const r = L.sm.trans; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
-      chipXY() { const r = L.sm.chip; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
-      pillXY(n) { const r = pillRect(n); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
-      keyXY(ch) {
-        const k = keyRects().find((r) => r.id === "k:" + ch);
-        return k ? { x: k.x + k.w / 2, y: k.y + k.h / 2 } : null;
-      },
       bandXY(which) {
         const seat = seatOf(turn), R = bandRows(seat), r = R[which];
         const lx = r.x + r.w / 2, ly = r.y + r.h / 2;

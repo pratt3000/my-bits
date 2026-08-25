@@ -58,9 +58,8 @@ await bit.fingerDown(1, pad.x, pad.y);
 await bit.wait(1200);
 if (!(await P(() => window.__CIPHER__.peek))) throw new Error("the hold did not expose the key");
 await bit.fingerUp(1);
-const pill = await P((n) => window.__CIPHER__.pillXY(n), 3);
-await bit.tap(pill.x, pill.y);
-await bit.wait(120);
+// No number to set: the clue is spoken, and the team guesses until it is
+// wrong or ends its own turn.
 const t = await P(() => window.__CIPHER__.transmitXY());
 await bit.tap(t.x, t.y);
 await untilPhase("board");

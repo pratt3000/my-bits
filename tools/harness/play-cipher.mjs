@@ -50,8 +50,12 @@ const domXY = (sel) => P((s) => {
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
 }, sel);
 
-/** One spymaster turn: hold the pad, read the key, set the number, transmit. */
-async function brief(num, { word, shots } = {}) {
+/** One spymaster turn: hold the pad, read the key, end the briefing.
+ *
+ * There is nothing to type and no number to set any more — the clue is spoken
+ * in the room and the app never learns it — so a turn is the hold and the
+ * button, and the team then guesses until it is wrong or it stops. */
+async function brief({ shots } = {}) {
   await untilPhase("handoff");
   await bit.wait(950);                       // the pass line finishes typing
   if (shots) await bit.shot(shots + "-handoff");
@@ -68,24 +72,6 @@ async function brief(num, { word, shots } = {}) {
   const down = await P(() => window.__CIPHER__.peek);
   if (down) throw new Error("the key stayed up after the finger lifted");
 
-  if (word) {
-    const chip = await P(() => window.__CIPHER__.chipXY());
-    await bit.tap(chip.x, chip.y);
-    await bit.wait(150);
-    for (const ch of word) {
-      const k = await P((c) => window.__CIPHER__.keyXY(c), ch);
-      await bit.tap(k.x, k.y);
-      await bit.wait(70);
-    }
-    if (shots) await bit.shot(shots + "-typing");
-    const ok = await P(() => window.__CIPHER__.keyXY("OK"));
-    await bit.tap(ok.x, ok.y);
-    await bit.wait(150);
-  }
-
-  const pill = await P((n) => window.__CIPHER__.pillXY(n), num);
-  await bit.tap(pill.x, pill.y);
-  await bit.wait(120);
   const t = await P(() => window.__CIPHER__.transmitXY());
   await bit.tap(t.x, t.y);
   await untilPhase("board");
@@ -113,7 +99,7 @@ await untilPhase("handoff");
 
 /* ---- turn 1: RED, clue OWL 2 ---- */
 let st = await state();
-await brief(2, { word: "OWL", shots: "cipher" });
+await brief({ shots: "cipher" });
 for (const i of pick(st, "red", 2)) await contact(i);
 await bit.shot("cipher-board");
 st = await state();
@@ -122,7 +108,7 @@ await contact(pick(st, "neutral", 1)[0]);         // bystander: turn ends
 /* ---- turn 2: BLUE, clue 1 ---- */
 st = await state();
 if (st.turn !== "blue") throw new Error("the bystander did not end red's turn");
-await brief(1);
+await brief();
 await contact(pick(st, "blue", 1)[0]);
 await bit.shot("cipher-blue");                    // blue's band, rotated to their seat
 const pass = await P(() => window.__CIPHER__.bandXY("pass"));
@@ -132,7 +118,7 @@ await settle();
 /* ---- turn 3: RED takes the rest ---- */
 st = await state();
 if (st.turn !== "red") throw new Error("END TURN did not hand the phone back to red");
-await brief(7);
+await brief();
 for (const i of pick(st, "red", 7)) await contact(i);
 
 await bit.wait(1400);
