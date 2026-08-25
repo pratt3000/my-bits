@@ -74,10 +74,10 @@ window.plethoraBit = {
       red: "#c3202e", black: "#191720", accent: "#7e1f2c",
     };
     const SEATS = [
-      { seat: "bottom", name: "Amber",  ink: "#f5b73c", rad: 0 },
-      { seat: "top",    name: "Rose",   ink: "#ff5d7a", rad: Math.PI },
-      { seat: "left",   name: "Sky",    ink: "#52c7f5", rad: Math.PI / 2 },
-      { seat: "right",  name: "Violet", ink: "#b58cff", rad: -Math.PI / 2 },
+      { seat: "bottom", name: "Amber",  ink: "#f5b73c", rad: 0,            suit: "S" },
+      { seat: "top",    name: "Rose",   ink: "#ff5d7a", rad: Math.PI,      suit: "H" },
+      { seat: "left",   name: "Sky",    ink: "#52c7f5", rad: Math.PI / 2,  suit: "D" },
+      { seat: "right",  name: "Violet", ink: "#b58cff", rad: -Math.PI / 2, suit: "C" },
     ];
     const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const SERIF = "ui-serif,Georgia,'Times New Roman',serif";
@@ -146,6 +146,16 @@ window.plethoraBit = {
       if (typeof OffscreenCanvas === "undefined") return null;
       return new OffscreenCanvas(Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h)));
     }
+    /**
+     * A 2D context on a bake surface.
+     *
+     * willReadFrequently pins the surface to the CPU backend, which is exactly
+     * what a write-once blit source wants: a GPU-backed offscreen has to be
+     * read back across the bus on every single drawImage, and a table with a
+     * dozen cards on it does a dozen of those a frame. Measured here it is the
+     * difference between one frame a second and a smooth one.
+     */
+    function surfCtx(s) { return s.getContext("2d", { willReadFrequently: true }); }
     const BAKED = typeof OffscreenCanvas !== "undefined";
 
     function roundRect(g, x, y, w, h, r) {
@@ -179,14 +189,26 @@ window.plethoraBit = {
       g.globalAlpha = 1;
     }
 
-    /** Letter-spaced small caps, measured by hand so it works on every engine. */
+    /**
+     * Letter-spaced small caps, measured by hand so it works on every engine.
+     * The per-character widths are memoised: this runs on every pad every
+     * frame, and measureText is one of the few canvas calls that is not cheap.
+     */
+    const trackCache = new Map();
     function tracked(g, text, x, y, spacing) {
-      const chars = String(text).split("");
-      let total = -spacing;
-      for (const c of chars) total += g.measureText(c).width + spacing;
-      let cx = x - total / 2;
+      const key = g.font + "|" + text + "|" + spacing;
+      let plan = trackCache.get(key);
+      if (!plan) {
+        const chars = String(text).split("");
+        const w = chars.map((c) => g.measureText(c).width);
+        let total = -spacing;
+        for (const v of w) total += v + spacing;
+        plan = { chars, w, total };
+        trackCache.set(key, plan);
+      }
+      let cx = x - plan.total / 2;
       g.textAlign = "left";
-      for (const c of chars) { g.fillText(c, cx, y); cx += g.measureText(c).width + spacing; }
+      for (let i = 0; i < plan.chars.length; i++) { g.fillText(plan.chars[i], cx, y); cx += plan.w[i] + spacing; }
       g.textAlign = "center";
     }
 
@@ -478,7 +500,7 @@ window.plethoraBit = {
         for (const r of RANKS) {
           const surf = surface(w * scale, h * scale);
           if (!surf) return null;
-          const g = surf.getContext("2d");
+          const g = surfCtx(surf);
           g.scale(scale, scale);
           paintCardFace(g, r, s.id, w, h);
           faces[r + s.id] = surf;
@@ -486,7 +508,7 @@ window.plethoraBit = {
       }
       const bs = surface(w * scale, h * scale);
       if (!bs) return null;
-      const bg = bs.getContext("2d");
+      const bg = surfCtx(bs);
       bg.scale(scale, scale);
       paintCardBack(bg, w, h);
       return { faces, back: bs };
@@ -550,8 +572,33 @@ window.plethoraBit = {
     const dpr = Math.min(ctx.dpr || 1, 2);
     let W = ctx.width, H = ctx.height;
 
-    const CARD_W = 100, CARD_H = 140, CARD_R = 9;
+    const CARD_W = 100, CARD_H = 140, CARD_R = 9, SHADOW_PAD = 22;
     const art = makeDeckArt(CARD_W, CARD_H, dpr);
+
+    /**
+     * The card shadow, baked once.
+     *
+     * Live, it is five stacked translucent fills per card — twelve cards on the
+     * table is sixty anti-aliased fills a frame, and it dominated the budget.
+     * Baked it is a single blit, and being one-off it can afford sixteen steps
+     * instead of five, so the falloff is smoother than the live version ever was.
+     */
+    const shadowArt = (function () {
+      const sw = CARD_W + SHADOW_PAD * 2, sh = CARD_H + SHADOW_PAD * 2;
+      const s = surface(sw * dpr, sh * dpr);
+      if (!s) return null;
+      const c = surfCtx(s);
+      c.scale(dpr, dpr);
+      c.fillStyle = "#000";
+      for (let i = 16; i >= 1; i--) {
+        const k = i / 16;
+        const sp = SHADOW_PAD * k;
+        c.globalAlpha = 0.032;
+        roundRect(c, SHADOW_PAD - sp, SHADOW_PAD - sp, CARD_W + sp * 2, CARD_H + sp * 2, CARD_R + sp * 0.7);
+        c.fill();
+      }
+      return s;
+    })();
 
     const L = {};
     function layout() {
@@ -583,8 +630,8 @@ window.plethoraBit = {
       L.px = usedL + (W - usedL - usedR) / 2;
       L.py = (L.bandTop + L.bandBot) / 2;
       L.ringR = Math.min((W - usedL - usedR) / 2 - 12, bh / 2 - 16, 118);
-      L.sx = L.px - 10;                       // the stock sits a hair behind the pile
-      L.sy = L.py - 13;
+      L.sx = L.px - 13;                       // the stock sits a hair behind the pile
+      L.sy = L.py - 17;
     }
     layout();
 
@@ -608,7 +655,7 @@ window.plethoraBit = {
     function weaveTile() {
       const s = surface(6, 6);
       if (!s) return null;
-      const c = s.getContext("2d");
+      const c = surfCtx(s);
       c.fillStyle = "rgba(255,255,255,0.30)";
       c.fillRect(0, 0, 3, 3); c.fillRect(3, 3, 3, 3);
       c.fillStyle = "rgba(0,0,0,0.34)";
@@ -619,7 +666,7 @@ window.plethoraBit = {
     function noiseTile() {
       const s = surface(96, 96);
       if (!s) return null;
-      const c = s.getContext("2d");
+      const c = surfCtx(s);
       const img = c.createImageData(96, 96);
       for (let i = 0; i < img.data.length; i += 4) {
         const v = 90 + Math.random() * 165;
@@ -720,7 +767,7 @@ window.plethoraBit = {
     function bakeTable() {
       const s = surface(W * dpr, H * dpr);
       if (!s) { table = null; return; }
-      const c = s.getContext("2d");
+      const c = surfCtx(s);
       c.scale(dpr, dpr);
       paintTable(c, true);
       table = s;
@@ -744,7 +791,7 @@ window.plethoraBit = {
 
     function makePlayers(n) {
       return SEATS.slice(0, n).map((s) => ({
-        seat: s.seat, name: s.name, ink: s.ink, rad: s.rad,
+        seat: s.seat, name: s.name, ink: s.ink, rad: s.rad, suit: s.suit,
         cards: 0, held: null, lock: 0, press: 0, flashT: 0, bad: 0,
       }));
     }
@@ -972,9 +1019,10 @@ window.plethoraBit = {
       const mirror = shell.el("over-mirror");
       mirror.textContent = winner ? winner.name + " wins" : "Dead heat";
       mirror.style.color = winner ? winner.ink : CREAM;
-      shell.el("over-sub").textContent = bestMs > 0
-        ? "fastest snap " + bestMs + " ms"
-        : "not one clean snap all deck";
+      const dead = pile.length;
+      shell.el("over-sub").textContent =
+        (bestMs > 0 ? "fastest snap " + bestMs + " ms" : "not one clean snap all deck") +
+        (dead ? "   ·   " + dead + " left on the table" : "");
       shell.el("over-rows").innerHTML = players.map((p) =>
         '<div style="display:flex;align-items:center;gap:10px;margin:8px 0;">' +
           '<div style="width:9px;height:9px;border-radius:3px;background:' + p.ink + ';flex:none;"></div>' +
@@ -1012,7 +1060,16 @@ window.plethoraBit = {
       g.save();
       g.translate(x, y);
       g.rotate(rot);
-      dropShadow(g, w, h, CARD_R * scale, lift);
+      if (shadowArt) {
+        const spread = 1 + lift * 1.2;              // airborne cards throw wider
+        const sw = (CARD_W + SHADOW_PAD * 2) * scale * spread;
+        const sh = (CARD_H + SHADOW_PAD * 2) * scale * spread;
+        g.globalAlpha = clamp(0.95 - lift * 0.30, 0.3, 0.95);
+        g.drawImage(shadowArt, -sw / 2, -sh / 2 + (3 + lift * 12) * scale, sw, sh);
+        g.globalAlpha = 1;
+      } else {
+        dropShadow(g, w, h, CARD_R * scale, lift);
+      }
       const src = faceUp ? (art && art.faces[card.id]) : (art && art.back);
       if (src) {
         g.drawImage(src, -w / 2, -h / 2, w, h);
@@ -1032,11 +1089,11 @@ window.plethoraBit = {
     function drawStock(now) {
       const n = stock.length;
       if (n <= 0) return;
-      const layers = Math.min(9, Math.ceil(n / 6));
+      const layers = Math.min(7, Math.ceil(n / 8));
       for (let i = layers; i >= 1; i--) {
         const k = i / layers;
         g.save();
-        g.translate(L.sx - i * 1.5, L.sy - i * 1.9);
+        g.translate(L.sx - i * 1.1, L.sy - i * 1.4);
         g.rotate(-0.035 + i * 0.004);
         const w = CARD_W, h = CARD_H;
         g.globalAlpha = 0.55 + 0.45 * (1 - k);
@@ -1049,7 +1106,7 @@ window.plethoraBit = {
         g.globalAlpha = 1;
         g.restore();
       }
-      drawCardAt(L.sx - 1.5, L.sy - 1.9, -0.031, 1, null, false, 0.06);
+      drawCardAt(L.sx - 1.1, L.sy - 1.4, -0.031, 1, null, false, 0.06);
 
       // A brass count plate riveted to the layout ring, so nobody has to guess
       // how much table is left. Drawn twice, back to back, for the two end
@@ -1118,7 +1175,7 @@ window.plethoraBit = {
     }
 
     function drawPile(now) {
-      const show = pile.slice(-9);
+      const show = pile.slice(-6);
       for (const e of show) {
         const t = clamp((now - e.t0) / LAND_MS, 0, 1);
         const p = easeOut(t);
@@ -1193,10 +1250,10 @@ window.plethoraBit = {
       // Armed glow: concentric strokes standing in for the blur we cannot use.
       if (armed) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 0.020);
-        for (let i = 6; i >= 1; i--) {
-          g.globalAlpha = 0.075 * (1 - i / 7) * (0.45 + 0.55 * pulse);
-          g.strokeStyle = p.ink;
-          g.lineWidth = i * 4;
+        g.strokeStyle = p.ink;
+        for (let i = 3; i >= 1; i--) {
+          g.globalAlpha = 0.13 * (1 - i / 4.2) * (0.45 + 0.55 * pulse);
+          g.lineWidth = i * 8;
           roundRect(g, -w / 2, -h / 2, w, h, rr);
           g.stroke();
         }
@@ -1210,10 +1267,16 @@ window.plethoraBit = {
       const ext = (Math.abs(nx) * w + Math.abs(ny) * h) / 2;
       roundRect(g, -w / 2, -h / 2, w, h, rr);
       const base = g.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
-      base.addColorStop(0.00, hexA(p.ink, (armed ? 0.36 : 0.17) + p.flashT * 0.45));
-      base.addColorStop(0.55, "rgba(9,27,18,0.90)");
-      base.addColorStop(1.00, "rgba(4,15,10,0.95)");
+      base.addColorStop(0.00, "rgba(22,35,27,0.95)");
+      base.addColorStop(1.00, "rgba(5,16,11,0.97)");
       g.fillStyle = base;
+      g.fill();
+      // The colour is a second pass on top. Folded into the leather gradient it
+      // mixed with the green showing through and every pad came out olive.
+      const wash = g.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
+      wash.addColorStop(0.00, hexA(p.ink, (armed ? 0.34 : 0.15) + p.flashT * 0.4));
+      wash.addColorStop(0.62, hexA(p.ink, 0));
+      g.fillStyle = wash;
       g.fill();
       g.strokeStyle = hexA(p.ink, armed ? 0.95 : 0.42);
       g.lineWidth = armed ? 2.4 : 1.4;
@@ -1266,12 +1329,16 @@ window.plethoraBit = {
         // Your winnings sit on your own pad as an actual stack of cards. A
         // progress bar would say the same thing in a language this table does
         // not speak.
-        miniStack(-lw * 0.26, lh * 0.02, p.cards, clamp(lh / 140 * 0.46, 0.19, 0.33));
+        // The seat's own suit, pressed into the leather like a maker's mark.
+        g.fillStyle = hexA(p.ink, 0.20);
+        suitPath(g, p.suit, lw * 0.29, lh * 0.02, Math.min(lh * 0.20, 22));
 
-        const tx = lw * 0.09;
-        g.fillStyle = hexA(p.ink, 0.90);
+        miniStack(-lw * 0.16, lh * 0.03, p.cards, clamp(lh / 140 * 0.52, 0.20, 0.38));
+
+        const tx = lw * 0.07;
+        g.fillStyle = hexA(p.ink, 0.92);
         g.font = "700 " + Math.round(Math.min(lh * 0.13, 12)) + "px " + FONT;
-        tracked(g, p.name.toUpperCase(), tx, -lh * 0.24, 3);
+        tracked(g, p.name.toUpperCase(), 0, -lh * 0.27, 3);
 
         g.fillStyle = armed ? "#fffdf4" : CREAM;
         g.font = "800 " + Math.round(Math.min(lh * 0.40, 46)) + "px " + FONT;
@@ -1280,7 +1347,7 @@ window.plethoraBit = {
         if (armed) {
           g.fillStyle = BRASS;
           g.font = "700 " + Math.round(Math.min(lh * 0.115, 11)) + "px " + FONT;
-          tracked(g, "SLAM", tx, lh * 0.36, 3.5);
+          tracked(g, "SLAM", 0, lh * 0.37, 3.5);
         }
       }
       g.restore();
@@ -1298,7 +1365,7 @@ window.plethoraBit = {
         g.restore();
         return;
       }
-      const layers = Math.min(9, Math.ceil(count / 6));
+      const layers = Math.min(6, 1 + Math.round(count / 9));
       for (let i = layers; i >= 2; i--) {
         g.save();
         g.translate(x - i * 0.9, y - i * 1.5);
@@ -1445,7 +1512,13 @@ window.plethoraBit = {
     }
 
     ctx.onFrame((dtMs) => {
+      // Two clocks. `dt` is clamped hard and drives decay and easing, where a
+      // long stall must not make everything jump. `dtG` is the game clock and
+      // is barely clamped at all: a card is due 600 ms after the last one
+      // whatever the frame rate, and a phone that drops to fifteen frames a
+      // second must not quietly halve the speed everybody is racing against.
       const dt = Math.min(dtMs, 60) / 1000;
+      const dtG = Math.min(dtMs, 250) / 1000;
       const now = performance.now();
 
       shake *= Math.pow(0.0022, dt);
@@ -1456,24 +1529,24 @@ window.plethoraBit = {
         p.press = Math.max(0, p.press - dt * 5);
         p.flashT = Math.max(0, p.flashT - dt * 2.4);
         p.bad = Math.max(0, p.bad - dt * 3);
-        if (p.lock > 0) p.lock = Math.max(0, p.lock - dt);
+        if (p.lock > 0) p.lock = Math.max(0, p.lock - dtG);
       }
       stepParts(dt);
       stepFlyers(now);
 
       if (phase === "deal") {
-        dealT += dt;
+        dealT += dtG;
         if (dealT >= 0.9) { phase = "count"; countT = 0; }
       } else if (phase === "count") {
         const before = Math.floor(countT / 0.55);
-        countT += dt;
+        countT += dtG;
         const after = Math.floor(countT / 0.55);
         if (after > before && after <= 3) sound.sting(after === 3 ? "coin" : "tap");
         if (countT >= 1.95) { phase = "playing"; flipTimer = 0.25; }
       } else if (phase === "playing") {
         const top = pile[pile.length - 1];
         if (top && !top.landed && now - top.t0 >= LAND_MS) landed(top, now);
-        flipTimer -= dt;
+        flipTimer -= dtG;
         if (flipTimer <= 0) {
           flipCard(now);
           flipTimer = flipEvery / 1000;
@@ -1481,7 +1554,7 @@ window.plethoraBit = {
       } else if (phase === "resolve") {
         const top = pile[pile.length - 1];
         if (top && !top.landed && now - top.t0 >= LAND_MS) landed(top, now);
-        resolveT -= dt;
+        resolveT -= dtG;
         if (resolveT <= 0) endMatch();
       }
 

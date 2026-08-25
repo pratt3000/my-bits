@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Bluffin",
+  "description": "A lying game for three to eight people and one phone. Everyone sees a fact with a hole in it. The phone goes round once and each of you secretly types a lie to fill it, then goes round again showing every lie shuffled in with the truth. Score for spotting the real one, score more for every person your lie catches, and score most of all if you accidentally write the truth. Sixty prompts, an explicit hold-to-look handover so nobody sees anybody else's screen, and a best-liar board.",
+  "tags": ["party", "multiplayer", "local-multiplayer", "bluffing", "words", "trivia", "social"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "best_liar": {
+        "label": "Best Liar",
+        "valueType": "number",
+        "order": "desc",
+        "format": "compact",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

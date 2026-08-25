@@ -169,7 +169,7 @@ window.plethoraBit = {
     function measure() {
       W = ctx.width; H = ctx.height;
       cx = W / 2; cy = H / 2;
-      portR = Math.round(Math.min(W * 0.295, H * 0.155));
+      portR = Math.round(Math.min(W * 0.272, H * 0.148));
     }
     measure();
 
@@ -194,6 +194,13 @@ window.plethoraBit = {
     function ray(deg, r) {
       const t = deg * D2R;
       return { x: cx + Math.cos(t) * r * (W / 2), y: cy + Math.sin(t) * r * (H / 2) };
+    }
+    /** The circle angle a normalised bearing lands on. The wedges are cut in
+     *  normalised space, so an arc drawn round the port has to be converted or
+     *  it will not line up with the mitre it is supposed to sit inside. */
+    function pixAng(deg) {
+      const t = deg * D2R;
+      return Math.atan2(Math.sin(t) * H, Math.cos(t) * W);
     }
     function wedgePath(g, i) {
       const s = sectors[i][0];
@@ -222,9 +229,9 @@ window.plethoraBit = {
     function anchor(i) {
       const k = STATIONS[i].key;
       if (k === "bottom") return { x: cx, y: H - safeB - 50, rad: 0 };
-      if (k === "top")    return { x: cx, y: safeT + 48, rad: Math.PI };
-      if (k === "left")   return { x: 58, y: cy, rad: Math.PI / 2 };
-      return { x: W - 58, y: cy, rad: -Math.PI / 2 };
+      if (k === "top")    return { x: cx, y: safeT + 46, rad: Math.PI };
+      if (k === "left")   return { x: 48, y: cy, rad: Math.PI / 2 };
+      return { x: W - 48, y: cy, rad: -Math.PI / 2 };
     }
     /** A generous point inside a station's wedge — where a hand naturally lands. */
     function tapPoint(i) {
@@ -647,7 +654,7 @@ window.plethoraBit = {
     });
     const rods = [];
     for (let k = 0; k < 8; k++) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(P(6), P(22), P(6)), rodMat);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(P(4.5), P(34), P(4.5)), rodMat);
       const a = k * TAU / 8;
       m.userData.a = a;
       m.rotation.z = -a + Math.PI / 2;
@@ -718,8 +725,26 @@ window.plethoraBit = {
       g.clearRect(0, 0, w, h);
       // Smoked glass so the readout survives against a white-hot core.
       roundRect(g, 8, 8, w - 16, h - 16, 24);
-      g.fillStyle = "rgba(3,5,10,0.90)";
+      // Smoked glass, not a hole: dark enough at the rim to carry white type,
+      // open enough in the middle that the core still burns behind the number.
+      const glass = g.createLinearGradient(0, 8, 0, h - 8);
+      glass.addColorStop(0.00, "rgba(3,5,10,0.92)");
+      glass.addColorStop(0.42, "rgba(6,10,18,0.62)");
+      glass.addColorStop(0.58, "rgba(6,10,18,0.62)");
+      glass.addColorStop(1.00, "rgba(3,5,10,0.92)");
+      g.fillStyle = glass;
       g.fill();
+      // A raking highlight across the pane.
+      g.save();
+      roundRect(g, 8, 8, w - 16, h - 16, 24);
+      g.clip();
+      const sheen = g.createLinearGradient(0, 0, w * 0.7, h);
+      sheen.addColorStop(0.00, "rgba(190,220,255,0.00)");
+      sheen.addColorStop(0.34, "rgba(190,220,255,0.075)");
+      sheen.addColorStop(0.42, "rgba(190,220,255,0.00)");
+      g.fillStyle = sheen;
+      g.fillRect(0, 0, w, h);
+      g.restore();
       for (const [lw, al] of [[9, 0.10], [5, 0.22], [2.4, 0.85]]) {
         g.lineWidth = lw;
         g.strokeStyle = "rgba(180,214,255," + al + ")";
@@ -871,7 +896,7 @@ window.plethoraBit = {
         g.save();
         wedgePath(g, i);
         g.clip();
-        for (const [w, al] of [[22, 0.05], [14, 0.10], [7, 0.28], [3.4, 0.75], [1.4, 1]]) {
+        for (const [w, al] of [[18, 0.035], [10, 0.065], [4.4, 0.16], [1.6, 0.40]]) {
           g.strokeStyle = rgba(st.rgb, al);
           g.lineWidth = w;
           g.beginPath();
@@ -893,7 +918,7 @@ window.plethoraBit = {
         g.lineWidth = 1.6;
         for (const sx of [-1, 1]) {
           for (const sy of [-1, 1]) {
-            const bx = sx * (STRIP_W / 2 + 9), by = sy * (STRIP_H / 2 + 9);
+            const bx = sx * (STRIP_W / 2 + 10), by = sy * (STRIP_H / 2 + 6);
             g.beginPath();
             g.moveTo(bx - sx * 13, by);
             g.lineTo(bx, by);
@@ -971,7 +996,7 @@ window.plethoraBit = {
      * player learns at the bottom of the table is the layout they get if
      * they move to the side.
      * ------------------------------------------------------------- */
-    const STRIP_W = 264, STRIP_H = 88;
+    const STRIP_W = 264, STRIP_H = 80;
 
     function paintStrip(g, i) {
       const st = STATIONS[i];
@@ -990,35 +1015,35 @@ window.plethoraBit = {
       const sx = x0 + 30;
       g.textAlign = "center";
       g.fillStyle = dead ? "rgba(255,120,130,0.9)" : st.ink;
-      g.font = "800 34px " + FONT;
-      g.fillText(String(scores[i]), sx, y0 + 44);
+      g.font = "800 32px " + FONT;
+      g.fillText(String(scores[i]), sx, y0 + 40);
       // Segment bar: one notch per point needed to hold the core.
-      const bw = 52, bx = sx - bw / 2, by = y0 + 56;
+      const bw = 52, bx = sx - bw / 2, by = y0 + 50;
       for (let k = 0; k < settings.target; k++) {
         const seg = bw / settings.target;
         g.fillStyle = k < scores[i] ? st.ink : "rgba(150,180,220,0.16)";
         g.fillRect(bx + k * seg, by, Math.max(1.4, seg - 1.1), 5);
       }
       g.fillStyle = "rgba(219,230,245,0.34)";
-      tracked(g, "OF " + settings.target, sx, y0 + 76, 7.5, 1.8, "center", 56);
+      tracked(g, "OF " + settings.target, sx, y0 + 68, 7.5, 1.8, "center", 56);
 
       // --- centre panel --------------------------------------------------
-      const mx = x0 + 64, mw = 124, mh = 64, my = y0 + 12;
+      const mx = x0 + 64, mw = 124, mh = 60, my = y0 + 10;
       if (phase === "brief") {
         // Round card: the type name spread across the panel and the status
         // column, because between rounds legibility beats density.
         const T = TYPE[roundKind];
         g.textAlign = "left";
         g.fillStyle = "rgba(219,230,245,0.45)";
-        tracked(g, "ROUND " + roundNo, mx, y0 + 24, 8, 2.2, "left");
+        tracked(g, "ROUND " + roundNo, mx, y0 + 21, 8, 2.2, "left");
         const label = T.name;
         g.fillStyle = rgba(T.rgb, 1);
-        const fs = fitFont(g, label, 118, 30, "800", FONT);
+        const fs = fitFont(g, label, 118, 28, "800", FONT);
         g.font = "800 " + fs + "px " + FONT;
-        g.fillText(label, mx, y0 + 56);
+        g.fillText(label, mx, y0 + 50);
         g.fillStyle = "rgba(219,230,245,0.62)";
         tracked(g, roundKind === "count" ? "TAP ON " + countTarget : T.rule,
-          mx, y0 + 75, 8.5, 1.9, "left", 190);
+          mx, y0 + 68, 8.5, 1.9, "left", 190);
       } else if (phase === "stations") {
         roundRect(g, mx, my, mw, mh, 9);
         g.fillStyle = zoneArmed[i] ? rgba(st.rgb, 0.18) : "rgba(150,180,220,0.06)";
@@ -1089,19 +1114,19 @@ window.plethoraBit = {
           if (locked[i]) { l1 = "SCRAM"; l2 = "LOCKED OUT"; }
         }
         g.fillStyle = c1;
-        tracked(g, l1, tx, y0 + 26, 10, 1.9, "left", tw);
+        tracked(g, l1, tx, y0 + 22, 10, 1.9, "left", tw);
         if (l2) {
           g.fillStyle = "rgba(219,230,245,0.62)";
-          tracked(g, l2, tx, y0 + 44, 8.5, 1.2, "left", tw);
+          tracked(g, l2, tx, y0 + 39, 8.5, 1.2, "left", tw);
         }
         if (l3) {
           g.fillStyle = "rgba(219,230,245,0.40)";
-          tracked(g, l3, tx, y0 + 60, 8.5, 1.2, "left", tw);
+          tracked(g, l3, tx, y0 + 54, 8.5, 1.2, "left", tw);
         }
         // Round counter, bottom right of the strip.
         if (phase !== "over" && phase !== "stations") {
           g.fillStyle = "rgba(219,230,245,0.26)";
-          tracked(g, "R" + roundNo, tx, y0 + 78, 7.5, 1.5, "left");
+          tracked(g, "R" + roundNo, tx, y0 + 70, 7.5, 1.5, "left", tw);
         }
       }
     }
@@ -1845,6 +1870,34 @@ window.plethoraBit = {
           fx.rotate(a.rad);
           if (zoneArt[i]) fx.drawImage(zoneArt[i], -STRIP_W / 2, -STRIP_H / 2, STRIP_W, STRIP_H);
           else paintStrip(fx, i);
+          fx.restore();
+        }
+      }
+
+      // Score around the rim. Each station's slice of the collar fills with its
+      // own colour as it takes rounds, so the running score is legible from the
+      // middle of the table without reading anybody else's console.
+      if (phase !== "menu") {
+        for (let i = 0; i < crew; i++) {
+          const frac = clamp(scores[i] / settings.target, 0, 1);
+          if (frac <= 0) continue;
+          const st = STATIONS[i];
+          const s0 = sectors[i][0];
+          let span = sectors[i][1] - s0;
+          if (span <= 0) span += 360;
+          const pad = span * 0.05;
+          const mid = s0 + span / 2, halfSpan = (span / 2 - pad) * frac;
+          const a0 = pixAng(mid - halfSpan), a1 = pixAng(mid + halfSpan);
+          fx.save();
+          clipZone(fx, i);
+          for (const [w, al] of [[15, 0.10], [9, 0.20], [5, 0.55], [2.2, 1]]) {
+            fx.strokeStyle = rgba(st.rgb, al);
+            fx.lineWidth = w;
+            fx.lineCap = "butt";
+            fx.beginPath();
+            fx.arc(cx, cy, portR + 9, a0, a1);
+            fx.stroke();
+          }
           fx.restore();
         }
       }

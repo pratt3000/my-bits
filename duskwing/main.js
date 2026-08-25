@@ -1,0 +1,1911 @@
+/**
+ * Duskwing — two to four people, one phone, one burning cave.
+ *
+ * Everybody gets a horizontal band of the screen. Hold your band and your
+ * creature beats its wings; let go and it falls. The world slides past from
+ * right to left forever, saw blades and crushers and rotors come with it, and
+ * the last wing still flying takes the round.
+ *
+ * Four decisions drive everything else.
+ *
+ * **A band per player, and the band is the button.** A side-scroller has a
+ * direction of travel, so unlike a board game it cannot be rotated to face a
+ * seat — instead the screen is sliced into N full-width horizontal strips and
+ * each strip is simultaneously one player's tunnel *and* one player's control.
+ * A finger anywhere inside your strip flies your creature, which is the only
+ * control scheme that survives four hands arriving on a 390px phone at once.
+ * Every pointer is bound to the band it landed in for its whole life, and a
+ * band that already has a live finger ignores extra ones, so a hand that
+ * strays across a divider can never start flying somebody else's creature.
+ *
+ * **The left edge of each band is both the wall and the pad.** In the game
+ * this is descended from, falling behind the advancing edge kills you. Here
+ * that edge is a black column down the left of every band, glowing in its
+ * owner's colour — it is the lethal boundary *and* the place your thumb
+ * naturally rests. Fingers therefore sit on the side the hazards have already
+ * passed, and never on the right side of the screen where the next blade is
+ * arriving. Flapping pushes you right, away from it; falling drifts you left,
+ * into it. That single coupling is the whole risk curve of the game.
+ *
+ * **Everything in the play layer is #000 with no interior detail.** The
+ * creatures, the rock, the blades, the rotors: pure black silhouettes read
+ * against a lit sky, which is the entire art direction. All the colour lives
+ * behind the silhouettes (an amber-to-teal gradient, three bloom centres, fog
+ * bands, god-rays) or in the two eyes of each creature, which is how you tell
+ * four identical black moths apart. Nothing in the foreground is ever tinted,
+ * because tinting it would destroy the one thing that makes the picture work.
+ *
+ * **The record belongs to the flight, not to a person.** Four people share
+ * this phone; "furthest flight" is how far this cave let *this group* get, so
+ * that is what goes to the global board.
+ *
+ * Contract notes: packaged assets are disabled (maxAssets is 0), so the sky,
+ * the three parallax forest layers, the film grain and the bloom sprite are
+ * painted into OffscreenCanvases at boot and blitted — with a live-draw
+ * fallback for WebViews that have no OffscreenCanvas. The canvas blur filter
+ * is banned and not needed: stacked low-alpha radial gradients *are* the blur.
+ * The overlay is one markup string on ctx.createRoot() rather than
+ * document.createElement, and pointer maths uses offsetX/offsetY rather than
+ * getBoundingClientRect — both of those are rejected at upload and neither is
+ * documented in sdk.md.
+ */
+window.plethoraBit = {
+  meta: {
+    title: "Duskwing",
+    runtime: "plethora-bit@2",
+    tags: ["multiplayer", "local-multiplayer", "arcade", "reflex", "silhouette"],
+    permissions: ["backgroundMusic", "haptics", "storage"],
+  },
+
+  async init(ctx) {
+    const TAU = Math.PI * 2;
+    const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const now = () => performance.now();
+
+    /** Escape anything that could ever be player-authored before it hits innerHTML. */
+    const esc = (s) => String(s).replace(/[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    /** Integer hash — the whole course is generated from this, so it replays exactly. */
+    function hash(n) {
+      n = (n ^ 61) ^ (n >>> 16);
+      n = (n + (n << 3)) | 0;
+      n = n ^ (n >>> 4);
+      n = Math.imul(n, 0x27d4eb2d);
+      n = n ^ (n >>> 15);
+      return n >>> 0;
+    }
+    /** hash-derived float in [0,1) for lane `salt`. */
+    const hf = (n, salt) => (hash(n * 2654435761 + salt * 40503) % 100000) / 100000;
+
+    /* ===============================================================
+     * PLAYERS
+     *
+     * Four black moths are indistinguishable by shape — deliberately, the
+     * silhouette rule forbids tinting a body — so identity is carried
+     * entirely by eye colour, by the glow on that player's wall, and by
+     * the huge ghosted distance numeral in their own band. Player 1 owns
+     * the BOTTOM band, because that is the strip closest to the hand of
+     * whoever is holding the phone.
+     * ============================================================= */
+    const CREW = [
+      { name: "CYAN",    ink: "#3BDCF2", rgb: [59, 220, 242] },
+      { name: "MAGENTA", ink: "#FF46A8", rgb: [255, 70, 168] },
+      { name: "LIME",    ink: "#A6F03C", rgb: [166, 240, 60] },
+      { name: "IRIS",    ink: "#AE8CFF", rgb: [174, 140, 255] },
+    ];
+    const rgba = (c, a) => "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + a + ")";
+
+    /* ===============================================================
+     * THE HOURS
+     *
+     * Four skies, cycling as the flight gets longer. DAWN is the signature
+     * one — a hot amber core cooling to teal at the corners — and it is
+     * always the first, because a dark palette on a dim screen in a bright
+     * room is where pure-black silhouettes stop reading at all.
+     * ============================================================= */
+    const HOURS = [
+      {
+        id: "DAWN",
+        base: [[0.00, "#06222B"], [0.26, "#0C3A3E"], [0.52, "#1E4F43"], [0.74, "#5C5C28"], [0.90, "#8E4E12"], [1.00, "#240C0C"]],
+        blooms: [
+          { x: 0.66, y: 0.50, r: 1.00, stops: [[0, "rgba(253,254,231,0.95)"], [0.16, "rgba(252,252,60,0.50)"], [0.44, "rgba(203,79,6,0.26)"], [1, "rgba(203,79,6,0)"]] },
+          { x: 0.16, y: 0.20, r: 0.58, stops: [[0, "rgba(226,246,236,0.42)"], [0.3, "rgba(110,200,180,0.18)"], [1, "rgba(110,200,180,0)"]] },
+          { x: 0.34, y: 0.92, r: 0.52, stops: [[0, "rgba(250,110,30,0.36)"], [0.4, "rgba(190,50,10,0.14)"], [1, "rgba(190,50,10,0)"]] },
+        ],
+        ray: [255, 240, 170], mote: [255, 238, 198], ink: "#FFEFCD", fog: [230, 200, 130],
+      },
+      {
+        id: "NOON",
+        base: [[0.00, "#07240F"], [0.28, "#10401A"], [0.55, "#25631F"], [0.78, "#5C8A1E"], [1.00, "#0A2410"]],
+        blooms: [
+          { x: 0.52, y: 0.30, r: 1.02, stops: [[0, "rgba(253,254,231,0.98)"], [0.14, "rgba(214,252,124,0.52)"], [0.44, "rgba(108,252,108,0.22)"], [1, "rgba(108,252,108,0)"]] },
+          { x: 0.86, y: 0.74, r: 0.62, stops: [[0, "rgba(240,255,210,0.40)"], [0.34, "rgba(108,252,108,0.16)"], [1, "rgba(108,252,108,0)"]] },
+        ],
+        ray: [235, 255, 190], mote: [226, 255, 190], ink: "#F2FFDC", fog: [180, 240, 150],
+      },
+      {
+        id: "DUSK",
+        base: [[0.00, "#2A0A18"], [0.24, "#4E1024"], [0.52, "#8C2416"], [0.76, "#C2470C"], [1.00, "#240C0C"]],
+        blooms: [
+          { x: 0.30, y: 0.62, r: 1.04, stops: [[0, "rgba(255,244,214,0.92)"], [0.15, "rgba(250,110,30,0.55)"], [0.46, "rgba(190,50,10,0.26)"], [1, "rgba(190,50,10,0)"]] },
+          { x: 0.82, y: 0.24, r: 0.66, stops: [[0, "rgba(255,170,190,0.40)"], [0.34, "rgba(140,32,90,0.20)"], [1, "rgba(140,32,90,0)"]] },
+        ],
+        ray: [255, 200, 150], mote: [255, 214, 180], ink: "#FFE3D2", fog: [230, 140, 110],
+      },
+      {
+        id: "NIGHT",
+        base: [[0.00, "#02060F"], [0.30, "#061A3E"], [0.60, "#0C3466"], [0.84, "#14508E"], [1.00, "#02060F"]],
+        blooms: [
+          { x: 0.72, y: 0.36, r: 0.96, stops: [[0, "rgba(234,246,255,0.90)"], [0.15, "rgba(110,232,216,0.42)"], [0.46, "rgba(50,110,250,0.22)"], [1, "rgba(50,110,250,0)"]] },
+          { x: 0.22, y: 0.78, r: 0.66, stops: [[0, "rgba(180,220,255,0.34)"], [0.36, "rgba(50,110,250,0.16)"], [1, "rgba(50,110,250,0)"]] },
+        ],
+        ray: [190, 236, 255], mote: [190, 240, 255], ink: "#DDEEFF", fog: [120, 180, 240], stars: true,
+      },
+    ];
+
+    /* ===============================================================
+     * SETTINGS — remembered between sessions.
+     * ============================================================= */
+    const saved = (function () {
+      try { return ctx.storage.get("duskwing") || {}; } catch (_) { return {}; }
+    })();
+    const settings = {
+      players: clamp(saved.players || 2, 2, 4),
+      diff: saved.diff === undefined ? 1 : clamp(saved.diff, 0, 2),
+      mute: !!saved.mute,
+      best: saved.best || 0,
+    };
+    function save() { try { ctx.storage.set("duskwing", settings); } catch (_) {} }
+
+    // Gentle / Normal / Brutal: scroll speed, how fast it ramps, hazard density.
+    const DIFF = [
+      { name: "GENTLE", v0: 0.58, ramp: 0.0055, cap: 1.28, dens: 0.78 },
+      { name: "NORMAL", v0: 0.70, ramp: 0.0085, cap: 1.62, dens: 1.00 },
+      { name: "BRUTAL", v0: 0.86, ramp: 0.0130, cap: 2.00, dens: 1.26 },
+    ];
+
+    /* ===============================================================
+     * SOUND — a drifting bed that tightens as the cave speeds up, stings
+     * on the moments that matter, haptics so a death is felt. All of it
+     * wrapped: audio is a nicety and must never break play.
+     * ============================================================= */
+    const sound = (function () {
+      let muted = settings.mute, bed = null, unlocked = false;
+      const start = () => ctx.music.play({ preset: "drift", volume: 0.34, tempo: 92, intensity: 0.25 });
+      return {
+        get muted() { return muted; },
+        async unlock() {
+          if (unlocked) return;
+          unlocked = true;
+          try { await ctx.music.unlock(); if (!muted) bed = start(); } catch (_) {}
+        },
+        sting(n) { if (!muted) { try { ctx.music.sting(n); } catch (_) {} } },
+        duck(a, ms) { if (!muted) { try { ctx.music.duck(a, ms); } catch (_) {} } },
+        heat(v) { if (!muted && bed) { try { bed.setIntensity(clamp(v, 0, 1)); } catch (_) {} } },
+        tempo(t) { if (!muted && bed) { try { bed.setTempo(t); } catch (_) {} } },
+        haptic(k) { try { ctx.platform.haptic(k); } catch (_) {} },
+        toggle() {
+          muted = !muted;
+          settings.mute = muted;
+          save();
+          try {
+            if (muted) { (bed || ctx.music).stop({ fadeOutMs: 220 }); bed = null; }
+            else if (unlocked) bed = start();
+          } catch (_) {}
+          return muted;
+        },
+      };
+    })();
+
+    // Display type. Bebas Neue is the register the reference art uses for every
+    // numeral and label; Nunito Sans carries the few sentences of body copy.
+    // The registry may not have them, so both stacks fall back to a condensed
+    // system face and every canvas heading is drawn glyph-by-glyph with manual
+    // tracking, which is what actually produces the airy look.
+    const DISP = "'Bebas Neue','Oswald','Anton','Arial Narrow',Impact,system-ui,sans-serif";
+    const BODY = "'Nunito Sans','Nunito',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+    try { ctx.loadFont("Bebas Neue"); ctx.loadFont("Nunito Sans"); } catch (_) {}
+
+    /* ===============================================================
+     * LAYOUT
+     *
+     * Chrome lives in a horizontal strip along the top, never in the side
+     * margins: a 390px-wide screen has no side margins to spare, and a
+     * button column there would sit directly on top of the tunnel.
+     * ============================================================= */
+    const canvas = ctx.createCanvas2D({ touchAction: "none" });
+    const g = canvas.getContext("2d");
+
+    let W = 0, H = 0, U = 0, PLAY_TOP = 0, PLAY_BOT = 0, WALL = 0, HOME = 0, XMAX = 0;
+    let bands = [];
+    const CHROME_H = 44;
+
+    function measure() {
+      W = ctx.width; H = ctx.height;
+      const dpr = Math.min(ctx.dpr || 1, 3);
+      if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+        canvas.width = Math.round(W * dpr);
+        canvas.height = Math.round(H * dpr);
+      }
+      PLAY_TOP = ctx.safeArea.top + CHROME_H + 4;
+      PLAY_BOT = H - ctx.safeArea.bottom - 6;
+      const n = settings.players;
+      U = (PLAY_BOT - PLAY_TOP) / n;                 // one band height = one world unit
+      bands = [];
+      for (let i = 0; i < n; i++) {
+        // Index 0 is the BOTTOM band, so player 1 is nearest the near hand.
+        const top = PLAY_BOT - (i + 1) * U;
+        bands.push({ i, top, mid: top + U / 2, bot: top + U });
+      }
+      WALL = clamp(W * 0.17, 50, 76);                // the lethal edge, and the pad
+      HOME = WALL + U * 0.42;                        // where a creature hatches
+      XMAX = W * 0.66;                               // furthest right flapping can carry you
+    }
+    measure();
+
+    /** Which band owns a screen y. Chrome strip owns nothing. */
+    function bandAt(y) {
+      if (y < PLAY_TOP - 2) return -1;
+      const i = Math.floor((PLAY_BOT - y) / U);
+      return clamp(i, 0, bands.length - 1);
+    }
+
+    /* ===============================================================
+     * BAKED SURFACES
+     *
+     * There are no packaged assets, so the sky, the forest, the grain and
+     * the bloom sprite are painted once into OffscreenCanvases. Every
+     * bake site has a live-draw fallback, because some WebViews have no
+     * OffscreenCanvas and a blank screen is worse than a slow one.
+     * ============================================================= */
+    function surface(w, h) {
+      if (typeof OffscreenCanvas === "undefined") return null;
+      try { return new OffscreenCanvas(Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h))); }
+      catch (_) { return null; }
+    }
+
+    /** The whole glow of the game: stacked low-alpha radial gradients. */
+    function paintSky(t, hour, w, h) {
+      const base = t.createLinearGradient(0, 0, w * 0.22, h);
+      for (const [p, c] of hour.base) base.addColorStop(p, c);
+      t.fillStyle = base;
+      t.fillRect(0, 0, w, h);
+
+      t.globalCompositeOperation = "lighter";
+      for (const b of hour.blooms) {
+        const cx = w * b.x, cy = h * b.y, r = h * b.r;
+        const grd = t.createRadialGradient(cx, cy, 0, cx, cy, r);
+        for (const [p, c] of b.stops) grd.addColorStop(p, c);
+        t.fillStyle = grd;
+        t.fillRect(0, 0, w, h);
+      }
+
+      // God-rays: long thin wedges fanning out of the primary bloom. Faded
+      // with their own gradient so they dissolve rather than end.
+      const src = hour.blooms[0];
+      const sx = w * src.x, sy = h * src.y;
+      t.save();
+      t.translate(sx, sy);
+      for (let i = 0; i < 7; i++) {
+        const a = -2.55 + i * 0.30 + (i % 3) * 0.055;
+        const spread = 0.020 + (i % 4) * 0.013;
+        const len = h * (1.35 + (i % 3) * 0.28);
+        const grd = t.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+        grd.addColorStop(0, rgba(hour.ray, 0.16));
+        grd.addColorStop(0.35, rgba(hour.ray, 0.075));
+        grd.addColorStop(1, rgba(hour.ray, 0));
+        t.fillStyle = grd;
+        t.beginPath();
+        t.moveTo(0, 0);
+        t.lineTo(Math.cos(a - spread) * len, Math.sin(a - spread) * len);
+        t.lineTo(Math.cos(a + spread) * len, Math.sin(a + spread) * len);
+        t.closePath();
+        t.fill();
+      }
+      t.restore();
+
+      // Two static fog bands. Wide flat ellipses of the palette mid-tone let
+      // distant shapes fade to smoke instead of reading as pure black.
+      for (let i = 0; i < 2; i++) {
+        const fy = h * (0.32 + i * 0.36);
+        const grd = t.createLinearGradient(0, fy - h * 0.11, 0, fy + h * 0.11);
+        grd.addColorStop(0, rgba(hour.fog, 0));
+        grd.addColorStop(0.5, rgba(hour.fog, 0.11));
+        grd.addColorStop(1, rgba(hour.fog, 0));
+        t.fillStyle = grd;
+        t.fillRect(0, fy - h * 0.11, w, h * 0.22);
+      }
+
+      if (hour.stars) {
+        for (let i = 0; i < 130; i++) {
+          const r = hf(i, 991);
+          t.globalAlpha = 0.18 + hf(i, 17) * 0.55;
+          t.fillStyle = rgba(hour.mote, 1);
+          t.beginPath();
+          t.arc(hf(i, 3) * w, hf(i, 5) * h, 0.5 + r * 1.2, 0, TAU);
+          t.fill();
+        }
+        t.globalAlpha = 1;
+      }
+      t.globalCompositeOperation = "source-over";
+    }
+
+    const skyCache = {};
+    function skyFor(idx) {
+      const hour = HOURS[idx];
+      const key = idx + ":" + W + "x" + H;
+      if (skyCache[key] !== undefined) return skyCache[key];
+      const c = surface(W, H);
+      if (c) paintSky(c.getContext("2d"), hour, W, H);
+      skyCache[key] = c;                                   // null → drawn live below
+      return c;
+    }
+
+    /**
+     * Parallax forest. Three layers of trunks and disc-cluster canopies,
+     * baked in pure black and blitted at three different alphas — drawing
+     * black over a lit sky at 0.3 alpha *is* the smoky mid-tone the far
+     * layers need, so one bake serves all four palettes.
+     */
+    function paintForest(t, layer, w, h) {
+      t.clearRect(0, 0, w, h);
+      t.fillStyle = "#000";
+      const salt = 700 + layer * 37;
+      const count = [9, 13, 17][layer];
+      const scale = [1.00, 0.72, 0.50][layer];
+      const baseY = h * [1.02, 1.06, 1.10][layer];
+      for (let k = 0; k < count; k++) {
+        // Every tree is drawn twice, one screen apart, so the strip tiles.
+        for (const off of [0, -w]) {
+          const x = hf(k, salt) * w + off;
+          const th = h * (0.34 + hf(k, salt + 1) * 0.42) * scale;
+          const tw = w * (0.014 + hf(k, salt + 2) * 0.022) * scale;
+          // Trunk: tapered segments with round caps.
+          t.lineCap = "round";
+          const lean = (hf(k, salt + 3) - 0.5) * w * 0.05;
+          for (let s = 0; s < 9; s++) {
+            const p0 = s / 9, p1 = (s + 1) / 9;
+            t.beginPath();
+            t.lineWidth = tw * (1 - p0 * 0.72);
+            t.moveTo(x + lean * p0 * p0, baseY - th * p0);
+            t.lineTo(x + lean * p1 * p1, baseY - th * p1);
+            t.strokeStyle = "#000";
+            t.stroke();
+          }
+          // Canopy: a chain of overlapping discs, never a polygon.
+          const cx = x + lean, cy = baseY - th;
+          const blobs = 16 + Math.floor(hf(k, salt + 4) * 12);
+          t.beginPath();
+          for (let b = 0; b < blobs; b++) {
+            const a = hf(k * 40 + b, salt + 5) * TAU;
+            const rr = hf(k * 40 + b, salt + 6);
+            const spread = w * (0.055 + hf(k, salt + 7) * 0.05) * scale;
+            t.moveTo(cx + Math.cos(a) * spread * rr + spread * 0.5, cy + Math.sin(a) * spread * rr * 0.62);
+            t.arc(cx + Math.cos(a) * spread * rr, cy + Math.sin(a) * spread * rr * 0.62,
+                  spread * (0.28 + rr * 0.34), 0, TAU);
+          }
+          t.fill();
+        }
+      }
+    }
+
+    let forest = [null, null, null];
+    function bakeForest() {
+      for (let i = 0; i < 3; i++) {
+        const c = surface(W, H);
+        if (c) paintForest(c.getContext("2d"), i, W, H);
+        forest[i] = c;
+      }
+    }
+
+    /** Film grain: one full-screen dot field, blitted with a per-frame jitter. */
+    let grain = null;
+    function bakeGrain() {
+      const c = surface(W + 10, H + 10);
+      if (!c) { grain = null; return; }
+      const t = c.getContext("2d");
+      t.fillStyle = "rgba(255,244,214,1)";
+      for (let i = 0; i < 2400; i++) {
+        t.globalAlpha = 0.05 + hf(i, 3301) * 0.09;
+        t.fillRect(hf(i, 11) * (W + 10), hf(i, 13) * (H + 10), 1, 1);
+      }
+      t.globalAlpha = 1;
+    }
+
+    /**
+     * One bloom sprite, reused for every glow in the game: the halo behind a
+     * hazard so its silhouette reads, the halo behind an eye, the white
+     * flash on a death. Blitted with globalAlpha under 'lighter', which is
+     * how you get soft light when ctx.filter = blur() is rejected at upload.
+     */
+    let bloomSprite = null;
+    function bakeBloom() {
+      const S = 160;
+      const c = surface(S, S);
+      if (!c) { bloomSprite = null; return; }
+      const t = c.getContext("2d");
+      const grd = t.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+      grd.addColorStop(0.00, "rgba(255,255,255,1)");
+      grd.addColorStop(0.16, "rgba(255,255,255,0.62)");
+      grd.addColorStop(0.42, "rgba(255,255,255,0.20)");
+      grd.addColorStop(0.72, "rgba(255,255,255,0.045)");
+      grd.addColorStop(1.00, "rgba(255,255,255,0)");
+      t.fillStyle = grd;
+      t.fillRect(0, 0, S, S);
+      bloomSprite = c;
+    }
+
+    /** Draw a soft light disc in `col` at (x,y). Falls back to a live gradient. */
+    function bloom(x, y, r, col, alpha) {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      g.globalAlpha = alpha;
+      if (bloomSprite) {
+        // A white sprite cannot be recoloured by alpha alone, so the colour is
+        // laid down first and the sprite multiplies it into a soft falloff.
+        g.fillStyle = rgba(col, 1);
+        g.globalCompositeOperation = "lighter";
+        g.drawImage(bloomSprite, x - r, y - r, r * 2, r * 2);
+        g.globalAlpha = alpha * 0.55;
+        g.fillStyle = rgba(col, 1);
+        g.beginPath(); g.arc(x, y, r * 0.30, 0, TAU); g.fill();
+      } else {
+        const grd = g.createRadialGradient(x, y, 0, x, y, r);
+        grd.addColorStop(0, rgba(col, 0.9));
+        grd.addColorStop(0.4, rgba(col, 0.25));
+        grd.addColorStop(1, rgba(col, 0));
+        g.fillStyle = grd;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      g.restore();
+    }
+
+    function bakeAll() { bakeForest(); bakeGrain(); bakeBloom(); for (const k in skyCache) delete skyCache[k]; }
+    bakeAll();
+
+    /* ===============================================================
+     * THE CAVE
+     *
+     * One course, shared by every band, so the round is a fair race: the
+     * blade that kills you is the same blade your neighbour just cleared.
+     * The profile is a function of world position measured in band units,
+     * which makes the cave self-similar — two tall bands and four short
+     * ones present exactly the same shapes at the same relative sizes.
+     * ============================================================= */
+    const MIN_ROCK = 0.085;                            // thinnest rock between tunnels
+    const MIN_GAP  = 0.215;                            // tightest a tunnel is allowed to be
+
+    let pinches = [];                                  // closing gaps, pushed by the spawner
+
+    /** Rolling lumps: a chain of soft bulges on a fixed lattice, hashed, so the
+     *  rock outline is bulbous rather than a smooth sine and never repeats. */
+    function lump(d, salt) {
+      const cell = 0.62;
+      const i0 = Math.floor(d / cell);
+      let s = 0;
+      for (let k = -1; k <= 1; k++) {
+        const i = i0 + k;
+        const cx = (i + 0.5 + (hf(i, salt) - 0.5) * 0.7) * cell;
+        const amp = 0.018 + hf(i, salt + 1) * 0.058;
+        const wid = 0.24 + hf(i, salt + 2) * 0.38;
+        const t = (d - cx) / wid;
+        if (t > -1 && t < 1) { const q = 1 - t * t; s += amp * q * q; }
+      }
+      return s;
+    }
+
+    /** Tunnel ceiling and floor at world position `d`, in band units 0..1. */
+    function profile(d, out) {
+      let c = 0.5 + 0.112 * Math.sin(d * 0.78) + 0.054 * Math.sin(d * 1.93 + 1.9) + 0.026 * Math.sin(d * 4.10 + 0.4);
+      let gp = 0.60 + 0.082 * Math.sin(d * 1.21 + 2.7);
+      for (let i = 0; i < pinches.length; i++) {
+        const p = pinches[i];
+        const t = 1 - Math.abs(d - p.d) / p.w;
+        if (t > 0) { const s = t * t * (3 - 2 * t); c += (p.c - c) * s; gp += (p.g - gp) * s; }
+      }
+      let ceil = c - gp / 2 + lump(d, 11);
+      let flr  = c + gp / 2 - lump(d, 77);
+      if (ceil < MIN_ROCK) ceil = MIN_ROCK;
+      if (flr > 1 - MIN_ROCK) flr = 1 - MIN_ROCK;
+      if (flr - ceil < MIN_GAP) { const m = (flr + ceil) / 2; ceil = m - MIN_GAP / 2; flr = m + MIN_GAP / 2; }
+      out[0] = ceil; out[1] = flr;
+      return out;
+    }
+    const _pf = [0, 0];
+
+    /* --- hazards ------------------------------------------------------
+     * All in band units: `x` is world px, everything else is a fraction of
+     * a band height, so a hazard is the same shape whatever the band count.
+     */
+    let hazards = [];
+    let spawnX = 0;                                    // world px reached by the generator
+    let courseSeed = 1;
+
+    function spawnOne(gate) {
+      const s = courseSeed++;
+      const r = (k) => hf(s, k);
+      const d = gate / U;                              // distance in band units
+      const heat = clamp((d - 6) / 90, 0, 1);          // what is unlocked, and how mean
+      const roll = r(1);
+      let type;
+      if (d < 7) type = "saw";
+      else if (roll < 0.30) type = "saw";
+      else if (roll < 0.46) type = "pinch";
+      else if (roll < 0.62) type = "rotor";
+      else if (roll < 0.78) type = "crusher";
+      else if (roll < 0.90) type = "spikes";
+      else type = "sawpair";
+
+      if (type === "pinch") {
+        profile(d, _pf);
+        pinches.push({
+          d, w: 1.5 + r(2) * 1.4,
+          c: clamp((_pf[0] + _pf[1]) / 2 + (r(3) - 0.5) * 0.22, 0.30, 0.70),
+          g: lerp(0.44, 0.27, heat * (0.4 + r(4) * 0.6)),
+        });
+        if (pinches.length > 24) pinches.shift();
+        return;
+      }
+      if (type === "saw" || type === "sawpair") {
+        const mount = r(5) < 0.5 ? "ceil" : "floor";
+        hazards.push({
+          type: "saw", x: gate, mount,
+          rr: 0.15 + r(6) * 0.11,
+          spin: (r(7) < 0.5 ? -1 : 1) * (2.2 + r(8) * 3.4),
+          bob: r(9) < 0.35 ? 0.07 + r(10) * 0.07 : 0,
+          bobF: 0.9 + r(11) * 1.1, ph: r(12) * TAU,
+        });
+        if (type === "sawpair") {
+          hazards.push({
+            type: "saw", x: gate + U * (0.55 + r(13) * 0.4),
+            mount: mount === "ceil" ? "floor" : "ceil",
+            rr: 0.13 + r(14) * 0.09,
+            spin: (r(15) < 0.5 ? -1 : 1) * (2.4 + r(16) * 3.0),
+            bob: 0, bobF: 1, ph: r(17) * TAU,
+          });
+        }
+        return;
+      }
+      if (type === "rotor") {
+        hazards.push({
+          type: "rotor", x: gate,
+          n: 0.5 + (r(18) - 0.5) * 0.22,
+          len: 0.20 + r(19) * 0.13 + heat * 0.05,
+          wdt: 0.028 + r(20) * 0.016,
+          blades: r(21) < 0.4 ? 3 : 2,
+          spin: (r(22) < 0.5 ? -1 : 1) * (1.5 + r(23) * 2.6 + heat * 1.4),
+          ph: r(24) * TAU,
+        });
+        return;
+      }
+      if (type === "crusher") {
+        hazards.push({
+          type: "crusher", x: gate,
+          from: r(25) < 0.5 ? "ceil" : "floor",
+          wdt: 0.16 + r(26) * 0.16,
+          reach: 0.34 + r(27) * 0.20 + heat * 0.08,
+          period: 2.4 - heat * 0.9 + r(28) * 0.6,
+          ph: r(29),
+        });
+        return;
+      }
+      hazards.push({
+        type: "spikes", x: gate,
+        from: r(30) < 0.5 ? "ceil" : "floor",
+        wdt: 0.55 + r(31) * 0.75,
+        hgt: 0.10 + r(32) * 0.07,
+      });
+    }
+
+    /** Keep the course generated a screen and a half ahead of the camera. */
+    function ensureCourse(rightEdge) {
+      const dens = DIFF[settings.diff].dens;
+      let guard = 0;
+      while (spawnX < rightEdge + W && guard++ < 60) {
+        spawnOne(spawnX);
+        const gap = U * (1.05 + hf(courseSeed, 55) * 0.95) / dens;
+        spawnX += gap;
+      }
+      while (hazards.length && hazards[0].x < camX - U * 1.2) hazards.shift();
+      while (pinches.length && pinches[0].d < camX / U - 3) pinches.shift();
+    }
+
+    /* ===============================================================
+     * STATE
+     * ============================================================= */
+    let phase = "title";               // title | claim | countdown | play | over
+    let camX = 0, scroll = 0, elapsed = 0, overAt = 0;
+    let hourIdx = 0, hourPrev = 0, hourFade = 1;
+    let shake = 0, flash = 0;
+    let winner = -1, roundBest = 0;
+    let particles = [];
+    let motes = [];
+    let birds = [];
+
+    function makeBird(i) {
+      return {
+        i, alive: true, n: 0.5, vn: 0, sx: HOME, vx: 0,
+        held: false, flapT: 0, wing: 0, wingV: 0,
+        dist: 0, best: 0, graze: 0, hatch: 0, claimed: false,
+        cause: "", trail: [], respawnAt: 0, milestone: 0,
+      };
+    }
+
+    function seedMotes() {
+      motes = [];
+      for (let i = 0; i < 46; i++) {
+        motes.push({
+          x: hf(i, 401) * W, y: hf(i, 403) * H,
+          r: 0.7 + hf(i, 405) * 1.9,
+          sp: 0.10 + hf(i, 407) * 0.30,
+          bob: hf(i, 409) * TAU, bobF: 0.4 + hf(i, 411) * 0.9,
+          a: 0.16 + hf(i, 413) * 0.28,
+        });
+      }
+    }
+    seedMotes();
+
+    function resetWorld(seed) {
+      camX = 0; scroll = 0; elapsed = 0;
+      hazards = []; pinches = []; particles = [];
+      spawnX = W * 0.95;                                // a clear run-up before the first blade
+      courseSeed = seed;
+      hourIdx = 0; hourPrev = 0; hourFade = 1;
+      winner = -1; roundBest = 0; shake = 0; flash = 0;
+      birds = [];
+      for (let i = 0; i < settings.players; i++) birds.push(makeBird(i));
+    }
+    resetWorld(1);
+
+    /* ===============================================================
+     * SIMULATION
+     *
+     * Gravity, the flap impulse and the vertical clamps are all expressed
+     * in band units per second, so the feel is identical whether the band
+     * is 350px tall (two players) or 170px (four).
+     * ============================================================= */
+    const GRAV = 6.2, FLAP_DV = 1.14, FLAP_HZ = 9.5, VUP = 1.18, VDOWN = 1.62;
+    const R_N = 0.072;                                 // creature radius, band units
+
+    function flap(b, loud) {
+      b.vn -= FLAP_DV;
+      if (b.vn < -VUP) b.vn = -VUP;
+      b.vx += W * 0.021;
+      b.wingV = -13;
+      if (phase === "play") {
+        const band = bands[b.i];
+        // A puff of dark motes shed downward, so the flap has weight.
+        for (let k = 0; k < 2; k++) {
+          particles.push({
+            k: "puff", x: b.sx + (Math.random() - 0.5) * U * 0.1,
+            y: band.top + b.n * U + U * 0.06,
+            vx: -30 - Math.random() * 40, vy: 40 + Math.random() * 90,
+            r: U * (0.012 + Math.random() * 0.016), life: 0.42, t: 0,
+          });
+        }
+      }
+      if (loud) { sound.sting("tap"); sound.haptic("light"); }
+    }
+
+    /** Autopilot for the attract loop on the title screen. */
+    function autoHold(b) {
+      const band = bands[b.i];
+      const look = (camX + b.sx + W * 0.22) / U;
+      profile(look, _pf);
+      const target = (_pf[0] + _pf[1]) / 2;
+      return b.n > target + 0.03;
+    }
+
+    function kill(b, cause) {
+      if (!b.alive) return;
+      b.alive = false;
+      b.cause = cause;
+      const band = bands[b.i];
+      const y = band.top + b.n * U;
+      // Silhouette confetti: the body pops into shards of itself. Never red,
+      // never gore — this world only has black shapes and light.
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * TAU + Math.random() * 0.4;
+        const sp = U * (0.9 + Math.random() * 2.1);
+        particles.push({
+          k: "shard", x: b.sx, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - U * 0.4,
+          r: U * (0.018 + Math.random() * 0.030), rot: Math.random() * TAU,
+          spin: (Math.random() - 0.5) * 16, life: 0.85 + Math.random() * 0.4, t: 0,
+        });
+      }
+      particles.push({ k: "flash", x: b.sx, y, r: U * 0.5, life: 0.22, t: 0, col: CREW[b.i].rgb });
+      if (phase !== "title") {
+        shake = Math.min(shake + 7, 11);
+        sound.sting("fail");
+        sound.haptic("heavy");
+        ctx.platform.interact({ type: "down", player: b.i + 1, cause, metres: Math.round(b.best) });
+      } else {
+        b.respawnAt = now() + 620;
+      }
+    }
+
+    /** Circle-vs-capsule, for rotor blades. */
+    function capsuleHit(px, py, x1, y1, x2, y2, r) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const L2 = dx * dx + dy * dy || 1;
+      let t = ((px - x1) * dx + (py - y1) * dy) / L2;
+      t = clamp(t, 0, 1);
+      const cx = x1 + dx * t, cy = y1 + dy * t;
+      return (px - cx) * (px - cx) + (py - cy) * (py - cy) < r * r;
+    }
+
+    /**
+     * Hazard geometry, resolved for the current instant.
+     * Both the renderer and the collision test read from this, so what you
+     * see really is what kills you.
+     */
+    function hazardAt(h, t, band) {
+      const sx = h.x - camX;
+      const d = h.x / U;
+      profile(d, _pf);
+      const ceilY = band.top + _pf[0] * U, floorY = band.top + _pf[1] * U;
+      if (h.type === "saw") {
+        const r = h.rr * U;
+        const bobo = h.bob ? Math.sin(t * h.bobF + h.ph) * h.bob * U : 0;
+        const cy = h.mount === "ceil" ? ceilY + r * 0.42 + bobo : floorY - r * 0.42 - bobo;
+        return { kind: "saw", x: sx, y: cy, r, a: t * h.spin + h.ph };
+      }
+      if (h.type === "rotor") {
+        const hub = { x: sx, y: lerp(ceilY, floorY, clamp((h.n - _pf[0]) / Math.max(0.001, _pf[1] - _pf[0]), 0.14, 0.86)) };
+        return { kind: "rotor", x: hub.x, y: hub.y, len: h.len * U, w: h.wdt * U,
+                 a: t * h.spin + h.ph, blades: h.blades, ceilY, floorY };
+      }
+      if (h.type === "crusher") {
+        const u = ((t / h.period) + h.ph) % 1;
+        let f;
+        if (u < 0.55) f = 0.06;
+        else if (u < 0.66) { const q = (u - 0.55) / 0.11; f = 0.06 + (1 - 0.06) * q * q; }
+        else if (u < 0.80) f = 1;
+        else f = 1 - (u - 0.80) / 0.20;
+        const depth = f * h.reach * U;
+        const w = h.wdt * U;
+        const top = h.from === "ceil" ? ceilY : floorY - depth;
+        return { kind: "crusher", x: sx - w / 2, y: top, w, h: depth, arming: u > 0.44 && u < 0.66, f };
+      }
+      const w = h.wdt * U, hg = h.hgt * U;
+      const y = h.from === "ceil" ? ceilY : floorY;
+      return { kind: "spikes", x: sx - w / 2, y, w, h: hg, up: h.from === "floor" };
+    }
+
+    function collide(b, t) {
+      const band = bands[b.i];
+      const by = band.top + b.n * U;
+      const r = R_N * U;
+      const wx = camX + b.sx;
+
+      // Rock. Sampled at the creature's own world x, which is the only place
+      // the tunnel actually has to be clear for it.
+      profile(wx / U, _pf);
+      if (b.n - R_N < _pf[0] || b.n + R_N > _pf[1]) return "CRUSHED";
+
+      // The wall on the left. Fall behind it and the dark takes you.
+      if (b.sx - r < WALL * 0.88) return "LEFT BEHIND";
+
+      let near = 0;
+      for (let i = 0; i < hazards.length; i++) {
+        const h = hazards[i];
+        const sx = h.x - camX;
+        if (sx < -U * 1.2 || sx > W + U * 1.2) continue;
+        const s = hazardAt(h, t, band);
+        if (s.kind === "saw") {
+          const dd = Math.hypot(b.sx - s.x, by - s.y);
+          if (dd < r + s.r * 0.90) return "SAWN";
+          if (dd < r + s.r * 1.55) near = 1;
+        } else if (s.kind === "rotor") {
+          for (let k = 0; k < s.blades; k++) {
+            const a = s.a + (k / s.blades) * TAU;
+            const x2 = s.x + Math.cos(a) * s.len, y2 = s.y + Math.sin(a) * s.len;
+            if (capsuleHit(b.sx, by, s.x, s.y, x2, y2, r + s.w * 0.8)) return "SAWN";
+          }
+          if (Math.hypot(b.sx - s.x, by - s.y) < s.len + r * 1.6) near = 1;
+        } else if (s.kind === "crusher") {
+          if (b.sx + r > s.x && b.sx - r < s.x + s.w && by + r > s.y && by - r < s.y + s.h) return "CRUSHED";
+          if (b.sx + r > s.x - U * 0.1 && b.sx - r < s.x + s.w + U * 0.1) near = 1;
+        } else {
+          if (b.sx + r * 0.7 > s.x && b.sx - r * 0.7 < s.x + s.w) {
+            if (s.up ? (by + r > s.y - s.h) : (by - r < s.y + s.h)) return "SPIKED";
+            near = 1;
+          }
+        }
+      }
+      if (near) b.graze = Math.min(b.graze + 0.06, 0.5);
+      return null;
+    }
+
+    function step(dt, t) {
+      const attract = phase === "title";
+      const running = phase === "play" || attract || phase === "countdown";
+
+      if (running) {
+        const D = DIFF[settings.diff];
+        if (phase === "play") elapsed += dt;
+        const rel = attract ? 0.62 : clamp(D.v0 + D.ramp * elapsed, 0, D.cap);
+        scroll = clamp(rel * U, 0, W * 0.62);
+        camX += scroll * (phase === "countdown" ? 0.35 : 1) * dt;
+        ensureCourse(camX + W);
+      }
+
+      for (const b of birds) {
+        const band = bands[b.i];
+        if (!b.alive) {
+          if (attract && now() > b.respawnAt) {
+            b.alive = true; b.n = 0.5; b.vn = 0; b.sx = HOME; b.vx = 0; b.trail.length = 0;
+          }
+          continue;
+        }
+
+        const held = attract ? autoHold(b) : b.held;
+        if (held) {
+          b.flapT += dt;
+          const per = 1 / FLAP_HZ;
+          let guard = 0;
+          while (b.flapT >= per && guard++ < 4) { b.flapT -= per; flap(b, false); }
+        } else {
+          b.flapT = per_reset(b);
+        }
+
+        // Vertical: strong gravity, discrete flaps, a terminal speed from drag.
+        b.vn += GRAV * dt;
+        b.vn *= Math.pow(0.992, dt * 60);
+        b.vn = clamp(b.vn, -VUP, VDOWN);
+        b.n += b.vn * dt;
+
+        // Horizontal: flapping carries you forward, falling lets the cave
+        // reel you back toward the wall. There is no left/right control and
+        // there never will be — this is the whole tension of the game.
+        const idle = -W * 0.058;
+        b.vx += (idle - b.vx) * (1 - Math.pow(0.16, dt));
+        b.vx = clamp(b.vx, -W * 0.16, W * 0.34);
+        b.sx += b.vx * dt;
+        if (b.sx > XMAX) { b.sx = XMAX; if (b.vx > 0) b.vx *= 0.4; }
+
+        b.wingV += (held ? -2 : 0);
+        b.wing += b.wingV * dt;
+        b.wingV += (0 - b.wing) * 92 * dt;
+        b.wingV *= Math.pow(0.02, dt);
+        b.graze = Math.max(0, b.graze - dt * 1.6);
+
+        // Three-frame positional lag on the tendrils.
+        b.trail.unshift({ x: b.sx, y: band.top + b.n * U });
+        if (b.trail.length > 7) b.trail.pop();
+
+        if (phase === "play") {
+          b.dist = (camX + b.sx - HOME) / U * 8;
+          if (b.dist > b.best) b.best = b.dist;
+          if (b.best > b.milestone + 250) {
+            b.milestone = Math.floor(b.best / 250) * 250;
+            sound.sting("coin");
+          }
+        }
+
+        if (b.n < -0.2 || b.n > 1.2) { kill(b, "CRUSHED"); continue; }
+        const c = collide(b, t);
+        if (c) kill(b, c);
+      }
+
+      // Particles.
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.t += dt;
+        if (p.t >= p.life) { particles.splice(i, 1); continue; }
+        if (p.k === "shard" || p.k === "puff") {
+          p.x += p.vx * dt; p.y += p.vy * dt;
+          p.vy += U * 3.4 * dt;
+          p.vx -= scroll * dt * 0.55;
+          if (p.k === "shard") p.rot += p.spin * dt;
+        }
+      }
+
+      // Dust motes drift with the cave and bob.
+      for (const m of motes) {
+        m.x -= scroll * m.sp * dt;
+        if (m.x < -6) { m.x = W + 6; m.y = hf(Math.floor(now()) % 9973, 419) * H; }
+        m.bob += m.bobF * dt;
+      }
+
+      if (shake > 0.01) shake *= Math.pow(0.0009, dt);
+      if (flash > 0) flash = Math.max(0, flash - dt * 3.4);
+      if (hourFade < 1) hourFade = Math.min(1, hourFade + dt * 0.7);
+
+      if (phase === "play") {
+        const alive = birds.filter((b) => b.alive);
+        roundBest = Math.max(roundBest, ...birds.map((b) => b.best));
+        const nextHour = Math.min(HOURS.length - 1, Math.floor(roundBest / 320)) % HOURS.length;
+        if (nextHour !== hourIdx) { hourPrev = hourIdx; hourIdx = nextHour; hourFade = 0; sound.sting("powerup"); }
+        sound.heat(clamp(elapsed / 70 + (alive.length === 1 ? 0.35 : 0), 0, 1));
+        if (alive.length === 0) endRound();
+      }
+    }
+    // Holding resets the flap phase so the first flap of a press is instant.
+    function per_reset() { return 1 / FLAP_HZ; }
+
+    /* ===============================================================
+     * ROUND FLOW
+     * ============================================================= */
+    let claimUntil = 0, countFrom = 0;
+
+    function beginFlight() {
+      resetWorld((Math.random() * 100000) | 0);
+      phase = "claim";
+      claimUntil = now() + 3600;
+      shell.el("title").style.display = "none";
+      shell.el("over").style.display = "none";
+      paintHud();
+    }
+
+    function startCountdown() {
+      phase = "countdown";
+      countFrom = now();
+      sound.sting("success");
+    }
+
+    function goLive() {
+      phase = "play";
+      elapsed = 0;
+      for (const b of birds) b.hatch = 1;
+      ctx.platform.start({ players: settings.players, difficulty: DIFF[settings.diff].name });
+      sound.sting("powerup");
+    }
+
+    async function endRound() {
+      phase = "over";
+      overAt = now();
+      // Last one flying: whoever got furthest. Ties go to the lower seat, which
+      // only happens if two creatures die in the same frame at the same x.
+      let w = 0;
+      for (let i = 1; i < birds.length; i++) if (birds[i].best > birds[w].best) w = i;
+      winner = w;
+      const flight = Math.round(Math.max(...birds.map((b) => b.best)));
+      roundBest = flight;
+      sound.duck(0.6, 500);
+      sound.sting("win");
+      sound.haptic("heavy");
+      flash = 1;
+
+      const fresh = flight > settings.best;
+      if (fresh) { settings.best = flight; save(); }
+
+      shell.el("over-who").textContent = CREW[w].name + " FLEW FURTHEST";
+      shell.el("over-who").style.color = CREW[w].ink;
+      shell.el("over-dist").textContent = fmt(flight);
+      shell.el("over-note").textContent = fresh ? "A NEW BEST FLIGHT" : "BEST FLIGHT " + fmt(settings.best) + " M";
+      shell.el("over-list").innerHTML = birds
+        .map((b, i) => ({ b, i }))
+        .sort((a, c) => c.b.best - a.b.best)
+        .map(({ b, i }) =>
+          '<div style="display:flex;align-items:center;gap:9px;padding:7px 0;' +
+            'border-bottom:1px solid rgba(255,255,255,0.06);">' +
+            '<span style="width:9px;height:9px;border-radius:50%;background:' + CREW[i].ink +
+              ';box-shadow:0 0 10px ' + CREW[i].ink + ';flex:none;"></span>' +
+            '<span style="flex:1;font-family:' + DISP + ';font-size:17px;letter-spacing:0.13em;' +
+              'color:' + CREW[i].ink + ';">' + esc(CREW[i].name) + '</span>' +
+            '<span style="font-size:10.5px;letter-spacing:0.18em;opacity:0.42;">' + esc(b.cause || "OUT") + '</span>' +
+            '<span style="font-family:' + DISP + ';font-size:19px;letter-spacing:0.06em;width:62px;' +
+              'text-align:right;">' + fmt(Math.round(b.best)) + '</span>' +
+          '</div>').join("");
+      shell.el("over").style.display = "flex";
+
+      ctx.platform.setScore(flight);
+      ctx.platform.complete({ winner: w + 1, metres: flight, players: settings.players });
+      // The record is a property of the FLIGHT — how far this cave let this
+      // group of people get — not of whichever of them happened to hold on
+      // longest. That is the honest number for a game played on one phone.
+      try { await ctx.memory.record("furthest_flight").submit(flight, { label: flight + " m" }); }
+      catch (_) { /* offline is fine; the flight still happened */ }
+    }
+
+    const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+    /* ===============================================================
+     * RENDER
+     * ============================================================= */
+    const sampleC = [], sampleF = [];
+    const SAMPLE_STEP = 7;
+
+    function drawFrame(t) {
+      const dpr = Math.min(ctx.dpr || 1, 3);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.save();
+      if (shake > 0.02) g.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+
+      /* --- sky ------------------------------------------------------- */
+      const sky = skyFor(hourIdx);
+      if (sky) {
+        if (hourFade < 1) {
+          const prev = skyFor(hourPrev);
+          if (prev) g.drawImage(prev, 0, 0, W, H);
+          g.globalAlpha = hourFade;
+          g.drawImage(sky, 0, 0, W, H);
+          g.globalAlpha = 1;
+        } else {
+          g.drawImage(sky, 0, 0, W, H);
+        }
+      } else {
+        paintSky(g, HOURS[hourIdx], W, H);              // no OffscreenCanvas: live
+      }
+
+      // The sky breathes: the primary bloom swells and fades by a few percent
+      // at a quarter hertz, so a static camera still feels alive.
+      const hour = HOURS[hourIdx];
+      const br = hour.blooms[0];
+      bloom(W * br.x, H * br.y, H * br.r * (0.52 + 0.02 * Math.sin(t * 1.6)),
+            hour.ray, 0.055 + 0.022 * Math.sin(t * 1.6));
+
+      /* --- parallax forest ------------------------------------------- */
+      const alphas = [0.30, 0.52, 0.80];
+      const rates = [0.05, 0.12, 0.24];
+      for (let i = 0; i < 3; i++) {
+        const off = -((camX * rates[i]) % W);
+        g.globalAlpha = alphas[i];
+        if (forest[i]) {
+          g.drawImage(forest[i], off, 0, W, H);
+          g.drawImage(forest[i], off + W, 0, W, H);
+        }
+        g.globalAlpha = 1;
+      }
+
+      /* --- drifting fog band ----------------------------------------- */
+      const fy = H * (0.5 + 0.16 * Math.sin(t * 0.22));
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const fg = g.createLinearGradient(0, fy - H * 0.16, 0, fy + H * 0.16);
+      fg.addColorStop(0, rgba(hour.fog, 0));
+      fg.addColorStop(0.5, rgba(hour.fog, 0.075));
+      fg.addColorStop(1, rgba(hour.fog, 0));
+      g.fillStyle = fg;
+      g.fillRect(0, fy - H * 0.16, W, H * 0.32);
+      g.restore();
+
+      /* --- dust motes ------------------------------------------------ */
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      for (const m of motes) {
+        g.globalAlpha = m.a * (0.6 + 0.4 * Math.sin(m.bob));
+        g.fillStyle = rgba(hour.mote, 1);
+        g.beginPath();
+        g.arc(m.x, m.y + Math.sin(m.bob) * 5, m.r, 0, TAU);
+        g.fill();
+      }
+      g.restore();
+
+      /* --- profile sampled once, reused by every band ---------------- */
+      const cols = Math.ceil(W / SAMPLE_STEP) + 2;
+      for (let i = 0; i < cols; i++) {
+        profile((camX + i * SAMPLE_STEP) / U, _pf);
+        sampleC[i] = _pf[0]; sampleF[i] = _pf[1];
+      }
+
+      /* --- per-band: ghost numeral, rock, hazards, creature ---------- */
+      for (const band of bands) {
+        const b = birds[band.i];
+        const crew = CREW[band.i];
+        const dim = b && !b.alive && phase !== "title";
+
+        // The player's own distance, huge and ghosted, sitting in their own
+        // sky. Drawn before the rock so the cave silhouettes across it.
+        g.save();
+        g.globalAlpha = dim ? 0.10 : 0.15;
+        g.fillStyle = crew.ink;
+        g.font = "700 " + Math.round(U * 0.62) + "px " + DISP;
+        g.textAlign = "right";
+        g.textBaseline = "middle";
+        const label = phase === "title" ? crew.name : fmt(b ? Math.round(b.best) : 0);
+        g.fillText(label, W - U * 0.10, band.mid + U * 0.02);
+        g.restore();
+
+        // Rock: everything above the ceiling and below the floor, pure #000.
+        g.fillStyle = "#000";
+        g.beginPath();
+        g.moveTo(-4, band.top - 2);
+        for (let i = 0; i < cols; i++) g.lineTo(i * SAMPLE_STEP, band.top + sampleC[i] * U);
+        g.lineTo(W + 4, band.top - 2);
+        g.closePath();
+        g.fill();
+        g.beginPath();
+        g.moveTo(-4, band.bot + 2);
+        for (let i = 0; i < cols; i++) g.lineTo(i * SAMPLE_STEP, band.top + sampleF[i] * U);
+        g.lineTo(W + 4, band.bot + 2);
+        g.closePath();
+        g.fill();
+
+        // Boulders: a chain of tangent discs on a fixed world lattice, which
+        // is what makes the outline read as lumpy rock rather than a curve.
+        const cell = U * 0.55;
+        const i0 = Math.floor(camX / cell) - 1;
+        g.beginPath();
+        for (let k = 0; k <= Math.ceil(W / cell) + 2; k++) {
+          const idx = i0 + k;
+          const wx = idx * cell + hf(idx, 601) * cell * 0.7;
+          const sx = wx - camX;
+          if (sx < -U || sx > W + U) continue;
+          profile(wx / U, _pf);
+          const rr = U * (0.045 + hf(idx, 603) * 0.075);
+          const onCeil = hf(idx, 605) < 0.5;
+          const y = band.top + (onCeil ? _pf[0] * U - rr * 0.55 : _pf[1] * U + rr * 0.55);
+          g.moveTo(sx + rr, y);
+          g.arc(sx, y, rr, 0, TAU);
+        }
+        g.fill();
+
+        // Hazards, clipped to their own band so a floor-mounted blade can
+        // never poke into the neighbour's tunnel.
+        g.save();
+        g.beginPath();
+        g.rect(0, band.top, W, U);
+        g.clip();
+        for (const h of hazards) {
+          const sx = h.x - camX;
+          if (sx < -U * 1.6 || sx > W + U * 1.6) continue;
+          drawHazard(hazardAt(h, t, band), hour, dim);
+        }
+        g.restore();
+
+        // The wall: black, wavy-edged, glowing in its owner's colour. It is
+        // the lethal boundary and the place the thumb rests, both at once.
+        drawWall(band, crew, b, t, dim);
+
+        if (b) drawBird(b, band, crew, t, dim);
+
+        if (dim) {
+          g.save();
+          g.globalCompositeOperation = "multiply";
+          g.fillStyle = "rgba(0,0,0,0.55)";
+          g.fillRect(0, band.top, W, U);
+          g.restore();
+          g.save();
+          g.globalAlpha = 0.55;
+          g.fillStyle = crew.ink;
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          tracked(g, "OUT · " + b.cause, W * 0.52, band.mid, Math.min(15, U * 0.11), 3.2);
+          g.restore();
+        }
+      }
+
+      /* --- particles -------------------------------------------------- */
+      for (const p of particles) {
+        const k = 1 - p.t / p.life;
+        if (p.k === "flash") {
+          bloom(p.x, p.y, p.r * (1 + (1 - k) * 2.4), [255, 255, 246], k * 0.85);
+          bloom(p.x, p.y, p.r * (0.6 + (1 - k) * 1.6), p.col, k * 0.5);
+        } else if (p.k === "shard") {
+          g.save();
+          g.translate(p.x, p.y);
+          g.rotate(p.rot);
+          g.fillStyle = "#000";
+          g.globalAlpha = Math.min(1, k * 1.6);
+          g.beginPath();
+          g.moveTo(-p.r, -p.r * 0.5); g.lineTo(p.r * 1.2, 0); g.lineTo(-p.r * 0.7, p.r * 0.8);
+          g.closePath(); g.fill();
+          g.restore();
+        } else {
+          g.globalAlpha = k * 0.5;
+          g.fillStyle = "#000";
+          g.beginPath(); g.arc(p.x, p.y, p.r * k, 0, TAU); g.fill();
+          g.globalAlpha = 1;
+        }
+      }
+
+      /* --- cave mouth: an irregular organic band top and bottom ------- */
+      caveFrame(t);
+
+      /* --- claim / countdown prompts ---------------------------------- */
+      if (phase === "claim") drawClaim(t);
+      if (phase === "countdown") drawCount(t);
+      if (phase === "play" && birds.filter((x) => x.alive).length === 1 && birds.length > 1) {
+        const b = birds.find((x) => x.alive);
+        g.save();
+        g.globalAlpha = 0.42 + 0.24 * Math.sin(t * 5);
+        g.fillStyle = CREW[b.i].ink;
+        g.textAlign = "center"; g.textBaseline = "top";
+        tracked(g, "LAST WING", W / 2, PLAY_TOP + 6, 13, 5);
+        g.restore();
+      }
+
+      /* --- grain, vignette -------------------------------------------- */
+      if (grain) {
+        g.save();
+        g.globalAlpha = 0.5;
+        g.drawImage(grain, -5 + ((t * 37) % 9), -5 + ((t * 53) % 9));
+        g.restore();
+      }
+      const vg = g.createRadialGradient(W * 0.5, H * 0.48, H * 0.18, W * 0.5, H * 0.5, H * 0.78);
+      vg.addColorStop(0, "rgba(0,0,0,0)");
+      vg.addColorStop(0.62, "rgba(0,0,0,0.34)");
+      vg.addColorStop(1, "rgba(0,0,0,0.86)");
+      g.fillStyle = vg;
+      g.fillRect(0, 0, W, H);
+
+      if (flash > 0) {
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.globalAlpha = flash * 0.20;
+        g.fillStyle = "#fff";
+        g.fillRect(0, 0, W, H);
+        g.restore();
+      }
+      g.restore();
+    }
+
+    /** Heading type with manual tracking — canvas has no letterSpacing. */
+    function tracked(t, text, x, y, size, track) {
+      t.font = "700 " + size + "px " + DISP;
+      const chars = String(text).split("");
+      let total = 0;
+      for (const c of chars) total += t.measureText(c).width + track;
+      total -= track;
+      let cx = t.textAlign === "center" ? x - total / 2 : t.textAlign === "right" ? x - total : x;
+      const al = t.textAlign;
+      t.textAlign = "left";
+      for (const c of chars) { t.fillText(c, cx, y); cx += t.measureText(c).width + track; }
+      t.textAlign = al;
+      return total;
+    }
+
+    /* --- hazards ---------------------------------------------------- */
+    function drawHazard(s, hour, dim) {
+      // Every hazard gets a light behind it. Pure black on a dark palette can
+      // vanish on a dim screen, and a blade you cannot see is not a hazard,
+      // it is a bug.
+      const glow = dim ? 0.05 : 0.14;
+      if (s.kind === "saw") {
+        bloom(s.x, s.y, s.r * 2.5, hour.ray, glow);
+        g.save();
+        g.translate(s.x, s.y);
+        g.rotate(s.a);
+        g.fillStyle = "#000";
+        g.beginPath();
+        const teeth = 20;
+        for (let i = 0; i < teeth; i++) {
+          const a0 = (i / teeth) * TAU;
+          const a1 = ((i + 0.5) / teeth) * TAU;
+          const a2 = ((i + 1) / teeth) * TAU;
+          const rk = s.r * 1.30, rake = 0.13;
+          if (i === 0) g.moveTo(Math.cos(a0) * s.r, Math.sin(a0) * s.r);
+          else g.lineTo(Math.cos(a0) * s.r, Math.sin(a0) * s.r);
+          g.lineTo(Math.cos(a1 - rake) * rk, Math.sin(a1 - rake) * rk);
+          g.lineTo(Math.cos(a2) * s.r, Math.sin(a2) * s.r);
+        }
+        g.closePath();
+        g.fill();
+        // Three faint inner cutouts — the only interior detail anything gets.
+        g.strokeStyle = "#141414";
+        g.lineWidth = Math.max(1.2, s.r * 0.055);
+        for (const f of [0.34, 0.54, 0.74]) {
+          g.beginPath();
+          g.arc(0, 0, s.r * f, 0.5, 0.5 + TAU * 0.72);
+          g.stroke();
+        }
+        g.fillStyle = "#000";
+        g.beginPath(); g.arc(0, 0, s.r * 0.20, 0, TAU); g.fill();
+        g.restore();
+        return;
+      }
+      if (s.kind === "rotor") {
+        bloom(s.x, s.y, s.len * 1.5, hour.ray, glow * 0.8);
+        // Mast back to the rock, so the hub is bolted to something.
+        g.strokeStyle = "#000";
+        g.lineWidth = s.w * 0.85;
+        g.lineCap = "round";
+        g.beginPath();
+        g.moveTo(s.x, s.y);
+        g.lineTo(s.x, Math.abs(s.y - s.ceilY) < Math.abs(s.y - s.floorY) ? s.ceilY - 2 : s.floorY + 2);
+        g.stroke();
+        g.save();
+        g.translate(s.x, s.y);
+        g.rotate(s.a);
+        g.fillStyle = "#000";
+        for (let k = 0; k < s.blades; k++) {
+          g.save();
+          g.rotate((k / s.blades) * TAU);
+          g.beginPath();
+          g.moveTo(0, -s.w * 1.05);
+          g.quadraticCurveTo(s.len * 0.72, -s.w * 1.5, s.len, -s.w * 0.42);
+          g.lineTo(s.len, s.w * 0.42);
+          g.quadraticCurveTo(s.len * 0.72, s.w * 1.5, 0, s.w * 1.05);
+          g.closePath();
+          g.fill();
+          g.restore();
+        }
+        g.beginPath(); g.arc(0, 0, s.w * 1.5, 0, TAU); g.fill();
+        g.strokeStyle = "#141414";
+        g.lineWidth = Math.max(1, s.w * 0.3);
+        g.beginPath(); g.arc(0, 0, s.w * 0.85, 0, TAU); g.stroke();
+        g.restore();
+        return;
+      }
+      if (s.kind === "crusher") {
+        bloom(s.x + s.w / 2, s.y + s.h * 0.5, s.w * 1.5, hour.ray, glow);
+        g.fillStyle = "#000";
+        // A slab with a lumpy leading face — machinery here is hard-edged but
+        // the rock it is bolted into is not.
+        const r = Math.min(s.w * 0.22, s.h * 0.4);
+        const yTop = s.y, yBot = s.y + s.h;
+        g.beginPath();
+        g.moveTo(s.x, yTop);
+        g.lineTo(s.x + s.w, yTop);
+        g.lineTo(s.x + s.w, yBot - r);
+        g.quadraticCurveTo(s.x + s.w, yBot, s.x + s.w - r, yBot);
+        g.lineTo(s.x + r, yBot);
+        g.quadraticCurveTo(s.x, yBot, s.x, yBot - r);
+        g.closePath();
+        g.fill();
+        // Teeth on the crushing face.
+        const tn = Math.max(3, Math.round(s.w / 10));
+        g.beginPath();
+        for (let i = 0; i < tn; i++) {
+          const x0 = s.x + (i / tn) * s.w, x1 = s.x + ((i + 1) / tn) * s.w;
+          const dir = s.h >= 0 ? 1 : -1;
+          g.moveTo(x0, yBot);
+          g.lineTo((x0 + x1) / 2, yBot + dir * s.w * 0.10);
+          g.lineTo(x1, yBot);
+        }
+        g.fill();
+        if (s.arming) {
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          g.globalAlpha = 0.5;
+          g.strokeStyle = "#FFFFF4";
+          g.lineWidth = 1.2;
+          g.setLineDash([5, 6]);
+          g.beginPath();
+          g.moveTo(s.x + s.w / 2, s.y + s.h);
+          g.lineTo(s.x + s.w / 2, s.y + s.h + s.w * 1.5);
+          g.stroke();
+          g.setLineDash([]);
+          g.restore();
+        }
+        return;
+      }
+      // Spikes: a row of needles growing out of the rock.
+      bloom(s.x + s.w / 2, s.y, s.w * 0.8, hour.ray, glow * 0.7);
+      g.fillStyle = "#000";
+      const n = Math.max(3, Math.round(s.w / (s.h * 0.85)));
+      g.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x0 = s.x + (i / n) * s.w, x1 = s.x + ((i + 1) / n) * s.w;
+        const dir = s.up ? -1 : 1;
+        g.moveTo(x0, s.y);
+        g.lineTo((x0 + x1) / 2, s.y + dir * s.h);
+        g.lineTo(x1, s.y);
+      }
+      g.fill();
+    }
+
+    /* --- the wall --------------------------------------------------- */
+    function drawWall(band, crew, b, t, dim) {
+      const held = b && b.held && phase !== "title";
+      const edge = WALL;
+      g.save();
+      g.beginPath();
+      g.rect(0, band.top, edge + 34, U);
+      g.clip();
+
+      // Black column with a slow organic wobble on its inner face.
+      g.fillStyle = "#000";
+      g.beginPath();
+      g.moveTo(0, band.top - 2);
+      const steps = 14;
+      for (let i = 0; i <= steps; i++) {
+        const p = i / steps;
+        const y = band.top + p * U;
+        const x = edge + Math.sin(p * 5.1 + t * 0.55 + band.i * 2.1) * 4.5
+                       + Math.sin(p * 11.3 + t * 0.31) * 2.2;
+        g.lineTo(x, y);
+      }
+      g.lineTo(0, band.bot + 2);
+      g.closePath();
+      g.fill();
+
+      // Rim light in the owner's colour: the only way to find your own band
+      // at a glance, and it flares the instant a finger lands on it.
+      g.globalCompositeOperation = "lighter";
+      const a = (dim ? 0.16 : held ? 0.95 : 0.42) * (0.86 + 0.14 * Math.sin(t * 2.2 + band.i));
+      const grd = g.createLinearGradient(edge - 3, 0, edge + 26, 0);
+      grd.addColorStop(0, rgba(crew.rgb, a));
+      grd.addColorStop(0.28, rgba(crew.rgb, a * 0.38));
+      grd.addColorStop(1, rgba(crew.rgb, 0));
+      g.fillStyle = grd;
+      g.fillRect(edge - 4, band.top, 32, U);
+      g.restore();
+
+      // Faint tint over the whole band, so the zone reads as owned without
+      // ever tinting a silhouette.
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const bg = g.createLinearGradient(0, 0, W, 0);
+      bg.addColorStop(0, rgba(crew.rgb, dim ? 0.012 : held ? 0.055 : 0.028));
+      bg.addColorStop(1, rgba(crew.rgb, 0));
+      g.fillStyle = bg;
+      g.fillRect(0, band.top, W, U);
+      g.restore();
+
+      // Hold chevrons on the pad, fading once the round is under way.
+      const hint = phase === "claim" || phase === "countdown" || (phase === "title");
+      if (hint && !dim) {
+        g.save();
+        g.globalAlpha = 0.30 + (held ? 0.45 : 0.22 * (0.5 + 0.5 * Math.sin(t * 3 + band.i)));
+        g.strokeStyle = crew.ink;
+        g.lineWidth = 2;
+        g.lineCap = "round";
+        for (let k = 0; k < 3; k++) {
+          const yy = band.mid + (k - 1) * 11;
+          g.beginPath();
+          g.moveTo(edge * 0.30, yy + 5);
+          g.lineTo(edge * 0.50, yy - 3);
+          g.lineTo(edge * 0.70, yy + 5);
+          g.stroke();
+        }
+        g.restore();
+      }
+    }
+
+    /* --- the creature ------------------------------------------------ */
+    function drawBird(b, band, crew, t, dim) {
+      if (!b.alive) return;
+      const x = b.sx, y = band.top + b.n * U;
+      const r = R_N * U;
+      const sp = Math.hypot(b.vx, b.vn * U);
+      const sq = 1 + clamp(sp / (U * 9), 0, 0.26);
+      const ang = Math.atan2(b.vn * U, Math.max(40, b.vx + scroll)) * 0.5;
+
+      // The eyes are the only colour anywhere in the play layer, so they get a
+      // real halo — an 8px eye still has to be findable at arm's length.
+      bloom(x, y, r * (3.1 + b.graze * 2.2), crew.rgb, (dim ? 0.10 : 0.34) + b.graze * 0.5);
+
+      g.save();
+      g.translate(x, y);
+      g.rotate(ang);
+      g.scale(sq, 1 / sq);
+
+      // Trailing tendrils, lagging three frames behind the body.
+      g.strokeStyle = "#000";
+      g.lineCap = "round";
+      for (let k = 0; k < 5; k++) {
+        const off = (k - 2) * r * 0.34;
+        const tail = b.trail[Math.min(b.trail.length - 1, 4)] || { x, y };
+        const dx = (tail.x - x) * 0.55 - 6, dy = (tail.y - y) * 0.55 + r * 1.5;
+        g.lineWidth = r * 0.30;
+        g.beginPath();
+        g.moveTo(off * 0.7, r * 0.55);
+        g.quadraticCurveTo(off + dx * 0.4, r * 1.1 + dy * 0.35, off * 0.6 + dx, r * 0.8 + dy);
+        g.stroke();
+      }
+
+      // Wings: two scalloped sheets that sweep on every flap.
+      const beat = clamp(b.wing, -1.2, 0.5);
+      for (const side of [-1, 1]) {
+        g.save();
+        g.scale(side, 1);
+        g.rotate(beat * 0.75);
+        g.fillStyle = "#000";
+        g.beginPath();
+        g.moveTo(r * 0.15, -r * 0.25);
+        g.quadraticCurveTo(r * 1.5, -r * 1.55, r * 2.35, -r * 0.55);
+        g.quadraticCurveTo(r * 2.05, -r * 0.10, r * 2.25, r * 0.30);
+        g.quadraticCurveTo(r * 1.75, r * 0.24, r * 1.60, r * 0.62);
+        g.quadraticCurveTo(r * 1.20, r * 0.30, r * 0.95, r * 0.66);
+        g.quadraticCurveTo(r * 0.55, r * 0.34, r * 0.15, r * 0.55);
+        g.closePath();
+        g.fill();
+        g.restore();
+      }
+
+      // Body: a fuzzy ball with a jagged fur fringe.
+      g.fillStyle = "#000";
+      g.beginPath();
+      const fringe = 30;
+      for (let i = 0; i <= fringe; i++) {
+        const a = (i / fringe) * TAU;
+        const rr = r * (i % 2 ? 1.16 : 0.97);
+        const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+        if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.closePath();
+      g.fill();
+
+      // Two antennae, curling forward.
+      g.strokeStyle = "#000";
+      g.lineWidth = r * 0.16;
+      for (const s2 of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(r * 0.25 * s2, -r * 0.75);
+        g.quadraticCurveTo(r * 0.85 * s2, -r * 1.75, r * 1.45 * s2, -r * 1.35);
+        g.stroke();
+      }
+
+      // Eyes.
+      g.restore();
+      g.save();
+      g.translate(x, y);
+      const look = clamp(b.vx / (W * 0.2), -1, 1);
+      for (const s2 of [-1, 1]) {
+        const ex = r * 0.40 * s2 + r * 0.20, ey = -r * 0.10;
+        bloom(ex, ey, r * 1.5, crew.rgb, dim ? 0.2 : 0.85);
+        g.globalAlpha = dim ? 0.35 : 1;
+        g.fillStyle = crew.ink;
+        g.beginPath();
+        g.ellipse(ex, ey, r * 0.29, r * 0.35, 0, 0, TAU);
+        g.fill();
+        g.fillStyle = "#FFFFF4";
+        g.beginPath();
+        g.arc(ex + look * r * 0.10, ey - r * 0.06, r * 0.10, 0, TAU);
+        g.fill();
+        g.globalAlpha = 1;
+      }
+      g.restore();
+    }
+
+    /* --- cave mouth -------------------------------------------------- */
+    function caveFrame(t) {
+      g.fillStyle = "#000";
+      for (const side of [0, 1]) {
+        const base = side ? PLAY_BOT + 5 : PLAY_TOP - 5;
+        const dir = side ? 1 : -1;
+        g.beginPath();
+        g.moveTo(-4, side ? H + 8 : -8);
+        for (let i = 0; i <= 46; i++) {
+          const p = i / 46, x = p * (W + 8) - 4;
+          const wob = 5.5 * Math.sin(i * 0.7 + side * 2.1) + 3 * Math.sin(i * 1.9 + 1.3)
+                    + 1.6 * Math.sin(i * 4.3 + t * 0.12);
+          g.lineTo(x, base + dir * (wob + 4));
+        }
+        g.lineTo(W + 4, side ? H + 8 : -8);
+        g.closePath();
+        g.fill();
+      }
+    }
+
+    /* --- claim + countdown ------------------------------------------- */
+    function drawClaim(t) {
+      const left = Math.max(0, claimUntil - now()) / 1000;
+      for (const band of bands) {
+        const b = birds[band.i], crew = CREW[band.i];
+        g.save();
+        g.textAlign = "left";
+        g.textBaseline = "middle";
+        g.globalAlpha = b.claimed ? 0.9 : 0.5 + 0.35 * Math.sin(t * 5 + band.i * 1.3);
+        g.fillStyle = crew.ink;
+        tracked(g, b.claimed ? crew.name + " READY" : "HOLD YOUR BAND",
+                WALL + 18, band.mid, Math.min(17, U * 0.13), 3.6);
+        g.restore();
+      }
+      g.save();
+      g.globalAlpha = 0.55;
+      g.fillStyle = HOURS[hourIdx].ink;
+      g.textAlign = "center";
+      g.textBaseline = "top";
+      tracked(g, "TAKING OFF IN " + Math.ceil(left), W / 2, PLAY_TOP + 6, 12, 4);
+      g.restore();
+    }
+
+    function drawCount(t) {
+      const el = (now() - countFrom) / 1000;
+      const n = 3 - Math.floor(el);
+      if (n <= 0) { goLive(); return; }
+      const f = el % 1;
+      // easeOutBack, so the numeral lands with weight rather than fading in.
+      const k = 1 - f;
+      const s = 1.6 - 0.6 * (1 + 2.7 * Math.pow(k, 3) - 3.7 * Math.pow(k, 2));
+      g.save();
+      g.globalAlpha = clamp(1 - f * 0.75, 0, 1);
+      g.translate(W / 2, (PLAY_TOP + PLAY_BOT) / 2);
+      g.scale(clamp(s, 0.2, 2), clamp(s, 0.2, 2));
+      g.fillStyle = HOURS[hourIdx].ink;
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.font = "700 96px " + DISP;
+      g.fillText(String(n), 0, 0);
+      g.restore();
+    }
+
+    /* ===============================================================
+     * OVERLAY
+     *
+     * One markup string on the runtime-owned root, handles queried back
+     * by [data-el]. The root is pointer-events:none — it is created after
+     * the canvas and therefore sits on top of it, so left solid it would
+     * swallow every hold meant for a band and the bit would animate
+     * beautifully while ignoring all four players.
+     * ============================================================= */
+    const SAFE_T = ctx.safeArea.top;
+    const btn = "pointer-events:auto;width:34px;height:34px;border-radius:11px;border:none;" +
+      "background:rgba(255,240,214,0.10);color:#FFEFCD;font-size:14px;line-height:1;" +
+      "font-family:inherit;padding:0;-webkit-tap-highlight-color:transparent;";
+    const bigBtn = (bg, fg) => "pointer-events:auto;width:100%;max-width:250px;padding:15px;border:none;" +
+      "border-radius:15px;font-family:" + DISP + ";font-size:19px;font-weight:700;letter-spacing:0.16em;" +
+      "background:" + bg + ";color:" + fg + ";margin-top:10px;-webkit-tap-highlight-color:transparent;";
+    const capLine = "font-size:10px;letter-spacing:0.26em;text-transform:uppercase;opacity:0.45;";
+    const panel = "position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;" +
+      "justify-content:center;background:rgba(4,7,10,0.92);z-index:70;padding:22px;";
+    const card = "max-width:330px;width:100%;background:rgba(14,18,20,0.98);border-radius:20px;" +
+      "padding:22px;border:1px solid rgba(255,240,214,0.10);";
+
+    const root = ctx.createRoot({ touchAction: "none" });
+    root.style.cssText += ";font-family:" + BODY + ";color:#FFEFCD;pointer-events:none;" +
+      "-webkit-font-smoothing:antialiased;";
+    root.innerHTML =
+      /* --- top chrome strip: distance, hour, buttons ------------------ */
+      '<div style="position:absolute;left:0;right:0;top:' + SAFE_T + 'px;height:' + CHROME_H + 'px;' +
+        'display:flex;align-items:center;justify-content:space-between;padding:0 12px;pointer-events:none;">' +
+        '<div style="display:flex;align-items:baseline;gap:6px;">' +
+          '<div data-el="dist" style="font-family:' + DISP + ';font-size:29px;font-weight:700;' +
+            'letter-spacing:0.05em;line-height:1;text-shadow:0 0 18px rgba(252,220,120,0.35);">0</div>' +
+          '<div style="' + capLine + 'opacity:0.5;">m</div>' +
+          '<div data-el="hour" style="' + capLine + 'margin-left:7px;">dawn</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<button data-el="mute" aria-label="Sound" style="' + btn + '">&#128266;</button>' +
+          '<button data-el="cog" aria-label="Settings" style="' + btn + '">&#9881;</button>' +
+          '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
+        '</div>' +
+      '</div>' +
+
+      /* --- title ------------------------------------------------------ */
+      '<div data-el="title" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
+        'flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:26px;' +
+        'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.86) 0%,rgba(4,7,10,0.42) 34%,' +
+        'rgba(4,7,10,0.42) 62%,rgba(4,7,10,0.92) 100%);">' +
+        '<div style="' + capLine + 'opacity:0.6;">Hold your band · fly or fall</div>' +
+        '<div style="font-family:' + DISP + ';font-size:70px;line-height:0.94;font-weight:700;' +
+          'letter-spacing:0.14em;margin:10px 0 2px 6px;background:linear-gradient(178deg,#FFF6DE 8%,#FCDC5A 44%,#FA6E1E 88%);' +
+          '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
+          'color:#FCDC5A;">DUSKWING</div>' +
+        '<div style="font-size:13.5px;line-height:1.6;opacity:0.66;max-width:264px;margin-top:8px;">' +
+          'The cave never stops. Hold your band to beat your wings, let go to fall, ' +
+          'and stay off the dark edge on your left.</div>' +
+        '<div style="' + capLine + 'margin-top:20px;">How many of you?</div>' +
+        '<div data-el="crew" style="display:flex;gap:9px;margin-top:9px;"></div>' +
+        '<button data-el="fly" style="' + bigBtn("linear-gradient(96deg,#FCDC5A,#FA6E1E)", "#180800") + '">TAKE FLIGHT</button>' +
+        '<div data-el="best" style="' + capLine + 'margin-top:14px;"></div>' +
+      '</div>' +
+
+      /* --- round over -------------------------------------------------- */
+      '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
+        'flex-direction:column;align-items:center;justify-content:center;z-index:55;padding:26px;' +
+        'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.94),rgba(4,7,10,0.80));">' +
+        '<div style="' + capLine + '">Flight ends</div>' +
+        '<div data-el="over-dist" style="font-family:' + DISP + ';font-size:78px;line-height:0.92;' +
+          'font-weight:700;letter-spacing:0.04em;margin-top:2px;">0</div>' +
+        '<div style="' + capLine + 'margin-top:-2px;">metres</div>' +
+        '<div data-el="over-who" style="font-family:' + DISP + ';font-size:22px;letter-spacing:0.16em;' +
+          'margin-top:14px;">—</div>' +
+        '<div data-el="over-list" style="width:100%;max-width:280px;margin-top:12px;"></div>' +
+        '<div data-el="over-note" style="' + capLine + 'margin-top:12px;"></div>' +
+        '<button data-el="again" style="' + bigBtn("linear-gradient(96deg,#FCDC5A,#FA6E1E)", "#180800") + '">FLY AGAIN</button>' +
+        '<button data-el="home" style="' + bigBtn("rgba(255,240,214,0.10)", "#FFEFCD") + 'margin-top:8px;">CHANGE CREW</button>' +
+      '</div>' +
+
+      /* --- settings ---------------------------------------------------- */
+      '<div data-el="cogp" style="' + panel + '">' +
+        '<div style="' + card + '">' +
+          '<div style="font-family:' + DISP + ';font-size:24px;letter-spacing:0.16em;margin-bottom:16px;">SETTINGS</div>' +
+          '<div style="' + capLine + '">Players</div>' +
+          '<div data-el="setcrew" style="display:flex;gap:7px;margin:8px 0 16px;"></div>' +
+          '<div style="' + capLine + '">The cave</div>' +
+          '<div data-el="setdiff" style="display:flex;gap:7px;margin:8px 0 16px;"></div>' +
+          '<div style="' + capLine + '">Sound</div>' +
+          '<div data-el="setmute" style="display:flex;gap:7px;margin:8px 0 4px;"></div>' +
+          '<button data-el="cogp-close" style="' + bigBtn("rgba(255,240,214,0.12)", "#FFEFCD") + 'max-width:none;">DONE</button>' +
+        '</div>' +
+      '</div>' +
+
+      /* --- how to play -------------------------------------------------- */
+      '<div data-el="helpp" style="' + panel + '">' +
+        '<div style="' + card + '">' +
+          '<div style="font-family:' + DISP + ';font-size:24px;letter-spacing:0.16em;margin-bottom:10px;">HOW TO FLY</div>' +
+          '<ul style="font-size:13.5px;line-height:1.7;opacity:0.86;padding-left:17px;margin:0;">' +
+            '<li>Lay the phone flat. Each of you takes one horizontal band — ' +
+              'player one has the bottom.</li>' +
+            '<li><b>Hold anywhere in your own band</b> and your creature beats its wings. ' +
+              'Let go and it falls. That is the only control.</li>' +
+            '<li>Rest your thumb on the glowing edge at the left of your band. ' +
+              'All four of you press at the same time.</li>' +
+            '<li>Flapping also carries you forward; falling lets the cave pull you back ' +
+              'toward that dark edge. <b>Touch it and you are gone.</b></li>' +
+            '<li>Saw blades, crushers, rotors and spikes kill on contact. So does the rock.</li>' +
+            '<li>Every band flies the <b>same</b> cave, so it is a fair race.</li>' +
+            '<li>Whoever flies furthest takes the round. The flight itself — the furthest ' +
+              'any of you got — goes to the global board.</li>' +
+          '</ul>' +
+          '<button data-el="helpp-close" style="' + bigBtn("rgba(255,240,214,0.12)", "#FFEFCD") + 'max-width:none;">GOT IT</button>' +
+        '</div>' +
+      '</div>';
+
+    const shell = {
+      el: (n) => root.querySelector('[data-el="' + n + '"]'),
+      tap: (node, fn) => {
+        if (!node) return;
+        ctx.listen(node, "pointerdown", (e) => e.stopPropagation());
+        ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
+      },
+    };
+
+    /** Pill rows, used by both the title picker and the settings panel. */
+    function pills(host, values, labels, get, set, colours) {
+      if (!host) return;
+      host.innerHTML = values.map((v, i) =>
+        '<button data-v="' + v + '" style="pointer-events:auto;flex:1;min-width:52px;padding:11px 0;border:none;' +
+        'border-radius:12px;font-family:' + DISP + ';font-size:17px;letter-spacing:0.12em;' +
+        '-webkit-tap-highlight-color:transparent;">' + esc(labels[i]) + '</button>').join("");
+      const paint = () => {
+        const kids = host.querySelectorAll("button");
+        for (let i = 0; i < kids.length; i++) {
+          const on = String(get()) === kids[i].dataset.v;
+          const c = colours ? colours[i] : "#FCDC5A";
+          kids[i].style.background = on ? "rgba(255,240,214,0.20)" : "rgba(255,240,214,0.07)";
+          kids[i].style.color = on ? c : "rgba(255,239,205,0.45)";
+          kids[i].style.boxShadow = on ? "inset 0 0 0 2px " + c : "none";
+        }
+      };
+      const kids = host.querySelectorAll("button");
+      for (let i = 0; i < kids.length; i++) {
+        shell.tap(kids[i], () => { set(values[i]); save(); paint(); sound.haptic("light"); });
+      }
+      paint();
+      return paint;
+    }
+
+    function rebuildForCrew() {
+      measure();
+      seedMotes();
+      bakeAll();
+      resetWorld(courseSeed || 1);
+    }
+
+    const paintCrew = pills(shell.el("crew"), [2, 3, 4], ["2", "3", "4"],
+      () => settings.players, (v) => { settings.players = v; rebuildForCrew(); paintSetCrew && paintSetCrew(); });
+    const paintSetCrew = pills(shell.el("setcrew"), [2, 3, 4], ["2", "3", "4"],
+      () => settings.players, (v) => { settings.players = v; rebuildForCrew(); paintCrew && paintCrew(); });
+    pills(shell.el("setdiff"), [0, 1, 2], ["GENTLE", "NORMAL", "BRUTAL"],
+      () => settings.diff, (v) => { settings.diff = v; });
+    const paintMute = pills(shell.el("setmute"), [0, 1], ["ON", "MUTED"],
+      () => (settings.mute ? 1 : 0), (v) => {
+        if (!!v !== settings.mute) { sound.toggle(); shell.el("mute").innerHTML = settings.mute ? "&#128263;" : "&#128266;"; }
+      });
+
+    shell.tap(shell.el("mute"), (e) => {
+      const m = sound.toggle();
+      const b = e.currentTarget || e.target;
+      b.innerHTML = m ? "&#128263;" : "&#128266;";
+      paintMute && paintMute();
+    });
+    if (settings.mute) shell.el("mute").innerHTML = "&#128263;";
+    shell.tap(shell.el("cog"), () => { shell.el("cogp").style.display = "flex"; });
+    shell.tap(shell.el("cogp-close"), () => { shell.el("cogp").style.display = "none"; });
+    shell.tap(shell.el("help"), () => { shell.el("helpp").style.display = "flex"; });
+    shell.tap(shell.el("helpp-close"), () => { shell.el("helpp").style.display = "none"; });
+
+    shell.tap(shell.el("fly"), async () => { await sound.unlock(); beginFlight(); });
+    shell.tap(shell.el("again"), async () => {
+      await sound.unlock();
+      beginFlight();
+      ctx.platform.interact({ type: "replay" });
+    });
+    shell.tap(shell.el("home"), () => {
+      phase = "title";
+      shell.el("over").style.display = "none";
+      shell.el("title").style.display = "flex";
+      resetWorld(courseSeed || 1);
+      paintHud();
+    });
+
+    function paintHud() {
+      shell.el("best").textContent = settings.best ? "BEST FLIGHT " + fmt(settings.best) + " M" : "NO FLIGHT LOGGED YET";
+    }
+    paintHud();
+
+    /* ===============================================================
+     * INPUT
+     *
+     * A pointer is bound to the band it landed in and keeps that band for
+     * its whole life; a band that already has a live finger ignores any
+     * further ones. Without both of those, a hand that drifts over a
+     * divider starts flying somebody else's creature and a player with two
+     * fingers down owns two bands — the pair of bugs that make a
+     * shared-screen game unplayable.
+     * ============================================================= */
+    const owners = new Map();                        // pointerId -> band index
+
+    ctx.listen(canvas, "pointerdown", (e) => {
+      const i = bandAt(e.offsetY);
+      if (i < 0) return;
+      const b = birds[i];
+      if (!b || b.held) return;                      // that band already has a hand on it
+      if (canvas.setPointerCapture) { try { canvas.setPointerCapture(e.pointerId); } catch (_) {} }
+      owners.set(e.pointerId, i);
+      b.held = true;
+      b.claimed = true;
+      if (phase === "play" || phase === "countdown") { flap(b, true); b.flapT = 0; }
+      else { sound.haptic("light"); }
+      if (phase === "claim") {
+        sound.sting("tap");
+        if (birds.every((x) => x.claimed)) claimUntil = Math.min(claimUntil, now() + 450);
+      }
+      sound.unlock();
+      ctx.platform.interact({ type: "hold", player: i + 1 });
+      e.preventDefault();
+    }, { passive: false });
+
+    const release = (e) => {
+      const i = owners.get(e.pointerId);
+      if (i === undefined) return;
+      owners.delete(e.pointerId);
+      if (birds[i]) birds[i].held = false;
+    };
+    ctx.listen(canvas, "pointerup", release);
+    ctx.listen(canvas, "pointercancel", release);
+    // A finger that slides out of its band keeps its band: the binding is made
+    // once, on the way down, and never revisited.
+    ctx.listen(canvas, "pointermove", (e) => { if (owners.has(e.pointerId)) e.preventDefault(); }, { passive: false });
+
+    /* ===============================================================
+     * FRAME
+     * ============================================================= */
+    let lastHour = -1, lastDist = -1;
+    ctx.onFrame((dtMs) => {
+      const dt = Math.min(dtMs, 46) / 1000;
+      const t = now() / 1000;
+
+      if (phase === "claim" && now() >= claimUntil) startCountdown();
+      step(dt, t);
+      drawFrame(t);
+
+      if (phase === "play") {
+        const d = Math.round(roundBest);
+        if (d !== lastDist) { lastDist = d; shell.el("dist").textContent = fmt(d); }
+        if (hourIdx !== lastHour) { lastHour = hourIdx; shell.el("hour").textContent = HOURS[hourIdx].id.toLowerCase(); }
+      } else if (phase === "title" && lastDist !== 0) {
+        lastDist = 0;
+        shell.el("dist").textContent = "0";
+        shell.el("hour").textContent = HOURS[hourIdx].id.toLowerCase();
+      }
+    });
+
+    /* --- resize ------------------------------------------------------ */
+    ctx.listen(window, "resize", () => {
+      if (ctx.width === W && ctx.height === H) return;
+      measure();
+      seedMotes();
+      bakeAll();
+    });
+
+    /* ===============================================================
+     * A read-only window onto the simulation, so the local harness can
+     * fly a real four-finger round and assert on where the creatures
+     * actually went. It exposes nothing the bit does not already draw.
+     * ============================================================= */
+    window.__DUSKWING__ = {
+      get phase() { return phase; },
+      // Transitions during which a hold is recorded but does not yet fly:
+      // a play script must poll this rather than sleep.
+      get busy() { return phase === "claim" || phase === "countdown" || (phase === "over" && now() - overAt < 400); },
+      get metres() { return Math.round(roundBest); },
+      get winner() { return winner; },
+      get players() { return settings.players; },
+      get best() { return settings.best; },
+      birds: () => birds.map((b) => ({
+        i: b.i, alive: b.alive, n: b.n, vn: b.vn, sx: b.sx, held: b.held,
+        best: Math.round(b.best), cause: b.cause,
+      })),
+      // Where a finger has to land to fly creature `i`.
+      zone: (i) => ({ x: Math.round(WALL * 0.5), y: Math.round(bands[i] ? bands[i].mid : 0) }),
+      layout: () => ({ W, H, U, PLAY_TOP, PLAY_BOT, WALL, bands: bands.map((b) => ({ top: b.top, bot: b.bot })) }),
+    };
+    ctx.onDestroy(() => { try { delete window.__DUSKWING__; } catch (_) {} });
+
+    // The first frame is drawn before ready(), so the host never shows a blank
+    // bit while the attract loop spins up.
+    ensureCourse(camX + W);
+    drawFrame(now() / 1000);
+    ctx.markVisualReady("cave drawn");
+    ctx.platform.ready();
+  },
+};
