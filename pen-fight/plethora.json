@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Pen Fight",
+  "description": "The desk game, with real physics. Two pens on a gold-inlaid table: flick yours to shove your rival's over the edge. Where you touch the pen is the whole game — catch it at the tip and it spins, catch it at the balance point and it drives straight. Friction is integrated along the pen so a sliding, spinning pen dies out of both at once, and a rigid pen hangs flat over the lip until its centre of mass crosses, then it goes. One flick almost never ends it; you walk them back over several exchanges and finish from close range.",
+  "tags": [
+    "3d",
+    "physics",
+    "game",
+    "duel",
+    "flick",
+    "skill",
+    "desk",
+    "arcade"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "win_streak": {
+        "label": "Round Streak",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

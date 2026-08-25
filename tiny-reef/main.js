@@ -112,6 +112,11 @@ window.plethoraBit = {
     }
 
     // ---- surfaces ----------------------------------------------------------
+    // Two runtime canvases: the reef backdrop, painted once and left alone, and
+    // the live layer cleared every frame on top of it. Layer order is creation
+    // order, so the backdrop has to come first.
+    const bgCanvas = ctx.createCanvas2D();
+    const bgCtx = bgCanvas.getContext("2d");
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
     const g = canvas.getContext("2d");
     const ui = ctx.createRoot({ touchAction: "manipulation" });
@@ -124,11 +129,9 @@ window.plethoraBit = {
     const baseLen = () => clamp(Math.min(W, H) * 0.115, 38, 88);
 
     // ---- scenery -----------------------------------------------------------
-    // Water, sand, rocks and coral never change, so they are painted once into
-    // an offscreen canvas and blitted each frame. Kelp, rays, motes and fish
-    // move, and are drawn live on top.
-    const bg = document.createElement("canvas");
-    const bgCtx = bg.getContext("2d");
+    // Water, sand, rocks and coral never change, so they are painted once onto
+    // the backdrop layer. Kelp, rays, motes and fish move, and are drawn live
+    // on the layer above.
     const sceneSeed = Math.floor(Math.random() * 1e9);
     let kelp = [];
     let motes = [];
@@ -152,11 +155,8 @@ window.plethoraBit = {
     }
 
     function buildScene() {
-      const dpr = ctx.dpr || 1;
-      bg.width = Math.max(1, Math.round(W * dpr));
-      bg.height = Math.max(1, Math.round(H * dpr));
-      bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const c = bgCtx;
+      c.clearRect(0, 0, W, H);
       const rnd = seeded(sceneSeed);
       const fy = floorY();
       // Décor is sized against the smaller viewport dimension, so a phone does
@@ -899,63 +899,141 @@ window.plethoraBit = {
       "justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation;transition:opacity 0.2s;" +
       "box-shadow:0 2px 12px rgba(0,0,0,0.32);";
 
-    function chip(label, aria) {
-      const b = document.createElement("button");
-      b.textContent = label;
-      b.setAttribute("aria-label", aria || label);
-      b.style.cssText = CHIP_CSS;
-      return b;
+    const chipHtml = (id, label, aria, extra) =>
+      '<button data-id="' + id + '" aria-label="' + aria + '" style="' + CHIP_CSS + (extra || "") + '">' + label + "</button>";
+
+    // Trait chips inside the designer.
+    const TCHIP =
+      "flex:0 0 auto;border-radius:12px;border:2px solid transparent;cursor:pointer;touch-action:manipulation;" +
+      "font:600 13px/1 " + FONT + ";color:#eaf6ff;background:rgba(255,255,255,0.10);" +
+      "min-height:38px;padding:0 12px;display:flex;align-items:center;justify-content:center;" +
+      "transition:transform 0.12s ease-out;";
+
+    function traitRowHtml(title, key, items, cell) {
+      let html = '<div style="margin-top:10px;">' +
+        '<div style="font:700 11px/1 ' + FONT + ';letter-spacing:0.09em;text-transform:uppercase;' +
+        'opacity:0.55;margin-bottom:7px;">' + title + "</div>" +
+        '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 3px;">';
+      items.forEach((item, i) => {
+        html += '<button data-trait="' + key + '" data-i="' + i + '" ' + cell(item) + "</button>";
+      });
+      return html + "</div></div>";
     }
 
-    const topBar = document.createElement("div");
-    topBar.style.cssText =
-      "position:absolute;left:12px;right:12px;top:calc(" + ctx.safeArea.top + "px + 12px);" +
-      "display:flex;gap:10px;align-items:center;pointer-events:none;";
-    ui.appendChild(topBar);
+    const BAR = "position:absolute;left:12px;right:12px;display:flex;pointer-events:none;";
 
-    const helpBtn = chip("?", "How it works");
-    const soundBtn = chip("♪", "Toggle sound");
-    const spacer = document.createElement("div");
-    spacer.style.cssText = "flex:1;";
-    const countChip = chip("🐠 —", "Fish in the reef — tap to look for new arrivals");
-    topBar.append(helpBtn, soundBtn, spacer, countChip);
+    // Chrome is declared as markup on the runtime-owned root and wired up by
+    // data-id. Every label here is a literal from this file — nothing from the
+    // shared world ever reaches innerHTML.
+    ui.innerHTML =
+      '<div style="' + BAR + "top:calc(" + ctx.safeArea.top + 'px + 12px);gap:10px;align-items:center;">' +
+        chipHtml("help", "?", "How it works") +
+        chipHtml("sound", "\u266a", "Toggle sound") +
+        '<div style="flex:1;"></div>' +
+        chipHtml("count", "\ud83d\udc20 \u2014", "Fish in the reef \u2014 tap to look for new arrivals",
+          "pointer-events:auto;") +
+      "</div>" +
+
+      // Centred rows rather than left:50% + translate, so long labels get the
+      // full container width instead of half of it and never wrap.
+      '<div style="' + BAR + "bottom:calc(" + ctx.safeArea.bottom + 'px + 26px);justify-content:center;">' +
+        '<button data-id="make" style="pointer-events:auto;white-space:nowrap;padding:14px 22px;border-radius:22px;' +
+        "border:none;cursor:pointer;touch-action:manipulation;font:700 16px/1 " + FONT + ";color:#04202f;" +
+        "background:linear-gradient(180deg,#8ff0d8,#37c8b0);" +
+        'box-shadow:0 6px 22px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.6);">\ud83c\udfa8 Make your fish</button>' +
+      "</div>" +
+
+      '<div style="' + BAR + "top:calc(" + ctx.safeArea.top + 'px + 66px);justify-content:center;">' +
+        '<div data-id="toast" style="opacity:0;transition:opacity 0.25s;padding:10px 16px;border-radius:16px;' +
+        "background:rgba(5,26,42,0.9);color:#eaf6ff;font:600 14px/1.3 " + FONT + ";text-align:center;" +
+        'box-shadow:0 4px 18px rgba(0,0,0,0.4);"></div>' +
+      "</div>" +
+
+      // ---- designer sheet --------------------------------------------------
+      '<div data-id="sheetWrap" style="position:absolute;inset:0;display:none;align-items:center;' +
+      "justify-content:center;padding:16px;pointer-events:auto;opacity:0;transition:opacity 0.18s ease-out;" +
+      'background:rgba(3,18,30,0.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);">' +
+        '<div data-id="sheet" style="width:100%;max-width:360px;max-height:88%;overflow:auto;' +
+        "-webkit-overflow-scrolling:touch;padding:16px 16px calc(" + ctx.safeArea.bottom + "px + 16px);" +
+        "border-radius:24px;background:linear-gradient(180deg,rgba(12,48,74,0.98),rgba(6,26,44,0.98));" +
+        "color:#eaf6ff;font-family:" + FONT + ";box-shadow:0 16px 50px rgba(0,0,0,0.55);" +
+        'transform:scale(0.96);transition:transform 0.18s ease-out;">' +
+
+          '<canvas data-id="preview" style="width:100%;height:126px;display:block;border-radius:16px;' +
+          'background:rgba(4,40,64,0.75);"></canvas>' +
+
+          '<div style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;">' +
+            '<div data-id="name" style="flex:1;font:800 19px/1.2 ' + FONT + ';min-width:0;overflow:hidden;' +
+            'text-overflow:ellipsis;white-space:nowrap;"></div>' +
+            chipHtml("dice", "\ud83c\udfb2", "New name", "flex:0 0 auto;background:rgba(255,255,255,0.12);") +
+          "</div>" +
+
+          traitRowHtml("Body", "b", BODIES, (item) => 'style="' + TCHIP + '">' + item.label) +
+          traitRowHtml("Colour", "c", COLORS, (item) =>
+            'aria-label="' + item.label + '" style="' + TCHIP + "width:38px;padding:0;background:linear-gradient(140deg," +
+            item.a + "," + item.b + ');">') +
+          traitRowHtml("Pattern", "p", PATTERNS, (item) => 'style="' + TCHIP + '">' + item.label) +
+          traitRowHtml("Tail", "t", TAILS, (item) => 'style="' + TCHIP + '">' + item.label) +
+          traitRowHtml("Size", "s", SIZES, (item) => 'style="' + TCHIP + 'width:38px;padding:0;">' + item.label) +
+
+          '<div style="margin-top:12px;font:500 13px/1.45 ' + FONT + ';opacity:0.62;">' +
+          "Your fish joins the reef everyone shares. Come back and redesign it any time.</div>" +
+
+          '<div style="display:flex;gap:10px;margin-top:14px;">' +
+            '<button data-id="surprise" style="flex:0 0 auto;padding:14px 16px;border-radius:18px;border:none;' +
+            "cursor:pointer;touch-action:manipulation;font:700 15px/1 " + FONT + ";color:#eaf6ff;" +
+            'background:rgba(255,255,255,0.13);">\ud83c\udfb2 Surprise</button>' +
+            '<button data-id="release" style="flex:1;padding:14px 16px;border-radius:18px;border:none;' +
+            "cursor:pointer;touch-action:manipulation;font:800 16px/1 " + FONT + ";color:#04202f;" +
+            "background:linear-gradient(180deg,#8ff0d8,#37c8b0);" +
+            'box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);">Release \ud83d\udc20</button>' +
+          "</div>" +
+
+          '<div data-id="sheetMsg" style="margin-top:10px;font:600 13px/1.4 ' + FONT + ';color:#ffd27f;' +
+          'display:none;"></div>' +
+        "</div>" +
+      "</div>";
+
+    const el = (id) => ui.querySelector('[data-id="' + id + '"]');
+    const helpBtn = el("help");
+    const soundBtn = el("sound");
+    const countChip = el("count");
+    const makeBtn = el("make");
+    const toast = el("toast");
+    const sheetWrap = el("sheetWrap");
+    const sheet = el("sheet");
+    const preview = el("preview");
+    const pv = preview.getContext("2d");
+    const nameLabel = el("name");
+    const diceBtn = el("dice");
+    const surpriseBtn = el("surprise");
+    const releaseBtn = el("release");
+    const sheetMsg = el("sheetMsg");
+
+    const rows = ["b", "c", "p", "t", "s"].map((key) => ({
+      key: key,
+      nodes: Array.prototype.slice.call(sheet.querySelectorAll('[data-trait="' + key + '"]'))
+    }));
+
+    // One delegated handler for every trait chip.
+    ctx.listen(sheet, "click", (e) => {
+      const b = e.target && e.target.closest ? e.target.closest("[data-trait]") : null;
+      if (!b) return;
+      const key = b.getAttribute("data-trait");
+      const i = Number(b.getAttribute("data-i"));
+      draft[key] = i;
+      syncSheet();
+      tick("light");
+      ctx.platform.interact({ type: "design", trait: key, value: i });
+    });
+
+    ctx.listen(sheetWrap, "pointerdown", (e) => { if (e.target === sheetWrap) closeSheet(); });
 
     function refreshCount() {
       const n = fish.filter((f) => !f.wild).length;
-      countChip.textContent = reefOnline ? "🐠 " + n : "🐠 solo";
+      countChip.textContent = reefOnline ? "\ud83d\udc20 " + n : "\ud83d\udc20 solo";
     }
 
-    // Centred rows rather than left:50% + translate, so long labels get the
-    // full container width instead of half of it and never wrap.
-    const bottomBar = document.createElement("div");
-    bottomBar.style.cssText =
-      "position:absolute;left:12px;right:12px;bottom:calc(" + ctx.safeArea.bottom + "px + 26px);" +
-      "display:flex;justify-content:center;pointer-events:none;";
-    ui.appendChild(bottomBar);
-
-    const makeBtn = document.createElement("button");
-    makeBtn.style.cssText =
-      "pointer-events:auto;white-space:nowrap;" +
-      "padding:14px 22px;border-radius:22px;border:none;cursor:pointer;touch-action:manipulation;" +
-      "font:700 16px/1 " + FONT + ";color:#04202f;" +
-      "background:linear-gradient(180deg,#8ff0d8,#37c8b0);" +
-      "box-shadow:0 6px 22px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.6);";
-    makeBtn.textContent = "🎨 Make your fish";
-    bottomBar.appendChild(makeBtn);
-
-    const toastRow = document.createElement("div");
-    toastRow.style.cssText =
-      "position:absolute;left:12px;right:12px;top:calc(" + ctx.safeArea.top + "px + 66px);" +
-      "display:flex;justify-content:center;pointer-events:none;";
-    ui.appendChild(toastRow);
-
-    const toast = document.createElement("div");
-    toast.style.cssText =
-      "opacity:0;transition:opacity 0.25s;" +
-      "padding:10px 16px;border-radius:16px;background:rgba(5,26,42,0.9);color:#eaf6ff;" +
-      "font:600 14px/1.3 " + FONT + ";text-align:center;" +
-      "box-shadow:0 4px 18px rgba(0,0,0,0.4);";
-    toastRow.appendChild(toast);
     let toastToken = 0;
     function say(text) {
       toast.textContent = text;
@@ -963,111 +1041,6 @@ window.plethoraBit = {
       const mine = ++toastToken;
       ctx.timeout(() => { if (mine === toastToken) toast.style.opacity = "0"; }, 2600);
     }
-
-    // ---- designer sheet ----------------------------------------------------
-    const sheetWrap = document.createElement("div");
-    sheetWrap.style.cssText =
-      "position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:16px;" +
-      "pointer-events:auto;opacity:0;transition:opacity 0.18s ease-out;" +
-      "background:rgba(3,18,30,0.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);";
-    ui.appendChild(sheetWrap);
-
-    const sheet = document.createElement("div");
-    sheet.style.cssText =
-      "width:100%;max-width:360px;max-height:88%;overflow:auto;-webkit-overflow-scrolling:touch;" +
-      "padding:16px 16px calc(" + ctx.safeArea.bottom + "px + 16px);border-radius:24px;" +
-      "background:linear-gradient(180deg,rgba(12,48,74,0.98),rgba(6,26,44,0.98));color:#eaf6ff;" +
-      "font-family:" + FONT + ";box-shadow:0 16px 50px rgba(0,0,0,0.55);" +
-      "transform:scale(0.96);transition:transform 0.18s ease-out;";
-    sheetWrap.appendChild(sheet);
-    ctx.listen(sheetWrap, "pointerdown", (e) => { if (e.target === sheetWrap) closeSheet(); });
-
-    const preview = document.createElement("canvas");
-    preview.style.cssText = "width:100%;height:126px;display:block;border-radius:16px;background:rgba(4,40,64,0.75);";
-    sheet.appendChild(preview);
-    const pv = preview.getContext("2d");
-
-    const nameRow = document.createElement("div");
-    nameRow.style.cssText = "display:flex;align-items:center;gap:10px;margin:12px 0 4px;";
-    const nameLabel = document.createElement("div");
-    nameLabel.style.cssText = "flex:1;font:800 19px/1.2 " + FONT + ";min-width:0;overflow:hidden;" +
-      "text-overflow:ellipsis;white-space:nowrap;";
-    const diceBtn = chip("🎲", "New name");
-    diceBtn.style.cssText += "flex:0 0 auto;background:rgba(255,255,255,0.12);";
-    nameRow.append(nameLabel, diceBtn);
-    sheet.appendChild(nameRow);
-
-    const rows = [];
-    function traitRow(title, key, items, render) {
-      const wrap = document.createElement("div");
-      wrap.style.cssText = "margin-top:10px;";
-      const h = document.createElement("div");
-      h.textContent = title;
-      h.style.cssText = "font:700 11px/1 " + FONT + ";letter-spacing:0.09em;text-transform:uppercase;" +
-        "opacity:0.55;margin-bottom:7px;";
-      const strip = document.createElement("div");
-      strip.style.cssText = "display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 3px;";
-      const nodes = items.map((item, i) => {
-        const b = document.createElement("button");
-        b.style.cssText =
-          "flex:0 0 auto;border-radius:12px;border:2px solid transparent;cursor:pointer;touch-action:manipulation;" +
-          "font:600 13px/1 " + FONT + ";color:#eaf6ff;background:rgba(255,255,255,0.10);" +
-          "min-height:38px;padding:0 12px;display:flex;align-items:center;justify-content:center;" +
-          "transition:transform 0.12s ease-out;";
-        render(b, item, i);
-        ctx.listen(b, "click", () => {
-          draft[key] = i;
-          syncSheet();
-          tick("light");
-          ctx.platform.interact({ type: "design", trait: key, value: i });
-        });
-        strip.appendChild(b);
-        return b;
-      });
-      wrap.append(h, strip);
-      sheet.appendChild(wrap);
-      rows.push({ key: key, nodes: nodes });
-    }
-
-    traitRow("Body", "b", BODIES, (b, item) => { b.textContent = item.label; });
-    traitRow("Colour", "c", COLORS, (b, item) => {
-      b.setAttribute("aria-label", item.label);
-      b.style.width = "38px";
-      b.style.padding = "0";
-      b.style.background = "linear-gradient(140deg," + item.a + "," + item.b + ")";
-    });
-    traitRow("Pattern", "p", PATTERNS, (b, item) => { b.textContent = item.label; });
-    traitRow("Tail", "t", TAILS, (b, item) => { b.textContent = item.label; });
-    traitRow("Size", "s", SIZES, (b, item) => {
-      b.textContent = item.label;
-      b.style.width = "38px";
-      b.style.padding = "0";
-    });
-
-    const note = document.createElement("div");
-    note.style.cssText = "margin-top:12px;font:500 13px/1.45 " + FONT + ";opacity:0.62;";
-    note.textContent = "Your fish joins the reef everyone shares. Come back and redesign it any time.";
-    sheet.appendChild(note);
-
-    const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;gap:10px;margin-top:14px;";
-    const surpriseBtn = document.createElement("button");
-    surpriseBtn.textContent = "🎲 Surprise";
-    surpriseBtn.style.cssText =
-      "flex:0 0 auto;padding:14px 16px;border-radius:18px;border:none;cursor:pointer;touch-action:manipulation;" +
-      "font:700 15px/1 " + FONT + ";color:#eaf6ff;background:rgba(255,255,255,0.13);";
-    const releaseBtn = document.createElement("button");
-    releaseBtn.textContent = "Release 🐠";
-    releaseBtn.style.cssText =
-      "flex:1;padding:14px 16px;border-radius:18px;border:none;cursor:pointer;touch-action:manipulation;" +
-      "font:800 16px/1 " + FONT + ";color:#04202f;background:linear-gradient(180deg,#8ff0d8,#37c8b0);" +
-      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);";
-    actions.append(surpriseBtn, releaseBtn);
-    sheet.appendChild(actions);
-
-    const sheetMsg = document.createElement("div");
-    sheetMsg.style.cssText = "margin-top:10px;font:600 13px/1.4 " + FONT + ";color:#ffd27f;display:none;";
-    sheet.appendChild(sheetMsg);
 
     function syncSheet() {
       nameLabel.textContent = nameOf(draft);
@@ -1151,11 +1124,10 @@ window.plethoraBit = {
     });
 
     // ---- help --------------------------------------------------------------
-    const help = document.createElement("div");
-    help.style.cssText =
-      "position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:22px;" +
-      "pointer-events:auto;background:rgba(3,18,30,0.8);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);";
-    help.innerHTML =
+    ui.insertAdjacentHTML("beforeend",
+      '<div data-id="helpPanel" style="position:absolute;inset:0;display:none;align-items:center;' +
+      "justify-content:center;padding:22px;pointer-events:auto;background:rgba(3,18,30,0.8);" +
+      'backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);">' +
       '<div style="max-width:330px;color:#eaf6ff;font:400 15px/1.55 ' + FONT + ';">' +
       '<h2 style="font:800 22px/1.2 ' + FONT + ';margin-bottom:12px;">Tiny Reef</h2>' +
       '<ul style="list-style:none;display:grid;gap:9px;">' +
@@ -1166,8 +1138,8 @@ window.plethoraBit = {
       "<li>• Tap <b>🐠</b> up top to look for newly arrived fish.</li>" +
       "<li>• A few wild fish keep the reef company when it is quiet.</li>" +
       "</ul>" +
-      '<p style="margin-top:16px;opacity:0.65;">Tap anywhere to close.</p></div>';
-    ui.appendChild(help);
+      '<p style="margin-top:16px;opacity:0.65;">Tap anywhere to close.</p></div></div>');
+    const help = el("helpPanel");
     ctx.listen(help, "click", () => { help.style.display = "none"; });
     ctx.listen(helpBtn, "click", () => {
       help.style.display = help.style.display === "none" ? "flex" : "none";
@@ -1480,7 +1452,7 @@ window.plethoraBit = {
 
     const ordered = [];
     function paint(t, dt) {
-      g.drawImage(bg, 0, 0, W, H);
+      g.clearRect(0, 0, W, H);          // the backdrop layer shows through
       drawRays(t);
       drawKelp(t);
       drawMotes(dt);

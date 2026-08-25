@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Chameleon Hunt",
+  "description": "You are the Seeker. Hiders are camouflaged into the walls and furniture of five 3D arenas \u2014 spot them, tap them, beat the clock. Wrong accusations cost time. Unlock harder arenas, chase per-arena leaderboards, and listen for giggles when you get close.",
+  "tags": [
+    "3d",
+    "hide-and-seek",
+    "camouflage",
+    "seeker",
+    "arcade",
+    "mobile"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic",
+    "audio",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "living_room": {
+        "label": "Living Room Best",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "kitchen": {
+        "label": "Kitchen Best",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "bedroom": {
+        "label": "Bedroom Best",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "toy_store": {
+        "label": "Toy Store Best",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "museum": {
+        "label": "Museum Best",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

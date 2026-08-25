@@ -1,0 +1,89 @@
+# Chameleon Hunt 🦎
+
+A 1-player mobile 3D hide-and-seek game inspired by *Meccha Chameleon*. You
+are always the Seeker ("Denner"): AI hiders are camouflaged into the walls,
+floors, and furniture of five themed low-poly arenas. Spot them, tap them,
+and clear the arena before the clock runs out.
+
+## How it plays
+
+- **Left half of the screen** — dynamic touch joystick: forward, backward, strafe.
+- **Right half** — drag to look around (first-person camera).
+- **Tap** a suspicious shape to accuse it. Catching a hider triggers an
+  un-camouflage reveal: bright rainbow dance, confetti burst, victory jingle.
+  Misidentifying a piece of furniture costs **+6 seconds**.
+- Hiders clone the *exact material* (procedural texture + color) of the
+  surface they lean against, tinted slightly "off" by a per-difficulty
+  mismatch factor. Fairness tells: subtle sway and periodically blinking eyes.
+- A synthesized **whistle/giggle proximity cue** plays more often and louder
+  the closer you are to an undiscovered hider.
+
+## The five arenas
+
+| # | Arena | Difficulty | Find | Time | Size | Notes |
+|---|-------|-----------|------|------|------|-------|
+| 1 | Living Room | Very Easy | 3 | 2:30 | 24×18 | Sofas, shelves, ceiling fan, coat-rack decoy |
+| 2 | Kitchen & Dining | Easy | 4 | 3:15 | 26×18 | Pot rack, wine rack, sill herbs, cabinet-top perch |
+| 3 | Master Bedroom | Medium | 5 | 4:00 | 28×20 | Wardrobes, **hanging-clothes decoys**, laundry basket |
+| 4 | Toy Store | Hard | 6 | 5:00 | 32×22 | **Two floors**, running toy train, balloon-camo air hider |
+| 5 | Art Museum | Very Hard | 7 | 5:30 | 36×24 | Statue garden, a gold living-statue decoy, ceiling beams/spotlights, **two ceiling clingers + a floater** |
+
+Hiders use eleven poses — stand, crouch, sit, lie flat, ball, wall-flat,
+flush "relief" inside paintings, **plank (reads as a low bench), spread-eagle
+star, headstand (eyes at the bottom!), and a casual crossed-ankle lean** — in
+two body builds (boxy or soft ellipsoid) with tiny-to-giant size rolls, so
+no two silhouettes match. Later arenas hide in the air: a hider bobbing among toy-store
+balloons, one floating among the museum's suspended sculptures, one clinging
+to the museum ceiling, and ball-poses on top of shelves, cabinets and
+wardrobes. Every arena also contains **humanoid decoys**
+(display dolls, stone figures, hanging clothes, a draped coat rack) built
+from the same pose kit; accusing one costs time. Rooms are dressed with
+ambient motion (spinning fans, drifting dust, swaying curtains and pot
+racks, bobbing balloons, a flickering TV) so the hiders' subtle sway is not
+the only movement. Each arena defines a pool of **22+ hand-placed hide
+spots** (position, rotation, pose, backing surface). Every run randomly draws its target count
+from the pool, and the drawn set is guaranteed to differ from the previous
+run's set (persisted per arena).
+
+Arenas unlock in order: clearing arena *N* unlocks arena *N+1* (persisted).
+
+## Scoring & leaderboards
+
+- Completion time is the ranked metric (faster = better); score =
+  `found × 250 + remaining-time bonus`, reported via `ctx.platform.setScore`.
+- Wrong accusations cost **6s on arena 1 up to 12s on the museum**; the
+  proximity giggle also gets quieter and rarer on harder arenas, blinks
+  near-vanish, and idle sway drops to almost nothing.
+- **Platform leaderboards only** — Plethora already knows the player, so
+  wins auto-submit to five `memory.records` channels (`living_room`,
+  `kitchen`, `bedroom`, `toy_store`, `museum`; `duration_ms` / `asc` /
+  `timer` / `best_per_user`) with no name prompt. There is deliberately no
+  in-bit leaderboard UI — Plethora surfaces a leaderboard per bit already —
+  so the arena-select screen just shows your cached personal best.
+
+## Audio
+
+The runtime denies arbitrary network audio, so everything is generated:
+
+- **Background bed**: `ctx.music` presets per arena (cozy, lofi, drift,
+  bubble, spooky) at low volume, ducked on catches and wins.
+- **SFX**: WebAudio synthesis (`audio` permission) — catch fanfare, penalty
+  buzz, low-time tick, win/lose melodies, proximity whistle/giggle. Falls
+  back to `ctx.music.sting` names when WebAudio is unavailable.
+
+## Files
+
+- `plethora.json` — manifest (`plethora-bit@2`, `three@0.164.1`, permissions:
+  haptics, backgroundMusic, audio, storage; 5 record channels).
+- `main.js` — entire game, single file, defines `window.plethoraBit`.
+
+## Contract notes
+
+- First visible frame is the DOM menu; `ctx.platform.ready()` fires before
+  three.js streams in, `ctx.platform.start()` on the first real gesture.
+- All listeners via `ctx.listen`, frame loop via one `ctx.onFrame`, timers
+  via `ctx.timeout`, teardown via `ctx.onDestroy` (world dispose, music
+  stop, renderer + AudioContext close).
+- No packaged assets, no external URLs; textures are canvas-painted, sounds
+  synthesized. Controls respect `ctx.safeArea` and avoid the bottom edge
+  (the joystick anchors where the thumb lands).
