@@ -407,12 +407,17 @@ window.plethoraBit = {
       // parked in the spine. The hold bar is the last row and keeps those
       // coordinates on the handoff screen too, so the shutters can open under
       // a finger that is already down.
-      const R0 = L.spineY, R1 = H - SAFE_B, room = R1 - R0;
-      const rowH = Math.min(52, room * 0.30), gap = room * 0.075;
+      const R0 = L.spineY, R1 = H - SAFE_B - 4, room = R1 - R0;
+      // The chrome buttons sit in the spine at the top of this panel and the
+      // rule prints under them, so the two rows start below both — but never
+      // so far down that they run off the bottom of a short phone. This panel
+      // is canvas, so nothing in the DOM would report it if they did.
+      const rowH = Math.min(52, Math.max(38, room * 0.30));
+      const gap = Math.min(16, room * 0.075);
       const stack = rowH * 2 + gap;
-      const top = Math.max(R0 + 84, R0 + (room - stack) / 2);
+      const top = Math.min(Math.max(R0 + 84, R0 + (room - stack) / 2), R1 - stack);
       L.sm = {
-        ruleY: R0 + 62,
+        ruleY: Math.min(R0 + 62, top - 16),
         trans: { x: 14, y: top, w: W - 28, h: rowH },
         pad:   { x: 14, y: top + rowH + gap, w: W - 28, h: rowH },
       };
