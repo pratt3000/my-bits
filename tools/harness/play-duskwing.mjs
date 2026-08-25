@@ -63,10 +63,19 @@ check((await state()).birds.every((b) => b.held), "all four bands hold their own
 for (let i = 0; i < 60 && (await P(() => window.__DUSKWING__.busy)); i++) await bit.wait(100);
 check((await P(() => window.__DUSKWING__.phase)) === "play", "round went live");
 
-/* --- with all four held, all four climb ------------------------------ */
-await bit.wait(240);
-const climbing = (await state()).birds.map((b) => b.alive && b.vn < 0);
-check(climbing.every(Boolean), "all four creatures climb while all four are held: " + JSON.stringify(climbing));
+/* --- with all four held, all four climb ------------------------------
+ * A flap is a discrete impulse at 9.5Hz, not a thrust, so vertical velocity
+ * stair-steps across zero for the first few beats. Sampling once would read
+ * a creature that is very much climbing as falling — so take the minimum
+ * over a short window instead.
+ */
+const lift = [0, 0, 0, 0];
+for (let k = 0; k < 5; k++) {
+  const st = await state();
+  for (const b of st.birds) lift[b.i] = Math.min(lift[b.i], b.vn);
+  await bit.wait(70);
+}
+check(lift.every((v) => v < -0.15), "all four creatures climb while all four are held: " + JSON.stringify(lift.map((v) => v.toFixed(2))));
 
 /* --- lift three: only the remaining one should still be climbing ----- */
 for (const id of [1, 2, 3]) await bit.fingerUp(id);

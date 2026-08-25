@@ -342,16 +342,20 @@ window.plethoraBit = {
         // areas sets it, and the surplus becomes margin at the near edge.
         bandU: Math.max(110, bandH - Math.max(SAFE_T, SAFE_B)),
       };
-      // The spymaster's own controls own everything below the grid. The first
-      // 40px of that stays clear of the utility chrome parked in the spine.
+      // The spymaster's own controls own everything below the grid, in four
+      // full-width rows. The first 40px stays clear of the utility chrome
+      // parked in the spine. The hold bar is the last row and keeps those
+      // coordinates on the handoff screen too, so the shutters can open under
+      // a finger that is already down.
       const R0 = L.spineY, R1 = H - SAFE_B, room = R1 - R0;
+      const rowH = Math.min(40, room * 0.175), gap = room * 0.027;
+      const top = R0 + room * 0.19;
       L.sm = {
-        numLabelY: R0 + 22,
-        pills: { x: 10, y: R0 + 44, w: W - 20, h: Math.min(38, room * 0.17) },
-        chip:  { x: 12, y: R0 + 88, w: W - 24, h: Math.min(32, room * 0.15) },
-        pad:   { x: 62, y: R0 + room * 0.71, r: Math.min(34, room * 0.16) },
-        trans: { x: 112, y: R0 + room * 0.575, w: W - 126, h: Math.min(50, room * 0.23) },
-        padLabelY: R0 + room * 0.905,
+        numLabelY: R0 + room * 0.10,
+        pills: { x: 10, y: top, w: W - 20, h: rowH * 0.92 },
+        chip:  { x: 12, y: top + rowH + gap, w: W - 24, h: rowH * 0.86 },
+        trans: { x: 12, y: top + (rowH + gap) * 2, w: W - 24, h: rowH },
+        pad:   { x: 12, y: top + (rowH + gap) * 3, w: W - 24, h: rowH },
       };
       L.tileArt = null;   // cell size changed: every baked face is stale
     }
@@ -373,7 +377,6 @@ window.plethoraBit = {
       return r * 5 + c;
     }
     const inRect = (x, y, r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
-    const inCircle = (x, y, cx, cy, r) => (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r;
 
     /** Which physical edge a team is sitting at. */
     const seatOf = (team) =>
@@ -392,15 +395,24 @@ window.plethoraBit = {
       if (seat === "top") { g.translate(W, L.bandH); g.rotate(Math.PI); }
       else g.translate(0, H - L.bandH);
     }
-    /** The rows inside a band, in band-local coordinates. */
-    function bandRows() {
+    /**
+     * The rows inside a band, in band-local coordinates.
+     *
+     * Both bands use one height — the deeper of the two safe areas sets it —
+     * so the two teams get identical controls rather than one of them getting
+     * a taller balloon because their edge has no home indicator. The surplus
+     * at the shallower edge becomes margin, centred.
+     */
+    function bandRows(seat) {
       const s = L.bandU / 170;
+      const safe = seat === "top" ? SAFE_T : SAFE_B;
+      const off = Math.max(0, (L.bandH - safe - L.bandU) / 2);
       return {
-        hdr:     { x: 12, y: 2 * s, w: W - 24, h: 24 * s },
-        balloon: { x: 12, y: 30 * s, w: W - 24, h: 60 * s },
-        pips:    { x: 12, y: 94 * s, w: W - 24, h: 18 * s },
-        confirm: { x: 12, y: 118 * s, w: W - 24 - 106, h: 44 * s },
-        pass:    { x: W - 12 - 100, y: 118 * s, w: 100, h: 44 * s },
+        hdr:     { x: 12, y: off + 2 * s, w: W - 24, h: 24 * s },
+        balloon: { x: 12, y: off + 30 * s, w: W - 24, h: 60 * s },
+        pips:    { x: 12, y: off + 94 * s, w: W - 24, h: 18 * s },
+        confirm: { x: 12, y: off + 118 * s, w: W - 24 - 106, h: 44 * s },
+        pass:    { x: W - 12 - 100, y: off + 118 * s, w: 100, h: 44 * s },
       };
     }
 
@@ -536,23 +548,22 @@ window.plethoraBit = {
           gg.beginPath(); gg.moveTo(w * 0.5, h * 0.42);
           gg.lineTo(w * 0.5 + Math.cos(a) * w, h * 0.42 + Math.sin(a) * w); gg.stroke();
         }
-        gg.fillStyle = "rgba(42,7,9,0.92)";                  // hooded figure
-        gg.beginPath();
-        gg.moveTo(w * 0.14, h);
-        gg.bezierCurveTo(w * 0.18, h * 0.66, w * 0.32, h * 0.58, w * 0.36, h * 0.52);
-        gg.bezierCurveTo(w * 0.22, h * 0.40, w * 0.34, h * 0.16, w * 0.5, h * 0.16);
-        gg.bezierCurveTo(w * 0.66, h * 0.16, w * 0.78, h * 0.40, w * 0.64, h * 0.52);
-        gg.bezierCurveTo(w * 0.68, h * 0.58, w * 0.82, h * 0.66, w * 0.86, h);
-        gg.closePath(); gg.fill();
-        gg.save();                                            // rim light, left only
-        gg.beginPath(); gg.rect(0, 0, w * 0.5, h); gg.clip();
-        gg.strokeStyle = "#FFB86B"; gg.lineWidth = 1.5;
-        gg.beginPath();
-        gg.moveTo(w * 0.14, h);
-        gg.bezierCurveTo(w * 0.18, h * 0.66, w * 0.32, h * 0.58, w * 0.36, h * 0.52);
-        gg.bezierCurveTo(w * 0.22, h * 0.40, w * 0.34, h * 0.16, w * 0.5, h * 0.16);
-        gg.stroke();
+        // hooded figure, with the rim light as a lit copy offset up-left and
+        // then covered — stroking it would draw the interior seams too
+        const hood = (p) => {
+          p.beginPath();
+          p.moveTo(w * 0.16, h * 0.94);
+          p.bezierCurveTo(w * 0.20, h * 0.66, w * 0.32, h * 0.58, w * 0.36, h * 0.52);
+          p.bezierCurveTo(w * 0.22, h * 0.40, w * 0.34, h * 0.18, w * 0.5, h * 0.18);
+          p.bezierCurveTo(w * 0.66, h * 0.18, w * 0.78, h * 0.40, w * 0.64, h * 0.52);
+          p.bezierCurveTo(w * 0.68, h * 0.58, w * 0.80, h * 0.66, w * 0.84, h * 0.94);
+          p.closePath();
+        };
+        gg.save();
+        gg.translate(-1.8, -1.4);
+        gg.fillStyle = "#FFC98A"; hood(gg); gg.fill();
         gg.restore();
+        gg.fillStyle = "#2A0709"; hood(gg); gg.fill();
       } else if (kind === "blue") {
         const rg = gg.createRadialGradient(w * 0.45, h * 0.38, 2, w * 0.45, h * 0.38, w * 0.95);
         rg.addColorStop(0, "#7FB7E8"); rg.addColorStop(0.4, "#2E6BB4");
@@ -596,9 +607,6 @@ window.plethoraBit = {
         gg.globalAlpha = 1;
         gg.strokeStyle = "#6E7358"; gg.lineWidth = 1;
         gg.beginPath(); gg.arc(w * 0.5, h * 0.40, w * 0.16, 0, TAU); gg.stroke();
-        gg.fillStyle = "rgba(70,66,50,0.7)";
-        gg.font = "700 7px " + MONO; gg.textAlign = "center"; gg.textBaseline = "middle";
-        tracked(gg, "CIVILIAN", w / 2, h * 0.20, 1.4, "center");
       } else {                                                // assassin
         gg.fillStyle = "#0A0A0C"; gg.fillRect(0, 0, w, h);
         gg.save();                                            // a cone of light from above
@@ -618,24 +626,22 @@ window.plethoraBit = {
           gg2.bezierCurveTo(w * 0.70, h * 0.60, w * 0.84, h * 0.70, w * 0.88, h);
           gg2.closePath();
         };
-        gg.fillStyle = "#000"; path(gg); gg.fill();
-        gg.beginPath();                                       // head, then the brim over it
-        gg.ellipse(w * 0.5, h * 0.38, w * 0.13, h * 0.15, 0, 0, TAU);
-        gg.fill();
-        gg.beginPath(); gg.ellipse(w * 0.5, h * 0.30, w * 0.30, h * 0.045, 0, 0, TAU); gg.fill();
-        gg.beginPath();
-        gg.moveTo(w * 0.36, h * 0.30); gg.lineTo(w * 0.40, h * 0.15);
-        gg.lineTo(w * 0.60, h * 0.15); gg.lineTo(w * 0.64, h * 0.30);
-        gg.closePath(); gg.fill();
-        gg.save();                                            // cold rim, upper left only
-        gg.beginPath(); gg.rect(0, 0, w * 0.5, h); gg.clip();
-        gg.strokeStyle = RIM; gg.lineWidth = 1.2;
-        path(gg); gg.stroke();
-        gg.beginPath(); gg.ellipse(w * 0.5, h * 0.30, w * 0.30, h * 0.045, 0, 0, TAU); gg.stroke();
-        gg.beginPath();
-        gg.moveTo(w * 0.36, h * 0.30); gg.lineTo(w * 0.40, h * 0.15); gg.lineTo(w * 0.60, h * 0.15);
-        gg.stroke();
+        const head = (p) => { p.beginPath(); p.ellipse(w * 0.5, h * 0.38, w * 0.13, h * 0.15, 0, 0, TAU); };
+        const brim = (p) => { p.beginPath(); p.ellipse(w * 0.5, h * 0.30, w * 0.31, h * 0.05, 0, 0, TAU); };
+        const crown = (p) => {
+          p.beginPath();
+          p.moveTo(w * 0.36, h * 0.30); p.lineTo(w * 0.40, h * 0.14);
+          p.lineTo(w * 0.60, h * 0.14); p.lineTo(w * 0.64, h * 0.30);
+          p.closePath();
+        };
+        const bits = [path, head, brim, crown];
+        gg.save();                                            // cold rim, up and left
+        gg.translate(-1.6, -1.2);
+        gg.fillStyle = RIM;
+        for (const b of bits) { b(gg); gg.fill(); }
         gg.restore();
+        gg.fillStyle = "#000";
+        for (const b of bits) { b(gg); gg.fill(); }
       }
 
       // A covered card still has to be discussable, so the word survives on a
@@ -838,17 +844,21 @@ window.plethoraBit = {
       gg.closePath(); gg.fill();
     }
 
+    /** Score is two stacks of agent cards filling in — never a numeral. */
     function drawStack(gg, x, y, team, size) {
       const n = TEAM[team].agents, left = remaining(team);
       for (let i = 0; i < n; i++) {
-        const cx = x + i * (size + 3);
-        roundRect(gg, cx, y, size, size * 1.35, 2);
-        if (i < n - left) { gg.fillStyle = TEAM[team].ink; gg.fill(); }
-        else {
-          gg.fillStyle = "rgba(255,255,255,0.06)"; gg.fill();
-          gg.strokeStyle = "rgba(255,255,255,0.22)"; gg.lineWidth = 0.8; gg.stroke();
+        const cx = x + i * (size + 3.2);
+        roundRect(gg, cx, y, size, size * 1.4, 2);
+        if (i < n - left) {
+          gg.fillStyle = TEAM[team].ink; gg.fill();
+          gg.strokeStyle = TEAM[team].lit; gg.lineWidth = 0.7; gg.stroke();
+        } else {
+          gg.fillStyle = "rgba(255,255,255,0.05)"; gg.fill();
+          gg.strokeStyle = "rgba(255,255,255,0.18)"; gg.lineWidth = 0.8; gg.stroke();
         }
       }
+      return n * (size + 3.2);
     }
 
     function decoButton(gg, r, label, opts) {
@@ -873,21 +883,33 @@ window.plethoraBit = {
     function drawBand(team) {
       const seat = seatOf(team), active = team === turn && phase === "board";
       const coopBot = isCoop() && team === "blue";
-      const R = bandRows();
+      const R = bandRows(seat);
       g.save();
       bandTransform(seat);
 
       // lacquer slab
       chamferRect(g, 0, 0, W, L.bandH, 16);
-      g.fillStyle = "rgba(20,18,16,0.92)"; g.fill();
+      const lg = g.createLinearGradient(0, 0, 0, L.bandH);
+      lg.addColorStop(0, "rgba(28,25,21,0.95)");
+      lg.addColorStop(0.55, "rgba(17,15,13,0.96)");
+      lg.addColorStop(1, "rgba(9,8,7,0.98)");
+      g.fillStyle = lg; g.fill();
+      if (GRAIN) { g.save(); chamferRect(g, 0, 0, W, L.bandH, 16); g.clip();
+        g.globalAlpha = 0.35; g.fillStyle = GRAIN; g.fillRect(0, 0, W, L.bandH); g.restore(); }
       g.strokeStyle = "rgba(255,255,255,0.10)"; g.lineWidth = 1;
       g.beginPath(); g.moveTo(16, 0.5); g.lineTo(W, 0.5); g.stroke();
       g.fillStyle = TEAM[team].ink;                       // team hairline at the grid edge
-      g.globalAlpha = active ? 1 : 0.4;
+      g.globalAlpha = active ? 1 : 0.45;
       g.fillRect(0, 0, W, 2.5);
       g.globalAlpha = 1;
+      // a gold hairline along the near edge, so the panel has two sides
+      const R2 = bandRows(seat);
+      g.strokeStyle = active ? "rgba(255,194,28,0.30)" : "rgba(255,194,28,0.10)";
+      g.lineWidth = 1;
+      const nearY = Math.min(L.bandH - 6, R2.confirm.y + R2.confirm.h + 12);
+      g.beginPath(); g.moveTo(12, nearY); g.lineTo(W - 12, nearY); g.stroke();
 
-      g.globalAlpha = active ? 1 : 0.42;
+      g.globalAlpha = active ? 1 : 0.5;
 
       // header: team, agents left, the stack of agent cards
       g.fillStyle = TEAM[team].ink;
@@ -896,7 +918,7 @@ window.plethoraBit = {
       const nw = tracked(g, nm, R.hdr.x, R.hdr.y + R.hdr.h / 2, 3, "left");
       g.font = "400 9px " + MONO; g.fillStyle = "rgba(241,231,210,0.55)";
       tracked(g, remaining(team) + " LEFT", R.hdr.x + nw + 10, R.hdr.y + R.hdr.h / 2 + 1, 1, "left");
-      drawStack(g, W - 12 - (TEAM[team].agents * 9.6), R.hdr.y + 3, team, 7);
+      drawStack(g, W - 12 - (TEAM[team].agents * 10.2), R.hdr.y + 2, team, 7);
 
       // clue balloon
       const b = R.balloon;
@@ -1016,103 +1038,145 @@ window.plethoraBit = {
         g.strokeStyle = "rgba(255,194,28,0.25)"; g.lineWidth = 1;
         const ey = top ? y + half - 8.5 : y + 8.5;
         g.beginPath(); g.moveTo(0, ey); g.lineTo(W, ey); g.stroke();
+        // deco corner brackets, only once the shutter has actually landed
+        if (e > 0.96) {
+          g.strokeStyle = "rgba(255,194,28,0.45)"; g.lineWidth = 2;
+          const m = 14, len = 26, cy2 = top ? y + m + SAFE_T : y + half - m - SAFE_B;
+          for (const sx of [1, -1]) {
+            const x0 = sx > 0 ? m : W - m;
+            g.beginPath();
+            g.moveTo(x0 + sx * len, cy2); g.lineTo(x0, cy2);
+            g.lineTo(x0, cy2 + (top ? len : -len));
+            g.stroke();
+          }
+        }
       }
       g.restore();
     }
 
-    function handoffLine() {
-      if (isCoop()) return "PASS THE PHONE TO THE SPYMASTER";
-      return "PASS THE PHONE TO THE " + TEAM[turn].name + " SPYMASTER";
+    /** The two lines are decided before a character is typed, so the
+     *  instruction never reflows under the reader as it comes in. */
+    function handoffLines() {
+      if (isCoop()) return ["PASS THE PHONE", "TO THE SPYMASTER"];
+      return ["PASS THE PHONE TO THE", TEAM[turn].name + " SPYMASTER"];
     }
 
     function drawHandoff() {
-      const seat = seatOf(turn);
-      const line = handoffLine(), n = Math.min(line.length, Math.floor(typed));
+      const seat = seatOf(turn), lines = handoffLines();
+      const n = Math.floor(typed);
+      const s1 = lines[0].slice(0, n);
+      const s2 = n > lines[0].length ? lines[1].slice(0, n - lines[0].length) : "";
+      const done = n >= lines[0].length + lines[1].length;
+
       g.save();
       // Rotated to the seat of whoever is being handed the phone: they read it
       // while the phone is still flat on the table.
-      g.translate(W / 2, H * 0.36);
+      g.translate(W / 2, H * 0.33);
       if (seat === "top") g.rotate(Math.PI);
       g.textAlign = "center"; g.textBaseline = "middle";
 
-      g.fillStyle = TEAM[turn].ink;
-      g.font = "700 11px " + MONO;
-      tracked(g, isCoop() ? "OPERATION" : TEAM[turn].name + " TURN", 0, -52, 3.5, "center");
-
-      g.fillStyle = CREAM; g.font = "700 26px " + DISPLAY;
-      const words2 = line.slice(0, n).split(" ");
-      // Two lines, broken at the middle word, so it never runs off a narrow
-      // phone and never reflows as it types.
-      const mid = Math.ceil(words2.length / 2);
-      tracked(g, words2.slice(0, mid).join(" "), 0, -14, 2.5, "center");
-      tracked(g, words2.slice(mid).join(" "), 0, 16, 2.5, "center");
-      if (n < line.length && (Date.now() % 700) < 380) {
-        g.fillStyle = GOLD; g.fillRect(4, 6, 9, 2);
+      // rings in the receiving team's colour, well under the type
+      g.strokeStyle = TEAM[turn].ink;
+      for (let i = 0; i < 3; i++) {
+        g.globalAlpha = 0.14 - i * 0.035;
+        g.lineWidth = 1.5;
+        g.beginPath(); g.arc(0, 0, 96 + i * 34, 0, TAU); g.stroke();
       }
-      g.fillStyle = "rgba(241,231,210,0.5)"; g.font = "400 10px " + MONO;
-      tracked(g, "EVERYONE ELSE: EYES UP", 0, 52, 1.6, "center");
+      g.globalAlpha = 1;
+
+      g.fillStyle = TEAM[turn].ink;
+      g.font = "700 10px " + MONO;
+      tracked(g, (isCoop() ? "OPERATION" : TEAM[turn].name + " TURN") + "  ·  TRANSMISSION " + turnNo,
+              0, -62, 3, "center");
+
+      g.fillStyle = CREAM;
+      const size = Math.min(30, (W - 56) / Math.max(lines[0].length, lines[1].length) * 1.85);
+      g.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
+      tracked(g, s1, 0, -18, 2.4, "center");
+      g.fillStyle = n > lines[0].length ? TEAM[turn].ink : CREAM;
+      tracked(g, s2, 0, 16, 2.4, "center");
+
+      g.strokeStyle = "rgba(255,194,28,0.35)"; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(-58, 42); g.lineTo(58, 42); g.stroke();
+      g.fillStyle = "rgba(241,231,210,0.55)"; g.font = "400 9.5px " + MONO;
+      tracked(g, done ? "EVERYONE ELSE: EYES UP" : "", 0, 60, 1.6, "center");
       g.restore();
     }
 
-    /** Nine nested arcs and a sweeping progress ring — no asset, no image. */
+    /**
+     * The hold bar: a procedural fingerprint at one end, and the 700ms hold
+     * drawn as gold sweeping across the bar rather than as a ring, because a
+     * bar this wide is a far easier target for a thumb than a small disc — and
+     * it is the only control on the handoff screen.
+     */
     function drawPad() {
-      const p = L.sm.pad, held = holdOn;
+      const p = L.sm.pad;
       const prog = clamp(holdT / HOLD_MS, 0, 1);
-      const r = p.r + holdBounce;
-      g.save();
-      g.beginPath(); g.arc(p.x, p.y, r, 0, TAU);
-      g.fillStyle = held ? "rgba(255,194,28,0.14)" : "rgba(11,10,9,0.55)"; g.fill();
-      g.strokeStyle = held ? GOLD : "rgba(241,231,210,0.35)"; g.lineWidth = 1.4; g.stroke();
+      const b = holdBounce * 0.3;
+      const x = p.x - b, y = p.y - b, w = p.w + b * 2, h = p.h + b * 2;
 
       g.save();
-      g.beginPath(); g.arc(p.x, p.y, r - 5, 0, TAU); g.clip();
-      g.strokeStyle = peek ? "rgba(255,194,28,0.85)" : "rgba(241,231,210,0.55)";
-      g.lineWidth = 1.5;
+      chamferRect(g, x, y, w, h, 10);
+      g.fillStyle = "rgba(11,10,9,0.72)"; g.fill();
+      g.save();
+      chamferRect(g, x, y, w, h, 10); g.clip();
+      if (prog > 0) {                                    // the hold, sweeping across
+        g.fillStyle = peek ? "rgba(255,194,28,0.30)" : "rgba(255,194,28,0.18)";
+        g.fillRect(x, y, w * prog, h);
+        g.fillStyle = GOLD;
+        g.fillRect(x + w * prog - 2, y, 2, h);
+      }
+      g.restore();
+      g.strokeStyle = peek ? GOLD : "rgba(241,231,210,0.42)"; g.lineWidth = 1.6;
+      chamferRect(g, x, y, w, h, 10); g.stroke();
+      if (peek) glowRect(g, x, y, w, h, 10, GOLD, 7);
+
+      // fingerprint: nine nested arcs with a little random phase, no asset
+      const fx = x + h * 0.62, fy = y + h / 2, fr = h * 0.34;
+      g.save();
+      g.beginPath(); g.arc(fx, fy, fr + 2, 0, TAU); g.clip();
+      g.strokeStyle = peek ? "rgba(255,194,28,0.95)" : "rgba(241,231,210,0.62)";
+      g.lineWidth = 1.3;
       for (let i = 0; i < 9; i++) {
-        const rr = 4 + i * 3.6, ph = (i * 1.7) % TAU;
+        const rr = fr * (0.16 + i * 0.105), ph = (i * 1.7) % TAU;
         g.beginPath();
-        g.arc(p.x, p.y + i * 0.7, rr, ph, ph + 2.1 + (i % 3) * 0.5);
+        g.arc(fx, fy + i * 0.5, rr, ph, ph + 2.2 + (i % 3) * 0.4);
         g.stroke();
       }
       g.restore();
-
-      if (prog > 0) {
-        g.beginPath();
-        g.arc(p.x, p.y, r + 5, -Math.PI / 2, -Math.PI / 2 + TAU * prog);
-        g.strokeStyle = GOLD; g.lineWidth = 3; g.lineCap = "round"; g.stroke();
-        if (prog >= 1) glowArc(g, p.x, p.y, r + 5, GOLD, 7);
-      }
       g.restore();
 
-      // The label sits under the pad, not beside it: the pad has to keep the
-      // same coordinates on the handoff screen and the clue screen so the
-      // shutters can open under a finger that is already down, and the space
-      // to its right belongs to TRANSMIT.
-      g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = peek ? GOLD : "rgba(241,231,210,0.78)";
-      g.font = "700 11px " + DISPLAY;
-      tracked(g, peek ? "KEY EXPOSED" : "HOLD TO READ", p.x, L.sm.padLabelY, 1.6, "center");
+      g.textAlign = "left"; g.textBaseline = "middle";
+      g.fillStyle = peek ? GOLD : "rgba(241,231,210,0.8)";
+      g.font = "700 15px " + DISPLAY;
+      tracked(g, peek ? "KEY EXPOSED" : "HOLD TO READ THE KEY", x + h * 1.25, y + h * 0.40, 2.2, "left");
       g.fillStyle = "rgba(241,231,210,0.45)"; g.font = "400 8px " + MONO;
-      tracked(g, peek ? "LET GO TO HIDE" : "THE KEY", p.x, L.sm.padLabelY + 12, 1, "center");
+      tracked(g, peek ? "LET GO AND IT HIDES" : "AND KEEP HOLDING", x + h * 1.25, y + h * 0.70, 1, "left");
     }
 
-    /** A hard red frame and a rubber stamp, for as long as the key is up. */
+    /** A rubber stamp: boxed, letter-spaced mono, knocked slightly off square. */
+    function drawStamp(text, colour, y, size) {
+      g.save();
+      g.translate(W / 2, y);
+      g.rotate(-0.055);
+      g.font = "700 " + size + "px " + MONO;
+      const w = trackWidth(g, text, 4) + 26, h = size * 2.1;
+      g.strokeStyle = colour; g.lineWidth = 2;
+      g.strokeRect(-w / 2, -h / 2, w, h);
+      g.strokeRect(-w / 2 + 3, -h / 2 + 3, w - 6, h - 6);
+      g.fillStyle = colour;
+      g.textAlign = "center"; g.textBaseline = "middle";
+      tracked(g, text, 0, 1, 4, "center");
+      g.restore();
+    }
+
+    /** A hard pulsing frame, for as long as the key is up. */
     function drawExposed() {
       const a = 0.55 + Math.sin(pulse * 3.4) * 0.35;
       g.save();
       g.strokeStyle = "rgba(214,52,42," + a.toFixed(3) + ")";
       g.lineWidth = 3;
       g.strokeRect(1.5, 1.5, W - 3, H - 3);
-      g.translate(W / 2, L.gy - 26);
-      g.rotate(-0.06);
-      g.strokeStyle = "rgba(214,52,42,0.9)"; g.lineWidth = 2;
-      const label = "KEY EXPOSED";
-      g.font = "700 13px " + MONO;
-      const w = trackWidth(g, label, 4) + 26;
-      g.strokeRect(-w / 2, -14, w, 28);
-      g.fillStyle = "rgba(214,52,42,0.95)";
-      g.textAlign = "center"; g.textBaseline = "middle";
-      tracked(g, label, 0, 1, 4, "center");
       g.restore();
     }
 
@@ -1170,28 +1234,45 @@ window.plethoraBit = {
     }
 
     function drawSpymasterHeader() {
+      const h = L.gy, top = SAFE_T, room = h - top;
       g.save();
-      const h = L.gy;
       chamferRect(g, 0, 0, W, h, 16);
-      g.fillStyle = "rgba(20,18,16,0.94)"; g.fill();
+      const lg = g.createLinearGradient(0, 0, 0, h);
+      lg.addColorStop(0, "rgba(9,8,7,0.98)");
+      lg.addColorStop(1, "rgba(26,23,20,0.96)");
+      g.fillStyle = lg; g.fill();
+      if (GRAIN) { g.save(); chamferRect(g, 0, 0, W, h, 16); g.clip();
+        g.globalAlpha = 0.35; g.fillStyle = GRAIN; g.fillRect(0, 0, W, h); g.restore(); }
       g.restore();
+
+      // The stamp holds the same spot whether or not the key is up, so nothing
+      // jumps when it comes on — and it is impossible to have the key on
+      // screen without a stamp saying so.
+      drawStamp(peek ? "KEY EXPOSED" : "SPYMASTER ONLY",
+                peek ? "rgba(214,52,42,0.95)" : "rgba(255,194,28,0.75)",
+                top + room * 0.14, 12);
+
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = TEAM[turn].ink; g.font = "700 34px " + DISPLAY;
-      tracked(g, (isCoop() ? "" : TEAM[turn].name + " ") + "SPYMASTER", W / 2, L.gy * 0.44, 4, "center");
-      g.fillStyle = "rgba(241,231,210,0.55)"; g.font = "400 9.5px " + MONO;
-      tracked(g, "ANGLE THE SCREEN AWAY FROM THE TABLE", W / 2, L.gy * 0.44 + 26, 1.4, "center");
-      // The two agent stacks, so the spymaster can see the state of the board
+      g.fillStyle = TEAM[turn].ink; g.font = "700 32px " + DISPLAY;
+      tracked(g, (isCoop() ? "" : TEAM[turn].name + " ") + "SPYMASTER",
+              W / 2, top + room * 0.40, 4, "center");
+      g.fillStyle = "rgba(241,231,210,0.5)"; g.font = "400 9px " + MONO;
+      tracked(g, "ANGLE THE SCREEN AWAY FROM THE TABLE", W / 2, top + room * 0.55, 1.4, "center");
+
+      // Both agent stacks, so the spymaster can read the state of the board
       // without leaving this screen.
+      const sw = 7, wR = TEAM.red.agents * (sw + 3.2), wB = TEAM.blue.agents * (sw + 3.2);
+      const x0 = (W - (wR + wB + 26)) / 2;
       g.save();
-      g.translate(W / 2 - 92, L.gy * 0.44 + 44);
-      drawStack(g, 0, 0, "red", 7);
-      g.translate(96, 0);
-      drawStack(g, 0, 0, "blue", 7);
+      g.translate(x0, top + room * 0.70);
+      drawStack(g, 0, 0, "red", sw);
+      drawStack(g, wR + 26, 0, "blue", sw);
       g.restore();
-      g.fillStyle = "rgba(255,194,28,0.6)"; g.font = "400 8px " + MONO;
+
+      g.fillStyle = "rgba(255,194,28,0.55)"; g.font = "400 8px " + MONO;
       g.textAlign = "center";
       tracked(g, "ONE WORD · ONE NUMBER · NOTHING ABOUT SPELLING OR POSITION",
-              W / 2, L.gy - 16, 0.7, "center");
+              W / 2, h - 14, 0.7, "center");
     }
 
     /* ===============================================================
@@ -1312,7 +1393,7 @@ window.plethoraBit = {
           g.restore();
         }
       } else {
-        const wash = clamp(t / 0.5, 0, 1) * 0.5;
+        const wash = clamp(t / 0.5, 0, 1) * 0.22;
         g.fillStyle = "rgba(8,6,12," + wash.toFixed(3) + ")";
         g.fillRect(0, 0, W, H);
       }
@@ -1566,13 +1647,12 @@ window.plethoraBit = {
         return { zone: "kb", id: "none" };
       }
       if (phase === "handoff") {
-        const p = L.sm.pad;
-        if (inCircle(x, y, p.x, p.y, p.r + 14)) return { zone: "pad", id: "pad" };
+        if (inRect(x, y, L.sm.pad)) return { zone: "pad", id: "pad" };
         return null;
       }
       if (phase === "clue") {
         const s = L.sm;
-        if (inCircle(x, y, s.pad.x, s.pad.y, s.pad.r + 14)) return { zone: "pad", id: "pad" };
+        if (inRect(x, y, s.pad)) return { zone: "pad", id: "pad" };
         if (inRect(x, y, s.trans)) return { zone: "sm", id: "transmit" };
         if (inRect(x, y, s.chip)) return { zone: "sm", id: "chip" };
         for (let i = 0; i < 11; i++) if (inRect(x, y, pillRect(i))) return { zone: "sm", id: "pill:" + i };
@@ -1583,7 +1663,7 @@ window.plethoraBit = {
       if (t >= 0) return { zone: "grid", id: "tile:" + t };
       const seat = seatOf(turn), p = toLocal(seat, x, y);
       if (p) {
-        const R = bandRows();
+        const R = bandRows(seat);
         if (inRect(p.x, p.y, R.confirm)) return { zone: "band", id: "confirm" };
         if (inRect(p.x, p.y, R.pass)) return { zone: "band", id: "pass" };
       }
@@ -1863,7 +1943,7 @@ window.plethoraBit = {
       const c = el("chrome");
       if (!c) return;
       c.style.top = (L.spineY + 2) + "px";
-      c.style.display = (phase === "menu") ? "none" : "flex";
+      c.style.display = (phase === "menu" || phase === "over") ? "none" : "flex";
     }
 
     let started = false;
@@ -1937,10 +2017,10 @@ window.plethoraBit = {
       reticle -= dt * 36;
       pulse += dt;
 
-      shutter += (shutterTo - shutter) * Math.min(1, dt * 11);
+      shutter += (shutterTo - shutter) * Math.min(1, dt * 17);
       if (Math.abs(shutter - shutterTo) < 0.004) shutter = shutterTo;
 
-      if (phase === "handoff") typed += dt * 24;
+      if (phase === "handoff") typed += dt * 46;
 
       if (holdOn && !peek) {
         holdT += dtMs;
@@ -2027,7 +2107,7 @@ window.plethoraBit = {
       get peek() { return peek; },
       get remaining() { return { red: remaining("red"), blue: remaining("blue") }; },
       tileXY(i) { const t = tileRect(i); return { x: t.x + t.w / 2, y: t.y + t.h / 2 }; },
-      padXY() { return { x: L.sm.pad.x, y: L.sm.pad.y }; },
+      padXY() { const r = L.sm.pad; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
       transmitXY() { const r = L.sm.trans; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
       chipXY() { const r = L.sm.chip; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
       pillXY(n) { const r = pillRect(n); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
@@ -2036,7 +2116,7 @@ window.plethoraBit = {
         return k ? { x: k.x + k.w / 2, y: k.y + k.h / 2 } : null;
       },
       bandXY(which) {
-        const R = bandRows(), r = R[which], seat = seatOf(turn);
+        const seat = seatOf(turn), R = bandRows(seat), r = R[which];
         const lx = r.x + r.w / 2, ly = r.y + r.h / 2;
         return seat === "top" ? { x: W - lx, y: L.bandH - ly } : { x: lx, y: H - L.bandH + ly };
       },

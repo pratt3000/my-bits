@@ -96,10 +96,10 @@ window.plethoraBit = {
      * ------------------------------------------------------------- */
     const TYPES = ["go", "match", "count", "math"];
     const TYPE = {
-      go:    { name: "GO",    rule: "TAP ON GREEN",  hex: 0xff2a33, rgb: [255, 42, 51] },
-      match: { name: "MATCH", rule: "TAP ON A PAIR", hex: 0xc05cff, rgb: [192, 92, 255] },
-      count: { name: "COUNT", rule: "TAP ON N",      hex: 0x2f9dff, rgb: [47, 157, 255] },
-      math:  { name: "MATH",  rule: "TAP IF TRUE",   hex: 0xffa312, rgb: [255, 163, 18] },
+      go:    { name: "GO",    rule: "TAP ON GREEN",  hex: 0xff2a33, hexStr: "#ff2a33", rgb: [255, 42, 51] },
+      match: { name: "MATCH", rule: "TAP ON A PAIR", hex: 0xc05cff, hexStr: "#c05cff", rgb: [192, 92, 255] },
+      count: { name: "COUNT", rule: "TAP ON N",      hex: 0x2f9dff, hexStr: "#2f9dff", rgb: [47, 157, 255] },
+      math:  { name: "MATH",  rule: "TAP IF TRUE",   hex: 0xffa312, hexStr: "#ffa312", rgb: [255, 163, 18] },
     };
     const GREEN = { hex: 0x24f58c, rgb: [36, 245, 140] };
     const IDLE = { hex: 0x2c4a7a, rgb: [44, 74, 122] };
@@ -1427,15 +1427,28 @@ window.plethoraBit = {
     /* =============================================================
      * OVERLAY — one markup string on the runtime-owned root.
      * ============================================================= */
+    const ROUND_HELP = [
+      ["GO", TYPE.go.hexStr, "The core burns red, then turns green. Slap on green."],
+      ["MATCH", TYPE.match.hexStr, "Two glyphs cycle. Slap only when they are identical."],
+      ["COUNT", TYPE.count.hexStr, "Dots flash. Slap only when exactly N are lit."],
+      ["MATH", TYPE.math.hexStr, "An equation cycles. Slap only when it is correct."],
+    ];
     const btn = "pointer-events:auto;width:34px;height:34px;border-radius:11px;border:none;" +
       "background:rgba(150,190,240,0.14);color:#dbe6f5;font-size:14px;line-height:1;" +
       "font-family:inherit;padding:0;";
     const bigBtn = (bg, fg) => "width:100%;padding:15px;border:none;border-radius:14px;font-family:inherit;" +
       "font-size:15px;font-weight:800;letter-spacing:0.10em;background:" + bg + ";color:" + fg + ";";
     const panel = "max-width:326px;width:100%;background:rgba(11,16,25,0.98);border-radius:20px;" +
-      "padding:22px;border:1px solid rgba(150,190,240,0.14);pointer-events:auto;";
+      "padding:20px;border:1px solid rgba(150,190,240,0.14);pointer-events:auto;";
+    const panelHead = (t) => '<div style="font-size:10px;letter-spacing:0.34em;font-family:' + MONO +
+      ';color:' + STATIONS[0].ink + ';">' + esc(t) + "</div>" +
+      '<div style="height:1px;background:linear-gradient(90deg,' + STATIONS[0].ink +
+      '55,rgba(150,190,240,0.05));margin:9px 0 15px;"></div>';
+    const sectionLabel = (t) => '<div style="font-size:9.5px;letter-spacing:0.26em;font-family:' + MONO +
+      ';opacity:0.5;">' + esc(t) + "</div>";
     const modal = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
-      "background:rgba(3,5,10,0.90);z-index:70;padding:22px;pointer-events:auto;";
+      "background:rgba(3,5,10,0.92);z-index:70;pointer-events:auto;padding:" +
+      (safeT + 12) + "px 20px " + (safeB + 12) + "px;";
     const crewBtn = (n, cap) =>
       '<button data-el="crew" data-n="' + n + '" style="pointer-events:auto;flex:1;padding:14px 6px 11px;' +
       'border:1px solid rgba(150,190,240,0.16);border-radius:15px;background:rgba(150,190,240,0.07);' +
@@ -1449,7 +1462,7 @@ window.plethoraBit = {
     root.innerHTML =
       /* --- chrome, faded out while a round is live so a corner slap still counts --- */
       '<div data-el="chrome" style="position:absolute;right:8px;top:' + (safeT + 4) + 'px;' +
-        'display:flex;flex-direction:column;gap:6px;z-index:40;pointer-events:none;' +
+        'display:flex;flex-direction:column;gap:6px;z-index:60;pointer-events:none;' +
         'transition:opacity .25s;">' +
         '<button data-el="mute" aria-label="Sound" style="' + btn + '">' + (settings.mute ? "&#128263;" : "&#128266;") + "</button>" +
         '<button data-el="cog" aria-label="Settings" style="' + btn + '">&#9881;</button>' +
@@ -1505,35 +1518,40 @@ window.plethoraBit = {
 
       /* --- settings --- */
       '<div data-el="cogp" style="' + modal + '"><div style="' + panel + '">' +
-        '<div style="font-size:18px;font-weight:800;letter-spacing:0.04em;margin-bottom:16px;">Settings</div>' +
-        '<div style="font-size:9.5px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.48;">Rounds to win</div>' +
-        '<div data-el="targets" style="display:flex;gap:7px;margin:9px 0 18px;"></div>' +
-        '<div style="font-size:9.5px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.48;">Signal pace</div>' +
-        '<div data-el="paces" style="display:flex;gap:7px;margin:9px 0 18px;"></div>' +
-        '<div style="font-size:9.5px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.48;">Sound</div>' +
+        panelHead("REACTOR CONTROL") +
+        sectionLabel("ROUNDS TO WIN") +
+        '<div data-el="targets" style="display:flex;gap:7px;margin:9px 0 17px;"></div>' +
+        sectionLabel("SIGNAL PACE") +
+        '<div data-el="paces" style="display:flex;gap:7px;margin:9px 0 17px;"></div>' +
+        sectionLabel("SOUND") +
         '<div data-el="mutes" style="display:flex;gap:7px;margin:9px 0 4px;"></div>' +
         '<button data-el="cogp-close" style="' + bigBtn("rgba(150,190,240,0.14)", "#eaf4ff") + 'margin-top:20px;">DONE</button>' +
       "</div></div>" +
 
       /* --- how to play --- */
       '<div data-el="helpp" style="' + modal + '"><div style="' + panel + '">' +
-        '<div style="font-size:18px;font-weight:800;letter-spacing:0.04em;margin-bottom:12px;">How to play</div>' +
-        '<ul style="font-size:13.5px;line-height:1.68;opacity:0.86;padding-left:17px;margin:0;">' +
-          "<li>Lay the phone flat. Each player takes one edge and owns the wedge in front of them.</li>" +
-          "<li>Tap your own wedge once at the start to arm your station.</li>" +
-          "<li>The round type is announced first, then the core charges. Watch the middle &mdash; " +
-            "your console repeats the same signal the right way up for your seat.</li>" +
-          '<li><b style="color:#ff2a33">GO</b> &mdash; the core is red, then turns green. Slap on green.</li>' +
-          '<li><b style="color:#c05cff">MATCH</b> &mdash; two glyphs cycle. Slap only when they are identical.</li>' +
-          '<li><b style="color:#2f9dff">COUNT</b> &mdash; dots flash. Slap only when exactly N are lit.</li>' +
-          '<li><b style="color:#ffa312">MATH</b> &mdash; an equation cycles. Slap only when it is correct.</li>' +
-          "<li>First slap on a true signal takes the round: <b>+1</b>.</li>" +
-          "<li>Slap on a false signal and your station scrams: <b>&minus;1</b> and you are locked out " +
-            "until the next round.</li>" +
-          "<li>Only GO turns the core green. In the other rounds the colour tells you nothing &mdash; read the signal.</li>" +
-          "<li>First station to the target holds the core. Your fastest reaction goes to the global board.</li>" +
+        panelHead("OPERATING PROCEDURE") +
+        '<ul style="font-size:12.5px;line-height:1.52;opacity:0.86;padding-left:15px;margin:0 0 13px;">' +
+          "<li>Phone flat. Take an edge each &mdash; you own the wedge in front of you.</li>" +
+          "<li>Tap your wedge once to arm your station.</li>" +
+          "<li>The round type is announced, then the core charges. Your console repeats " +
+            "the signal the right way up for your seat.</li>" +
+          "<li>First slap on a <b>true</b> signal takes the round: <b>+1</b>.</li>" +
+          "<li>Slap on a <b>false</b> one and you scram: <b>&minus;1</b>, locked out for the round.</li>" +
         "</ul>" +
-        '<button data-el="helpp-close" style="' + bigBtn("rgba(150,190,240,0.14)", "#eaf4ff") + 'margin-top:16px;">GOT IT</button>' +
+        sectionLabel("THE FOUR ROUNDS") +
+        '<div style="font-size:12.5px;line-height:1.5;opacity:0.86;margin:9px 0 12px;">' +
+          ROUND_HELP.map((r) =>
+            '<div style="display:flex;gap:8px;margin-bottom:5px;">' +
+            '<b style="color:' + r[1] + ';min-width:52px;font-family:' + MONO +
+              ';font-size:11px;letter-spacing:0.12em;padding-top:2px;">' + esc(r[0]) + "</b>" +
+            "<span>" + esc(r[2]) + "</span></div>").join("") +
+        "</div>" +
+        '<div style="font-size:11.5px;line-height:1.5;opacity:0.62;border-top:1px solid ' +
+          'rgba(150,190,240,0.12);padding-top:10px;">Only GO turns the core green. In the other ' +
+          "rounds the colour tells you nothing &mdash; read the signal. First station to the " +
+          "target holds the core; the fastest reaction at the table goes to the global board.</div>" +
+        '<button data-el="helpp-close" style="' + bigBtn("rgba(150,190,240,0.14)", "#eaf4ff") + 'margin-top:15px;">GOT IT</button>' +
       "</div></div>";
 
     const shell = {
@@ -1565,8 +1583,9 @@ window.plethoraBit = {
       const paint = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
-          b.style.background = on ? "rgba(150,190,240,0.30)" : "rgba(150,190,240,0.08)";
-          b.style.color = on ? "#eaf4ff" : "rgba(219,230,245,0.52)";
+          b.style.background = on ? "rgba(34,220,255,0.20)" : "rgba(150,190,240,0.07)";
+          b.style.color = on ? STATIONS[0].ink : "rgba(219,230,245,0.50)";
+          b.style.boxShadow = on ? "inset 0 0 0 1px rgba(34,220,255,0.55)" : "none";
         }
       };
       for (const b of host.querySelectorAll("button")) {

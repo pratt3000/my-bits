@@ -59,6 +59,23 @@ This is the whole point of these bits, and it has its own failure modes.
   phone changes hands with the screen covered. Gate it behind a
   "pass to <name> → hold to look" screen.
 - **Keep controls off the bottom edge** (`ctx.safeArea.bottom`).
+- **A phone reports at most five simultaneous touches.** iOS caps
+  `navigator.maxTouchPoints` at 5, and the sixth contact is simply never
+  delivered — it is a hardware/OS limit, not a performance one, so it cannot be
+  tuned around. Any design that needs one *held* touch per player therefore
+  caps at five players, and four is the safe number. A momentary tap is no
+  cheaper: the cap counts concurrent contacts regardless of duration, so six
+  people tapping in the same frame still loses one. In an elimination game the
+  dropped player just dies, with no feedback explaining why.
+  Sequential-turn games are unaffected — that is a real reason to prefer them
+  above four players.
+  (The headless harness reports `maxTouchPoints: 1` because it emulates a
+  desktop pointer. CDP still delivers multi-touch, so multi-finger tests are
+  valid; the number is not.)
+- **Rotate the HUD, not the world.** Inscribing a playfield in a circle so it
+  can spin to face each seat throws away most of a 390x844 screen — a 328px
+  arena on an 844px display. Leave the world alone and rotate the text and
+  controls around it.
 - **The overlay must be transparent to pointers.** `ctx.createRoot()` returns an
   element filling the container, and it is created *after* the canvas, so it
   sits on top and silently swallows every tap meant for the play surface. Give

@@ -26,20 +26,40 @@ const until = (expr, ms = 20000) => bit.probe(([e, m]) => new Promise((res) => {
 await bit.wait(700);
 await bit.shot("r4-1-title");
 
+/** Tap an overlay control by its data-el name. The play script may read the
+ *  DOM directly — the no-rect rule applies to the bit, not to the harness. */
+async function tapEl(name) {
+  const box = await bit.probe((n) => {
+    const el = document.querySelector('[data-el="' + n + '"]');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, name);
+  if (!box) throw new Error("no such control: " + name);
+  await bit.tap(box.x, box.y);
+}
+
 // --- chrome panels ---------------------------------------------------------
-await bit.tap(365, 105);                       // settings
-await bit.wait(320);
+await tapEl("cog");
+await bit.wait(340);
 await bit.shot("r4-0a-settings");
-await bit.tap(195, 520);                       // done
+await tapEl("cogp-close");
 await bit.wait(250);
-await bit.tap(365, 145);                       // how to play
-await bit.wait(320);
+await tapEl("help");
+await bit.wait(340);
 await bit.shot("r4-0b-help");
-await bit.tap(195, 640);
+await tapEl("helpp-close");
 await bit.wait(250);
+console.log("panels closed, phase:", await probe(() => window.__REACTOR__.phase));
 
 // --- crew picker: four stations -------------------------------------------
-await bit.tap(293, 543);
+await bit.probe(() => {
+  const b = [...document.querySelectorAll('[data-el="crew"]')].find(x => x.dataset.n === "4");
+  const r = b.getBoundingClientRect();
+  window.__CREW4__ = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+const crew4 = await probe(() => window.__CREW4__);
+await bit.tap(crew4.x, crew4.y);
 await bit.wait(500);
 await bit.shot("r4-2-stations");
 
@@ -128,7 +148,7 @@ const submits = (await bit.events()).filter(e => e.kind === "memory.record.submi
 console.log("leaderboard submits:", JSON.stringify(submits.map(e => e.args)));
 
 // --- rematch path ----------------------------------------------------------
-await bit.tap(W / 2, 552);
+await tapEl("again");
 await bit.wait(600);
 console.log("after rematch:", JSON.stringify(await probe(() => ({
   phase: window.__REACTOR__.phase, scores: window.__REACTOR__.scores,

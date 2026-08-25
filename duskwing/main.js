@@ -108,10 +108,10 @@ window.plethoraBit = {
     const HOURS = [
       {
         id: "DAWN",
-        base: [[0.00, "#062A3C"], [0.28, "#0C4C58"], [0.52, "#136058"], [0.72, "#3D6438"], [0.88, "#96540F"], [1.00, "#2A0E08"]],
+        base: [[0.00, "#03202F"], [0.28, "#07414F"], [0.52, "#0C5A55"], [0.72, "#3A6430"], [0.88, "#A2560C"], [1.00, "#250B06"]],
         blooms: [
-          { x: 0.70, y: 0.66, r: 0.94, stops: [[0, "rgba(253,254,231,0.95)"], [0.14, "rgba(252,236,96,0.52)"], [0.42, "rgba(214,104,10,0.26)"], [1, "rgba(203,79,6,0)"]] },
-          { x: 0.22, y: 0.17, r: 0.70, stops: [[0, "rgba(196,252,246,0.55)"], [0.20, "rgba(46,206,200,0.34)"], [0.52, "rgba(20,150,160,0.16)"], [1, "rgba(20,150,160,0)"]] },
+          { x: 0.70, y: 0.68, r: 0.86, stops: [[0, "rgba(253,254,231,0.98)"], [0.11, "rgba(252,214,58,0.48)"], [0.34, "rgba(206,86,6,0.24)"], [1, "rgba(180,50,4,0)"]] },
+          { x: 0.24, y: 0.15, r: 0.62, stops: [[0, "rgba(180,250,246,0.34)"], [0.18, "rgba(30,196,196,0.20)"], [0.50, "rgba(12,130,148,0.09)"], [1, "rgba(12,130,148,0)"]] },
           { x: 0.36, y: 0.96, r: 0.56, stops: [[0, "rgba(255,150,40,0.44)"], [0.4, "rgba(190,50,10,0.16)"], [1, "rgba(190,50,10,0)"]] },
         ],
         ray: [255, 240, 170], mote: [255, 238, 198], ink: "#FFEFCD", fog: [230, 200, 130],
@@ -224,6 +224,14 @@ window.plethoraBit = {
     let bands = [];
     const CHROME_H = 44;
 
+    // Every band flies the SAME course, sampled a fixed distance apart, so
+    // each one gets an identical sequence of blades a few seconds out of step
+    // with its neighbours. Sampling the same window in all of them would stack
+    // four identical saws in a column down the screen — correct, fair, and
+    // instantly readable as copy-paste.
+    const LANE_OFFSET = 3.7;                       // band units between lanes
+    let maxOff = 0;
+
     function measure() {
       W = ctx.width; H = ctx.height;
       const dpr = Math.min(ctx.dpr || 1, 3);
@@ -239,8 +247,9 @@ window.plethoraBit = {
       for (let i = 0; i < n; i++) {
         // Index 0 is the BOTTOM band, so player 1 is nearest the near hand.
         const top = PLAY_BOT - (i + 1) * U;
-        bands.push({ i, top, mid: top + U / 2, bot: top + U });
+        bands.push({ i, top, mid: top + U / 2, bot: top + U, off: i * LANE_OFFSET * U });
       }
+      maxOff = (n - 1) * LANE_OFFSET * U;
       WALL = clamp(W * 0.17, 50, 76);                // the lethal edge, and the pad
       HOME = WALL + U * 0.42;                        // where a creature hatches
       XMAX = W * 0.66;                               // furthest right flapping can carry you
@@ -314,7 +323,7 @@ window.plethoraBit = {
         const fy = h * (0.32 + i * 0.36);
         const grd = t.createLinearGradient(0, fy - h * 0.11, 0, fy + h * 0.11);
         grd.addColorStop(0, rgba(hour.fog, 0));
-        grd.addColorStop(0.5, rgba(hour.fog, 0.11));
+        grd.addColorStop(0.5, rgba(hour.fog, 0.07));
         grd.addColorStop(1, rgba(hour.fog, 0));
         t.fillStyle = grd;
         t.fillRect(0, fy - h * 0.11, w, h * 0.22);
@@ -549,7 +558,7 @@ window.plethoraBit = {
           c: clamp((_pf[0] + _pf[1]) / 2 + (r(3) - 0.5) * 0.22, 0.30, 0.70),
           g: lerp(0.47, 0.31, heat * (0.4 + r(4) * 0.6)),
         });
-        if (pinches.length > 24) pinches.shift();
+        if (pinches.length > 48) pinches.shift();
         return;
       }
       if (type === "saw" || type === "sawpair") {
@@ -607,9 +616,13 @@ window.plethoraBit = {
     function ensureCourse(rightEdge) {
       const dens = DIFF[settings.diff].dens;
       let guard = 0;
-      while (spawnX < rightEdge + W && guard++ < 60) {
+      while (spawnX < rightEdge + W && guard++ < 90) {
         spawnOne(spawnX);
-        const gap = U * (1.05 + hf(courseSeed, 55) * 0.95) / dens;
+        // The opening stretch is deliberately thin. A player who meets the
+        // first blade before they have found the rhythm of the flap simply
+        // dies, and reads it as the game's fault rather than their own.
+        const warm = spawnX / U < 9 ? 1.7 : 1;
+        const gap = U * (1.05 + hf(courseSeed, 55) * 0.95) * warm / dens;
         spawnX += gap;
       }
       while (hazards.length && hazards[0].x < camX - U * 1.2) hazards.shift();
@@ -654,7 +667,7 @@ window.plethoraBit = {
     function resetWorld(seed) {
       camX = 0; originX = 0; scroll = 0; elapsed = 0;
       hazards = []; pinches = []; particles = [];
-      spawnX = W * 0.95;                                // a clear run-up before the first blade
+      spawnX = W * 1.7;                                 // a clear run-up before the first blade
       courseSeed = seed;
       hourIdx = 0; hourPrev = 0; hourFade = 1;
       winner = -1; roundBest = 0; shake = 0; flash = 0;
@@ -696,7 +709,7 @@ window.plethoraBit = {
     /** Autopilot for the attract loop on the title screen. */
     function autoHold(b) {
       const band = bands[b.i];
-      const look = (camX + b.sx + W * 0.22) / U;
+      const look = (camX + bands[b.i].off + b.sx + W * 0.22) / U;
       profile(look, _pf);
       const target = (_pf[0] + _pf[1]) / 2;
       return b.n > target + 0.03;
@@ -746,7 +759,7 @@ window.plethoraBit = {
      * see really is what kills you.
      */
     function hazardAt(h, t, band) {
-      const sx = h.x - camX;
+      const sx = h.x - camX - band.off;
       const d = h.x / U;
       profile(d, _pf);
       const ceilY = band.top + _pf[0] * U, floorY = band.top + _pf[1] * U;
@@ -782,7 +795,7 @@ window.plethoraBit = {
       const band = bands[b.i];
       const by = band.top + b.n * U;
       const r = R_N * U;
-      const wx = camX + b.sx;
+      const wx = camX + band.off + b.sx;
 
       // Rock. Sampled at the creature's own world x, which is the only place
       // the tunnel actually has to be clear for it.
@@ -795,7 +808,7 @@ window.plethoraBit = {
       let near = 0;
       for (let i = 0; i < hazards.length; i++) {
         const h = hazards[i];
-        const sx = h.x - camX;
+        const sx = h.x - camX - band.off;
         if (sx < -U * 1.2 || sx > W + U * 1.2) continue;
         const s = hazardAt(h, t, band);
         if (s.kind === "saw") {
@@ -833,9 +846,9 @@ window.plethoraBit = {
         if (phase === "play") elapsed += dt;
         const rel = attract ? 0.62 : clamp(D.v0 + D.ramp * elapsed, 0, D.cap);
         scroll = clamp(rel * U, 0, W * 0.62);
-        const slow = phase === "countdown" ? 0.32 : phase === "claim" ? 0.16 : phase === "over" ? 0.22 : 1;
+        const slow = phase === "countdown" ? 0.22 : phase === "claim" ? 0.09 : phase === "over" ? 0.22 : 1;
         camX += scroll * slow * dt;
-        ensureCourse(camX + W);
+        ensureCourse(camX + maxOff + W);
       }
 
       // Before the round starts the creatures hover, unhurt, at the hatch
@@ -1060,8 +1073,8 @@ window.plethoraBit = {
       // at a quarter hertz, so a static camera still feels alive.
       const hour = HOURS[hourIdx];
       const br = hour.blooms[0];
-      bloom(W * br.x, H * br.y, H * br.r * (0.52 + 0.02 * Math.sin(t * 1.6)),
-            hour.ray, 0.055 + 0.022 * Math.sin(t * 1.6));
+      bloom(W * br.x, H * br.y, H * br.r * (0.50 + 0.02 * Math.sin(t * 1.6)),
+            hour.ray, 0.032 + 0.014 * Math.sin(t * 1.6));
 
       /* --- parallax forest ------------------------------------------- */
       const alphas = [0.30, 0.52, 0.80];
@@ -1082,7 +1095,7 @@ window.plethoraBit = {
       g.globalCompositeOperation = "lighter";
       const fg = g.createLinearGradient(0, fy - H * 0.16, 0, fy + H * 0.16);
       fg.addColorStop(0, rgba(hour.fog, 0));
-      fg.addColorStop(0.5, rgba(hour.fog, 0.075));
+      fg.addColorStop(0.5, rgba(hour.fog, 0.045));
       fg.addColorStop(1, rgba(hour.fog, 0));
       g.fillStyle = fg;
       g.fillRect(0, fy - H * 0.16, W, H * 0.32);
@@ -1100,12 +1113,7 @@ window.plethoraBit = {
       }
       g.restore();
 
-      /* --- profile sampled once, reused by every band ---------------- */
       const cols = Math.ceil(W / SAMPLE_STEP) + 2;
-      for (let i = 0; i < cols; i++) {
-        profile((camX + i * SAMPLE_STEP) / U, _pf);
-        sampleC[i] = _pf[0]; sampleF[i] = _pf[1];
-      }
 
       /* --- per-band: ghost numeral, rock, hazards, creature ---------- */
       for (const band of bands) {
@@ -1126,6 +1134,10 @@ window.plethoraBit = {
         g.restore();
 
         // Rock: everything above the ceiling and below the floor, pure #000.
+        for (let i = 0; i < cols; i++) {
+          profile((camX + band.off + i * SAMPLE_STEP) / U, _pf);
+          sampleC[i] = _pf[0]; sampleF[i] = _pf[1];
+        }
         g.fillStyle = "#000";
         g.beginPath();
         g.moveTo(-4, band.top - 2);
@@ -1143,12 +1155,12 @@ window.plethoraBit = {
         // Boulders: a chain of tangent discs on a fixed world lattice, which
         // is what makes the outline read as lumpy rock rather than a curve.
         const cell = U * 0.55;
-        const i0 = Math.floor(camX / cell) - 1;
+        const i0 = Math.floor((camX + band.off) / cell) - 1;
         g.beginPath();
         for (let k = 0; k <= Math.ceil(W / cell) + 2; k++) {
           const idx = i0 + k;
           const wx = idx * cell + hf(idx, 601) * cell * 0.7;
-          const sx = wx - camX;
+          const sx = wx - camX - band.off;
           if (sx < -U || sx > W + U) continue;
           profile(wx / U, _pf);
           const rr = U * (0.045 + hf(idx, 603) * 0.075);
@@ -1166,7 +1178,7 @@ window.plethoraBit = {
         g.rect(0, band.top, W, U);
         g.clip();
         for (const h of hazards) {
-          const sx = h.x - camX;
+          const sx = h.x - camX - band.off;
           if (sx < -U * 1.6 || sx > W + U * 1.6) continue;
           drawHazard(hazardAt(h, t, band), hour, dim);
         }
@@ -1181,7 +1193,7 @@ window.plethoraBit = {
         if (dim) {
           g.save();
           g.globalCompositeOperation = "multiply";
-          g.fillStyle = "rgba(0,0,0,0.55)";
+          g.fillStyle = "rgba(0,0,0,0.46)";
           g.fillRect(0, band.top, W, U);
           g.restore();
           g.save();
@@ -1189,7 +1201,7 @@ window.plethoraBit = {
           g.fillStyle = crew.ink;
           g.textAlign = "center";
           g.textBaseline = "middle";
-          tracked(g, "OUT · " + b.cause, W * 0.52, band.mid, Math.min(15, U * 0.11), 3.2);
+          tracked(g, "OUT · " + b.cause, W * 0.66, band.mid, Math.min(15, U * 0.105), 3.2);
           g.restore();
         }
       }
@@ -1243,8 +1255,8 @@ window.plethoraBit = {
       }
       const vg = g.createRadialGradient(W * 0.5, H * 0.48, H * 0.26, W * 0.5, H * 0.5, H * 0.80);
       vg.addColorStop(0, "rgba(0,0,0,0)");
-      vg.addColorStop(0.66, "rgba(0,0,0,0.20)");
-      vg.addColorStop(1, "rgba(0,0,0,0.66)");
+      vg.addColorStop(0.66, "rgba(0,0,0,0.22)");
+      vg.addColorStop(1, "rgba(0,0,0,0.74)");
       g.fillStyle = vg;
       g.fillRect(0, 0, W, H);
 
@@ -1421,12 +1433,23 @@ window.plethoraBit = {
       for (let i = 0; i <= steps; i++) {
         const p = i / steps;
         const y = band.top + p * U;
-        const x = edge + Math.sin(p * 5.1 + t * 0.55 + band.i * 2.1) * 4.5
-                       + Math.sin(p * 11.3 + t * 0.31) * 2.2;
+        const x = edge + Math.sin(p * 5.1 + t * 0.55 + band.i * 2.1) * 7.5
+                       + Math.sin(p * 11.3 + t * 0.31) * 3.6
+                       + Math.sin(p * 2.3 + band.i) * 4.0;
         g.lineTo(x, y);
       }
       g.lineTo(0, band.bot + 2);
       g.closePath();
+      g.fill();
+      // Boulders on the inner face, so the column reads as the edge of the
+      // cave rather than a rectangle of chrome.
+      g.beginPath();
+      for (let k = 0; k < 5; k++) {
+        const p = (k + 0.5) / 5;
+        const rr = U * (0.035 + hf(k + band.i * 9, 811) * 0.055);
+        g.moveTo(edge + rr * 0.4, band.top + p * U);
+        g.arc(edge - rr * 0.25, band.top + p * U + hf(k, 813) * 10, rr, 0, TAU);
+      }
       g.fill();
 
       // Rim light in the owner's colour: the only way to find your own band
@@ -1934,7 +1957,7 @@ window.plethoraBit = {
 
     // The first frame is drawn before ready(), so the host never shows a blank
     // bit while the attract loop spins up.
-    ensureCourse(camX + W);
+    ensureCourse(camX + maxOff + W);
     drawFrame(now() / 1000);
     ctx.markVisualReady("cave drawn");
     ctx.platform.ready();

@@ -67,7 +67,7 @@ window.plethoraBit = {
      * mid-tones — a sage or olive player would disappear into the felt.
      * ============================================================= */
     const FELT_LIT = "#1d7150", FELT_MID = "#0f4b34", FELT_DARK = "#04150e";
-    const RAIL = "#26160e", BRASS = "#d8a94a", BRASS_DIM = "rgba(216,169,74,0.55)";
+    const RAIL = "#26160e", BRASS = "#d8a94a", BRASS_DIM = "rgba(216,169,74,0.40)";
     const CREAM = "#f4ecd8";
     const CARD_THEME = {
       face: "#f8f4e9", edge: "rgba(26,18,10,0.26)",
@@ -637,7 +637,7 @@ window.plethoraBit = {
 
     /** Which player's zone a screen point belongs to, or null for dead table. */
     function seatAt(x, y) {
-      const n = settings.players;
+      const n = players.length || settings.players;
       if (y >= L.bandBot && x > L.chrome) return "bottom";
       if (y <= L.bandTop && x < W - L.chrome) return "top";
       if (n >= 3 && x <= L.sideW && y > L.bandTop && y < L.bandBot) return "left";
@@ -1026,9 +1026,9 @@ window.plethoraBit = {
       mirror.textContent = winner ? winner.name + " wins" : "Dead heat";
       mirror.style.color = winner ? winner.ink : CREAM;
       const dead = pile.length;
-      shell.el("over-sub").textContent =
-        (bestMs > 0 ? "fastest snap " + bestMs + " ms" : "not one clean snap all deck") +
-        (dead ? "   ·   " + dead + " left on the table" : "");
+      shell.el("over-sub").textContent = bestMs > 0
+        ? "fastest snap " + bestMs + " ms"
+        : "not one clean snap all deck";
       shell.el("over-rows").innerHTML = players.map((p) =>
         '<div style="display:flex;align-items:center;gap:10px;margin:8px 0;">' +
           '<div style="width:9px;height:9px;border-radius:3px;background:' + p.ink + ';flex:none;"></div>' +
@@ -1037,7 +1037,11 @@ window.plethoraBit = {
             '<div style="width:' + Math.round(p.cards / DECK_N * 100) + '%;height:100%;border-radius:5px;background:' + p.ink + ';"></div>' +
           '</div>' +
           '<div style="width:26px;text-align:right;font-size:15px;font-weight:700;flex:none;">' + p.cards + '</div>' +
-        '</div>').join("");
+        '</div>').join("") +
+        // Whatever was still on the table when the stock ran out belongs to
+        // nobody, and the arithmetic looks broken unless it says so.
+        (dead ? '<div style="font-size:11.5px;opacity:0.45;margin-top:13px;letter-spacing:0.04em;">' +
+          dead + ' left unclaimed on the table</div>' : "");
       shell.el("over").style.display = "flex";
 
       sound.duck(0.5, 500);
@@ -1173,7 +1177,7 @@ window.plethoraBit = {
       }
 
       g.strokeStyle = matchOpen ? "#ffd979" : BRASS_DIM;
-      g.lineWidth = matchOpen ? 5.5 : 3.4;
+      g.lineWidth = matchOpen ? 6 : 2.6;
       g.beginPath();
       g.arc(0, 0, L.ringR, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(prog, 0.0001));
       g.stroke();
@@ -1587,7 +1591,7 @@ window.plethoraBit = {
     const panel = "max-width:322px;width:100%;background:linear-gradient(180deg,#14311f,#0b2015);" +
       "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(216,169,74,0.28),0 20px 60px rgba(0,0,0,0.55);";
     const label = "font-size:11px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.52;";
-    const sheet = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
+    const sheetCss = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
       "background:rgba(3,12,8,0.90);z-index:70;padding:24px;pointer-events:auto;";
 
     const root = ctx.createRoot({ touchAction: "none" });
@@ -1627,10 +1631,10 @@ window.plethoraBit = {
         'align-items:center;justify-content:center;z-index:60;padding:26px;text-align:center;' +
         'pointer-events:auto;background:radial-gradient(120% 60% at 50% 45%,rgba(3,16,10,0.82),rgba(2,9,6,0.97));">' +
         // A mirrored headline for whoever is sitting at the other end, so the
-        // result is not upside down for half the table. Placed on the baize
-        // below their pad rather than on top of it.
-        '<div data-el="over-mirror" style="position:absolute;left:0;right:0;top:29%;' +
-          'transform:rotate(180deg);font-size:27px;font-weight:800;opacity:0.9;"></div>' +
+        // result is not upside down for half the table. In the flow rather than
+        // absolutely placed, or it lands on the card below it at some heights.
+        '<div data-el="over-mirror" style="transform:rotate(180deg);font-size:27px;' +
+          'font-weight:800;opacity:0.9;margin-bottom:16px;"></div>' +
         '<div style="max-width:300px;width:100%;' + panel + 'padding:22px 20px 20px;">' +
           '<div style="' + label + '">Hand over</div>' +
           '<div data-el="over-title" style="font-size:36px;font-weight:800;margin-top:5px;letter-spacing:-0.02em;line-height:1.1;"></div>' +
@@ -1645,7 +1649,7 @@ window.plethoraBit = {
       '</div>' +
 
       /* ---- settings ---- */
-      '<div data-el="cogp" style="' + sheet + '">' +
+      '<div data-el="cogp" style="' + sheetCss + '">' +
         '<div style="' + panel + '">' +
           '<div style="font-size:19px;font-weight:700;margin-bottom:16px;">Settings</div>' +
           '<div style="' + label + '">Sound</div>' +
@@ -1662,7 +1666,7 @@ window.plethoraBit = {
       '</div>' +
 
       /* ---- how to play ---- */
-      '<div data-el="helpp" style="' + sheet + '">' +
+      '<div data-el="helpp" style="' + sheetCss + '">' +
         '<div style="' + panel + '">' +
           '<div style="font-size:19px;font-weight:700;margin-bottom:12px;">How to play</div>' +
           '<ul style="font-size:13.5px;line-height:1.62;opacity:0.86;padding-left:18px;margin:0;">' +
@@ -1743,7 +1747,7 @@ window.plethoraBit = {
       paintAllPills();
     });
     /** Open or close a full-screen sheet, freezing the hand while it is up. */
-    function sheet(name, open) {
+    function showSheet(name, open) {
       shell.el(name).style.display = open ? "flex" : "none";
       if (open === sheetOpen) return;
       sheetOpen = open;
@@ -1754,10 +1758,10 @@ window.plethoraBit = {
       matchAt += held;
       graceUntil += held;
     }
-    shell.tap(shell.el("cog"), () => { sheet("cogp", true); paintAllPills(); });
-    shell.tap(shell.el("cogp-close"), () => { sheet("cogp", false); });
-    shell.tap(shell.el("help"), () => { sheet("helpp", true); });
-    shell.tap(shell.el("helpp-close"), () => { sheet("helpp", false); });
+    shell.tap(shell.el("cog"), () => { showSheet("cogp", true); paintAllPills(); });
+    shell.tap(shell.el("cogp-close"), () => { showSheet("cogp", false); });
+    shell.tap(shell.el("help"), () => { showSheet("helpp", true); });
+    shell.tap(shell.el("helpp-close"), () => { showSheet("helpp", false); });
 
     shell.tap(shell.el("deal"), async () => {
       ctx.platform.start({ players: settings.players });
