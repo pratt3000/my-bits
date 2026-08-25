@@ -144,6 +144,21 @@ cause is **not** characterised. What is established:
   half uploads cleanly on its own; concatenated, they are rejected. So it is a
   threshold or an interaction, not one bad line — which is why bisecting to a
   single trigger does not converge.
+- It is not a `data:` literal. `go-fish` is the only one of the five that
+  contains the substring `data:` at all (ten object keys, `data: { ... }`);
+  spacing them to `data : {` changes nothing.
+- The five failing and nineteen accepted bits share every token. A scan for
+  identifiers and syntax features present in **all five** rejected bits and in
+  **none** of the nineteen accepted ones returns the empty set, so there is no
+  construct to remove.
+- The rejection survived a rewrite of all 24 bits (every font stack, a case
+  fold, an SVG icon swap): exactly the same five failed before and after, and
+  no accepted bit regressed. Whatever it is, it is stable and it is not
+  something the source was edited into.
+
+This is worth reporting to Plethora with the reproduction rather than guessing
+at further: the message names no offending resource, and the five bits contain
+no remote URL of any kind.
 
 `504 deadline_exceeded` is different and is genuinely just a slow server: the
 draft is usually created anyway, and a retry reports `updated`. `tools/upload.mjs`

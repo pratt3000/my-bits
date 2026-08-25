@@ -89,7 +89,7 @@ for (const bit of bits) {
     // 401 missing token · 403 bad/expired/wrong scope · 409 title already live
     // · 400 contract validation. The message is the useful part.
     const why = (body && (body.error || body.message)) || `HTTP ${res.status}`;
-    console.log(`✗ ${bit}: HTTP ${res.status} — ${JSON.stringify(why).slice(0, 220)}`);
+    console.log(`✗ ${bit}: HTTP ${res.status} — ${JSON.stringify(why, null, 1)}`);
     results.push({ bit, ok: false, status: res.status, why });
   }
 }
