@@ -937,7 +937,9 @@ window.plethoraBit = {
     function hurt(p, amount, owner) {
       p.hp = Math.max(0, p.hp - amount);
       p.hurt = 16;
-      popNumber(p.x, p.y - 34, "-" + amount, p.i === owner ? "#FF5A5A" : p.ink);
+      // Clear of the hull: at 34 the glyph run landed across the turret of the
+      // tank it was reporting on, which is the one thing you want to see.
+      popNumber(p.x, p.y - 48, "-" + amount, p.i === owner ? "#FF5A5A" : p.ink);
       if (owner !== undefined && owner !== p.i) shotDamage += amount;
       sound.haptic("light");
       const low = Math.min(players[0].hp, players[1].hp) / Math.max(1, settings.armour);
@@ -1660,10 +1662,17 @@ window.plethoraBit = {
         gg.fillStyle = "rgba(255,236,190," + (flash * 0.4).toFixed(3) + ")";
         gg.fillRect(0, BF_TOP, W, BF_H);
       }
-      // Volley counter, centred so it belongs to neither seat.
+      // Volley counter. Centred so it belongs to neither seat, and turned to
+      // face whoever is acting — same rule as the banner and the damage
+      // numbers, so no text in this window is ever upside down for the player
+      // it is currently talking to.
       if (phase !== "title") {
         gg.globalAlpha = 0.5;
-        blockText(gg, "VOLLEY " + volley, W / 2, BF_TOP + 9, 2, { align: "center", colour: "#F0C9B4" });
+        gg.save();
+        gg.translate(W / 2, BF_TOP + 9 + 7);
+        if (turn === 1) gg.rotate(Math.PI);
+        blockText(gg, "VOLLEY " + volley, 0, -7, 2, { align: "center", colour: "#F0C9B4" });
+        gg.restore();
         gg.globalAlpha = 1;
       }
       gg.restore();
@@ -1885,10 +1894,21 @@ window.plethoraBit = {
         { align: "right", colour: VALUE, shadow: [1.5, 1.5] });
 
       // --- readouts ---
-      blockText(gg, String(Math.round(p.ang)), DL.angV.x + DL.angV.w / 2, DL.angV.y + DL.angV.h / 2 - 5, 4,
-        { align: "center", colour: VALUE });
-      blockText(gg, String(Math.round(p.pow)), DL.powV.x + DL.powV.w / 2, DL.powV.y + DL.powV.h / 2 - 5, 4,
-        { align: "center", colour: VALUE });
+      // Three digits (power 100, angle 100+) are wider than the value plate on
+      // a narrow phone, so the glyph size is fitted to the plate rather than
+      // fixed at 4, and the run is anchored to the bottom of the plate so it
+      // keeps sitting under the baked label whatever size it comes out.
+      // …and the plate itself shrinks with the deck on a short phone, where a
+      // fixed 28px glyph run climbs into the baked label above it.
+      const fitV = (txt, r) =>
+        Math.min(4, (r.w - 10) / (String(txt).length * 6 - 1), (r.h - 22) / 7);
+      const drawV = (val, r) => {
+        const txt = String(Math.round(val));
+        const s = fitV(txt, r);
+        blockText(gg, txt, r.x + r.w / 2, r.y + r.h - 7 * s - 2, s, { align: "center", colour: VALUE });
+      };
+      drawV(p.ang, DL.angV);
+      drawV(p.pow, DL.powV);
 
       // --- weapon ---
       const Wp = DL.weapon, w = selWeapon(p);
@@ -2308,12 +2328,12 @@ window.plethoraBit = {
             'margin:12px 0 0;height:' + (HELP_H - 150) + 'px;overflow-y:auto;padding-bottom:4px;">' +
             '<li>Two players, one phone. <b style="color:#29D3F0">Azure</b> takes the bottom edge, ' +
               '<b style="color:#FF6A3C">Ember</b> the top.</li>' +
-            '<li>Your deck sits at <b>your own end</b>, right-way-up from your seat. It lights up on your turn; the other one is dimmed and dead.</li>' +
+            '<li>Your deck sits at <b>your own end</b>, right-way-up from your seat. It lights on your turn; the other one is dead.</li>' +
             '<li><b>Angle</b> is measured from your own line of fire: <b>0</b> is flat at your opponent, <b>90</b> straight up, <b>180</b> over your own shoulder.</li>' +
             '<li>Drag the aim dome to set angle and power at once. The <b>&minus;</b> and <b>+</b> pads nudge by one &mdash; hold to repeat.</li>' +
             '<li>Wind pushes every shell sideways. The arrows in your dome show which way it pushes <b>your</b> shot.</li>' +
             '<li><b>There is no trajectory preview.</b> Fire, watch where it lands, correct. That is the entire game.</li>' +
-            '<li>Tap the weapon plate for your arsenal. Eight shells, each fires <b>once</b>, then it is gone.</li>' +
+            '<li>Tap the weapon plate for your arsenal. Eight shells, each fires <b>once</b>.</li>' +
             '<li>The ground is real. Blow it out from under a tank and it <b>falls and takes the damage</b>.</li>' +
             '<li>First to zero armour wins. If both run dry, the healthier tank takes it.</li>' +
             '<li>The <b>biggest single shot</b> of the match goes to the global board.</li>' +

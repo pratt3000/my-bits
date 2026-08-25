@@ -1167,10 +1167,11 @@ window.plethoraBit = {
         [2, 3, 4].map((n, k) =>
           '<button data-el="count' + n + '" data-n="' + n + '" style="pointer-events:auto;position:absolute;' +
           'left:' + Math.round(W / 2 + (k - 1) * 88 - 34) + 'px;top:' + Math.round(H * 0.552) + 'px;' +
-          'width:68px;height:68px;border-radius:24px;border:2px solid ' + RIM + ';' +
-          'background:' + CLAY_FACE + ';color:#FFD98A;font-family:inherit;' +
-          'font-size:26px;font-weight:800;box-shadow:0 5px 0 rgba(0,0,0,0.45),' +
-          'inset 0 2px 0 rgba(255,224,180,0.18);">' + n + '</button>').join("") +
+          'width:68px;height:68px;border-radius:24px;border:2px solid rgba(255,198,120,0.42);' +
+          'background:linear-gradient(180deg,#805D3D,#3E2B1B);color:#FFE6B4;font-family:inherit;' +
+          'font-size:26px;font-weight:800;text-shadow:0 2px 0 rgba(0,0,0,0.45);' +
+          'box-shadow:0 5px 0 rgba(0,0,0,0.5),inset 0 2px 0 rgba(255,224,180,0.26);">' +
+          n + '</button>').join("") +
         '<div style="position:absolute;left:0;right:0;top:' + Math.round(H * 0.672) + 'px;text-align:center;' +
           'font-size:12px;line-height:1.65;color:rgba(234,243,230,0.36);">Two &rarr; the short edges' +
           '<br>Three &rarr; add the left side &nbsp;·&nbsp; Four &rarr; one per edge</div>' +
@@ -1192,13 +1193,17 @@ window.plethoraBit = {
 
       // --- seat check ---
       '<div data-el="seatp" style="position:absolute;inset:0;z-index:40;pointer-events:none;display:none;">' +
-        '<div style="position:absolute;left:50%;top:50%;margin-top:-128px;width:214px;' +
-          'transform:translate(-50%,-50%) rotate(180deg);text-align:center;pointer-events:none;">' +
-          '<div style="font-size:10px;font-weight:800;letter-spacing:0.24em;text-transform:uppercase;' +
-            'color:rgba(234,243,230,0.40);">Take your seat</div>' +
-          '<div style="margin-top:4px;font-size:15px;line-height:1.25;font-weight:800;' +
-            'color:rgba(234,243,230,0.86);">Everyone press<br>your bomb button</div>' +
-          '<div data-el="seatcount2" style="margin-top:5px;font-size:11px;font-weight:800;' +
+        '<div style="position:absolute;left:50%;top:50%;margin-top:-134px;width:186px;' +
+          'box-sizing:border-box;padding:11px 12px 13px;border-radius:18px;' +
+          'transform:translate(-50%,-50%) rotate(180deg);text-align:center;pointer-events:none;' +
+          'background:linear-gradient(180deg,rgba(38,30,22,0.93),rgba(16,12,8,0.95));' +
+          'box-shadow:inset 0 2px 0 rgba(255,224,180,0.10),0 6px 18px rgba(0,0,0,0.55);' +
+          'border:1.5px solid rgba(255,205,130,0.16);">' +
+          '<div style="font-size:9.5px;font-weight:800;letter-spacing:0.24em;text-transform:uppercase;' +
+            'color:rgba(234,243,230,0.42);">Take your seat</div>' +
+          '<div style="margin-top:4px;font-size:14px;line-height:1.24;font-weight:800;' +
+            'color:rgba(234,243,230,0.88);">Everyone press<br>your bomb button</div>' +
+          '<div data-el="seatcount2" style="margin-top:5px;font-size:10.5px;font-weight:800;' +
             'letter-spacing:0.16em;color:' + HOT + ';font-family:' + MONO + ';">0 / 4 ready</div>' +
         '</div>' +
         '<div data-el="seatcard" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);' +
@@ -1222,7 +1227,7 @@ window.plethoraBit = {
       // --- match over ---
       '<div data-el="over" style="position:absolute;inset:0;z-index:62;pointer-events:auto;display:none;' +
         'background:radial-gradient(ellipse at 50% 40%,rgba(30,20,12,0.975),rgba(6,4,3,0.99));">' +
-        '<div style="position:absolute;left:0;right:0;top:11%;text-align:center;' +
+        '<div style="position:absolute;left:0;right:0;top:20%;text-align:center;' +
           'transform:rotate(180deg);">' +
           '<div style="font-size:10.5px;font-weight:800;letter-spacing:0.32em;text-transform:uppercase;' +
             'color:rgba(234,243,230,0.36);">Match over</div>' +

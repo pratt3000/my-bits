@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Crownlands",
+  "description": "A tile-laying kingdom race for two to four people and one phone. Draft dominoes from a shared lane and lay them into your own five-by-five realm — wheat, forest, lake, grass, swamp and mine, each half having to touch land of its own kind. Land only scores where crowns stand on it, so a vast empty forest is worth nothing and one three-crown mine is worth three. Nothing is hidden, so the phone lies flat and nobody ever picks it up.",
+  "tags": ["board", "multiplayer", "local-multiplayer", "tiles", "strategy", "drafting", "family"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "best_kingdom": {
+        "label": "Best Kingdom",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

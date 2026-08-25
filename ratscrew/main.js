@@ -77,7 +77,7 @@ window.plethoraBit = {
      * slap, RED is a burn. If they shared a hue nobody could tell at a
      * glance whether they had just won the pile or paid for it.
      * ============================================================= */
-    const FELT_LIT = "#1a6b4c", FELT_MID = "#0d4530", FELT_DARK = "#03120c";
+    const FELT_LIT = "#1d7452", FELT_MID = "#093525", FELT_DARK = "#020c07";
     const RAIL = "#241409", COPPER = "#d99a52", COPPER_DIM = "rgba(217,154,82,0.40)";
     const GOLD = "#ffd45e", BURN = "#ff4a4a";
     const CREAM = "#f5edda";
@@ -94,7 +94,7 @@ window.plethoraBit = {
     const LAND_MS = 195;        // how long a thrown card takes to turn over and settle
     const REVEAL_MS = 105;      // when in that throw the face first becomes legible
     const MIN_REACTION = 90;    // under this a "reaction" is a lucky mid-air mash
-    const LOCK_S = 0.85;        // pad freeze after a burn
+    const LOCK_S = 1.15;        // pad freeze after a burn
     const GRACE_MS = 800;       // after a claim, late hands cost nothing
     const COLLECT_MS = 900;     // the beat before a failed tribute is swept up
     const FLIP_LOCK = 0.24;     // minimum gap between flips, so the table sees the card
@@ -659,10 +659,13 @@ window.plethoraBit = {
     const WEAVE = weaveTile(), NOISE = noiseTile();
 
     function paintTable(c, rich) {
-      const pool = c.createRadialGradient(L.px, L.py - H * 0.04, 10, L.px, L.py, Math.max(W, H) * 0.80);
+      // The pool is tight on purpose: one bulb over a table, not a lit room.
+      // Widened, the whole screen came out the same mid-emerald and the felt
+      // stopped reading as cloth under a lamp at all.
+      const pool = c.createRadialGradient(L.px, L.py - H * 0.03, 8, L.px, L.py, Math.max(W, H) * 0.58);
       pool.addColorStop(0.00, FELT_LIT);
-      pool.addColorStop(0.30, "#145a3f");
-      pool.addColorStop(0.58, FELT_MID);
+      pool.addColorStop(0.22, "#155c40");
+      pool.addColorStop(0.48, FELT_MID);
       pool.addColorStop(1.00, FELT_DARK);
       c.fillStyle = pool;
       c.fillRect(0, 0, W, H);
@@ -722,9 +725,10 @@ window.plethoraBit = {
       c.fillRect(0, 0, W, H);
       c.restore();
 
-      const vig = c.createRadialGradient(L.px, L.py, Math.min(W, H) * 0.28, L.px, L.py, Math.max(W, H) * 0.72);
+      const vig = c.createRadialGradient(L.px, L.py, Math.min(W, H) * 0.20, L.px, L.py, Math.max(W, H) * 0.66);
       vig.addColorStop(0, "rgba(0,0,0,0)");
-      vig.addColorStop(1, "rgba(0,0,0,0.58)");
+      vig.addColorStop(0.55, "rgba(0,0,0,0.26)");
+      vig.addColorStop(1, "rgba(0,0,0,0.74)");
       c.fillStyle = vig;
       c.fillRect(0, 0, W, H);
 
@@ -969,7 +973,10 @@ window.plethoraBit = {
     function flipCard(p, now) {
       if (!p.deck.length) return;
       const card = p.deck.pop();
-      const a = rnd() * TAU, d = 6 + rnd() * 7;
+      // A wide scatter, not a neat stack. Six pixels of jitter and the pile is
+      // one card with edges; twenty and you can see the corner index of what is
+      // underneath, which is the only way a sandwich is legible at all.
+      const a = rnd() * TAU, d = 11 + rnd() * 11;
       const from = padCentre(p.seat);
       pile.push({
         card, t0: now, landed: false, faceDown: false,
@@ -1107,7 +1114,7 @@ window.plethoraBit = {
       }
       p.lock = LOCK_S;
       const card = p.deck.pop();
-      const a = rnd() * TAU, d = 7 + rnd() * 7;
+      const a = rnd() * TAU, d = 11 + rnd() * 11;
       pile.unshift({
         card, t0: now - 999, landed: true, faceDown: true,
         rot: (rnd() - 0.5) * 0.34, ox: Math.cos(a) * d, oy: Math.sin(a) * d,
@@ -1268,6 +1275,15 @@ window.plethoraBit = {
         g.restore();
         return;
       }
+      // One shadow for the whole heap, laid down before any of it.
+      //
+      // A shadow per card was the first version and it was badly wrong: six
+      // cards landing within twenty pixels of each other stacked six baked
+      // shadows into an opaque grey slab that read as a seventh card sitting
+      // under the pile. Only the card on top throws its own, because only the
+      // card on top is meant to look lifted.
+      cardShadow(L.px, L.py, 0, 1.14, 0.12);
+
       const buried = Math.max(0, n - 6);
       const slabs = Math.min(6, Math.ceil(buried / 3));
       for (let i = slabs; i >= 1; i--) {
@@ -1279,7 +1295,10 @@ window.plethoraBit = {
         g.strokeStyle = "rgba(0,0,0,0.42)"; g.lineWidth = 1; g.stroke();
         g.restore();
       }
-      for (const e of pile.slice(-6)) {
+      const shown = pile.slice(-6);
+      for (let i = 0; i < shown.length; i++) {
+        const e = shown[i];
+        const top = i === shown.length - 1;
         const t = clamp((now - e.t0) / LAND_MS, 0, 1);
         const p = easeOut(t);
         const tx = L.px + e.ox, ty = L.py + e.oy;
@@ -1298,9 +1317,37 @@ window.plethoraBit = {
           drawCardAt(0, 0, 0, 1, e.card, f >= 0.5, 0.55 * (1 - p) + 0.05);
           g.restore();
         } else {
-          drawCardAt(x, y, rot, grow, e.card, !e.faceDown, 0.05);
+          drawCardAt(x, y, rot, grow, e.card, !e.faceDown, 0.05, top);
         }
       }
+    }
+
+    /**
+     * Ring the cards that actually make the slap.
+     *
+     * Without it the table only ever says "something is live"; with it, it says
+     * which two cards did it, which is how somebody learns the sandwich rule
+     * without reading the panel.
+     */
+    function drawPileHighlight(now) {
+      if (!slapNow) return;
+      const n = pile.length;
+      const idx = slapNow === "sandwich" ? [n - 1, n - 3] : [n - 1, n - 2];
+      const pulse = 0.55 + 0.45 * Math.sin(now * 0.022);
+      for (const i of idx) {
+        const e = pile[i];
+        if (!e || now - e.t0 < LAND_MS) continue;
+        g.save();
+        g.translate(L.px + e.ox, L.py + e.oy);
+        g.rotate(e.rot);
+        g.globalAlpha = 0.35 + 0.45 * pulse;
+        g.strokeStyle = GOLD;
+        g.lineWidth = 3;
+        roundRect(g, -CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H, CARD_R);
+        g.stroke();
+        g.restore();
+      }
+      g.globalAlpha = 1;
     }
 
     function drawFlyers(now) {
@@ -1360,7 +1407,7 @@ window.plethoraBit = {
       g.translate(L.px, L.py);
       g.lineCap = "round";
 
-      g.strokeStyle = "rgba(255,244,214,0.09)";
+      g.strokeStyle = "rgba(255,244,214,0.13)";
       g.lineWidth = 3;
       g.beginPath(); g.arc(0, 0, L.ringR, 0, TAU); g.stroke();
 
@@ -1383,8 +1430,8 @@ window.plethoraBit = {
       }
 
       // Stake arc: how much of the table is riding on the next hand down.
-      g.strokeStyle = slapNow ? GOLD : COPPER_DIM;
-      g.lineWidth = slapNow ? 6 : 2.8;
+      g.strokeStyle = slapNow ? GOLD : "rgba(217,154,82,0.62)";
+      g.lineWidth = slapNow ? 6 : 4;
       g.beginPath();
       g.arc(0, 0, L.ringR, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(stake, 0.001));
       g.stroke();
@@ -1402,21 +1449,6 @@ window.plethoraBit = {
         g.stroke();
       }
 
-      // Tribute pips, in the creditor's colour, sitting on the ring.
-      if (tribute) {
-        const cred = players[tribute.creditor];
-        const total = TRIBUTE[tribute.rank];
-        for (let i = 0; i < total; i++) {
-          const a = -Math.PI / 2 + (i - (total - 1) / 2) * 0.20;
-          const x = Math.cos(a) * (L.ringR + 13), y = Math.sin(a) * (L.ringR + 13);
-          const paid = i >= tribute.left;
-          g.beginPath();
-          g.arc(x, y, paid ? 3 : 4.6, 0, TAU);
-          g.fillStyle = paid ? "rgba(255,244,214,0.20)" : cred.ink;
-          g.fill();
-        }
-      }
-
       // A chevron on the ring pointing at whoever has to act. It is the one
       // piece of state everybody at the table needs at once, and an arrow is
       // the only shape that reads the same from all four sides.
@@ -1424,7 +1456,10 @@ window.plethoraBit = {
         const p = players[turn];
         const bob = Math.sin(now * 0.006) * 2.5;
         g.save();
-        g.rotate(-p.rad);
+        // rotate by the seat's own angle, not its negative: rotating the other
+        // way sent the left player's arrow to the right-hand edge of the ring,
+        // pointing at an empty side of the table.
+        g.rotate(p.rad);
         g.translate(0, L.ringR + 16 + bob);
         g.fillStyle = hexA(p.ink, 0.92);
         g.beginPath();
@@ -1436,7 +1471,7 @@ window.plethoraBit = {
 
       // The status plate, drawn once for each end seat so both of them read it
       // the right way up. The side seats get the same words on their own pad.
-      let text = pile.length ? String(pile.length) : "";
+      let text = pile.length ? "PILE " + pile.length : "";
       let ink = COPPER, bg = "rgba(6,20,14,0.74)";
       if (slapNow) { text = KIND_LABEL[slapNow]; ink = "#141008"; bg = GOLD; }
       else if (pendingCollect) { text = players[pendingCollect.idx].name.toUpperCase() + " TAKES IT"; ink = players[pendingCollect.idx].ink; }
@@ -1458,6 +1493,22 @@ window.plethoraBit = {
         g.lineWidth = 1; g.stroke();
         g.fillStyle = ink;
         tracked(g, text, 0, 0.5, 2);
+
+        // Tribute pips ride directly above the plate rather than floating on
+        // their own arc, so each end seat gets one object to read instead of
+        // two things stacked up the middle of the table.
+        if (tribute && !slapNow && !pendingCollect) {
+          const cred = players[tribute.creditor];
+          const total = TRIBUTE[tribute.rank];
+          for (let i = 0; i < total; i++) {
+            const px = (i - (total - 1) / 2) * 11;
+            const paid = i >= tribute.left;
+            g.beginPath();
+            g.arc(px, -20, paid ? 2.4 : 3.8, 0, TAU);
+            g.fillStyle = paid ? "rgba(255,244,214,0.18)" : cred.ink;
+            g.fill();
+          }
+        }
         g.restore();
       }
     }
@@ -1702,15 +1753,18 @@ window.plethoraBit = {
      * upper eight hid the lower one and the picture said "some cards" instead
      * of "a double" — which is the only thing it is there to say.
      */
+    // Kept clear of the chrome column: a stray card behind the sound and rules
+    // buttons made all three look like a mistake rather than a corner of a
+    // table with cards on it.
     const STRAY = [
-      { id: "2D", x: -168, y: -132, r: -1.15, a: 0.30 },
-      { id: "5C", x: 176, y: 116, r: 0.92, a: 0.26 },
-      { id: "AS", x: 150, y: -168, r: 0.44, a: 0.22 },
+      { id: "2D", x: -168, y: -128, r: -1.15, a: 0.30 },
+      { id: "5C", x: 176, y: 120, r: 0.92, a: 0.26 },
+      { id: "AS", x: 104, y: -214, r: 0.44, a: 0.20 },
     ];
     const HEAP = [
       { id: "4C", x: -66, y: 40, r: -0.72 },
       { id: "9D", x: 58, y: 44, r: 0.64 },
-      { id: "KS", x: -46, y: -26, r: -0.40 },
+      { id: "KS", x: -60, y: -34, r: -0.44 },
       { id: "6H", x: 62, y: -28, r: 0.82 },
       { id: "QC", x: 4, y: 36, r: 0.18 },
       { id: "8S", x: -28, y: 2, r: -0.19 },
@@ -1784,26 +1838,30 @@ window.plethoraBit = {
       } else {
         drawRing(now);
         drawPile(now);
+        drawPileHighlight(now);
         drawShocks();
         drawFlyers(now);
         drawParts();
       }
       g.restore();
 
-      if (phase !== "menu") {
-        for (const p of players) drawPad(p, now);
-        drawBanner(now);
-      }
+      if (phase !== "menu") for (const p of players) drawPad(p, now);
 
       if (flash.a > 0.004) {
         // A tint over the whole table, not a wash. At full strength the peak
         // frame is a single flat colour and the felt, the cards and three other
         // people's pads all go the winner's yellow at once.
-        g.globalAlpha = flash.a * 0.30;
+        g.globalAlpha = flash.a * 0.26;
         g.fillStyle = flash.ink;
         g.fillRect(0, 0, W, H);
         g.globalAlpha = 1;
       }
+
+      // The shout goes on last, above the blow-out. Underneath it, the one
+      // frame that names the winner was the one frame washed white — the whole
+      // point of the flash is to obliterate the table, and it obliterated the
+      // announcement with it.
+      if (phase !== "menu") drawBanner(now);
     }
 
     ctx.onFrame((dtMs) => {

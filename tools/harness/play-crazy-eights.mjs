@@ -97,7 +97,7 @@ await bit.shot("crazy-eights-3-hand");
 }
 
 /* ---- play the game out ------------------------------------------- */
-let shotSuit = false, shotEight = false;
+let shotSuit = false, shotEight = false, shotNamed = false, shotDraw = false;
 let steps = 0;
 while (steps++ < 260) {
   await settle();
@@ -124,6 +124,17 @@ while (steps++ < 260) {
   }
 
   if (s.phase === "play") {
+    if (s.named && !shotNamed) {
+      // An eight is live: the token above the pile has to be saying which suit.
+      check(s.legal.every((i) => s.hand[i][0] === "8" || s.hand[i].slice(-1) === s.named),
+        "with an eight live only the named suit (or another eight) is legal");
+      await bit.shot("crazy-eights-7-eight-live");
+      shotNamed = true;
+    }
+    if (!s.legal.length && s.canDraw && !shotDraw) {
+      await bit.shot("crazy-eights-8-must-draw");
+      shotDraw = true;
+    }
     if (s.legal.length) {
       // Prefer an eight now and then so the wild path really gets exercised.
       let pick = s.legal[0];
@@ -162,6 +173,24 @@ await click('[data-el="again"]');
 await settle();
 s = await look();
 check(s.round === 1 && s.players.every((p) => p.score === 0), "Play again deals a fresh game");
+
+/* ---- four round one phone ---------------------------------------- */
+// The rail has to hold three opponents on a 390px screen, and a four-handed
+// deal is five cards rather than seven. Both are layout claims a screenshot
+// can settle and a unit test cannot.
+await click('[data-el="cog"]');
+await click('[data-el="leave"]');
+s = await look();
+check(s.phase === "menu", "Leave this game walks out of a half-played hand, got " + s.phase);
+await click('[data-el="seats"] button[data-v="4"]');
+await click('[data-el="deal"]');
+await settle();
+await click('[data-el="cover-btn"]');
+await settle();
+s = await look();
+check(s.players.length === 4 && s.players.every((p) => p.cards === 5),
+  "four players get five cards each, got " + JSON.stringify(s.players.map((p) => p.cards)));
+await bit.shot("crazy-eights-9-four-players");
 
 const errs = (await bit.errors()).filter((e) => !/404|favicon/.test(e));
 console.log(errs.length ? "ERRORS:\n  " + errs.join("\n  ") : "errors: none");

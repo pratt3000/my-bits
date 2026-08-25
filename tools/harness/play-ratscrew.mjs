@@ -113,11 +113,12 @@ async function flip() {
 
 /* --- THE TEST: two hands land in the same frame on a live table. ---
        Flip until something is slappable, then bring two pads down together. */
-let snaps = [], lates = [], pileBefore = 0, opened = false, kind = null;
+let snaps = [], lates = [], pileBefore = 0, opened = false, kind = null, heldBefore = {};
 for (let i = 0; i < 34 && !opened; i++) {
   const s = await rs();
   if (s.slap) {
     opened = true; pileBefore = s.pile; kind = s.slap;
+    for (const c of s.counts) heldBefore[c.seat] = c.cards;
     await bit.tapTogether([{ x: pads.bottom.x, y: pads.bottom.y }, { x: pads.top.x, y: pads.top.y }]);
     const c = await bit.probe(() => window.__RATSCREW__.claims);
     snaps = c.filter((x) => x.verdict === "slap");
@@ -137,9 +138,11 @@ check(lates.length >= 1, "the other hand was recorded late, not burned (got " + 
 if (snaps.length === 1 && lates.length >= 1) {
   const won = st.counts.find((c) => c.seat === snaps[0].seat);
   const lost = st.counts.find((c) => c.seat === lates[0].seat);
-  check(won.cards === 6 - (snaps[0].seat === st.turn ? 0 : 0) + pileBefore - (0),
-    "the winner banked the whole pile of " + pileBefore + " (holds " + won.cards + ")");
-  check(lost.lock === 0, "the late hand was not locked out");
+  check(won.cards === heldBefore[won.seat] + pileBefore,
+    "the winner banked the whole pile of " + pileBefore +
+    " (" + heldBefore[won.seat] + " -> " + won.cards + ")");
+  check(lost.cards === heldBefore[lost.seat] && lost.lock === 0,
+    "the late hand paid nothing (" + heldBefore[lost.seat] + " -> " + lost.cards + ")");
 }
 console.log("  claims:", JSON.stringify(st.claims));
 
@@ -149,7 +152,10 @@ const quiet = await rs();
 const before = quiet.counts;
 const victim = before.find((c) => c.seat !== quiet.turn && !c.out) || before[0];
 await bit.tap(pads[victim.seat].x, pads[victim.seat].y);
-await bit.wait(220);
+await bit.wait(90);
+// Probe before the screenshot. A page.screenshot on SwiftShader takes most of
+// a second, so the pad's lockout can expire inside the capture itself and the
+// assertion afterwards reads a pad that has already come back to life.
 st = await rs();
 const nowV = st.counts.find((c) => c.seat === victim.seat);
 check(st.claims.some((c) => c.verdict === "burn"), "the hand was judged a burn");

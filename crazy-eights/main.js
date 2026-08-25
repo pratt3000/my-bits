@@ -71,7 +71,7 @@ window.plethoraBit = {
      * warm brown cloth a red back is the same family as the felt and the
      * stock stops reading as a separate object.
      * ============================================================= */
-    const FELT_LIT = "#8f5130", FELT_MID = "#5a2f1b", FELT_DARK = "#170801";
+    const FELT_LIT = "#a35d33", FELT_MID = "#5c2e19", FELT_DARK = "#130601";
     const RAIL = "#2b1610", BRASS = "#e8b95f", BRASS_DIM = "rgba(232,185,95,0.38)";
     const CREAM = "#f8efdb", INK_SOFT = "rgba(248,239,219,0.60)";
     const CARD_THEME = {
@@ -209,26 +209,7 @@ window.plethoraBit = {
      * of the few canvas calls that is not cheap.
      */
     const trackCache = new Map();
-    function tracked(g, text, x, y, spacing) {
-      const key = g.font + "|" + text + "|" + spacing;
-      let plan = trackCache.get(key);
-      if (!plan) {
-        const chars = String(text).split("");
-        const w = chars.map((c) => g.measureText(c).width);
-        let total = -spacing;
-        for (const v of w) total += v + spacing;
-        plan = { chars, w, total };
-        trackCache.set(key, plan);
-      }
-      let cx = x - plan.total / 2;
-      const align = g.textAlign;
-      g.textAlign = "left";
-      for (let i = 0; i < plan.chars.length; i++) { g.fillText(plan.chars[i], cx, y); cx += plan.w[i] + spacing; }
-      g.textAlign = align;
-      return plan.total;
-    }
-    /** The same, but starting at x rather than centred on it. */
-    function trackedL(g2, text, x, y, spacing) {
+    function trackPlan(g2, text, spacing) {
       const key = g2.font + "|" + text + "|" + spacing;
       let plan = trackCache.get(key);
       if (!plan) {
@@ -239,6 +220,16 @@ window.plethoraBit = {
         plan = { chars, w, total };
         trackCache.set(key, plan);
       }
+      return plan;
+    }
+    function trackWidth(g2, text, spacing) { return trackPlan(g2, text, spacing).total; }
+    /** Centred on x. */
+    function tracked(g2, text, x, y, spacing) {
+      return trackedL(g2, text, x - trackPlan(g2, text, spacing).total / 2, y, spacing);
+    }
+    /** Starting at x rather than centred on it. */
+    function trackedL(g2, text, x, y, spacing) {
+      const plan = trackPlan(g2, text, spacing);
       let cx = x;
       const align = g2.textAlign;
       g2.textAlign = "left";
@@ -502,10 +493,10 @@ window.plethoraBit = {
       // Stock: warm paper, very slightly darker toward the edges so a flat
       // rectangle still reads as a physical card under a lamp.
       roundRect(g, 0.5, 0.5, w - 1, h - 1, r);
-      const paper = g.createLinearGradient(0, 0, w * 0.35, h);
-      paper.addColorStop(0, "#fffdf6");
-      paper.addColorStop(0.55, CARD_THEME.face);
-      paper.addColorStop(1, "#ebe2ce");
+      const paper = g.createLinearGradient(0, 0, w * 0.55, h);
+      paper.addColorStop(0, "#fffdf4");
+      paper.addColorStop(0.42, CARD_THEME.face);
+      paper.addColorStop(1, "#ece2cd");
       g.fillStyle = paper; g.fill();
       g.strokeStyle = CARD_THEME.edge; g.lineWidth = Math.max(1, w * 0.008); g.stroke();
 
@@ -650,7 +641,13 @@ window.plethoraBit = {
     let W = ctx.width, H = ctx.height;
 
     const CARD_W = 100, CARD_H = 140, CARD_R = 9, SHADOW_PAD = 22;
-    const HAND_S = 0.66, TABLE_S = 0.86;
+    const HAND_S = 0.66, TABLE_S = 0.92;
+    // The widest the fan is allowed to open, and how far below the screen its
+    // pivot sits. Together they decide where the outermost card lands: at 0.60
+    // radians on a 455px radius the end cards clear the screen edge with room
+    // for the corner a rotated card throws outward, which a flatter fan on a
+    // longer radius does not.
+    const FAN_ARC = 0.60, FAN_R = 455, FAN_STEP_MAX = 0.112;
     const art = makeDeckArt(CARD_W, CARD_H, dpr);
 
     /**
@@ -689,7 +686,7 @@ window.plethoraBit = {
       const bottom = H - sb;
       L.fanY = bottom - 126;                    // centre of the middle card in the fan
       L.fanX = W / 2;
-      L.fanR = 500;
+      L.fanR = FAN_R;
       L.promptY = L.fanY - 116;                 // centre of the prompt plaque
       L.promptW = Math.min(W - 44, 322);
       L.promptH = 50;
@@ -697,8 +694,8 @@ window.plethoraBit = {
       L.tableBot = L.promptY - 30;
       L.tableY = (L.tableTop + L.tableBot) / 2 + 4;
       L.tableX = W / 2;
-      L.discard = { x: W / 2 + 52, y: L.tableY };
-      L.stock = { x: W / 2 - 52, y: L.tableY };
+      L.discard = { x: W / 2 + 55, y: L.tableY };
+      L.stock = { x: W / 2 - 55, y: L.tableY };
       L.ringR = Math.min(W * 0.44, (L.tableBot - L.tableTop) / 2 - 4, 150);
 
       // The pass control only exists when a player can neither play nor draw,
@@ -739,17 +736,17 @@ window.plethoraBit = {
 
     function paintTable(c, rich) {
       const fx = L.tableX, fy = L.tableY;
-      const pool = c.createRadialGradient(fx, fy - H * 0.04, 10, fx, fy, Math.max(W, H) * 0.82);
+      const pool = c.createRadialGradient(fx, fy - H * 0.04, 10, fx, fy, Math.max(W, H) * 0.78);
       pool.addColorStop(0.00, FELT_LIT);
-      pool.addColorStop(0.28, "#7c4326");
-      pool.addColorStop(0.58, FELT_MID);
+      pool.addColorStop(0.26, "#8a4c28");
+      pool.addColorStop(0.56, FELT_MID);
       pool.addColorStop(1.00, FELT_DARK);
       c.fillStyle = pool;
       c.fillRect(0, 0, W, H);
 
       if (rich && WEAVE) {
         c.save();
-        c.globalAlpha = 0.19;
+        c.globalAlpha = 0.26;
         c.globalCompositeOperation = "overlay";
         c.fillStyle = c.createPattern(WEAVE, "repeat");
         c.fillRect(0, 0, W, H);
@@ -781,19 +778,26 @@ window.plethoraBit = {
       // into the baize rather than painted on top.
       c.save();
       c.translate(fx, fy);
-      c.strokeStyle = "rgba(255,232,196,0.06)";
+      // Struck twice — a light stroke with a dark one just inside it, which is
+      // what makes a line look pressed into cloth rather than drawn on it.
+      c.strokeStyle = "rgba(0,0,0,0.16)";
+      c.lineWidth = 2.5;
+      c.beginPath(); c.arc(0, 0, L.ringR - 1.5, 0, TAU); c.stroke();
+      c.strokeStyle = "rgba(255,226,178,0.10)";
       c.lineWidth = 2;
       c.beginPath(); c.arc(0, 0, L.ringR, 0, TAU); c.stroke();
+      c.strokeStyle = "rgba(255,226,178,0.055)";
       c.lineWidth = 1;
-      c.beginPath(); c.arc(0, 0, L.ringR + 6, 0, TAU); c.stroke();
-      c.strokeStyle = "rgba(0,0,0,0.11)";
-      c.beginPath(); c.arc(0, 0, L.ringR + 2.5, 0, TAU); c.stroke();
+      c.beginPath(); c.arc(0, 0, L.ringR + 7, 0, TAU); c.stroke();
       // Four suit marks pressed into the cloth on the circle's diagonals.
-      c.fillStyle = "rgba(255,232,196,0.045)";
       const marks = ["S", "H", "D", "C"];
       for (let i = 0; i < 4; i++) {
         const a = Math.PI / 4 + (i / 4) * TAU;
-        suitPath(c, marks[i], Math.cos(a) * (L.ringR - 20), Math.sin(a) * (L.ringR - 20), 11);
+        const mx = Math.cos(a) * (L.ringR - 22), my = Math.sin(a) * (L.ringR - 22);
+        c.fillStyle = "rgba(0,0,0,0.17)";
+        suitPath(c, marks[i], mx, my + 1, 13);
+        c.fillStyle = "rgba(255,226,178,0.075)";
+        suitPath(c, marks[i], mx, my, 13);
       }
       c.restore();
 
@@ -801,18 +805,19 @@ window.plethoraBit = {
       // so the falloff is a real radial gradient instead.
       c.save();
       c.globalCompositeOperation = "lighter";
-      const bloom = c.createRadialGradient(fx, fy - H * 0.05, 0, fx, fy - H * 0.05, Math.max(W, H) * 0.60);
-      bloom.addColorStop(0.00, "rgba(255,220,160,0.15)");
-      bloom.addColorStop(0.35, "rgba(255,214,150,0.065)");
-      bloom.addColorStop(0.70, "rgba(255,214,150,0.016)");
-      bloom.addColorStop(1.00, "rgba(255,214,150,0)");
+      const bloom = c.createRadialGradient(fx, fy - H * 0.05, 0, fx, fy - H * 0.05, Math.max(W, H) * 0.58);
+      bloom.addColorStop(0.00, "rgba(255,214,150,0.20)");
+      bloom.addColorStop(0.32, "rgba(255,208,140,0.085)");
+      bloom.addColorStop(0.70, "rgba(255,208,140,0.020)");
+      bloom.addColorStop(1.00, "rgba(255,208,140,0)");
       c.fillStyle = bloom;
       c.fillRect(0, 0, W, H);
       c.restore();
 
-      const vig = c.createRadialGradient(fx, fy, Math.min(W, H) * 0.26, fx, fy, Math.max(W, H) * 0.74);
+      const vig = c.createRadialGradient(fx, fy, Math.min(W, H) * 0.22, fx, fy, Math.max(W, H) * 0.70);
       vig.addColorStop(0, "rgba(0,0,0,0)");
-      vig.addColorStop(1, "rgba(0,0,0,0.58)");
+      vig.addColorStop(0.65, "rgba(6,2,0,0.30)");
+      vig.addColorStop(1, "rgba(4,1,0,0.68)");
       c.fillStyle = vig;
       c.fillRect(0, 0, W, H);
 
@@ -1378,8 +1383,8 @@ window.plethoraBit = {
       g.save();
       g.translate(x, y); g.rotate(rot);
       roundRect(g, -w / 2, -h / 2, w, h, CARD_R * scale);
-      g.fillStyle = "rgba(26,11,3,0.60)"; g.fill();
-      g.strokeStyle = "rgba(0,0,0,0.30)"; g.lineWidth = 1; g.stroke();
+      g.fillStyle = "rgba(30,13,4,0.46)"; g.fill();
+      g.strokeStyle = "rgba(0,0,0,0.26)"; g.lineWidth = 1; g.stroke();
       g.restore();
     }
 
@@ -1397,7 +1402,7 @@ window.plethoraBit = {
 
     /* ---- the fan -------------------------------------------------- */
     function fanSlot(i, n) {
-      const step = n > 1 ? Math.min(0.112, 0.62 / (n - 1)) : 0;
+      const step = n > 1 ? Math.min(FAN_STEP_MAX, FAN_ARC / (n - 1)) : 0;
       const a = (i - (n - 1) / 2) * step;
       const R = L.fanR;
       return { x: L.fanX + Math.sin(a) * R, y: L.fanY + R - Math.cos(a) * R, a };
@@ -1663,9 +1668,22 @@ window.plethoraBit = {
         g.font = "700 8.5px " + FONT;
         trackedL(g, one ? "ONE CARD" : "CARDS", tx + numW + 8, y + 43, 1.5);
 
-        g.fillStyle = "rgba(248,239,219,0.44)";
+        // On a wide plaque the running score goes to the far edge, or the left
+        // half is a column of text against forty empty pixels of leather.
+        g.fillStyle = "rgba(248,239,219,0.46)";
         g.font = "600 9.5px " + FONT;
-        g.fillText(p.score + " pts", tx + numW + 8, y + 56);
+        if (wide) {
+          g.textAlign = "right";
+          g.font = "700 15px " + FONT;
+          g.fillStyle = "rgba(248,239,219,0.80)";
+          g.fillText(String(p.score), x + pw - 18, y + 47);
+          g.font = "700 8px " + FONT;
+          g.fillStyle = "rgba(248,239,219,0.42)";
+          g.textAlign = "left";
+          trackedL(g, "PTS", x + pw - 18 - trackWidth(g, "PTS", 1.6), y + 60, 1.6);
+        } else {
+          g.fillText(p.score + " pts", tx + numW + 8, y + 56);
+        }
 
         if (next) {
           g.fillStyle = BRASS;
@@ -1684,15 +1702,23 @@ window.plethoraBit = {
     }
 
     /* ---- the prompt band ------------------------------------------ */
+    /**
+     * The prompt band.
+     *
+     * Only drawn while a player is actually looking at their hand. It used to
+     * be drawn in every phase, and the cover, the suit sheet and the result
+     * panel all sit on translucent grounds — so a ghost of "ROSE · 1 card
+     * plays" printed itself faintly through every one of them.
+     */
     function drawPrompt(now) {
-      if (phase === "menu" || phase === "deal") return;
+      if (phase !== "play") return;
       const p = players[turn];
       if (!p) return;
       const x = W / 2, y = L.promptY;
       const w = L.promptW, h = L.promptH;
 
       const legal = legalIndices(p.hand);
-      const stuck = phase === "play" && revealed && !legal.length && !canDraw();
+      const stuck = revealed && !legal.length && !canDraw();
       if (stuck) { drawPassButton(now); return; }
 
       g.save();
@@ -1712,44 +1738,40 @@ window.plethoraBit = {
       g.font = "800 10.5px " + FONT;
       g.fillText(p.name.toUpperCase(), x - w / 2 + 29, y - 9);
 
-      g.fillStyle = CREAM;
       g.font = "600 12px " + FONT;
       let msg = "";
-      if (phase === "cover") msg = "pass the phone along";
-      else if (phase === "suit") msg = "name the suit that follows";
-      else if (!revealed) msg = "";
+      if (!revealed) msg = "pass the phone along";
       else if (legal.length) msg = legal.length + (legal.length === 1 ? " card plays" : " cards play");
       else if (canDraw()) msg = "nothing plays — tap the deck";
       else msg = "nothing plays";
       g.fillStyle = legal.length || !revealed ? INK_SOFT : "#ffb3a0";
       g.fillText(msg, x - w / 2 + 29, y + 9);
 
-      // What has to be matched, drawn rather than named.
+      // What has to be matched, drawn rather than named, and laid out from the
+      // right edge inward so the pieces cannot collide at any rank width.
       const t = top();
       if (t) {
-        const rx = x + w / 2 - 20;
-        g.textAlign = "right";
-        g.textBaseline = "middle";
         const suit = activeSuit();
+        g.textBaseline = "middle";
         g.fillStyle = isRed(suit) ? "#ff8b92" : CREAM;
-        suitPath(g, suit, rx - 5, y - 1, 11);
+        suitPath(g, suit, x + w / 2 - 28, y - 1, 12);
+        let cur = x + w / 2 - 44;                    // right edge of the next item
+        g.font = "700 9px " + FONT;
+        const small = named ? "EIGHT" : "OR";
+        g.fillStyle = named ? BRASS : INK_SOFT;
+        const sw = trackWidth(g, small, 1.6);
+        trackedL(g, small, cur - sw, y, 1.6);
+        cur -= sw + 9;
         if (!named) {
           g.fillStyle = CREAM;
           g.font = "800 19px " + SERIF;
-          g.fillText(t.rank, rx - 22, y);
-          g.fillStyle = INK_SOFT;
-          g.font = "700 9px " + FONT;
-          g.textAlign = "center";
-          tracked(g, "OR", rx - 36, y + 1, 1.4);
-        } else {
-          g.fillStyle = BRASS;
-          g.font = "700 8.5px " + FONT;
-          g.textAlign = "center";
-          tracked(g, "EIGHT", rx - 32, y + 1, 1.6);
+          g.textAlign = "right";
+          g.fillText(t.rank, cur, y);
         }
       }
       g.restore();
       g.textAlign = "center";
+      g.textBaseline = "middle";
     }
 
     function drawPassButton(now) {
@@ -1851,11 +1873,11 @@ window.plethoraBit = {
     /* ---- the title fan --------------------------------------------- */
     const FAN = ["8S", "QH", "8D", "KC", "8H"];
     function drawTitleFan(now) {
-      const cx = W / 2, cy = H * 0.30, R = 300;
+      const cx = W / 2, cy = H * 0.295, R = 320;
       const rock = Math.sin(now * 0.00065) * 0.028;
       for (let i = 0; i < FAN.length; i++) {
         const k = i - (FAN.length - 1) / 2;
-        const a = k * 0.165 + rock;
+        const a = k * 0.190 + rock;
         const wild = FAN[i][0] === "8";
         const card = { id: FAN[i], rank: FAN[i].slice(0, -1), suit: FAN[i].slice(-1) };
         drawCardAt(cx + Math.sin(a) * R, cy - Math.cos(a) * R + R - (wild ? 15 : 0),
@@ -1967,17 +1989,22 @@ window.plethoraBit = {
     const QUIET = "linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.055))";
     const QUIET_EDGE = "rgba(232,185,95,0.42)";
     const GOLD = "linear-gradient(180deg,#f4d492,#cf9a2e)";
-    const panel = "max-width:326px;width:100%;background:linear-gradient(180deg,#3a1d10,#200d05);" +
-      "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(232,185,95,0.28),0 20px 60px rgba(0,0,0,0.6);";
+    // box-sizing is explicit on every padded block. Chrome's UA sheet gives
+    // buttons border-box and divs content-box, so a panel with width:100% and
+    // 22px of padding came out 44px wider than the column it sits in and hung
+    // off both edges of the screen — while the buttons under it lined up fine.
+    const panel = "box-sizing:border-box;max-width:326px;width:100%;" +
+      "background:linear-gradient(180deg,#4a2513,#261006);" +
+      "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(232,185,95,0.30),0 20px 60px rgba(0,0,0,0.6);";
     const label = "font-size:11px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.52;";
-    const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
+    const sheetCss = "box-sizing:border-box;position:absolute;inset:0;display:none;align-items:center;" +
       "align-items:safe center;justify-content:center;" +
       "background:rgba(12,5,2,0.90);z-index:80;padding:" + (SAFE_T + 14) + "px 24px " +
       (SAFE_B + 14) + "px;overflow-y:auto;pointer-events:auto;";
-    const resultCss = "position:absolute;inset:0;display:none;flex-direction:column;" +
+    const resultCss = "box-sizing:border-box;position:absolute;inset:0;display:none;flex-direction:column;" +
       "align-items:center;align-items:safe center;justify-content:center;z-index:65;padding:" +
-      (SAFE_T + 16) + "px 24px " + (SAFE_B + 16) + "px;text-align:center;overflow-y:auto;pointer-events:auto;" +
-      "background:radial-gradient(120% 60% at 50% 42%,rgba(24,10,4,0.86),rgba(8,3,1,0.975));";
+      (SAFE_T + 16) + "px 22px " + (SAFE_B + 16) + "px;text-align:center;overflow-y:auto;pointer-events:auto;" +
+      "background:radial-gradient(130% 62% at 50% 42%,rgba(34,15,6,0.80),rgba(9,3,1,0.965));";
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT + ";color:" + CREAM + ";pointer-events:none;";
@@ -1997,11 +2024,11 @@ window.plethoraBit = {
         'rgba(14,5,2,0) 18%,rgba(14,5,2,0.24) 38%,rgba(14,5,2,0.88) 56%,rgba(12,4,1,0.98) 100%);">' +
         '<div style="' + label + 'margin-bottom:4px;">Wild cards, one phone</div>' +
         '<div style="font-size:52px;font-weight:800;letter-spacing:-0.035em;line-height:0.92;' +
-          'background:linear-gradient(178deg,#fff4dd 6%,#eec06a 50%,#a9741e);-webkit-background-clip:text;' +
+          'background:linear-gradient(178deg,#fff6e3 2%,#f2ca79 44%,#c48f31 100%);-webkit-background-clip:text;' +
           'background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' +
           'text-shadow:0 8px 30px rgba(0,0,0,0.55);">Crazy Eights</div>' +
         '<div style="font-size:14px;line-height:1.55;opacity:0.66;max-width:272px;margin-top:9px;">' +
-          'Match the pile by rank or suit. Drop an eight and name whatever suit you like. ' +
+          'Match the pile by rank or suit. Play an eight and name any suit you like. ' +
           'The phone goes round — your hand is yours alone.</div>' +
         '<div style="' + label + 'margin:18px 0 8px;">Players</div>' +
         '<div data-el="seats" style="display:flex;gap:9px;width:210px;"></div>' +
@@ -2019,18 +2046,20 @@ window.plethoraBit = {
        * public information and there is no reason to hide them while the phone
        * is in the air. Only the hand is secret, and the hand is drawn face
        * down until the cover lifts. ---- */
-      '<div data-el="cover" style="position:absolute;inset:0;display:none;flex-direction:column;' +
-        'justify-content:flex-end;align-items:center;z-index:55;pointer-events:auto;' +
-        'padding:0 26px ' + (SAFE_B + 22) + 'px;text-align:center;background:linear-gradient(180deg,' +
-        'rgba(16,6,2,0) 10%,rgba(16,6,2,0.30) 26%,rgba(15,5,2,0.90) 46%,rgba(11,4,1,0.985) 66%);">' +
-        '<div data-el="cover-need" style="font-size:12.5px;opacity:0.62;margin-bottom:16px;"></div>' +
+      '<div data-el="cover" style="box-sizing:border-box;position:absolute;inset:0;display:none;' +
+        'flex-direction:column;justify-content:flex-end;align-items:center;z-index:55;pointer-events:auto;' +
+        'padding:0 24px ' + (SAFE_B + 22) + 'px;text-align:center;background:linear-gradient(180deg,' +
+        'rgba(16,6,2,0) 0%,rgba(16,6,2,0.05) 40%,rgba(15,5,2,0.55) 52%,rgba(11,4,1,0.965) 64%,' +
+        'rgba(9,3,1,0.99) 100%);">' +
+        '<div data-el="cover-need" style="font-size:12.5px;opacity:0.62;margin-bottom:18px;"></div>' +
         '<div style="' + label + '">Pass the phone to</div>' +
         '<div data-el="cover-name" style="font-size:44px;font-weight:800;line-height:1.06;' +
           'letter-spacing:-0.02em;margin-top:2px;"></div>' +
         '<div data-el="cover-count" style="font-size:12.5px;font-weight:700;letter-spacing:0.16em;' +
           'text-transform:uppercase;opacity:0.85;margin-top:4px;"></div>' +
-        '<div style="width:100%;max-width:280px;">' +
-          '<button data-el="cover-btn" style="' + bigBtn("#fff", "#1a0a03") + 'margin-top:20px;"></button>' +
+        '<div style="width:100%;max-width:306px;">' +
+          '<button data-el="cover-btn" style="' + bigBtn("#fff", "#1a0a03") +
+            'margin-top:20px;font-size:15px;"></button>' +
         '</div>' +
         '<div style="font-size:12px;opacity:0.44;line-height:1.5;margin-top:12px;max-width:260px;">' +
           'Only you should see the next screen.<br>It covers itself again the moment you play.</div>' +
@@ -2097,7 +2126,11 @@ window.plethoraBit = {
           '<div style="' + label + '">Play to</div>' +
           '<div data-el="targs" style="display:flex;gap:7px;margin:9px 0 4px;"></div>' +
           '<div style="font-size:12px;opacity:0.45;margin-top:10px;">Players and target apply on the next deal.</div>' +
-          '<button data-el="cogp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Done</button>' +
+          '<button data-el="cogp-close" style="' + bigBtn(GOLD, "#241704") + 'margin-top:16px;">Done</button>' +
+          // Somebody has to be able to walk away from a half-played game
+          // without closing the bit; without this the only route back to the
+          // title is playing the whole thing out.
+          '<button data-el="leave" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:8px;">Leave this game</button>' +
         '</div>' +
       '</div>' +
 
@@ -2224,14 +2257,17 @@ window.plethoraBit = {
       newMatch();
       try { ctx.platform.interact({ type: "replay" }); } catch (_) {}
     });
-    shell.tap(shell.el("quit"), () => {
-      shell.el("match").style.display = "none";
+    function toMenu() {
+      for (const n of ["match", "round", "cover", "suitp"]) shell.el(n).style.display = "none";
       shell.el("menu").style.display = "flex";
       phase = "menu";
       players = [];
+      flyer = null; drawQueue = 0; waitT = 0; waitFn = null; banner = null;
       layout(); bakeTable();
       paintAllPills();
-    });
+    }
+    shell.tap(shell.el("quit"), toMenu);
+    shell.tap(shell.el("leave"), () => { showSheet("cogp", false); toMenu(); });
 
     /* ===============================================================
      * INPUT
