@@ -1093,7 +1093,10 @@ window.plethoraBit = {
 
     function startDraw() {
       if (!canDraw()) return;
-      drawQueue = settings.drawRule === 1 ? 1 : 24;   // 24 is a ceiling, not a target
+      // The strict rule has no card limit, so neither does this: the run stops
+      // when something is playable or when there is genuinely nothing left to
+      // draw. 52 is a guard against a logic error, not a house rule.
+      drawQueue = settings.drawRule === 1 ? 1 : 52;
       stepDraw();
     }
 
@@ -1108,8 +1111,12 @@ window.plethoraBit = {
       const idx = p.hand.length - 1;
       const slot = fanSlot(idx, p.hand.length);
       drawQueue--;
+      // A run of draws is a cascade, not a queue of individual deals. At the
+      // single-card pace a bad hand spent eight seconds watching cards fly
+      // before its owner could do anything.
+      const run = drawQueue > 0;
       flyer = {
-        card, target: "hand", handIndex: idx, t0: performance.now(), dur: 250,
+        card, target: "hand", handIndex: idx, t0: performance.now(), dur: run ? 125 : 240,
         x0: L.stock.x, y0: L.stock.y, r0: -0.03, s0: TABLE_S,
         x1: slot.x, y1: slot.y, r1: slot.a, s1: HAND_S,
         faceUp: revealed,
@@ -1119,7 +1126,7 @@ window.plethoraBit = {
           sound.sting("tap");
           sound.haptic("light");
           if (settings.drawRule === 0 && legalIndices(p.hand).length) drawQueue = 0;
-          if (drawQueue > 0 && canDraw()) after(0.08, stepDraw);
+          if (drawQueue > 0 && canDraw()) after(0.03, stepDraw);
           else finishDraw();
         },
       };
@@ -1177,7 +1184,9 @@ window.plethoraBit = {
       shell.el("round-title").textContent = w ? w.name + " goes out" : "Nobody can move";
       shell.el("round-title").style.color = w ? w.ink : CREAM;
       shell.el("round-sub").textContent = w
-        ? (left === 0 ? "an exact finish" : left + (left === 1 ? " card" : " cards") + " left between the rest")
+        ? (left === 0 ? "an exact finish"
+          : left + (left === 1 ? " card" : " cards") +
+            (players.length > 2 ? " left between the rest" : " still in hand"))
         : "the deck is spent and no one has a legal card";
       shell.el("round-rows").innerHTML = scoreRows();
       shell.el("round-btn").textContent = done ? "See the result" : "Next round";
@@ -1338,7 +1347,14 @@ window.plethoraBit = {
     /* ===============================================================
      * DRAWING
      * ============================================================= */
-    function cardShadow(x, y, rot, scale, lift) {
+    /**
+     * One card's shadow, separate from the card so a cluster can share a single
+     * one. Five discards landing within a dozen pixels of each other stack five
+     * shadows and the pile arrives wearing a black hole; a fan of thirteen is
+     * worse. Callers that draw a group pass `shadow: false` on the cards and
+     * lay one shadow down first.
+     */
+    function cardShadow(x, y, rot, scale, lift, alpha) {
       g.save();
       g.translate(x, y);
       g.rotate(rot);
@@ -1346,11 +1362,13 @@ window.plethoraBit = {
         const spread = 1 + lift * 1.7;
         const sw = (CARD_W + SHADOW_PAD * 2) * scale * spread;
         const sh = (CARD_H + SHADOW_PAD * 2) * scale * spread;
-        g.globalAlpha = clamp(1 - lift * 0.9, 0.25, 1);
+        g.globalAlpha = clamp(1 - lift * 0.9, 0.25, 1) * (alpha === undefined ? 1 : alpha);
         g.drawImage(shadowArt, -sw / 2, -sh / 2 + (3 + lift * 12) * scale, sw, sh);
         g.globalAlpha = 1;
       } else {
+        g.globalAlpha = alpha === undefined ? 1 : alpha;
         dropShadow(g, CARD_W * scale, CARD_H * scale, CARD_R * scale, lift);
+        g.globalAlpha = 1;
       }
       g.restore();
     }
@@ -1408,18 +1426,37 @@ window.plethoraBit = {
       return { x: L.fanX + Math.sin(a) * R, y: L.fanY + R - Math.cos(a) * R, a };
     }
 
-    /** Topmost card under a point. Cards are laid left to right, so scan back. */
+    /** Is (x,y) inside card i's rectangle, in that card's own rotated frame? */
+    function overCard(i, n, x, y) {
+      const s = fanSlot(i, n);
+      const lift = i === selected ? 30 : 0;
+      const dx = x - s.x, dy = y - (s.y - lift);
+      const c = Math.cos(-s.a), si = Math.sin(-s.a);
+      const rx = dx * c - dy * si, ry = dx * si + dy * c;
+      return Math.abs(rx) <= CARD_W * HAND_S / 2 && Math.abs(ry) <= CARD_H * HAND_S / 2;
+    }
+
+    /**
+     * Which card a finger has picked out of the fan.
+     *
+     * The obvious answer — the topmost card whose rectangle contains the point
+     * — is what the eye sees but not what the hand means. In a ten-card fan
+     * each card shows a thirty-pixel sliver, so aiming at the *middle* of a
+     * card lands on its right-hand neighbour, and a player who reaches for the
+     * card they can plainly see gets a different one. (It cost a play script an
+     * infinite loop before it cost a person a turn.)
+     *
+     * So the scan is topmost-first over the LEGAL cards only. Illegal cards
+     * are dimmed and unusable anyway, so they cannot shadow a playable card
+     * out from under a finger: put a thumb across a bright card and a dim one
+     * and the bright one is what lifts.
+     */
     function fanHit(x, y) {
       const hand = players[turn] ? players[turn].hand : [];
       const n = hand.length;
-      const hw = CARD_W * HAND_S / 2, hh = CARD_H * HAND_S / 2;
       for (let i = n - 1; i >= 0; i--) {
-        const s = fanSlot(i, n);
-        const lift = i === selected ? 30 : 0;
-        const dx = x - s.x, dy = y - (s.y - lift);
-        const c = Math.cos(-s.a), si = Math.sin(-s.a);
-        const rx = dx * c - dy * si, ry = dx * si + dy * c;
-        if (Math.abs(rx) <= hw && Math.abs(ry) <= hh) return i;
+        if (!isLegal(hand[i])) continue;
+        if (overCard(i, n, x, y)) return i;
       }
       return -1;
     }
@@ -1438,7 +1475,11 @@ window.plethoraBit = {
         const lift = sel ? 30 : (legal && act ? 4 : 0);
         const sc = HAND_S * (sel ? 1.13 : 1);
         const x = s.x, y = s.y - lift;
-        drawCardAt(x, y, s.a, sc, hand[i], revealed, sel ? 0.55 : 0.10);
+        // Fan cards overlap by two thirds, so their shadows pile up under the
+        // hand into one dark bar. Each is thinned; only the lifted card, which
+        // is genuinely off the table, throws a full one.
+        cardShadow(x, y, s.a, sc, sel ? 0.55 : 0.09, sel ? 1 : 0.42);
+        drawCardAt(x, y, s.a, sc, hand[i], revealed, 0, false);
         if (revealed && !legal) dimCard(x, y, s.a, sc);
         else if (revealed && sel) rimCard(x, y, s.a, sc, "#fff4d8", 2.4, 0.95);
         else if (revealed && legal && act) rimCard(x, y, s.a, sc, hexA(ink, 1), 1.6, 0.55);
@@ -1518,9 +1559,15 @@ window.plethoraBit = {
 
     function drawDiscard(now) {
       const skip = flyer && flyer.target === "discard" ? 1 : 0;
-      const show = discard.slice(Math.max(0, discard.length - 5 - skip), discard.length - skip);
-      for (const e of show) {
-        drawCardAt(L.discard.x + (e.ox || 0), L.discard.y + (e.oy || 0), e.rot || 0, TABLE_S, e, true, 0.06);
+      const end = discard.length - skip;
+      const show = discard.slice(Math.max(0, end - 4), end);
+      if (show.length) {
+        // One shadow for the whole pile, thrown by the card on top of it.
+        const t0 = show[show.length - 1];
+        cardShadow(L.discard.x + (t0.ox || 0), L.discard.y + (t0.oy || 0), t0.rot || 0, TABLE_S, 0.06);
+        for (const e of show) {
+          drawCardAt(L.discard.x + (e.ox || 0), L.discard.y + (e.oy || 0), e.rot || 0, TABLE_S, e, true, 0.06, false);
+        }
       }
       if (!show.length) {
         g.save();
@@ -1685,15 +1732,21 @@ window.plethoraBit = {
           g.fillText(p.score + " pts", tx + numW + 8, y + 56);
         }
 
+        // "Up next" is a double chevron rather than the word, because on a
+        // three-opponent rail each plaque is 117px wide and the word landed on
+        // top of the name. The brighter border carries most of the meaning
+        // anyway; this is the confirmation.
         if (next) {
           g.fillStyle = BRASS;
-          g.font = "800 8px " + FONT;
-          const w2 = trackedL(g, "NEXT", x + pw - 34, y + 17, 1.8);
-          g.beginPath();
-          g.moveTo(x + pw - 34 + w2 + 4, y + 10);
-          g.lineTo(x + pw - 34 + w2 + 9, y + 14);
-          g.lineTo(x + pw - 34 + w2 + 4, y + 18);
-          g.closePath(); g.fill();
+          for (const [dx, al] of [[0, 1], [-7, 0.45]]) {
+            g.globalAlpha = al;
+            g.beginPath();
+            g.moveTo(x + pw - 17 + dx, y + 11);
+            g.lineTo(x + pw - 11 + dx, y + 16);
+            g.lineTo(x + pw - 17 + dx, y + 21);
+            g.closePath(); g.fill();
+          }
+          g.globalAlpha = 1;
         }
         g.restore();
       }
@@ -1880,8 +1933,9 @@ window.plethoraBit = {
         const a = k * 0.190 + rock;
         const wild = FAN[i][0] === "8";
         const card = { id: FAN[i], rank: FAN[i].slice(0, -1), suit: FAN[i].slice(-1) };
-        drawCardAt(cx + Math.sin(a) * R, cy - Math.cos(a) * R + R - (wild ? 15 : 0),
-          a, 1, card, true, wild ? 0.22 : 0.07);
+        const fx = cx + Math.sin(a) * R, fy = cy - Math.cos(a) * R + R - (wild ? 15 : 0);
+        cardShadow(fx, fy, a, 1, wild ? 0.22 : 0.07, 0.5);
+        drawCardAt(fx, fy, a, 1, card, true, 0, false);
       }
     }
 
@@ -2011,7 +2065,7 @@ window.plethoraBit = {
     root.innerHTML =
       /* ---- chrome: a horizontal strip, never a side column ---- */
       '<div style="position:absolute;right:10px;top:' + (SAFE_T + 6) + 'px;display:flex;' +
-        'gap:7px;z-index:90;pointer-events:none;">' +
+        'gap:7px;z-index:70;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="' + btn + 'font-size:16px;">♪</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + btn + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
@@ -2125,7 +2179,8 @@ window.plethoraBit = {
           '<div data-el="rules" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + label + '">Play to</div>' +
           '<div data-el="targs" style="display:flex;gap:7px;margin:9px 0 4px;"></div>' +
-          '<div style="font-size:12px;opacity:0.45;margin-top:10px;">Players and target apply on the next deal.</div>' +
+          '<div style="font-size:12px;opacity:0.45;margin-top:10px;line-height:1.45;">' +
+            'The target applies straight away. A new player count starts a fresh game.</div>' +
           '<button data-el="cogp-close" style="' + bigBtn(GOLD, "#241704") + 'margin-top:16px;">Done</button>' +
           // Somebody has to be able to walk away from a half-played game
           // without closing the bit; without this the only route back to the
@@ -2138,17 +2193,16 @@ window.plethoraBit = {
       '<div data-el="helpp" style="' + sheetCss + '">' +
         '<div style="' + panel + '">' +
           '<div style="font-size:19px;font-weight:700;margin-bottom:12px;">How to play</div>' +
-          '<ul style="font-size:13.5px;line-height:1.6;opacity:0.88;padding-left:18px;margin:0;">' +
-            '<li>Seven cards each — five with four players — and one card turned up to start the pile.</li>' +
-            '<li>The cover names whoever should be holding the phone. Tap it to see your hand; it closes itself the moment you play.</li>' +
-            '<li>Play a card that matches the pile’s <b>rank</b> or its <b>suit</b>. Cards you may not play are dimmed and cannot be tapped.</li>' +
-            '<li>Press a card to lift it, slide to change your mind, lift your finger to play it. Slide off the bottom to cancel.</li>' +
-            '<li>Any <b>eight is wild</b>: play it on anything and name the suit everybody must follow until the next eight.</li>' +
-            '<li>Nothing to play? <b>Tap the deck</b> and keep drawing until something fits. (Settings can make that one card and pass.)</li>' +
-            '<li>If the deck runs dry the pile is shuffled back in, all but the top card.</li>' +
-            '<li>First to empty a hand wins the round. Everyone else scores what they are still holding: <b>50</b> an eight, <b>10</b> a court, face value otherwise, ace one.</li>' +
-            '<li>Those are penalties. When somebody crosses the target the <b>lowest</b> score wins the game.</li>' +
-            '<li>How few cards the losers were left holding goes to the global board — a measure of how close the round was.</li>' +
+          '<ul style="font-size:13px;line-height:1.5;opacity:0.88;padding-left:17px;margin:0;">' +
+            '<li style="margin-bottom:6px;">Seven cards each (five with four players), one turned up to start the pile.</li>' +
+            '<li style="margin-bottom:6px;">The cover names who should be holding the phone. Tap to see your hand; it closes again the moment you play.</li>' +
+            '<li style="margin-bottom:6px;">Match the pile’s <b>rank</b> or its <b>suit</b>. Cards you cannot play are dimmed and cannot be tapped.</li>' +
+            '<li style="margin-bottom:6px;">Press a card to lift it, slide to change your mind, lift your finger to play. Slide off the bottom to cancel.</li>' +
+            '<li style="margin-bottom:6px;">Any <b>eight is wild</b>: play it on anything and name the suit that follows.</li>' +
+            '<li style="margin-bottom:6px;">Nothing plays? <b>Tap the deck</b> and keep drawing until something fits. If the deck runs dry the pile is shuffled back in.</li>' +
+            '<li style="margin-bottom:6px;">First to empty a hand wins the round. Everyone else scores what they hold: <b>50</b> an eight, <b>10</b> a court, face value otherwise.</li>' +
+            '<li style="margin-bottom:6px;">Those are penalties: when someone crosses the target, the <b>lowest</b> score wins.</li>' +
+            '<li>Fewest cards left between the losers goes to the global board.</li>' +
           '</ul>' +
           '<button data-el="helpp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Got it</button>' +
         '</div>' +
@@ -2211,7 +2265,7 @@ window.plethoraBit = {
           () => settings.target, (v) => { settings.target = v; }),
         pills(shell.el("targs"), TARGETS, TARGETS.map(String),
           () => settings.target, (v) => { settings.target = v; }),
-        pills(shell.el("rules"), [0, 1], ["Draw until you can", "Draw one, pass"],
+        pills(shell.el("rules"), [0, 1], ["Until you can", "One then pass"],
           () => settings.drawRule, (v) => { settings.drawRule = v; }),
         pills(shell.el("mutes"), [0, 1], ["On", "Muted"],
           () => (sound.muted ? 1 : 0), (v) => {
@@ -2373,7 +2427,22 @@ window.plethoraBit = {
       get matchWinner() { return matchWinner >= 0 ? players[matchWinner].name : null; },
       get lastClose() { return lastClose; },
       get baked() { return BAKED; },
-      handXY(i) { const n = players[turn] ? players[turn].hand.length : 0; const s = fanSlot(i, n); return { x: s.x, y: s.y }; },
+      /**
+       * A point that actually lands on card i — the middle of the sliver it
+       * shows, not the middle of the card, most of which is under its
+       * neighbour. Returning the centre made a play script tap card 0 and
+       * select card 1 forever.
+       */
+      handXY(i) {
+        const n = players[turn] ? players[turn].hand.length : 0;
+        const s = fanSlot(i, n);
+        const lift = i === selected ? 30 : 0;
+        if (i >= n - 1) return { x: s.x, y: s.y - lift };
+        const nx = fanSlot(i + 1, n);
+        const gap = Math.hypot(nx.x - s.x, nx.y - s.y);
+        const off = clamp(CARD_W * HAND_S / 2 - gap / 2, 0, CARD_W * HAND_S / 2 - 6);
+        return { x: s.x - Math.cos(s.a) * off, y: s.y - lift - Math.sin(s.a) * off };
+      },
       stockXY() { return { x: L.stock.x, y: L.stock.y }; },
       passXY() { return { x: L.pass.x, y: L.pass.y }; },
     };

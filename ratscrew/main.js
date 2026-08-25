@@ -766,7 +766,7 @@ window.plethoraBit = {
     let pendingCollect = null;        // { idx, t0, dur, reason }
     let slapNow = null;               // "double" | "sandwich" | "tens" | null
     let slapSince = 0, slapTopId = null;
-    let graceUntil = 0, flipLock = 0, lastFlipper = 0;
+    let graceUntil = 0, claimAt = 0, flipLock = 0, lastFlipper = 0;
     let dealT = 0, resolveT = 0;
     let shake = 0, ringPulse = 0;
     let flash = { a: 0, ink: "#fff" };
@@ -798,7 +798,7 @@ window.plethoraBit = {
       turn = 0; tribute = null; pendingCollect = null;
       slapNow = null; slapSince = 0; slapTopId = null;
       graceUntil = 0; flipLock = 0; lastFlipper = 0;
-      bestMs = 0; bestBy = ""; lastSlap = null; winner = null; outOrder = 0;
+      bestMs = 0; bestBy = ""; lastSlap = null; winner = null; outOrder = 0; claimAt = 0;
       banner = null; shake = 0; flash.a = 0; ringPulse = 0;
       flyers.length = 0; shocks.length = 0;
       for (const p of parts) p.life = 0;
@@ -1080,6 +1080,7 @@ window.plethoraBit = {
       slapTopId = null;
       turn = p.idx;
       graceUntil = now + GRACE_MS;
+      claimAt = now;
       flipLock = Math.max(flipLock, 0.5);
 
       // Running out is only fatal once the pile you might have slapped back
@@ -1150,15 +1151,21 @@ window.plethoraBit = {
     async function endMatch() {
       phase = "over";
       const alive = players.filter((q) => !q.out);
+      // Everybody can go out: the last two players run dry, one of them slaps
+      // at thin air with nothing left to burn, and the table is empty. Calling
+      // that person the winner when they have just died is a lie, so the
+      // headline changes rather than the arithmetic.
       winner = alive.length
         ? alive.reduce((a, b) => (b.deck.length > a.deck.length ? b : a))
         : players.slice().sort((a, b) => b.outAt - a.outAt)[0];
+      const headline = !winner ? "Nobody wins"
+        : alive.length ? winner.name + " wins" : winner.name + " lasted longest";
 
       const title = shell.el("over-title");
-      title.textContent = winner ? winner.name + " wins" : "Nobody wins";
+      title.textContent = headline;
       title.style.color = winner ? winner.ink : CREAM;
       const mirror = shell.el("over-mirror");
-      mirror.textContent = winner ? winner.name + " wins" : "Nobody wins";
+      mirror.textContent = headline;
       mirror.style.color = winner ? winner.ink : CREAM;
 
       const slaps = claims.filter((c) => c.verdict === "slap").length;
@@ -1206,7 +1213,7 @@ window.plethoraBit = {
 
       ctx.platform.complete({
         winner: winner ? winner.name : "none",
-        counts: players.map((p) => ({ name: p.name, cards: p.deck.length, out: p.out })),
+        counts: players.map((p) => ({ name: p.name, cards: p.deck.length, taken: p.took, out: p.out })),
         fastestSlapMs: bestMs,
         slaps, burns,
         durationMs: Math.round(performance.now() - matchStart),
@@ -1340,10 +1347,14 @@ window.plethoraBit = {
         g.save();
         g.translate(L.px + e.ox, L.py + e.oy);
         g.rotate(e.rot);
+        // Inset, not straddling the edge. On the outline itself the two rings
+        // crossed each other and every card border in the heap at three
+        // different angles, and the picture went from "these two match" to a
+        // tangle of gold rectangles.
         g.globalAlpha = 0.35 + 0.45 * pulse;
         g.strokeStyle = GOLD;
-        g.lineWidth = 3;
-        roundRect(g, -CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H, CARD_R);
+        g.lineWidth = 2.5;
+        roundRect(g, -CARD_W / 2 + 3.5, -CARD_H / 2 + 3.5, CARD_W - 7, CARD_H - 7, CARD_R - 2);
         g.stroke();
         g.restore();
       }
@@ -1430,10 +1441,21 @@ window.plethoraBit = {
       }
 
       // Stake arc: how much of the table is riding on the next hand down.
-      g.strokeStyle = slapNow ? GOLD : "rgba(217,154,82,0.62)";
-      g.lineWidth = slapNow ? 6 : 4;
+      //
+      // While the table is live the ring closes into a solid gold band and the
+      // stake drops to a hairline just inside it. Drawn at full weight on top
+      // of the hot ring it read as a loading spinner — a third of a circle in
+      // a different colour, spinning nowhere, at the exact moment the middle of
+      // the table is supposed to say one thing only.
+      if (slapNow) {
+        g.strokeStyle = GOLD;
+        g.lineWidth = 6;
+        g.beginPath(); g.arc(0, 0, L.ringR, 0, TAU); g.stroke();
+      }
+      g.strokeStyle = slapNow ? "rgba(255,251,232,0.5)" : "rgba(217,154,82,0.62)";
+      g.lineWidth = slapNow ? 2.5 : 4;
       g.beginPath();
-      g.arc(0, 0, L.ringR, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(stake, 0.001));
+      g.arc(0, 0, L.ringR - (slapNow ? 8 : 0), -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(stake, 0.001));
       g.stroke();
 
       // The collect countdown runs the other way round the ring in the
@@ -1896,8 +1918,27 @@ window.plethoraBit = {
           top.landed = true;
           puff(L.px + top.ox, L.py + top.oy);
         }
+        // A live table cannot be swept out from under the people looking at it.
+        //
+        // Everywhere else a double sits there until somebody takes it, but a
+        // tribute that failed on a card which happened to make one gave the
+        // table a 900 ms deadline instead — and the creditor took the pile
+        // simply because nobody's thumb arrived inside it. The collection clock
+        // holds while the middle is gold, so the creditor has to slap for it
+        // like everybody else.
+        // (Only while the game is actually running: a sheet already gives back
+        // the time it was up when it closes, and adding it here as well would
+        // pay for the same pause twice.)
+        if (pendingCollect && slapNow && !sheetOpen) pendingCollect.t0 += Math.min(dtMs, 250);
         if (pendingCollect && !sheetOpen && now - pendingCollect.t0 >= pendingCollect.dur) {
-          const p = players[pendingCollect.idx];
+          // The creditor can die inside their own collection window — they had
+          // no cards left, they slapped at nothing during the beat, and the
+          // burn finished them. Sweeping the table to a player who is already
+          // out would hand the game to a corpse, so it falls to whoever laid
+          // the last card and, failing that, to anybody still standing.
+          let p = players[pendingCollect.idx];
+          if (p.out) p = (!players[lastFlipper].out ? players[lastFlipper] : players.find((q) => !q.out)) || p;
+          if (p.out) { pendingCollect = null; checkOver(now); render(now); return; }
           const n = pile.length;
           banner = {
             t0: now, ink: p.ink, rad: p.rad, life: 1000,
@@ -1939,13 +1980,24 @@ window.plethoraBit = {
     const GOLDBTN = "linear-gradient(180deg,#ffe08f,#d09a34)";
     const panel = "max-width:322px;width:100%;background:linear-gradient(180deg,#132e1e,#0a1d14);" +
       "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(217,154,82,0.28),0 20px 60px rgba(0,0,0,0.55);";
+    /**
+     * A sheet whose card never grows taller than the screen.
+     *
+     * The first version scrolled the whole sheet, which is the obvious thing to
+     * do and is quietly a trap: the rules ran past one screen, so the only way
+     * out of them started life below the fold. Somebody who does not think to
+     * scroll a panel is stuck in it. The card is a flex column instead — head
+     * and footer fixed, only the middle scrolls — so "Got it" is on screen the
+     * moment the sheet opens, however long the rules get.
+     */
+    const panelFlex = panel + "display:flex;flex-direction:column;box-sizing:border-box;" +
+      "max-height:100%;overflow:hidden;";
+    const scrollBody = "flex:1 1 auto;min-height:0;overflow-y:auto;margin:0 -4px;padding:0 4px;";
     const label = "font-size:11px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.52;";
-    // overflow-y:auto so a long panel on a short phone scrolls rather than
-    // centring itself off both ends, which puts its close button out of reach.
     const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
-      "align-items:safe center;justify-content:center;" +
+      "justify-content:center;" +
       "background:rgba(3,12,8,0.90);z-index:70;padding:" + (SAFE_T + 14) + "px 24px " +
-      (SAFE_B + 14) + "px;overflow-y:auto;pointer-events:auto;";
+      (SAFE_B + 14) + "px;pointer-events:auto;";
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT + ";color:" + CREAM + ";pointer-events:none;";
@@ -1983,7 +2035,12 @@ window.plethoraBit = {
 
       /* ---- game over ---- */
       '<div data-el="over" style="position:absolute;inset:0;display:none;flex-direction:column;' +
-        'align-items:center;justify-content:center;z-index:60;padding:26px;text-align:center;' +
+        // Four players and four result rows is the tallest this ever gets. It
+        // fits, but "fits on the phone I tested" is how a Deal-again button
+        // ends up under the bottom edge, so it scrolls — and centres safely, or
+        // overflow would push the top of the plate off instead.
+        'align-items:center;justify-content:center;justify-content:safe center;overflow-y:auto;' +
+        'z-index:60;padding:' + (SAFE_T + 16) + 'px 26px ' + (SAFE_B + 16) + 'px;text-align:center;' +
         'pointer-events:auto;background:radial-gradient(120% 60% at 50% 45%,rgba(3,16,10,0.82),rgba(2,9,6,0.97));">' +
         // The result, turned round for whoever is sitting at the other end. It
         // is the same plate as the main one, just compact — an eyebrow, the
@@ -2013,8 +2070,9 @@ window.plethoraBit = {
 
       /* ---- settings ---- */
       '<div data-el="cogp" style="' + sheetCss + '">' +
-        '<div style="' + panel + '">' +
-          '<div style="font-size:19px;font-weight:700;margin-bottom:16px;">Settings</div>' +
+        '<div style="' + panelFlex + '">' +
+          '<div style="font-size:19px;font-weight:700;margin-bottom:16px;flex:none;">Settings</div>' +
+          '<div style="' + scrollBody + '">' +
           '<div style="' + label + '">Sound</div>' +
           '<div data-el="mutes" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + label + '">Players</div>' +
@@ -2026,29 +2084,74 @@ window.plethoraBit = {
           '<div style="font-size:12px;opacity:0.45;margin-top:8px;line-height:1.5;">' +
             'Tens: two number cards in a row adding to ten. Off by default in some houses — ' +
             'it roughly doubles how often the table is live.</div>' +
-          '<button data-el="cogp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Done</button>' +
+          '</div>' +
+          '<button data-el="cogp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;flex:none;">Done</button>' +
         '</div>' +
       '</div>' +
 
       /* ---- how to play ---- */
+      //
+      // Rules panels rot into a wall of identical bullets, and this game has
+      // three separate systems in it. The two that are pure lookup — what each
+      // face card costs, and what counts as slappable — are pulled out as
+      // tables, so the eye can find "what does a queen cost" without reading a
+      // paragraph to get there.
       '<div data-el="helpp" style="' + sheetCss + '">' +
-        '<div style="' + panel + '">' +
-          '<div style="font-size:19px;font-weight:700;margin-bottom:12px;">How to play</div>' +
-          '<ul style="font-size:13.5px;line-height:1.62;opacity:0.86;padding-left:18px;margin:0;">' +
-            '<li>Lay the phone flat. Everyone takes the pad on their own edge — that pad is your face-down stack.</li>' +
-            '<li>When your pad says <b>FLIP</b>, tap it to throw your top card into the middle.</li>' +
-            '<li>Throw a face card or an ace and the next player owes tribute: ' +
-              '<b>4</b> cards for an ace, <b>3</b> for a king, <b>2</b> for a queen, <b>1</b> for a jack.</li>' +
-            '<li>If they turn up a face card while paying, the debt <b>flips back</b> onto you and they become the creditor.</li>' +
-            '<li>Pay in full without one and the pile is yours.</li>' +
-            '<li><b>Slap the moment the middle goes gold.</b> DOUBLE — top two the same rank. ' +
-              'SANDWICH — top and third the same. TENS — two number cards adding to ten.</li>' +
-            '<li>Every pad is live at once and the <b>first hand down</b> takes the pile. Being second costs nothing.</li>' +
-            '<li>Slap at nothing and it is a <b>burn</b>: one card off your stack, face down under the pile, and your pad locks for a moment.</li>' +
-            '<li>Out of cards? You stay in until the pile is claimed — so slap your way back in. Burn on empty and you are out for good.</li>' +
-            '<li>Last player still holding cards wins. The fastest clean slap of the game goes to the global board.</li>' +
+        '<div style="' + panelFlex + '">' +
+          '<div style="flex:none;">' +
+            '<div style="font-size:19px;font-weight:700;margin-bottom:3px;">How to play</div>' +
+            '<div style="font-size:12.5px;opacity:0.5;margin-bottom:15px;line-height:1.5;">' +
+              'Phone flat on the table. Everyone takes the pad on their own edge — ' +
+              'that pad is your face-down stack.</div>' +
+          '</div>' +
+          '<div style="' + scrollBody + '">' +
+
+          '<div style="' + label + 'margin-bottom:9px;">Your turn</div>' +
+          '<ul style="font-size:13px;line-height:1.6;opacity:0.86;padding-left:17px;margin:0 0 17px;">' +
+            '<li>When your pad reads <b>FLIP</b>, tap it to throw your top card into the middle.</li>' +
+            '<li>Throw a face card or an ace and the next player owes <b>tribute</b>.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Got it</button>' +
+
+          '<div style="' + label + 'margin-bottom:9px;">Tribute — chances to pay</div>' +
+          '<div style="display:flex;gap:6px;margin-bottom:10px;">' +
+            [["A", "4"], ["K", "3"], ["Q", "2"], ["J", "1"]].map((r) =>
+              '<div style="flex:1;text-align:center;padding:9px 0 8px;border-radius:11px;' +
+                'background:rgba(255,255,255,0.055);box-shadow:inset 0 0 0 1px rgba(217,154,82,0.20);">' +
+                '<div style="font-size:17px;font-weight:700;font-family:' + SERIF + ';">' + r[0] + '</div>' +
+                '<div style="font-size:12px;font-weight:700;color:' + COPPER + ';margin-top:1px;">' + r[1] + '</div>' +
+              '</div>').join("") +
+          '</div>' +
+          '<ul style="font-size:13px;line-height:1.6;opacity:0.86;padding-left:17px;margin:0 0 17px;">' +
+            '<li>They keep flipping until they pay in full — then the pile is <b>yours</b>.</li>' +
+            '<li>A face card while paying <b>flips the debt back</b> and they become the creditor.</li>' +
+          '</ul>' +
+
+          '<div style="' + label + 'margin-bottom:9px;">Slap — everyone, any time</div>' +
+          [["DOUBLE", "top two cards the same rank"],
+           ["SANDWICH", "top and third card the same rank"],
+           ["TENS", "two number cards adding to ten"]].map((r) =>
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">' +
+              '<div style="flex:none;width:88px;text-align:center;padding:6px 0;border-radius:9px;' +
+                'background:' + GOLD + ';color:#241704;font-size:10px;font-weight:800;' +
+                'letter-spacing:0.12em;">' + r[0] + '</div>' +
+              '<div style="font-size:12.5px;opacity:0.78;line-height:1.4;">' + r[1] + '</div>' +
+            '</div>').join("") +
+          '<div style="font-size:12px;opacity:0.45;margin:9px 0 17px;line-height:1.5;">' +
+            'Tens is a settings toggle. The cards that made it are ringed in gold.</div>' +
+
+          '<div style="' + label + 'margin-bottom:9px;">Winning and losing it</div>' +
+          '<ul style="font-size:13px;line-height:1.6;opacity:0.86;padding-left:17px;margin:0;">' +
+            '<li>Every pad is live at once and the <b>first hand down</b> takes the pile. ' +
+              'Being second costs nothing.</li>' +
+            '<li>Slap at nothing and it is a <b>burn</b>: one card off your stack, face down ' +
+              'under the pile, and your pad locks for a moment.</li>' +
+            '<li>Out of cards? You are still in until the pile is claimed — so slap your way ' +
+              'back in. Burn while empty and you are out for good.</li>' +
+            '<li><b>Last player still holding cards wins.</b> The fastest clean slap of the ' +
+              'game goes to the global board.</li>' +
+          '</ul>' +
+          '</div>' +
+          '<button data-el="helpp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:18px;flex:none;">Got it</button>' +
         '</div>' +
       '</div>';
 
@@ -2210,8 +2313,12 @@ window.plethoraBit = {
       if (slapNow) { winSlap(p, now, slapNow); return; }
 
       if (now < graceUntil) {                    // somebody just beat them to it
+        // Measured from the moment the pile was taken, not from the window that
+        // opened it. A hand arriving after a tribute was swept up has no window
+        // behind it at all, and billing it against a stale one logged reaction
+        // times in the tens of seconds.
         claims.push({ seat: p.seat, name: p.name, verdict: "late",
-                      ms: Math.max(1, Math.round(now - slapSince)) });
+                      ms: Math.max(1, Math.round(now - claimAt)) });
         p.flashT = Math.max(p.flashT, 0.35);
         sound.haptic("light");
         return;

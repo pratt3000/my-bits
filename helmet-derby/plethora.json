@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Helmet Derby",
+  "description": "Two players, one phone, two cars trying to bonk each other on the head. Sit side by side with two fat buttons each in your own corner — on the ground they drive you, in the air they spin you, which is how you land on somebody. Touch the other car's helmet with any part of yours and the point is yours. Three arenas, first to three, five or nine.",
+  "tags": ["multiplayer", "local-multiplayer", "two-player", "physics", "arcade", "duel", "chaotic"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "win_margin": {
+        "label": "Biggest Win",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

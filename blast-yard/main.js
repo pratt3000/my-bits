@@ -1140,7 +1140,7 @@ window.plethoraBit = {
       '<div data-el="banner" style="position:absolute;left:0;right:0;top:50%;z-index:44;pointer-events:none;' +
         'text-align:center;transform:translateY(-50%);opacity:0;">' +
         '<div data-el="banner-echo" style="font-size:26px;font-weight:800;letter-spacing:-0.01em;' +
-          'transform:rotate(180deg);opacity:0.85;margin-bottom:3px;' +
+          'transform:rotate(180deg);opacity:0.85;margin-bottom:8px;' +
           'text-shadow:0 3px 0 rgba(0,0,0,0.55);"></div>' +
         '<div data-el="banner-big" style="font-size:44px;font-weight:800;letter-spacing:-0.02em;' +
           'text-shadow:0 5px 0 rgba(0,0,0,0.55),0 0 40px rgba(255,180,60,0.4);"></div>' +
@@ -1193,16 +1193,14 @@ window.plethoraBit = {
 
       // --- seat check ---
       '<div data-el="seatp" style="position:absolute;inset:0;z-index:40;pointer-events:none;display:none;">' +
-        '<div style="position:absolute;left:50%;top:50%;margin-top:-134px;width:186px;' +
-          'box-sizing:border-box;padding:11px 12px 13px;border-radius:18px;' +
+        '<div style="position:absolute;left:50%;top:50%;margin-top:-124px;width:214px;' +
+          'box-sizing:border-box;padding:11px 14px 12px;border-radius:18px;opacity:0.82;' +
           'transform:translate(-50%,-50%) rotate(180deg);text-align:center;pointer-events:none;' +
-          'background:linear-gradient(180deg,rgba(38,30,22,0.93),rgba(16,12,8,0.95));' +
-          'box-shadow:inset 0 2px 0 rgba(255,224,180,0.10),0 6px 18px rgba(0,0,0,0.55);' +
-          'border:1.5px solid rgba(255,205,130,0.16);">' +
-          '<div style="font-size:9.5px;font-weight:800;letter-spacing:0.24em;text-transform:uppercase;' +
-            'color:rgba(234,243,230,0.42);">Take your seat</div>' +
-          '<div style="margin-top:4px;font-size:14px;line-height:1.24;font-weight:800;' +
-            'color:rgba(234,243,230,0.88);">Everyone press<br>your bomb button</div>' +
+          'background:linear-gradient(180deg,rgba(38,30,22,0.90),rgba(16,12,8,0.93));' +
+          'box-shadow:inset 0 2px 0 rgba(255,224,180,0.09),0 6px 18px rgba(0,0,0,0.55);' +
+          'border:1.5px solid rgba(255,205,130,0.14);">' +
+          '<div style="font-size:14px;line-height:1.24;font-weight:800;' +
+            'color:rgba(234,243,230,0.86);">Everyone press<br>your bomb button</div>' +
           '<div data-el="seatcount2" style="margin-top:5px;font-size:10.5px;font-weight:800;' +
             'letter-spacing:0.16em;color:' + HOT + ';font-family:' + MONO + ';">0 / 4 ready</div>' +
         '</div>' +
@@ -1218,9 +1216,10 @@ window.plethoraBit = {
             'color:' + HOT + ';font-family:' + MONO + ';">0 / 4 ready</div>' +
         '</div>' +
         '<button data-el="skip" style="pointer-events:auto;position:absolute;left:50%;top:50%;' +
-          'margin-left:-78px;margin-top:96px;width:156px;height:42px;border:none;border-radius:15px;' +
+          'margin-left:-78px;margin-top:96px;width:156px;height:42px;border-radius:15px;' +
           'font-family:inherit;font-size:13.5px;font-weight:800;letter-spacing:0.04em;' +
-          'background:' + EMBER_BTN + ';color:' + EMBER_INK + ';' +
+          'background:rgba(20,14,8,0.74);color:' + OFFWHITE + ';' +
+          'border:1.5px solid ' + RIM + ';' +
           'box-shadow:0 4px 0 rgba(0,0,0,0.45);">Start anyway</button>' +
       '</div>' +
 

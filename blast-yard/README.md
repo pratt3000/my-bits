@@ -83,6 +83,14 @@ work — the finger travels `0.42 × padHeight` for full tilt, but the knob only
 slides `0.225 × padHeight`, so it never escapes its well however hard the stick
 is shoved.
 
+The three things addressed to the *whole table* — the seat prompt, the round
+banner and the result — each carry a smaller 180°-rotated echo directly above
+them, so both long edges read them right way up. Everything else a player
+needs is already on their own pad, rotated to their own seat; these three are
+the only shared sentences in the game, and a winner announcement legible from
+one edge of a phone lying flat is a winner announcement three people cannot
+read.
+
 There is deliberately **no hidden information** anywhere in this game, which is
 what lets four people share one screen with no pass-the-phone gate: everything
 that matters — where every figure is, how long every fuse has left, whose bomb
@@ -195,6 +203,20 @@ records how badly one person ran the table, and everybody there was part of it.
 Rounds to win 2 / 3 / 5. Pace — chill, normal or frantic, which is how long the
 rim holds together. Mute. All persisted with `ctx.storage`.
 
+## One warm family
+
+Every pixel of chrome is fired clay and ember. The yard is pine lit from above
+floating in warm soot, so a control pad, a panel or a button in a cool grey
+reads as a different application sitting on top of the game rather than a part
+of it — which is exactly what the first build looked like: lavender pads and
+lime buttons over an orange plank. The pads are clay slabs with the owner's hue
+in the rim and a breath of it in the inner glow, the panels are the same clay
+slabbed thicker, and there is exactly one call-to-action colour.
+
+The one place that colour is deliberately *withheld* is the seat screen: "Start
+anyway" is the bail-out, not the thing to do, so it is a quiet outlined button
+while the instruction it sits under does the talking.
+
 ## Contract notes
 
 - No packaged assets (`maxAssets: 0`). The plank grain, the scorch blots, the
@@ -227,6 +249,15 @@ all four seats with a single four-finger tap, then plays two full rounds with
 three sticks held down at once while the fourth player cooks and throws a bomb —
 and asserts a real match end: `matchend`, winner Ember, two wins, a streak of
 two, `platform.complete` fired and the record submitted.
+
+- **The fuse gauge was a pie, not a ring.** Drawn as a plain conic gradient at
+  0.45 of the pad's height it grew to very nearly the full height of the pad and
+  crowded the pad's own rim — a three-second countdown taking over the control
+  it belongs to. It is now masked into a band that hugs the sphere, with a dark
+  track ring left behind between throws so the button keeps a defined edge.
+- **The mirrored seat card clipped the help button.** The chrome strip ends at
+  `arena.y + 36`; the echo has to sit in the band that is actually free between
+  it and the card it mirrors, not merely "above centre".
 
 ## Two things only real input found
 

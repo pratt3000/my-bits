@@ -81,16 +81,18 @@ await bit.shot("crazy-eights-3-hand");
   check(JSON.stringify(want) === JSON.stringify(s.legal),
     "legal set is rank-or-suit-or-eight: want " + JSON.stringify(want) + " got " + JSON.stringify(s.legal));
 
-  // An illegal card must not even be selectable — a wrong tap is impossible
-  // rather than punished, which is the whole reason the dim state exists.
+  // A dimmed card must never be the card that gets played. It is not simply
+  // "the tap does nothing": the fan picks the topmost LEGAL card under the
+  // finger, so a thumb over a dim card and a bright one lifts the bright one.
+  // What must hold is that the dim card itself cannot leave the hand.
   const bad = s.hand.map((_, i) => i).find((i) => !s.legal.includes(i));
   if (bad !== undefined) {
-    const before = s.pile;
+    const badId = s.hand[bad];
     const p = await handXY(bad);
     await bit.tap(p.x, p.y);
-    await bit.wait(180);
+    await settle();
     const after = await look();
-    check(after.pile === before, "tapping a dimmed card does nothing (pile still " + before + ")");
+    check(after.top !== badId, "a dimmed card (" + badId + ") can never reach the pile");
   } else {
     check(true, "every card in this hand happens to be legal — nothing to dim");
   }
@@ -99,10 +101,30 @@ await bit.shot("crazy-eights-3-hand");
 /* ---- play the game out ------------------------------------------- */
 let shotSuit = false, shotEight = false, shotNamed = false, shotDraw = false;
 let steps = 0;
+// A stall guard. The first version of the fan hit-test returned the topmost
+// card whose rectangle covered the point rather than the topmost *legal* one,
+// so tapping the middle of a card in a ten-card fan selected its neighbour and
+// nothing ever happened. Without this the script span for eleven minutes and
+// then timed out with no clue why.
+let lastSig = "", sameFor = 0;
 while (steps++ < 260) {
-  await settle();
+  const settled = await settle();
   s = await look();
+  if (process.env.EIGHTS_TRACE) {
+    console.log("   " + steps, s.phase, settled ? "" : "STILL-BUSY",
+      "turn" + s.turn, JSON.stringify(s.players.map((p) => p.cards)),
+      "stock" + s.stock, "pile" + s.pile, "top" + s.top, "named" + s.named,
+      "legal" + JSON.stringify(s.legal), "draw" + s.canDraw);
+  }
   if (s.phase === "match") break;
+
+  const sig = s.phase + s.turn + s.top + s.named + JSON.stringify(s.players.map((p) => p.cards));
+  sameFor = sig === lastSig ? sameFor + 1 : 0;
+  lastSig = sig;
+  if (sameFor >= 4) {
+    check(false, "the game stalled — " + sig + " for five turns running, input is being dropped");
+    break;
+  }
 
   if (s.phase === "cover") { await click('[data-el="cover-btn"]'); continue; }
 
@@ -136,10 +158,23 @@ while (steps++ < 260) {
       shotDraw = true;
     }
     if (s.legal.length) {
-      // Prefer an eight now and then so the wild path really gets exercised.
+      // Play the first eight it is dealt, so the wild path is exercised early,
+      // then play like a person: keep the suit you hold most of and save your
+      // eights. Naive first-legal play drags a two-handed round past a hundred
+      // turns because it changes suit constantly and neither hand shrinks.
       let pick = s.legal[0];
       const eight = s.legal.find((i) => s.hand[i][0] === "8");
-      if (eight !== undefined && !shotEight) { pick = eight; shotEight = true; }
+      if (eight !== undefined && !shotEight) {
+        pick = eight;
+        shotEight = true;
+      } else {
+        const bySuit = {};
+        for (const id of s.hand) bySuit[id.slice(-1)] = (bySuit[id.slice(-1)] || 0) + 1;
+        const plain = s.legal.filter((i) => s.hand[i][0] !== "8");
+        const pool = plain.length ? plain : s.legal;
+        pick = pool.reduce((best, i) =>
+          (bySuit[s.hand[i].slice(-1)] || 0) > (bySuit[s.hand[best].slice(-1)] || 0) ? i : best, pool[0]);
+      }
       const p = await handXY(pick);
       await bit.tap(p.x, p.y);
     } else if (s.canDraw) {
@@ -191,6 +226,14 @@ s = await look();
 check(s.players.length === 4 && s.players.every((p) => p.cards === 5),
   "four players get five cards each, got " + JSON.stringify(s.players.map((p) => p.cards)));
 await bit.shot("crazy-eights-9-four-players");
+
+/* ---- the two panels every bit has to have ------------------------ */
+await click('[data-el="cog"]');
+await bit.shot("crazy-eights-10-settings");
+await click('[data-el="cogp-close"]');
+await click('[data-el="help"]');
+await bit.shot("crazy-eights-11-how-to-play");
+await click('[data-el="helpp-close"]');
 
 const errs = (await bit.errors()).filter((e) => !/404|favicon/.test(e));
 console.log(errs.length ? "ERRORS:\n  " + errs.join("\n  ") : "errors: none");

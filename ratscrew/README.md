@@ -49,10 +49,10 @@ it cannot resolve.
 Everyone who lands after that, inside an 800 ms grace, is logged `late` and pays
 nothing. Being second is not a foul.
 
-`tools/harness/play-ratscrew.mjs` proves it: `bit.tapTogether([...])` sends both
-touch points in a single CDP `touchStart`, and the run asserts exactly one
-`slap` claim, at least one `late`, that the winner banked the entire pile, and
-that the loser's stack and lockout were untouched.
+`tools/harness/play-ratscrew.mjs` proves it: `bit.tapTogether([...])` sends
+**all three** touch points in a single CDP `touchStart`, and the run asserts
+exactly one `slap` claim, two `late` ones, that the winner banked the entire
+pile, and that the losers' stacks and lockouts were untouched.
 
 ## The rules, and where they differ from the kitchen table
 
@@ -62,7 +62,10 @@ that the loser's stack and lockout were untouched.
 * An unpaid tribute is swept up **after a 900 ms beat**, not instantly — the
   countdown runs backwards round the ring in the creditor's own colour. If the
   last card of a failed payment happened to make a double, that beat is your
-  window to steal it. Slaps beat collection, as they should.
+  window to steal it, and **the countdown holds while the middle is gold**, so
+  the creditor has to slap for it like everybody else. Without that hold, the
+  one place in the game where a live table had a deadline on it was the one
+  place the creditor could win a pile by nobody's thumb arriving in time.
 * Slap conditions: **DOUBLE** (top two the same rank), **SANDWICH** (top and
   third), and **TENS** (two number cards adding to ten) which is a settings
   toggle, because half the houses that play this game do not use it.
@@ -77,9 +80,10 @@ that the loser's stack and lockout were untouched.
 
 Two things exist only because this is a phone:
 
-* **A 0.85 s lockout after a burn.** At a real table, mashing the pile is
+* **A 1.15 s lockout after a burn.** At a real table, mashing the pile is
   punished by your own arm and by running out of cards. On a screen, mashing is
-  free and it wins every race. The lockout is the phone-specific correction.
+  free and it wins every race. The lockout is the phone-specific correction, and
+  it is long enough that the red hatch across the pad actually registers.
 * **A 0.24 s gap between flips.** Without it a fast tapper empties their stack
   before anybody else has seen a card. Your own second tap inside that gap is
   read as an eager double-tap and costs nothing; somebody *else's* tap in the
@@ -113,9 +117,28 @@ Four things learned by looking at the render rather than the code:
 * **The turn arrow pointed at an empty side of the table.** It was rotated by
   the negative of the seat angle, which sent the left player's chevron to the
   right-hand edge of the ring.
+* **The way out of the rules panel started below the fold.** Scrolling the whole
+  sheet is the obvious thing to do and is quietly a trap: once the rules ran
+  past one screen, "Got it" was off the bottom, and a full-screen sheet takes
+  every tap meant for anything underneath it. The play script found it the hard
+  way — it tapped Deal, the sheet ate the tap, and nine assertions failed at
+  once. The card is a flex column now: head and footer fixed, only the middle
+  scrolls, so the way out is on screen the moment the sheet opens.
 
 The cards that actually make the slap are ringed in gold while the window is
 open. That is how somebody learns the sandwich rule without opening the panel.
+
+## Two edge cases that only exist because a pile is claimed on a delay
+
+* **The creditor can die inside their own collection window.** They have no
+  cards left, they slap at nothing during the 900 ms beat, and the burn
+  finishes them — and then the timer fires and sweeps the table to a player who
+  is already out. The collection re-targets to whoever laid the last card, and
+  failing that to anybody still standing.
+* **Everybody can go out at once.** The last two players run dry, one of them
+  slaps at thin air with nothing left to burn, and there is nobody holding
+  cards. Calling that person the winner when they have just died is a lie, so
+  the headline reads *lasted longest* instead. The arithmetic is unchanged.
 
 ## Layout
 
@@ -161,8 +184,20 @@ node tools/harness/validate.mjs ratscrew     # clean
 node tools/harness/play-ratscrew.mjs         # a real 3-player game to a real winner
 ```
 
-The play script deals three players with tens on, proves the simultaneous slap
-resolves to exactly one winner, proves a wrong slap costs a card and locks the
-pad, waits for a real tribute, plays the game out to a single survivor, and then
-deals a rematch from the end screen — asserting all 18 cards are still accounted
-for at the finish.
+The play script deals three players with tens on, brings all three pads down in
+one frame and proves the race resolves to exactly one winner, proves a wrong
+slap costs a card and locks the pad, waits for a real tribute, plays the game
+out to a single survivor, and then deals a rematch from the end screen —
+asserting all 18 cards are still accounted for at the finish. A separate render
+pass covers the four-seat layout, which is the tightest the centre band ever
+gets and the only one where the right-hand pad exists at all, and a second one
+runs the whole thing on a 375x667 screen to check the rules panel's way out is
+still on it.
+
+The bit exposes a read-only `window.__RATSCREW__` with a `busy` flag, and the
+script polls it rather than sleeping. `busy` means *a throw would be dropped* —
+mid-flip, mid-sweep, or between phases — and deliberately does not include a
+live slap, because a slap is never blocked. Waiting on a stopwatch instead is
+how a screenshot ends up of a table that has not started yet: the game clock is
+clamped at 250 ms a frame, so on a loaded machine the deal stretches in real
+time while the animation runs at the same speed it always does.

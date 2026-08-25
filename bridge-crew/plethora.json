@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Bridge Crew",
+  "description": "A co-op panic panel for two to four people and one phone. Everyone can read every order on the board — and nobody can reach anybody else's controls, so the person who spots an order is usually not the person who can carry it out. Switches flip, dials step, sliders drag, levers must be held, and the ship asks for more than one pair of hands can serve. Miss one and the hull takes a bite. You are going to have to shout.",
+  "tags": ["co-op", "multiplayer", "local-multiplayer", "party", "frantic", "shouting", "space"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "orders_served": {
+        "label": "Orders Served",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

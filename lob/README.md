@@ -49,6 +49,23 @@ The battlefield itself never rotates. Spinning the world a half turn between
 turns is a lovely piece of juice, but it cannot coexist with two decks that are
 both visible — the dimmed one would end up at the wrong end of the table.
 
+The *terrain* never rotates; the **writing over it does**. Text in the
+battlefield window is not scenery, it is a message with an addressee, so it is
+drawn in that person's frame: the turn banner and the volley counter face
+whoever is acting, and every damage number faces the player who fired the shell
+that caused it. Printing "EMBER FIRES" upside down at the exact instant it
+becomes Ember's turn is the one thing a shared-screen game cannot get away with,
+and before this rule existed Azure could read every number on the board and
+Ember could read none of them. The match-over card carries the same idea in
+HTML: the full result sits right-way-up for Azure and a rotated headline plus
+score line sits at the far edge for Ember.
+
+Damage numbers land on top of the fireball that caused them, so they carry a
+hard dark outline rather than a drop shadow — Ember's orange ink over an orange
+blast is the one pairing this palette cannot survive. The outline is one
+combined `Path2D` filled once, not eight offset fills: stacked alpha turned a
+half-faded number into a solid black smear.
+
 ## The ground is one number per column
 
 `surf` is a `Float32Array` with one surface height per screen column, and every

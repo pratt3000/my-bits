@@ -1901,7 +1901,7 @@ window.plethoraBit = {
       // …and the plate itself shrinks with the deck on a short phone, where a
       // fixed 28px glyph run climbs into the baked label above it.
       const fitV = (txt, r) =>
-        Math.min(4, (r.w - 10) / (String(txt).length * 6 - 1), (r.h - 22) / 7);
+        Math.min(4, (r.w - 16) / (String(txt).length * 6 - 1), (r.h - 22) / 7);
       const drawV = (val, r) => {
         const txt = String(Math.round(val));
         const s = fitV(txt, r);
