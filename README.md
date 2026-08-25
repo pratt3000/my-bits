@@ -17,6 +17,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ninth-watchfire/`](ninth-watchfire)   | A five-minute animated story in twelve chapters, with one choice that's yours. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`whirligig/`](whirligig)               | Fidget spinner as a gear train — flick a plate of packed discs, all meshed. |
 | [`sketch-hop/`](sketch-hop)             | Endless doodle jumper on graph paper — bounce up the page, dodge monsters. Ships as *Sketch Hop II*. |
 | [`windmill-cove/`](windmill-cove)       | Mini golf in the Golf With Your Friends mould — seven courses, nine holes each. |
 | [`windmill-cove-3d/`](windmill-cove-3d) | The same game in 3D — orbit the camera, survey the hole, aim by looking.     |
