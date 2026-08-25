@@ -1,0 +1,1797 @@
+/**
+ * Reactor Four — a two-to-four player reaction duel on one phone.
+ *
+ * The phone goes flat on the table and two, three or four people each claim an
+ * edge. A reactor core burns in a circular viewport at the centre; four console
+ * wedges radiate out from it, one per seat. When the signal comes true, the
+ * first player to slap their own wedge takes the round. Slap while it is false
+ * and the station scrams: locked out, one point gone.
+ *
+ * Four decisions drive everything else.
+ *
+ * **The screen is divided by its own diagonals, not by a grid.** Rays from the
+ * centre through the four screen corners cut the display into four wedges that
+ * tile it exactly, and every player's wedge touches the edge they are sitting
+ * at along its whole length. The same test carries two and three players: the
+ * sector list simply gets coarser (two 180° halves, or 135°/90°/135°), so a
+ * three-player game has no dead strip of screen that swallows a slap.
+ *
+ * **Nothing important is written only in the middle.** Text that reads
+ * right-way-up for the player at the bottom is upside down for the player at
+ * the top, so the centre carries only rotation-invariant state — the core's
+ * colour, a pair of glyphs, a row of dots — and every console repeats the
+ * signal rotated to its own seat. Control rooms mirror the master gauge onto
+ * each station for exactly this reason.
+ *
+ * **Colour is only a cue in the round that says it is.** In a GO round the core
+ * turns green the instant it arms, and that is the whole game. In MATCH, COUNT
+ * and MATH the core keeps burning in the round's own hue right through the arm,
+ * because if it flashed green the round would collapse back into GO. The decoy
+ * cycles tick audibly whether they are true or false so the sound cannot leak
+ * the answer either.
+ *
+ * **A pointer belongs to the wedge it landed in, for its whole life.** A slap
+ * is decided on pointerdown and the binding is held in a Map keyed by
+ * pointerId, with one live pointer per station — otherwise a hand that lands
+ * across a mitre line, or a second finger from the same player, fires somebody
+ * else's console.
+ *
+ * Contract notes: packaged assets are disabled (maxAssets is 0), so the console
+ * plating, the chamber behind the core, the glow sprites and every readout are
+ * painted into OffscreenCanvases at boot and either blitted or uploaded as
+ * textures. The overlay is one markup string on ctx.createRoot() rather than
+ * document.createElement, and pointer maths uses offsetX/offsetY rather than
+ * getBoundingClientRect — both of those are rejected at upload and neither is
+ * documented in sdk.md.
+ */
+window.plethoraBit = {
+  meta: {
+    title: "Reactor Four",
+    runtime: "plethora-bit@2",
+    tags: ["multiplayer", "local-multiplayer", "party", "reflex", "four-player"],
+    permissions: ["backgroundMusic", "haptics", "storage"],
+  },
+
+  async init(ctx) {
+    const THREE = await ctx.importModule("three", "0.164.1");
+
+    const TAU = Math.PI * 2;
+    const D2R = Math.PI / 180;
+    const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const now = () => performance.now();
+    const rnd = (n) => Math.floor(Math.random() * n);
+
+    /** Escape anything that could ever be player-authored before it hits innerHTML. */
+    const esc = (s) => String(s).replace(/[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    /* ---------------------------------------------------------------
+     * Stations. Index is fixed: 0 bottom, 1 top, 2 left, 3 right, so a
+     * two-player game is always bottom-and-top and a three-player game
+     * always adds the left edge. `rad` is the rotation a console needs
+     * to read right-way-up from that seat.
+     * ------------------------------------------------------------- */
+    const STATIONS = [
+      { key: "bottom", name: "CYAN",    ink: "#22dcff", hex: 0x22dcff, rgb: [34, 220, 255] },
+      { key: "top",    name: "MAGENTA", ink: "#ff2f8f", hex: 0xff2f8f, rgb: [255, 47, 143] },
+      { key: "left",   name: "AMBER",   ink: "#ffb020", hex: 0xffb020, rgb: [255, 176, 32] },
+      { key: "right",  name: "LIME",    ink: "#8bf03a", hex: 0x8bf03a, rgb: [139, 240, 58] },
+    ];
+    const SEAT_RAD = { bottom: 0, top: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 };
+
+    /** Angular ownership, in screen degrees where 90° is straight down. */
+    function sectorsFor(n) {
+      if (n === 2) return [[0, 180], [180, 360]];
+      if (n === 3) return [[0, 135], [225, 360], [135, 225]];
+      return [[45, 135], [225, 315], [135, 225], [315, 45]];
+    }
+
+    const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+    /* ---------------------------------------------------------------
+     * Round types. Each carries the hue the core burns while it is the
+     * active mode, so a glance at the core says which game you are in
+     * before you have read a word.
+     * ------------------------------------------------------------- */
+    const TYPES = ["go", "match", "count", "math"];
+    const TYPE = {
+      go:    { name: "GO",    rule: "TAP ON GREEN",  hex: 0xff2a33, rgb: [255, 42, 51] },
+      match: { name: "MATCH", rule: "TAP ON A PAIR", hex: 0xc05cff, rgb: [192, 92, 255] },
+      count: { name: "COUNT", rule: "TAP ON N",      hex: 0x2f9dff, rgb: [47, 157, 255] },
+      math:  { name: "MATH",  rule: "TAP IF TRUE",   hex: 0xffa312, rgb: [255, 163, 18] },
+    };
+    const GREEN = { hex: 0x24f58c, rgb: [36, 245, 140] };
+    const IDLE = { hex: 0x2c4a7a, rgb: [44, 74, 122] };
+
+    /* ---------------------------------------------------------------
+     * Settings, remembered between sessions.
+     * ------------------------------------------------------------- */
+    const saved = (function () {
+      try { return ctx.storage.get("reactor4") || {}; } catch (_) { return {}; }
+    })();
+    const settings = {
+      crew: saved.crew || 4,
+      target: saved.target || 5,
+      pace: saved.pace === undefined ? 1 : saved.pace,   // 0 calm, 1 normal, 2 brutal
+      mute: !!saved.mute,
+    };
+    const PACE = { 0: 1.3, 1: 1.0, 2: 0.74 };
+    const pace = () => PACE[settings.pace];
+    function saveSettings() { try { ctx.storage.set("reactor4", settings); } catch (_) {} }
+
+    /* ---------------------------------------------------------------
+     * Sound. A techno bed whose intensity tracks the reactor's charge,
+     * so the room can hear the wind-up as well as see it. Every call is
+     * wrapped: audio is a nicety and must never break play.
+     * ------------------------------------------------------------- */
+    const sound = (function () {
+      let muted = settings.mute, bed = null, unlocked = false;
+      const start = () => ctx.music.play({ preset: "techno", volume: 0.30, tempo: 120, intensity: 0.25 });
+      return {
+        get muted() { return muted; },
+        async unlock() {
+          if (unlocked) return;
+          unlocked = true;
+          try { await ctx.music.unlock(); if (!muted) bed = start(); } catch (_) {}
+        },
+        sting(n) { if (!muted) { try { ctx.music.sting(n); } catch (_) {} } },
+        duck(a, ms) { if (!muted) { try { ctx.music.duck(a, ms); } catch (_) {} } },
+        heat(v) { if (!muted && bed) { try { bed.setIntensity(clamp(v, 0, 1)); } catch (_) {} } },
+        tempo(v) { if (!muted && bed) { try { bed.setTempo(v); } catch (_) {} } },
+        haptic(k) { try { ctx.platform.haptic(k); } catch (_) {} },
+        toggle() {
+          muted = !muted;
+          settings.mute = muted;
+          saveSettings();
+          try {
+            if (muted) { (bed || ctx.music).stop({ fadeOutMs: 200 }); bed = null; }
+            else if (unlocked) bed = start();
+          } catch (_) {}
+          return muted;
+        },
+      };
+    })();
+
+    /* ---------------------------------------------------------------
+     * Layout. Everything is measured from the port — the circular hole
+     * in the console plating that the 3D core burns through.
+     * ------------------------------------------------------------- */
+    let W = ctx.width, H = ctx.height, cx = W / 2, cy = H / 2, portR = 112;
+    const safeT = ctx.safeArea.top, safeB = ctx.safeArea.bottom;
+    function measure() {
+      W = ctx.width; H = ctx.height;
+      cx = W / 2; cy = H / 2;
+      portR = Math.round(Math.min(W * 0.295, H * 0.155));
+    }
+    measure();
+
+    let sectors = sectorsFor(settings.crew);
+    let crew = settings.crew;
+
+    /** Which station owns a screen point. Normalised first, so the mitre
+     *  lines land exactly on the screen diagonals whatever the aspect. */
+    function zoneAt(px, py) {
+      const u = (px - cx) / (W / 2), v = (py - cy) / (H / 2);
+      let a = Math.atan2(v, u) / D2R;
+      if (a < 0) a += 360;
+      for (let i = 0; i < sectors.length; i++) {
+        const s = sectors[i][0], e = sectors[i][1];
+        if (s < e ? (a >= s && a < e) : (a >= s || a < e)) return i;
+      }
+      return 0;
+    }
+
+    /** A point on the r=3 unit ellipse — far outside the screen in every
+     *  direction, which is what makes a sector clip cover its whole wedge. */
+    function ray(deg, r) {
+      const t = deg * D2R;
+      return { x: cx + Math.cos(t) * r * (W / 2), y: cy + Math.sin(t) * r * (H / 2) };
+    }
+    function wedgePath(g, i) {
+      const s = sectors[i][0];
+      let span = sectors[i][1] - s;
+      if (span <= 0) span += 360;
+      const steps = Math.max(2, Math.ceil(span / 30));
+      g.beginPath();
+      g.moveTo(cx, cy);
+      for (let k = 0; k <= steps; k++) {
+        const p = ray(s + span * k / steps, 3);
+        g.lineTo(p.x, p.y);
+      }
+      g.closePath();
+    }
+    /** Two successive clips intersect, which is how the port stays a real hole
+     *  in every wedge rather than an even-odd artefact in three of them. */
+    function clipOutsidePort(g) {
+      g.beginPath();
+      g.rect(0, 0, W, H);
+      g.arc(cx, cy, portR, 0, TAU, true);          // reversed: nonzero punches
+      g.clip();
+    }
+    function clipZone(g, i) { wedgePath(g, i); g.clip(); }
+
+    /** Where a station's readout strip sits, and how it is turned. */
+    function anchor(i) {
+      const k = STATIONS[i].key;
+      if (k === "bottom") return { x: cx, y: H - safeB - 50, rad: 0 };
+      if (k === "top")    return { x: cx, y: safeT + 48, rad: Math.PI };
+      if (k === "left")   return { x: 58, y: cy, rad: Math.PI / 2 };
+      return { x: W - 58, y: cy, rad: -Math.PI / 2 };
+    }
+    /** A generous point inside a station's wedge — where a hand naturally lands. */
+    function tapPoint(i) {
+      const k = STATIONS[i].key;
+      if (k === "bottom") return { x: cx, y: H - safeB - 24 };
+      if (k === "top")    return { x: cx, y: safeT + 22 };
+      if (k === "left")   return { x: 22, y: cy };
+      return { x: W - 22, y: cy };
+    }
+
+    function surface(w, h) {
+      if (typeof OffscreenCanvas === "undefined") return null;   // older WebViews draw live
+      return new OffscreenCanvas(Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h)));
+    }
+
+    /* =============================================================
+     * CANVAS PRIMITIVES
+     * ============================================================= */
+    function roundRect(g, x, y, w, h, r) {
+      const k = Math.min(r, w / 2, h / 2);
+      g.beginPath();
+      g.moveTo(x + k, y);
+      g.arcTo(x + w, y, x + w, y + h, k);
+      g.arcTo(x + w, y + h, x, y + h, k);
+      g.arcTo(x, y + h, x, y, k);
+      g.arcTo(x, y, x + w, y, k);
+      g.closePath();
+    }
+
+    /** Letter-spaced caps, drawn per glyph so the tracking is identical on
+     *  every engine — ctx.letterSpacing is not universally present. */
+    function tracked(g, text, x, y, size, track, align) {
+      g.font = "700 " + size + "px " + MONO;
+      const chars = String(text).split("");
+      let total = 0;
+      for (const c of chars) total += g.measureText(c).width + track;
+      total -= track;
+      let px = align === "center" ? x - total / 2 : align === "right" ? x - total : x;
+      g.textAlign = "left";
+      for (const c of chars) {
+        g.fillText(c, px, y);
+        px += g.measureText(c).width + track;
+      }
+      return total;
+    }
+
+    /** Shrink a font until the string fits; readouts must never overflow. */
+    function fitFont(g, text, maxW, size, weight, family) {
+      let s = size;
+      g.font = weight + " " + s + "px " + family;
+      while (s > 6 && g.measureText(text).width > maxW) {
+        s -= 1;
+        g.font = weight + " " + s + "px " + family;
+      }
+      return s;
+    }
+
+    const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const MONO = "ui-monospace,SFMono-Regular,Menlo,'Roboto Mono',monospace";
+
+    /* ---------------------------------------------------------------
+     * Signal glyphs. Six shapes that stay distinguishable from any seat:
+     * whether two of them match is a rotation-invariant question, which
+     * is exactly why MATCH can live in the middle of the screen.
+     * ------------------------------------------------------------- */
+    function glyph(g, idx, x, y, s) {
+      g.beginPath();
+      if (idx === 0) {                                   // ring
+        g.lineWidth = s * 0.42;
+        g.arc(x, y, s * 0.74, 0, TAU);
+        g.stroke();
+        return;
+      }
+      if (idx === 1) {                                   // square
+        g.rect(x - s * 0.82, y - s * 0.82, s * 1.64, s * 1.64);
+      } else if (idx === 2) {                            // triangle
+        g.moveTo(x, y - s);
+        g.lineTo(x + s * 0.92, y + s * 0.72);
+        g.lineTo(x - s * 0.92, y + s * 0.72);
+        g.closePath();
+      } else if (idx === 3) {                            // cross
+        const t = s * 0.34;
+        g.rect(x - t, y - s, t * 2, s * 2);
+        g.rect(x - s, y - t, s * 2, t * 2);
+      } else if (idx === 4) {                            // hexagon
+        for (let k = 0; k < 6; k++) {
+          const a = k * TAU / 6 + Math.PI / 6;
+          const px = x + Math.cos(a) * s, py = y + Math.sin(a) * s;
+          if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+        }
+        g.closePath();
+      } else {                                           // diamond
+        g.moveTo(x, y - s);
+        g.lineTo(x + s * 0.78, y);
+        g.lineTo(x, y + s);
+        g.lineTo(x - s * 0.78, y);
+        g.closePath();
+      }
+      g.fill();
+    }
+
+    /**
+     * The signal payload, drawn into a box of w×h with its top-left at 0,0.
+     * One function serves both the master gauge baked onto the core's readout
+     * plate and the four repeats on the consoles, so a station can never show
+     * something subtly different from the middle of the table.
+     */
+    function payloadArt(g, w, h, sig, opts) {
+      const o = opts || {};
+      const ink = o.ink || "#eaf4ff";
+      const scale = h / 66;
+      if (!sig || !sig.kind) return;
+
+      if (sig.kind === "go") {
+        // A single lamp. Red means hold; green is the only thing worth a slap.
+        const on = !!sig.on;
+        const col = on ? "36,245,140" : "255,42,51";
+        const r = h * 0.30;
+        for (let k = 4; k >= 1; k--) {                   // concentric halo, no blur filter
+          g.beginPath();
+          g.arc(w / 2, h * 0.44, r + k * r * 0.32, 0, TAU);
+          g.fillStyle = "rgba(" + col + "," + (on ? 0.10 : 0.05) + ")";
+          g.fill();
+        }
+        g.beginPath();
+        g.arc(w / 2, h * 0.44, r, 0, TAU);
+        g.fillStyle = "rgba(" + col + ",1)";
+        g.fill();
+        if (o.label !== false) {
+          g.fillStyle = "rgba(" + col + ",0.95)";
+          tracked(g, on ? "GO" : "HOLD", w / 2, h * 0.96, Math.max(8, 9 * scale), 2 * scale, "center");
+        }
+        return;
+      }
+
+      if (sig.kind === "match") {
+        const s = h * 0.26;
+        g.fillStyle = ink;
+        g.strokeStyle = ink;
+        glyph(g, sig.a, w * 0.29, h * 0.48, s);
+        g.fillStyle = ink;
+        g.strokeStyle = ink;
+        glyph(g, sig.b, w * 0.71, h * 0.48, s);
+        g.strokeStyle = "rgba(219,230,245,0.22)";        // divider
+        g.lineWidth = Math.max(1, scale);
+        g.beginPath();
+        g.moveTo(w / 2, h * 0.16);
+        g.lineTo(w / 2, h * 0.80);
+        g.stroke();
+        return;
+      }
+
+      if (sig.kind === "count") {
+        const n = sig.n;
+        const cols = Math.min(n, 4);
+        const rows = Math.ceil(n / 4);
+        const r = h * (rows > 1 ? 0.085 : 0.115);
+        const gapX = r * 3.1, gapY = r * 3.1;
+        g.fillStyle = ink;
+        let drawn = 0;
+        for (let ry = 0; ry < rows; ry++) {
+          const inRow = Math.min(4, n - drawn);
+          for (let k = 0; k < inRow; k++) {
+            const px = w / 2 + (k - (inRow - 1) / 2) * gapX;
+            const py = h * 0.46 + (ry - (rows - 1) / 2) * gapY;
+            g.beginPath();
+            g.arc(px, py, r, 0, TAU);
+            g.fill();
+            drawn++;
+          }
+        }
+        if (o.label !== false) {
+          g.fillStyle = "rgba(219,230,245,0.55)";
+          tracked(g, "NEED " + sig.target, w / 2, h * 0.97, Math.max(8, 8.5 * scale), 1.6 * scale, "center");
+        }
+        void cols;
+        return;
+      }
+
+      // math
+      const size = fitFont(g, sig.text, w * 0.90, h * 0.40, "700", MONO);
+      g.font = "700 " + size + "px " + MONO;
+      g.fillStyle = ink;
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(sig.text, w / 2, h * 0.5);
+      g.textBaseline = "alphabetic";
+    }
+
+    /* =============================================================
+     * 3D — the reactor core
+     * ============================================================= */
+    const canvas = ctx.createCanvas({ touchAction: "none" });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(ctx.dpr, 2));
+    renderer.setSize(W, H, false);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    ctx.onDestroy(() => renderer.dispose());
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x04060b);
+
+    const FOV = 32;
+    const camDist = 1 / Math.tan((FOV / 2) * D2R);
+    const camera = new THREE.PerspectiveCamera(FOV, W / H, 0.1, 20);
+    camera.position.set(0, 0, camDist);
+    camera.lookAt(0, 0, 0);
+
+    // Screen pixels to world units. Everything the core is made of lives near
+    // z=0, so this stays a straight linear scale.
+    const P = (px) => px / (H / 2);
+
+    /** A soft radial sprite, baked once. Used for the bloom and the motes. */
+    function radialTexture(size, stops) {
+      const c = surface(size, size);
+      if (!c) return null;
+      const g = c.getContext("2d");
+      const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      for (const s of stops) gr.addColorStop(s[0], s[1]);
+      g.fillStyle = gr;
+      g.fillRect(0, 0, size, size);
+      const t = new THREE.CanvasTexture(c);
+      ctx.onDestroy(() => t.dispose());
+      return t;
+    }
+
+    /** The chamber wall behind the core: machinery you only half see. */
+    function chamberTexture() {
+      const S = 512;
+      const c = surface(S, S);
+      if (!c) return null;
+      const g = c.getContext("2d");
+      g.fillStyle = "#05070c";
+      g.fillRect(0, 0, S, S);
+      const m = S / 2;
+      // Radial vents.
+      for (let k = 0; k < 48; k++) {
+        const a = k * TAU / 48;
+        g.strokeStyle = k % 4 === 0 ? "rgba(120,160,220,0.18)" : "rgba(90,120,170,0.07)";
+        g.lineWidth = k % 4 === 0 ? 3 : 1.4;
+        g.beginPath();
+        g.moveTo(m + Math.cos(a) * m * 0.30, m + Math.sin(a) * m * 0.30);
+        g.lineTo(m + Math.cos(a) * m * 0.98, m + Math.sin(a) * m * 0.98);
+        g.stroke();
+      }
+      // Containment rings.
+      for (const r of [0.34, 0.48, 0.62, 0.78, 0.93]) {
+        g.strokeStyle = "rgba(110,150,205,0.13)";
+        g.lineWidth = r > 0.7 ? 2.5 : 1.5;
+        g.beginPath();
+        g.arc(m, m, m * r, 0, TAU);
+        g.stroke();
+      }
+      // Hazard arc at the rim.
+      g.save();
+      g.beginPath();
+      g.arc(m, m, m * 0.955, 0, TAU);
+      g.arc(m, m, m * 0.90, 0, TAU, true);
+      g.clip();
+      for (let k = -S; k < S * 2; k += 22) {
+        g.fillStyle = "rgba(190,140,40,0.22)";
+        g.beginPath();
+        g.moveTo(k, 0); g.lineTo(k + 11, 0); g.lineTo(k + 11 + S, S); g.lineTo(k + S, S);
+        g.closePath(); g.fill();
+      }
+      g.restore();
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      ctx.onDestroy(() => t.dispose());
+      return t;
+    }
+
+    // --- chamber wall ---------------------------------------------------
+    const chamberTex = chamberTexture();
+    const chamber = new THREE.Mesh(
+      new THREE.CircleGeometry(P(340), 64),
+      new THREE.MeshBasicMaterial({
+        color: chamberTex ? 0xffffff : 0x0a0f18,
+        map: chamberTex || null,
+      })
+    );
+    chamber.position.z = -P(230);
+    scene.add(chamber);
+
+    // --- the core --------------------------------------------------------
+    const coreCol = new THREE.Color(IDLE.hex);
+    const coreMat = new THREE.MeshStandardMaterial({
+      color: 0x0a0d14, emissive: coreCol.clone(), emissiveIntensity: 1.0,
+      roughness: 0.35, metalness: 0.2,
+    });
+    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(P(52), 4), coreMat);
+    scene.add(core);
+
+    // A faceted cage riding just off the surface. Counter-rotating, it makes
+    // the core read as a contained reaction rather than a painted ball.
+    const cageMat = new THREE.MeshBasicMaterial({
+      color: coreCol.clone(), wireframe: true, transparent: true, opacity: 0.30,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const cage = new THREE.Mesh(new THREE.IcosahedronGeometry(P(63), 1), cageMat);
+    scene.add(cage);
+
+    // Nested back-faced shells: the cheapest honest stand-in for volume. Each
+    // one adds light where the sightline is longest, so the core has a falloff
+    // instead of an edge.
+    const halos = [];
+    for (const [r, op] of [[70, 0.20], [86, 0.13], [104, 0.085], [126, 0.05]]) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(P(r), 32, 24),
+        new THREE.MeshBasicMaterial({
+          color: coreCol.clone(), transparent: true, opacity: op, side: THREE.BackSide,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        })
+      );
+      scene.add(m);
+      halos.push({ mesh: m, base: op });
+    }
+
+    // Camera-facing bloom, so the port itself looks like it is emitting.
+    const bloomTex = radialTexture(256, [
+      [0, "rgba(255,255,255,0.95)"], [0.22, "rgba(255,255,255,0.42)"],
+      [0.55, "rgba(255,255,255,0.10)"], [1, "rgba(255,255,255,0)"],
+    ]);
+    const bloomMat = new THREE.MeshBasicMaterial({
+      color: coreCol.clone(), map: bloomTex || null, transparent: true,
+      opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const bloom = new THREE.Mesh(new THREE.PlaneGeometry(P(430), P(430)), bloomMat);
+    bloom.position.z = P(70);
+    scene.add(bloom);
+
+    // --- gyroscope rings -------------------------------------------------
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0x30405c, roughness: 0.25, metalness: 0.95,
+      emissive: coreCol.clone(), emissiveIntensity: 0.35,
+    });
+    const rings = [];
+    for (const [r, ax] of [[86, "x"], [95, "y"], [104, "z"]]) {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(P(r), P(3.2), 10, 72), ringMat);
+      if (ax === "x") m.rotation.x = 0.5;
+      if (ax === "y") { m.rotation.y = 0.9; m.rotation.x = 1.1; }
+      if (ax === "z") { m.rotation.x = 1.5; m.rotation.z = 0.4; }
+      scene.add(m);
+      rings.push({ mesh: m, ax });
+    }
+
+    // --- control rods ----------------------------------------------------
+    // Eight rods that withdraw as the core charges. A reactor tells you it is
+    // about to go by the rods pulling out, which is the tension made physical.
+    const rodMat = new THREE.MeshStandardMaterial({
+      color: 0x27354d, roughness: 0.3, metalness: 0.9,
+      emissive: coreCol.clone(), emissiveIntensity: 0.5,
+    });
+    const rods = [];
+    for (let k = 0; k < 8; k++) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(P(6), P(22), P(6)), rodMat);
+      const a = k * TAU / 8;
+      m.userData.a = a;
+      m.rotation.z = -a + Math.PI / 2;
+      scene.add(m);
+      rods.push(m);
+    }
+
+    // --- energy motes ----------------------------------------------------
+    const moteTex = radialTexture(64, [
+      [0, "rgba(255,255,255,1)"], [0.35, "rgba(255,255,255,0.55)"], [1, "rgba(255,255,255,0)"],
+    ]);
+    const MOTES = 260;
+    const motePos = new Float32Array(MOTES * 3);
+    const moteState = [];
+    for (let k = 0; k < MOTES; k++) {
+      moteState.push({
+        a: Math.random() * TAU, r: P(60 + Math.random() * 90),
+        y: (Math.random() - 0.5) * P(160), sp: 0.5 + Math.random() * 1.4,
+        vr: 0, vy: 0, blast: 0,
+      });
+    }
+    const moteGeo = new THREE.BufferGeometry();
+    moteGeo.setAttribute("position", new THREE.BufferAttribute(motePos, 3));
+    const moteMat = new THREE.PointsMaterial({
+      size: P(7), map: moteTex || null, color: coreCol.clone(),
+      transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending,
+      depthWrite: false, sizeAttenuation: true,
+    });
+    const motes = new THREE.Points(moteGeo, moteMat);
+    scene.add(motes);
+
+    // --- discharge shockwave --------------------------------------------
+    const waveMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const wave = new THREE.Mesh(new THREE.RingGeometry(P(88), P(100), 96), waveMat);
+    wave.position.z = P(60);
+    wave.visible = false;
+    scene.add(wave);
+    let waveT = 0;
+
+    // --- readout plate ---------------------------------------------------
+    // The master gauge. Smoked glass across the core's face, carrying whatever
+    // the round asks people to read. GO rounds hide it, so the bare core is
+    // itself the signal.
+    const plateW = 196, plateH = 118;
+    const plateSurf = surface(512, 320);
+    const plateTex = plateSurf ? new THREE.CanvasTexture(plateSurf) : null;
+    if (plateTex) { plateTex.colorSpace = THREE.SRGBColorSpace; ctx.onDestroy(() => plateTex.dispose()); }
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(P(plateW), P(plateH)),
+      new THREE.MeshBasicMaterial({ map: plateTex || null, transparent: true, depthWrite: false })
+    );
+    plate.position.z = P(62);
+    plate.visible = false;
+    scene.add(plate);
+
+    function paintPlate(sig) {
+      if (!plateSurf || !plateTex) return;
+      const g = plateSurf.getContext("2d");
+      const w = 512, h = 320;
+      g.clearRect(0, 0, w, h);
+      // Smoked glass so the readout survives against a white-hot core.
+      roundRect(g, 6, 6, w - 12, h - 12, 26);
+      g.fillStyle = "rgba(4,7,13,0.86)";
+      g.fill();
+      g.lineWidth = 4;
+      g.strokeStyle = "rgba(150,190,240,0.42)";
+      g.stroke();
+      roundRect(g, 16, 16, w - 32, h - 32, 18);
+      g.lineWidth = 1.5;
+      g.strokeStyle = "rgba(150,190,240,0.16)";
+      g.stroke();
+      g.save();
+      g.translate(30, 34);
+      payloadArt(g, w - 60, h - 68, sig, { ink: "#eef7ff", label: false });
+      g.restore();
+      plateTex.needsUpdate = true;
+    }
+
+    // --- lights -----------------------------------------------------------
+    scene.add(new THREE.AmbientLight(0x24344f, 0.55));
+    const coreLight = new THREE.PointLight(IDLE.hex, 1.2, P(520), 2);
+    scene.add(coreLight);
+    const rim = new THREE.DirectionalLight(0x9fc4ff, 0.5);
+    rim.position.set(0.6, 0.9, 1.2);
+    scene.add(rim);
+
+    /* =============================================================
+     * 2D — the console plating
+     * ============================================================= */
+    const fxc = ctx.createCanvas2D({ touchAction: "none" });
+    const fx = fxc.getContext("2d");
+    // The 2D layer is created after the WebGL one, so it stacks above it. Every
+    // fill is clipped outside the port, which leaves the port transparent and
+    // the core burning through from below.
+
+    let frameArt = null;
+    const zoneArt = [null, null, null, null];
+    const zoneKey = ["", "", "", ""];
+
+    /**
+     * The static console: plating, radar arcs, the lit rail at the port, hazard
+     * banding at the outer edge and each station's name. Baked once per layout
+     * because none of it moves.
+     */
+    function paintFrame(g) {
+      g.clearRect(0, 0, W, H);
+      for (let i = 0; i < crew; i++) {
+        const st = STATIONS[i];
+        const a = anchor(i);
+        g.save();
+        clipZone(g, i);
+        clipOutsidePort(g);
+
+        // Plate gradient: brighter at the seat, sinking to black at the core.
+        const outer = ray((sectors[i][0] + ((sectors[i][1] - sectors[i][0] + 360) % 360) / 2), 1);
+        const gr = g.createLinearGradient(outer.x, outer.y, cx, cy);
+        gr.addColorStop(0, rgba(st.rgb, 0.16));
+        gr.addColorStop(0.35, "rgba(16,22,32,0.97)");
+        gr.addColorStop(1, "rgba(7,10,16,1)");
+        g.fillStyle = gr;
+        g.fillRect(0, 0, W, H);
+
+        // Radar arcs stepping out from the port.
+        for (let k = 0; k < 9; k++) {
+          const r = portR + 22 + k * 46;
+          g.strokeStyle = rgba(st.rgb, k === 0 ? 0.20 : 0.055);
+          g.lineWidth = k === 0 ? 1.6 : 1;
+          g.beginPath();
+          g.arc(cx, cy, r, 0, TAU);
+          g.stroke();
+        }
+        // Rivet grid — flat plating with nothing on it reads as unfinished.
+        g.fillStyle = "rgba(150,180,220,0.055)";
+        for (let ry = 26; ry < H; ry += 34) {
+          for (let rx = 20; rx < W; rx += 34) {
+            g.beginPath();
+            g.arc(rx, ry, 1.3, 0, TAU);
+            g.fill();
+          }
+        }
+
+        // Hazard banding along the outer edge of the wedge.
+        g.save();
+        g.globalAlpha = 0.30;
+        const bandR0 = Math.max(W, H) * 0.62, bandR1 = bandR0 + 16;
+        g.beginPath();
+        g.arc(cx, cy, bandR1, 0, TAU);
+        g.arc(cx, cy, bandR0, 0, TAU, true);
+        g.clip();
+        for (let k = -H; k < W + H; k += 26) {
+          g.fillStyle = rgba(st.rgb, 0.55);
+          g.beginPath();
+          g.moveTo(k, 0); g.lineTo(k + 13, 0); g.lineTo(k + 13 + H, H); g.lineTo(k + H, H);
+          g.closePath(); g.fill();
+        }
+        g.restore();
+
+        // The lit rail: a thick arc hugging the port in the station's colour,
+        // so at a glance you can see which slice of the rim belongs to you.
+        g.save();
+        wedgePath(g, i);
+        g.clip();
+        for (const [w, al] of [[16, 0.07], [10, 0.13], [5, 0.55], [2, 1]]) {
+          g.strokeStyle = rgba(st.rgb, al);
+          g.lineWidth = w;
+          g.beginPath();
+          g.arc(cx, cy, portR + 7, 0, TAU);
+          g.stroke();
+        }
+        g.restore();
+
+        // Station name, out near the seat and turned to face it.
+        g.save();
+        g.translate(a.x, a.y);
+        g.rotate(a.rad);
+        g.fillStyle = rgba(st.rgb, 0.85);
+        tracked(g, "STATION " + (i + 1), 0, -56, 9.5, 3.4, "center");
+        g.fillStyle = "rgba(219,230,245,0.30)";
+        tracked(g, st.name, 0, 62, 8.5, 3.2, "center");
+        g.restore();
+        g.restore();
+      }
+
+      // Mitre lines between neighbouring stations.
+      for (let i = 0; i < crew; i++) {
+        const p = ray(sectors[i][0], 3);
+        g.save();
+        clipOutsidePort(g);
+        g.strokeStyle = "rgba(6,9,14,0.95)";
+        g.lineWidth = 5;
+        g.beginPath(); g.moveTo(cx, cy); g.lineTo(p.x, p.y); g.stroke();
+        g.strokeStyle = "rgba(150,180,220,0.22)";
+        g.lineWidth = 1;
+        g.beginPath(); g.moveTo(cx, cy); g.lineTo(p.x, p.y); g.stroke();
+        g.restore();
+      }
+
+      // Port bezel: a machined ring with a graduated scale around it.
+      g.save();
+      clipOutsidePort(g);
+      const bez = g.createRadialGradient(cx, cy, portR, cx, cy, portR + 18);
+      bez.addColorStop(0, "#39465c");
+      bez.addColorStop(0.35, "#1b2434");
+      bez.addColorStop(1, "rgba(11,15,22,0)");
+      g.fillStyle = bez;
+      g.beginPath();
+      g.arc(cx, cy, portR + 18, 0, TAU);
+      g.fill();
+      g.strokeStyle = "rgba(190,215,250,0.55)";
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.arc(cx, cy, portR + 1.5, 0, TAU);
+      g.stroke();
+      for (let k = 0; k < 72; k++) {
+        const a = k * TAU / 72;
+        const long = k % 6 === 0;
+        const r0 = portR + 6, r1 = portR + (long ? 15 : 10);
+        g.strokeStyle = long ? "rgba(200,225,255,0.42)" : "rgba(160,190,230,0.18)";
+        g.lineWidth = long ? 1.8 : 1;
+        g.beginPath();
+        g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+        g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+        g.stroke();
+      }
+      g.restore();
+    }
+
+    function bakeFrame() {
+      const c = surface(W * ctx.dpr, H * ctx.dpr);
+      if (!c) { frameArt = null; return; }
+      const g = c.getContext("2d");
+      g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+      paintFrame(g);
+      frameArt = c;
+    }
+
+    /* ---------------------------------------------------------------
+     * The readout strip. 264×88, identical for every seat — the layout a
+     * player learns at the bottom of the table is the layout they get if
+     * they move to the side.
+     * ------------------------------------------------------------- */
+    const STRIP_W = 264, STRIP_H = 88;
+
+    function paintStrip(g, i) {
+      const st = STATIONS[i];
+      const x0 = -STRIP_W / 2, y0 = -STRIP_H / 2;
+      const dead = locked[i] && (phase === "charge" || phase === "armed" || phase === "resolve");
+
+      // Backing.
+      roundRect(g, x0, y0, STRIP_W, STRIP_H, 12);
+      g.fillStyle = "rgba(6,9,15,0.72)";
+      g.fill();
+      g.strokeStyle = dead ? "rgba(255,51,68,0.55)" : rgba(st.rgb, 0.30);
+      g.lineWidth = 1.2;
+      g.stroke();
+
+      // --- score block -------------------------------------------------
+      const sx = x0 + 30;
+      g.textAlign = "center";
+      g.fillStyle = dead ? "rgba(255,120,130,0.9)" : st.ink;
+      g.font = "800 34px " + FONT;
+      g.fillText(String(scores[i]), sx, y0 + 44);
+      // Segment bar: one notch per point needed to hold the core.
+      const bw = 52, bx = sx - bw / 2, by = y0 + 56;
+      for (let k = 0; k < settings.target; k++) {
+        const seg = bw / settings.target;
+        g.fillStyle = k < scores[i] ? st.ink : "rgba(150,180,220,0.16)";
+        g.fillRect(bx + k * seg, by, Math.max(1.4, seg - 1.1), 5);
+      }
+      g.fillStyle = "rgba(219,230,245,0.34)";
+      tracked(g, "OF " + settings.target, sx, y0 + 76, 7.5, 1.8, "center");
+
+      // --- centre panel --------------------------------------------------
+      const mx = x0 + 64, mw = 124, mh = 64, my = y0 + 12;
+      if (phase === "brief") {
+        // Round card: the type name spread across the panel and the status
+        // column, because between rounds legibility beats density.
+        const T = TYPE[roundKind];
+        g.textAlign = "left";
+        g.fillStyle = "rgba(219,230,245,0.45)";
+        tracked(g, "ROUND " + roundNo, mx, y0 + 24, 8, 2.2, "left");
+        const label = T.name;
+        g.fillStyle = rgba(T.rgb, 1);
+        const fs = fitFont(g, label, 118, 30, "800", FONT);
+        g.font = "800 " + fs + "px " + FONT;
+        g.fillText(label, mx, y0 + 56);
+        g.fillStyle = "rgba(219,230,245,0.62)";
+        tracked(g, roundKind === "count" ? "TAP ON " + countTarget : T.rule,
+          mx, y0 + 75, 8.5, 1.9, "left");
+      } else if (phase === "stations") {
+        roundRect(g, mx, my, mw, mh, 9);
+        g.fillStyle = zoneArmed[i] ? rgba(st.rgb, 0.18) : "rgba(150,180,220,0.06)";
+        g.fill();
+        g.strokeStyle = zoneArmed[i] ? rgba(st.rgb, 0.8) : "rgba(150,180,220,0.22)";
+        g.lineWidth = 1.2;
+        g.stroke();
+        g.fillStyle = zoneArmed[i] ? st.ink : "rgba(219,230,245,0.65)";
+        tracked(g, zoneArmed[i] ? "ARMED" : "TAP TO ARM", mx + mw / 2, my + mh / 2 + 4, 11, 2.6, "center");
+      } else {
+        roundRect(g, mx, my, mw, mh, 9);
+        g.fillStyle = "rgba(3,6,11,0.85)";
+        g.fill();
+        g.strokeStyle = dead ? "rgba(255,51,68,0.35)" : rgba(st.rgb, 0.26);
+        g.lineWidth = 1.1;
+        g.stroke();
+        if (!dead && sig.kind) {
+          g.save();
+          roundRect(g, mx, my, mw, mh, 9);
+          g.clip();
+          g.translate(mx, my);
+          payloadArt(g, mw, mh, sig, { ink: "#e8f2ff" });
+          g.restore();
+        } else if (dead) {
+          g.save();
+          roundRect(g, mx, my, mw, mh, 9);
+          g.clip();
+          for (let k = -mh; k < mw + mh; k += 12) {          // scram hatching
+            g.strokeStyle = "rgba(255,51,68,0.30)";
+            g.lineWidth = 4;
+            g.beginPath();
+            g.moveTo(mx + k, my); g.lineTo(mx + k + mh, my + mh);
+            g.stroke();
+          }
+          g.fillStyle = "#ff6b76";
+          tracked(g, "SCRAM", mx + mw / 2, my + mh / 2 + 5, 14, 3.4, "center");
+          g.restore();
+        }
+      }
+
+      // --- status column ---------------------------------------------------
+      if (phase !== "brief") {
+        const tx = x0 + 196, tw = 62;
+        g.textAlign = "left";
+        let l1 = "", l2 = "", l3 = "", c1 = rgba(st.rgb, 0.95);
+        if (phase === "stations") { l1 = "STANDBY"; l2 = "TAKE"; l3 = "YOUR EDGE"; }
+        else if (phase === "over") {
+          l1 = winner === i ? "WINNER" : "STAND DOWN";
+          l2 = scores[i] + " PTS";
+          c1 = winner === i ? st.ink : "rgba(219,230,245,0.5)";
+        } else if (phase === "resolve") {
+          if (roundWinner === i) { l1 = "CLAIMED"; l2 = "+1"; l3 = Math.round(lastReaction) + " MS"; }
+          else if (locked[i]) { l1 = "SCRAM"; l2 = "-1"; l3 = "LOCKED"; c1 = "#ff6b76"; }
+          else { l1 = "MISSED"; l2 = "--"; c1 = "rgba(219,230,245,0.42)"; }
+        } else {
+          const T = TYPE[roundKind];
+          l1 = T.name;
+          l2 = roundKind === "count" ? "TAP ON " + countTarget : T.rule;
+          c1 = locked[i] ? "#ff6b76" : rgba(T.rgb, 0.95);
+          if (locked[i]) { l1 = "SCRAM"; l2 = "LOCKED OUT"; }
+        }
+        g.fillStyle = c1;
+        tracked(g, l1, tx, y0 + 26, 10, 1.9, "left");
+        if (l2) {
+          g.fillStyle = "rgba(219,230,245,0.62)";
+          const s2 = fitFont(g, l2, tw, 8.5, "700", MONO);
+          tracked(g, l2, tx, y0 + 44, s2, 1.2, "left");
+        }
+        if (l3) {
+          g.fillStyle = "rgba(219,230,245,0.40)";
+          const s3 = fitFont(g, l3, tw, 8.5, "700", MONO);
+          tracked(g, l3, tx, y0 + 60, s3, 1.2, "left");
+        }
+        // Round counter, bottom right of the strip.
+        if (phase !== "over" && phase !== "stations") {
+          g.fillStyle = "rgba(219,230,245,0.26)";
+          tracked(g, "R" + roundNo, tx, y0 + 78, 7.5, 1.5, "left");
+        }
+      }
+    }
+
+    /** Content signature — the strip is only repainted when it would differ. */
+    function stripKey(i) {
+      return phase + "|" + roundNo + "|" + scores[i] + "|" + (locked[i] ? 1 : 0) + "|" +
+        (zoneArmed[i] ? 1 : 0) + "|" + sigSerial + "|" + roundWinner + "|" + winner + "|" +
+        Math.round(lastReaction) + "|" + settings.target;
+    }
+    function refreshStrip(i) {
+      const k = stripKey(i);
+      if (zoneKey[i] === k && zoneArt[i]) return;
+      zoneKey[i] = k;
+      const c = zoneArt[i] || surface(STRIP_W * ctx.dpr, STRIP_H * ctx.dpr);
+      if (!c) { zoneArt[i] = null; return; }
+      zoneArt[i] = c;
+      const g = c.getContext("2d");
+      g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+      g.clearRect(0, 0, STRIP_W, STRIP_H);
+      g.save();
+      g.translate(STRIP_W / 2, STRIP_H / 2);
+      paintStrip(g, i);
+      g.restore();
+    }
+
+    /* =============================================================
+     * STATE
+     * ============================================================= */
+    let phase = "menu";        // menu | stations | brief | charge | armed | resolve | over
+    const scores = [0, 0, 0, 0];
+    const locked = [false, false, false, false];
+    const zoneArmed = [false, false, false, false];
+    const zoneFlash = [0, 0, 0, 0];
+    const zoneFlashCol = [null, null, null, null];
+
+    let roundNo = 0, roundKind = "go", countTarget = 4;
+    let sig = { kind: null, on: false };
+    let sigSerial = 0;
+    let phaseUntil = 0, armAt = 0, armedAt = 0, cycleAt = 0, cyclesLeft = 0;
+    let holdUntil = 0, chargeFrom = 0, roundStart = 0, tickAt = 0;
+    let roundWinner = -1, lastReaction = 0, bestReaction = Infinity;
+    let winner = -1, matchStart = 0, falseStarts = 0, roundsPlayed = 0;
+    let charge = 0, shake = 0, dischargeCol = null, stationsSince = 0;
+
+    function setSignal(next) {
+      sig = next;
+      sigSerial++;
+      if (sig.kind === "go" || !sig.kind) { plate.visible = false; }
+      else { paintPlate(sig); plate.visible = !!plateTex; }
+    }
+
+    /* --- signal generators ------------------------------------------- */
+    function makeMatch(want) {
+      const a = rnd(6);
+      let b = a;
+      if (!want) { do { b = rnd(6); } while (b === a); }
+      return { kind: "match", on: want, a, b };
+    }
+    function makeCount(want) {
+      let n = countTarget;
+      if (!want) { do { n = 2 + rnd(6); } while (n === countTarget); }
+      return { kind: "count", on: want, n, target: countTarget };
+    }
+    function makeMath(want) {
+      const ops = ["+", "-", "x"];
+      const op = ops[rnd(3)];
+      let A, B;
+      if (op === "x") { A = 2 + rnd(7); B = 2 + rnd(7); }
+      else {
+        A = 2 + rnd(11); B = 2 + rnd(11);
+        if (op === "-" && B > A) { const t = A; A = B; B = t; }
+      }
+      const real = op === "+" ? A + B : op === "-" ? A - B : A * B;
+      let shown = real;
+      if (!want) {
+        const d = [1, -1, 2, -2, 3, -3][rnd(6)];
+        shown = real + d;
+        if (shown < 0 || shown === real) shown = real + 1 + rnd(2);
+      }
+      return { kind: "math", on: want, text: A + " " + op + " " + B + " = " + shown };
+    }
+    function makeSignal(want) {
+      if (roundKind === "go") return { kind: "go", on: want };
+      if (roundKind === "match") return makeMatch(want);
+      if (roundKind === "count") return makeCount(want);
+      return makeMath(want);
+    }
+    function cycleMs() {
+      const base = roundKind === "math" ? 1180 : roundKind === "count" ? 800 : 720;
+      return base * pace();
+    }
+    function holdMs() {
+      return (roundKind === "math" ? 2000 : 1550) * pace();
+    }
+
+    /* --- round machine ------------------------------------------------ */
+    function beginMatch(keepCrew) {
+      if (!keepCrew) { /* crew already set by the picker */ }
+      scores.fill(0);
+      locked.fill(false);
+      roundNo = 0;
+      roundWinner = -1;
+      winner = -1;
+      lastReaction = 0;
+      bestReaction = Infinity;
+      falseStarts = 0;
+      roundsPlayed = 0;
+      matchStart = now();
+      shell.el("over").style.display = "none";
+      beginRound();
+    }
+
+    function beginRound() {
+      roundNo++;
+      // Random, but a type rarely repeats back to back — the whole point is
+      // that nobody settles into one reflex.
+      let k = TYPES[rnd(4)];
+      let guard = 0;
+      while (k === roundKind && Math.random() < 0.8 && guard++ < 6) k = TYPES[rnd(4)];
+      roundKind = k;
+      if (k === "count") countTarget = 3 + rnd(4);
+      locked.fill(false);
+      roundWinner = -1;
+      lastReaction = 0;
+      setSignal({ kind: null, on: false });
+      phase = "brief";
+      roundStart = now();
+      phaseUntil = roundStart + 1650 * pace();
+      sound.sting("tap");
+      sound.heat(0.2);
+      updateChrome();
+    }
+
+    function beginCharge() {
+      phase = "charge";
+      chargeFrom = now();
+      tickAt = chargeFrom + 380;
+      if (roundKind === "go") {
+        setSignal(makeSignal(false));
+        armAt = chargeFrom + (1150 + Math.random() * 2500) * pace();
+      } else {
+        setSignal(makeSignal(false));
+        cycleAt = chargeFrom + cycleMs();
+        cyclesLeft = 2 + rnd(3);
+      }
+      updateChrome();
+    }
+
+    function arm() {
+      phase = "armed";
+      armedAt = now();
+      setSignal(makeSignal(true));
+      holdUntil = armedAt + holdMs();
+      if (roundKind === "go") {
+        flashWave(GREEN.hex, 1.0);
+        sound.duck(0.4, 240);
+      }
+      updateChrome();
+    }
+
+    function disarm() {
+      // Nobody took it inside the hold window: back to decoys, and it can come
+      // true again. Without this a missed signal would freeze the round.
+      phase = "charge";
+      setSignal(makeSignal(false));
+      cycleAt = now() + cycleMs();
+      cyclesLeft = 2 + rnd(2);
+    }
+
+    function claim(i, t) {
+      roundWinner = i;
+      lastReaction = Math.max(0, t - armedAt);
+      if (lastReaction < bestReaction) bestReaction = lastReaction;
+      scores[i]++;
+      roundsPlayed++;
+      zoneFlash[i] = 1;
+      zoneFlashCol[i] = STATIONS[i].rgb;
+      dischargeCol = STATIONS[i];
+      flashWave(STATIONS[i].hex, 1.4);
+      blastMotes();
+      shake = 0.028;
+      phase = "resolve";
+      phaseUntil = t + 1750;
+      sound.duck(0.5, 320);
+      sound.sting(scores[i] >= settings.target ? "win" : "coin");
+      sound.haptic("medium");
+      sound.heat(0.25);
+      ctx.platform.setScore(Math.max.apply(null, scores.slice(0, crew)));
+      ctx.platform.interact({ type: "claim", station: i, round: roundKind, ms: Math.round(lastReaction) });
+      updateChrome();
+    }
+
+    function scram(i) {
+      locked[i] = true;
+      scores[i] = Math.max(0, scores[i] - 1);
+      falseStarts++;
+      zoneFlash[i] = 1;
+      zoneFlashCol[i] = [255, 51, 68];
+      shake = 0.016;
+      sound.sting("fail");
+      sound.haptic("error");
+      ctx.platform.interact({ type: "scram", station: i, round: roundKind });
+      // Everybody jumped: no point dragging the round out.
+      let live = 0;
+      for (let k = 0; k < crew; k++) if (!locked[k]) live++;
+      if (live === 0) voidRound();
+    }
+
+    function voidRound() {
+      roundWinner = -1;
+      roundsPlayed++;
+      phase = "resolve";
+      phaseUntil = now() + 1450;
+      dischargeCol = null;
+      setSignal({ kind: null, on: false });
+      updateChrome();
+    }
+
+    function afterResolve() {
+      let best = -1;
+      for (let i = 0; i < crew; i++) if (scores[i] >= settings.target && (best < 0 || scores[i] > scores[best])) best = i;
+      if (best >= 0) return endMatch(best);
+      beginRound();
+    }
+
+    async function endMatch(w) {
+      phase = "over";
+      winner = w;
+      const st = STATIONS[w];
+      const el = shell.el;
+      el("over-name").textContent = st.name;
+      el("over-name").style.color = st.ink;
+      el("over-name").style.textShadow = "0 0 34px " + st.ink + "88";
+      el("over-echo").textContent = st.name + " HOLDS THE CORE";
+      el("over-echo").style.color = st.ink;
+      const best = isFinite(bestReaction) ? Math.round(bestReaction) + " ms" : "—";
+      el("over-stat").innerHTML =
+        '<span style="opacity:.5">FASTEST REACTION</span> &nbsp;<b style="color:#eaf4ff">' +
+        esc(best) + "</b>";
+      el("over-rows").innerHTML = STATIONS.slice(0, crew).map((s, i) =>
+        '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;">' +
+          '<span style="width:9px;height:9px;border-radius:3px;background:' + s.ink + ';"></span>' +
+          '<span style="flex:1;font-size:12px;letter-spacing:0.16em;opacity:' + (i === w ? "1" : ".55") + ';">' +
+            esc(s.name) + "</span>" +
+          '<span style="font-size:19px;font-weight:800;color:' + (i === w ? s.ink : "rgba(219,230,245,.6)") + ';">' +
+            scores[i] + "</span></div>").join("");
+      el("over").style.display = "flex";
+      dischargeCol = st;
+      flashWave(st.hex, 1.8);
+      blastMotes();
+      sound.duck(0.6, 500);
+      sound.sting("success");
+      sound.haptic("heavy");
+      sound.heat(0.15);
+      updateChrome();
+      ctx.platform.milestone("match", { winner: st.name, rounds: roundsPlayed });
+      ctx.platform.complete({
+        winner: st.name, crew, scores: scores.slice(0, crew),
+        rounds: roundsPlayed, falseStarts,
+        fastestMs: isFinite(bestReaction) ? Math.round(bestReaction) : null,
+      });
+      // The record belongs to the match, not to one of the people round the
+      // table: the sharpest hand on this phone tonight.
+      try {
+        if (isFinite(bestReaction)) {
+          await ctx.memory.record("fastest_reaction")
+            .submit(Math.round(bestReaction), { label: Math.round(bestReaction) + " ms" });
+        }
+      } catch (_) { /* offline is fine; the duel still happened */ }
+    }
+
+    /* --- core effects -------------------------------------------------- */
+    function flashWave(hex, power) {
+      waveMat.color.setHex(hex);
+      waveT = 1;
+      wave.visible = true;
+      wave.scale.setScalar(0.5);
+      waveMat.opacity = 0.9 * Math.min(power, 1.4);
+    }
+    function blastMotes() {
+      for (const m of moteState) {
+        m.blast = 1;
+        m.vr = P(120 + Math.random() * 260);
+        m.vy = (Math.random() - 0.5) * P(220);
+      }
+    }
+
+    /* =============================================================
+     * OVERLAY — one markup string on the runtime-owned root.
+     * ============================================================= */
+    const btn = "pointer-events:auto;width:38px;height:38px;border-radius:12px;border:none;" +
+      "background:rgba(150,190,240,0.13);color:#dbe6f5;font-size:15px;line-height:1;" +
+      "font-family:inherit;padding:0;";
+    const bigBtn = (bg, fg) => "width:100%;padding:15px;border:none;border-radius:14px;font-family:inherit;" +
+      "font-size:15px;font-weight:800;letter-spacing:0.10em;background:" + bg + ";color:" + fg + ";";
+    const panel = "max-width:326px;width:100%;background:rgba(11,16,25,0.98);border-radius:20px;" +
+      "padding:22px;border:1px solid rgba(150,190,240,0.14);pointer-events:auto;";
+    const modal = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
+      "background:rgba(3,5,10,0.90);z-index:70;padding:22px;pointer-events:auto;";
+    const crewBtn = (n, cap) =>
+      '<button data-el="crew" data-n="' + n + '" style="pointer-events:auto;flex:1;padding:14px 6px 11px;' +
+      'border:1px solid rgba(150,190,240,0.16);border-radius:15px;background:rgba(150,190,240,0.07);' +
+      'color:#eaf4ff;font-family:inherit;">' +
+      '<div style="font-size:27px;font-weight:800;line-height:1;">' + n + "</div>" +
+      '<div style="font-size:8px;letter-spacing:0.14em;opacity:0.52;margin-top:6px;">' + cap + "</div></button>";
+
+    const root = ctx.createRoot({ touchAction: "none" });
+    root.style.cssText += ";font-family:" + FONT + ";color:#dbe6f5;pointer-events:none;" +
+      "-webkit-user-select:none;user-select:none;";
+    root.innerHTML =
+      /* --- chrome, faded out while a round is live so a corner slap still counts --- */
+      '<div data-el="chrome" style="position:absolute;right:10px;top:' + (safeT + 6) + 'px;' +
+        'display:flex;gap:7px;z-index:40;pointer-events:none;transition:opacity .25s;">' +
+        '<button data-el="mute" aria-label="Sound" style="' + btn + '">' + (settings.mute ? "&#128263;" : "&#128266;") + "</button>" +
+        '<button data-el="cog" aria-label="Settings" style="' + btn + '">&#9881;</button>' +
+        '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
+      "</div>" +
+
+      /* --- title --- */
+      '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
+        'align-items:center;justify-content:center;gap:0;z-index:50;padding:26px;text-align:center;' +
+        'pointer-events:auto;background:radial-gradient(circle at 50% 50%,rgba(4,7,13,0.55) 0%,' +
+        'rgba(4,7,13,0.90) 42%,rgba(3,5,10,0.97) 100%);">' +
+        '<div style="font-size:10px;letter-spacing:0.52em;text-transform:uppercase;opacity:0.45;">Reaction Duel</div>' +
+        '<div style="font-size:47px;font-weight:800;letter-spacing:-0.025em;line-height:1.02;margin-top:10px;' +
+          'background:linear-gradient(102deg,' + STATIONS[0].ink + ',' + STATIONS[2].ink + ' 38%,' +
+          STATIONS[3].ink + ' 66%,' + STATIONS[1].ink + ');-webkit-background-clip:text;background-clip:text;' +
+          '-webkit-text-fill-color:transparent;">REACTOR<br>FOUR</div>' +
+        '<div style="font-size:13.5px;opacity:0.60;max-width:250px;line-height:1.6;margin-top:14px;">' +
+          "Phone flat. Claim an edge. Slap your own wedge the instant the signal is true &mdash; " +
+          "and not one beat before.</div>" +
+        '<div style="font-size:9.5px;letter-spacing:0.34em;text-transform:uppercase;opacity:0.42;margin-top:26px;">Crew</div>' +
+        '<div style="display:flex;gap:9px;margin-top:11px;width:100%;max-width:288px;">' +
+          crewBtn(2, "TOP&middot;BOT") + crewBtn(3, "+LEFT") + crewBtn(4, "ALL EDGES") +
+        "</div>" +
+      "</div>" +
+
+      /* --- stations: a fallback if somebody is not at the table --- */
+      '<div data-el="skip" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);' +
+        'display:none;z-index:45;"><button data-el="skipb" style="pointer-events:auto;padding:11px 18px;' +
+        'border:1px solid rgba(150,190,240,0.3);border-radius:999px;background:rgba(8,12,20,0.92);' +
+        'color:#dbe6f5;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:0.18em;">START ANYWAY</button></div>' +
+
+      /* --- match over. The banner is repeated upside down so the player at
+             the far edge is not the last to know. --- */
+      '<div data-el="over" style="position:absolute;inset:0;display:none;flex-direction:column;' +
+        'align-items:center;justify-content:center;z-index:55;padding:24px;text-align:center;' +
+        'pointer-events:auto;background:radial-gradient(circle at 50% 50%,rgba(4,7,13,0.60) 0%,' +
+        'rgba(4,7,13,0.93) 45%,rgba(3,5,10,0.98) 100%);">' +
+        '<div data-el="over-echo" style="position:absolute;top:' + (safeT + 22) + 'px;left:0;right:0;' +
+          'transform:rotate(180deg);font-size:12px;font-weight:800;letter-spacing:0.30em;opacity:0.85;"></div>' +
+        '<div style="font-size:10px;letter-spacing:0.44em;text-transform:uppercase;opacity:0.45;">Core secured by</div>' +
+        '<div data-el="over-name" style="font-size:44px;font-weight:800;letter-spacing:-0.01em;margin-top:6px;"></div>' +
+        '<div data-el="over-stat" style="font-size:11px;letter-spacing:0.16em;margin-top:10px;"></div>' +
+        '<div data-el="over-rows" style="width:100%;max-width:232px;margin-top:18px;' +
+          'border-top:1px solid rgba(150,190,240,0.14);"></div>' +
+        '<div style="width:100%;max-width:232px;display:flex;flex-direction:column;gap:9px;margin-top:22px;">' +
+          '<button data-el="again" style="' + bigBtn("linear-gradient(96deg," + STATIONS[0].ink + "," + STATIONS[1].ink + ")", "#050a12") + '">REMATCH</button>' +
+          '<button data-el="newcrew" style="' + bigBtn("rgba(150,190,240,0.13)", "#dbe6f5") + '">CHANGE CREW</button>' +
+        "</div>" +
+      "</div>" +
+
+      /* --- settings --- */
+      '<div data-el="cogp" style="' + modal + '"><div style="' + panel + '">' +
+        '<div style="font-size:18px;font-weight:800;letter-spacing:0.04em;margin-bottom:16px;">Settings</div>' +
+        '<div style="font-size:9.5px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.48;">Rounds to win</div>' +
+        '<div data-el="targets" style="display:flex;gap:7px;margin:9px 0 18px;"></div>' +
+        '<div style="font-size:9.5px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.48;">Signal pace</div>' +
+        '<div data-el="paces" style="display:flex;gap:7px;margin:9px 0 18px;"></div>' +
+        '<div style="font-size:9.5px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.48;">Sound</div>' +
+        '<div data-el="mutes" style="display:flex;gap:7px;margin:9px 0 4px;"></div>' +
+        '<button data-el="cogp-close" style="' + bigBtn("rgba(150,190,240,0.14)", "#eaf4ff") + 'margin-top:20px;">DONE</button>' +
+      "</div></div>" +
+
+      /* --- how to play --- */
+      '<div data-el="helpp" style="' + modal + '"><div style="' + panel + '">' +
+        '<div style="font-size:18px;font-weight:800;letter-spacing:0.04em;margin-bottom:12px;">How to play</div>' +
+        '<ul style="font-size:13.5px;line-height:1.68;opacity:0.86;padding-left:17px;margin:0;">' +
+          "<li>Lay the phone flat. Each player takes one edge and owns the wedge in front of them.</li>" +
+          "<li>Tap your own wedge once at the start to arm your station.</li>" +
+          "<li>The round type is announced first, then the core charges. Watch the middle &mdash; " +
+            "your console repeats the same signal the right way up for your seat.</li>" +
+          '<li><b style="color:#ff2a33">GO</b> &mdash; the core is red, then turns green. Slap on green.</li>' +
+          '<li><b style="color:#c05cff">MATCH</b> &mdash; two glyphs cycle. Slap only when they are identical.</li>' +
+          '<li><b style="color:#2f9dff">COUNT</b> &mdash; dots flash. Slap only when exactly N are lit.</li>' +
+          '<li><b style="color:#ffa312">MATH</b> &mdash; an equation cycles. Slap only when it is correct.</li>' +
+          "<li>First slap on a true signal takes the round: <b>+1</b>.</li>" +
+          "<li>Slap on a false signal and your station scrams: <b>&minus;1</b> and you are locked out " +
+            "until the next round.</li>" +
+          "<li>Only GO turns the core green. In the other rounds the colour tells you nothing &mdash; read the signal.</li>" +
+          "<li>First station to the target holds the core. Your fastest reaction goes to the global board.</li>" +
+        "</ul>" +
+        '<button data-el="helpp-close" style="' + bigBtn("rgba(150,190,240,0.14)", "#eaf4ff") + 'margin-top:16px;">GOT IT</button>' +
+      "</div></div>";
+
+    const shell = {
+      el: (n) => root.querySelector('[data-el="' + n + '"]'),
+      all: (n) => [...root.querySelectorAll('[data-el="' + n + '"]')],
+      tap: (node, fn) => {
+        if (!node) return;
+        ctx.listen(node, "pointerdown", (e) => e.stopPropagation());
+        ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
+      },
+    };
+
+    /** Chrome must not eat a slap: during a live round it fades out and stops
+     *  taking pointers, so a corner hit falls through to the station under it. */
+    function updateChrome() {
+      const live = phase === "charge" || phase === "armed";
+      const c = shell.el("chrome");
+      c.style.opacity = live ? "0" : "1";
+      for (const b of c.querySelectorAll("button")) b.style.pointerEvents = live ? "none" : "auto";
+      shell.el("skip").style.display =
+        (phase === "stations" && now() - stationsSince > 4500) ? "block" : "none";
+    }
+
+    function pills(host, values, labels, get, set) {
+      host.innerHTML = values.map((v, i) =>
+        '<button data-v="' + v + '" style="pointer-events:auto;flex:1;padding:11px 0;border:none;' +
+        "border-radius:11px;font-family:inherit;font-size:12px;font-weight:700;letter-spacing:0.08em;\">" +
+        esc(labels[i]) + "</button>").join("");
+      const paint = () => {
+        for (const b of host.querySelectorAll("button")) {
+          const on = String(get()) === b.dataset.v;
+          b.style.background = on ? "rgba(150,190,240,0.30)" : "rgba(150,190,240,0.08)";
+          b.style.color = on ? "#eaf4ff" : "rgba(219,230,245,0.52)";
+        }
+      };
+      for (const b of host.querySelectorAll("button")) {
+        shell.tap(b, () => { set(b.dataset.v); saveSettings(); paint(); sound.haptic("light"); });
+      }
+      paint();
+      return paint;
+    }
+    const paintTargets = pills(shell.el("targets"), [5, 10, 15], ["5", "10", "15"],
+      () => settings.target, (v) => { settings.target = Number(v); zoneKey.fill(""); });
+    pills(shell.el("paces"), [0, 1, 2], ["CALM", "NORMAL", "BRUTAL"],
+      () => settings.pace, (v) => { settings.pace = Number(v); });
+    const paintMutes = pills(shell.el("mutes"), [0, 1], ["ON", "MUTED"],
+      () => (settings.mute ? 1 : 0), (v) => {
+        const wantMute = v === "1";
+        if (wantMute !== sound.muted) sound.toggle();
+        shell.el("mute").innerHTML = sound.muted ? "&#128263;" : "&#128266;";
+      });
+
+    shell.tap(shell.el("mute"), () => {
+      const m = sound.toggle();
+      shell.el("mute").innerHTML = m ? "&#128263;" : "&#128266;";
+      paintMutes();
+    });
+    shell.tap(shell.el("cog"), () => { shell.el("cogp").style.display = "flex"; sound.haptic("light"); });
+    shell.tap(shell.el("cogp-close"), () => {
+      shell.el("cogp").style.display = "none";
+      zoneKey.fill("");
+      paintTargets();
+    });
+    shell.tap(shell.el("help"), () => { shell.el("helpp").style.display = "flex"; sound.haptic("light"); });
+    shell.tap(shell.el("helpp-close"), () => { shell.el("helpp").style.display = "none"; });
+
+    for (const b of shell.all("crew")) {
+      shell.tap(b, async () => {
+        crew = settings.crew = Number(b.dataset.n);
+        saveSettings();
+        sectors = sectorsFor(crew);
+        bakeFrame();
+        zoneKey.fill("");
+        ctx.platform.start({ crew });
+        await sound.unlock();
+        sound.haptic("light");
+        shell.el("menu").style.display = "none";
+        goStations();
+      });
+    }
+    shell.tap(shell.el("again"), () => {
+      shell.el("over").style.display = "none";
+      ctx.platform.interact({ type: "rematch" });
+      beginMatch(true);
+    });
+    shell.tap(shell.el("newcrew"), () => {
+      shell.el("over").style.display = "none";
+      phase = "menu";
+      shell.el("menu").style.display = "flex";
+      updateChrome();
+    });
+    shell.tap(shell.el("skipb"), () => {
+      for (let i = 0; i < crew; i++) zoneArmed[i] = true;
+      shell.el("skip").style.display = "none";
+      beginMatch(true);
+    });
+
+    function goStations() {
+      phase = "stations";
+      zoneArmed.fill(false);
+      stationsSince = now();
+      scores.fill(0);
+      locked.fill(false);
+      roundNo = 0;
+      winner = -1;
+      roundWinner = -1;
+      setSignal({ kind: null, on: false });
+      zoneKey.fill("");
+      updateChrome();
+    }
+
+    /* =============================================================
+     * INPUT
+     *
+     * A pointer is bound to the wedge it landed in and keeps it until it
+     * lifts, and a wedge holds one pointer at a time. On a phone four
+     * hands are hovering over the same glass: without both rules a hand
+     * that lands across a mitre line, or a player's second finger, fires
+     * a station that is not theirs.
+     * ============================================================= */
+    const owners = new Map();                    // pointerId -> station index
+
+    ctx.listen(fxc, "pointerdown", (e) => {
+      const t = now();
+      const i = zoneAt(e.offsetX, e.offsetY);
+      if (i >= crew) return;
+      for (const v of owners.values()) if (v === i) return;   // that station already has a hand on it
+      owners.set(e.pointerId, i);
+      e.preventDefault();
+
+      if (phase === "stations") {
+        if (!zoneArmed[i]) {
+          zoneArmed[i] = true;
+          zoneFlash[i] = 0.8;
+          zoneFlashCol[i] = STATIONS[i].rgb;
+          sound.unlock();
+          sound.sting("tap");
+          sound.haptic("light");
+          let all = true;
+          for (let k = 0; k < crew; k++) if (!zoneArmed[k]) all = false;
+          if (all) ctx.timeout(() => { if (phase === "stations") beginMatch(true); }, 260);
+        }
+        return;
+      }
+      if (phase === "armed" && sig.on && roundWinner < 0 && !locked[i]) return claim(i, t);
+      if (phase === "charge" && !locked[i]) {
+        zoneFlash[i] = 1;
+        return scram(i);
+      }
+    }, { passive: false });
+
+    const release = (e) => { owners.delete(e.pointerId); };
+    ctx.listen(fxc, "pointerup", release);
+    ctx.listen(fxc, "pointercancel", release);
+
+    /* =============================================================
+     * FRAME
+     * ============================================================= */
+    const tmpCol = new THREE.Color();
+    const idleCol = new THREE.Color(IDLE.hex);
+
+    function updateState(t) {
+      if (phase === "stations") {
+        if (now() - stationsSince > 4500 && shell.el("skip").style.display !== "block") updateChrome();
+        return;
+      }
+      if (phase === "brief" && t >= phaseUntil) return beginCharge();
+
+      if (phase === "charge") {
+        if (t >= tickAt) {                       // audible metronome that never leaks the answer
+          tickAt = t + (roundKind === "go" ? 430 : cycleMs()) ;
+          sound.sting("tap");
+        }
+        if (roundKind === "go") {
+          if (t >= armAt) arm();
+        } else if (t >= cycleAt) {
+          cyclesLeft--;
+          if (cyclesLeft <= 0) arm();
+          else { setSignal(makeSignal(false)); cycleAt = t + cycleMs(); }
+        }
+        if (t - roundStart > 30000) voidRound();
+        return;
+      }
+      if (phase === "armed") {
+        if (roundKind === "go") {
+          if (t - armedAt > 6000) voidRound();
+        } else if (t >= holdUntil) disarm();
+        return;
+      }
+      if (phase === "resolve" && t >= phaseUntil) afterResolve();
+    }
+
+    function updateCharge(t) {
+      let target = 0;
+      if (phase === "brief") target = 0.10 + 0.12 * clamp((t - roundStart) / (phaseUntil - roundStart), 0, 1);
+      else if (phase === "charge" || phase === "armed") {
+        target = clamp(0.26 + (t - chargeFrom) / 4600, 0, 1);
+        if (phase === "armed" && roundKind === "go") target = 1;
+      } else if (phase === "stations") target = 0.10;
+      else target = 0.06;
+      charge += (target - charge) * 0.10;
+      sound.heat(phase === "charge" || phase === "armed" ? 0.25 + charge * 0.7 : 0.2);
+    }
+
+    function updateCore(dt, t) {
+      // Colour: the round's own hue, going green only where green means go.
+      let want = idleCol;
+      if (phase === "brief") { tmpCol.setHex(TYPE[roundKind].hex); want = tmpCol; }
+      else if (phase === "charge") { tmpCol.setHex(TYPE[roundKind].hex); want = tmpCol; }
+      else if (phase === "armed") { tmpCol.setHex(roundKind === "go" ? GREEN.hex : TYPE[roundKind].hex); want = tmpCol; }
+      else if (phase === "resolve" && dischargeCol) { tmpCol.setHex(dischargeCol.hex); want = tmpCol; }
+      else if (phase === "over" && dischargeCol) { tmpCol.setHex(dischargeCol.hex); want = tmpCol; }
+      const snap = (phase === "armed" && roundKind === "go") || phase === "resolve" ? 0.45 : 0.10;
+      coreCol.lerp(want, snap);
+
+      const pulse = Math.sin(t * 0.001 * (2.4 + charge * 16)) * 0.5 + 0.5;
+      const heat = charge + pulse * 0.13 * charge;
+
+      coreMat.emissive.copy(coreCol);
+      coreMat.emissiveIntensity = 0.55 + heat * 3.2;
+      core.scale.setScalar(1 + heat * 0.14);
+      core.rotation.y += dt * (0.25 + charge * 1.1);
+      core.rotation.x += dt * 0.12;
+
+      cageMat.color.copy(coreCol);
+      cageMat.opacity = 0.16 + charge * 0.42;
+      cage.rotation.y -= dt * (0.35 + charge * 2.2);
+      cage.rotation.z += dt * (0.2 + charge * 0.9);
+      cage.scale.setScalar(1 + heat * 0.10);
+
+      for (const h of halos) {
+        h.mesh.material.color.copy(coreCol);
+        h.mesh.material.opacity = h.base * (0.30 + heat * 1.25);
+        h.mesh.scale.setScalar(1 + heat * 0.10);
+      }
+      bloomMat.color.copy(coreCol);
+      bloomMat.opacity = 0.16 + heat * 0.62;
+      bloom.scale.setScalar(0.72 + heat * 0.45);
+
+      ringMat.emissive.copy(coreCol);
+      ringMat.emissiveIntensity = 0.25 + charge * 1.5;
+      const spin = 0.3 + charge * 3.6;
+      rings[0].mesh.rotation.z += dt * spin * 0.9;
+      rings[0].mesh.rotation.x += dt * spin * 0.35;
+      rings[1].mesh.rotation.y += dt * spin * 1.25;
+      rings[2].mesh.rotation.x += dt * spin * 0.75;
+      rings[2].mesh.rotation.z -= dt * spin * 0.5;
+
+      // Rods pull out as the core heats: the tension made mechanical.
+      rodMat.emissive.copy(coreCol);
+      rodMat.emissiveIntensity = 0.3 + charge * 1.1;
+      const rr = P(74) + charge * P(30);
+      for (const m of rods) {
+        const a = m.userData.a + t * 0.00006 * (1 + charge * 4);
+        m.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0);
+        m.rotation.z = -a + Math.PI / 2;
+      }
+
+      // Motes: drawn inward while charging, thrown outward on discharge.
+      moteMat.color.copy(coreCol);
+      moteMat.opacity = 0.35 + charge * 0.6;
+      const inner = P(46), outer = P(150);
+      for (let k = 0; k < MOTES; k++) {
+        const m = moteState[k];
+        if (m.blast > 0) {
+          m.blast -= dt * 1.5;
+          m.r += m.vr * dt;
+          m.y += m.vy * dt;
+          m.vr *= 0.94; m.vy *= 0.94;
+          if (m.r > P(250)) { m.r = inner + Math.random() * (outer - inner); m.blast = 0; m.y = (Math.random() - 0.5) * P(150); }
+        } else {
+          m.a += dt * m.sp * (0.35 + charge * 2.4);
+          m.r -= dt * (0.02 + charge * 0.32) * m.sp;
+          m.y *= 1 - dt * 0.25 * charge;
+          if (m.r < inner) { m.r = outer * (0.8 + Math.random() * 0.45); m.y = (Math.random() - 0.5) * P(170); }
+        }
+        motePos[k * 3] = Math.cos(m.a) * m.r;
+        motePos[k * 3 + 1] = Math.sin(m.a) * m.r * 0.85 + m.y * 0.25;
+        motePos[k * 3 + 2] = Math.sin(m.a * 1.7) * m.r * 0.5;
+      }
+      moteGeo.attributes.position.needsUpdate = true;
+
+      coreLight.color.copy(coreCol);
+      coreLight.intensity = 0.8 + heat * 4.0;
+
+      if (waveT > 0) {
+        waveT -= dt * 1.9;
+        const p = 1 - Math.max(waveT, 0);
+        wave.scale.setScalar(0.5 + p * 2.6);
+        waveMat.opacity = Math.max(0, waveT) * 0.85;
+        if (waveT <= 0) wave.visible = false;
+      }
+
+      chamber.rotation.z += dt * (0.02 + charge * 0.14);
+
+      if (shake > 0.0004) {
+        shake *= Math.pow(0.004, dt);
+        camera.position.x = (Math.random() - 0.5) * shake * camDist;
+        camera.position.y = (Math.random() - 0.5) * shake * camDist;
+        camera.lookAt(0, 0, 0);
+      } else if (camera.position.x !== 0) {
+        camera.position.set(0, 0, camDist);
+        camera.lookAt(0, 0, 0);
+      }
+      // A high charge trembles the whole assembly a little.
+      if (charge > 0.72 && phase === "charge") {
+        const j = (charge - 0.72) * 0.010;
+        camera.position.x += (Math.random() - 0.5) * j;
+        camera.position.y += (Math.random() - 0.5) * j;
+      }
+    }
+
+    /* --- 2D paint ------------------------------------------------------ */
+    function paint2D(t, dt) {
+      const s = fxc.width / W || ctx.dpr;
+      fx.setTransform(s, 0, 0, s, 0, 0);
+      fx.clearRect(0, 0, W, H);
+
+      if (frameArt) fx.drawImage(frameArt, 0, 0, W, H);
+      else paintFrame(fx);
+
+      // Station readouts, each turned to its own seat.
+      if (phase !== "menu") {
+        for (let i = 0; i < crew; i++) {
+          const a = anchor(i);
+          refreshStrip(i);
+          fx.save();
+          clipZone(fx, i);
+          clipOutsidePort(fx);
+          fx.translate(a.x, a.y);
+          fx.rotate(a.rad);
+          if (zoneArt[i]) fx.drawImage(zoneArt[i], -STRIP_W / 2, -STRIP_H / 2, STRIP_W, STRIP_H);
+          else paintStrip(fx, i);
+          fx.restore();
+        }
+      }
+
+      // Impact tint on the wedge that just acted.
+      for (let i = 0; i < crew; i++) {
+        if (zoneFlash[i] <= 0.001) continue;
+        zoneFlash[i] *= Math.pow(0.0035, dt);
+        const col = zoneFlashCol[i] || STATIONS[i].rgb;
+        fx.save();
+        clipZone(fx, i);
+        clipOutsidePort(fx);
+        fx.globalCompositeOperation = "lighter";
+        const gr = fx.createRadialGradient(cx, cy, portR, cx, cy, portR + 340);
+        gr.addColorStop(0, rgba(col, 0.42 * zoneFlash[i]));
+        gr.addColorStop(0.5, rgba(col, 0.16 * zoneFlash[i]));
+        gr.addColorStop(1, rgba(col, 0));
+        fx.fillStyle = gr;
+        fx.fillRect(0, 0, W, H);
+        fx.restore();
+      }
+
+      // Locked-out stations are struck through with hazard hatching.
+      for (let i = 0; i < crew; i++) {
+        if (!locked[i] || phase === "menu" || phase === "over") continue;
+        fx.save();
+        clipZone(fx, i);
+        clipOutsidePort(fx);
+        fx.strokeStyle = "rgba(255,51,68,0.11)";
+        fx.lineWidth = 7;
+        for (let k = -H; k < W + H; k += 30) {
+          fx.beginPath();
+          fx.moveTo(k, 0);
+          fx.lineTo(k + H, H);
+          fx.stroke();
+        }
+        fx.restore();
+      }
+
+      // The port's own light spilling onto the plating. The inner stop is fully
+      // transparent, so the additive pass never paints over the port itself.
+      const cc = [Math.round(coreCol.r * 255), Math.round(coreCol.g * 255), Math.round(coreCol.b * 255)];
+      const pulse = 0.5 + 0.5 * Math.sin(t * 0.001 * (2.4 + charge * 16));
+      const spillA = (0.10 + charge * 0.40) * (0.82 + pulse * 0.18);
+      fx.save();
+      clipOutsidePort(fx);
+      fx.globalCompositeOperation = "lighter";
+      const r1 = portR + 300;
+      const gr = fx.createRadialGradient(cx, cy, portR * 0.98, cx, cy, r1);
+      gr.addColorStop(0, rgba(cc, 0));
+      gr.addColorStop(0.001, rgba(cc, spillA));
+      gr.addColorStop(0.12, rgba(cc, spillA * 0.42));
+      gr.addColorStop(0.45, rgba(cc, spillA * 0.10));
+      gr.addColorStop(1, rgba(cc, 0));
+      fx.fillStyle = gr;
+      fx.fillRect(cx - r1, cy - r1, r1 * 2, r1 * 2);
+      // A hot ring right at the bezel — concentric strokes, never a blur filter.
+      for (const [w, al] of [[13, 0.09], [7, 0.18], [3, 0.42], [1.4, 0.9]]) {
+        fx.strokeStyle = rgba(cc, al * (0.35 + charge * 0.65));
+        fx.lineWidth = w;
+        fx.beginPath();
+        fx.arc(cx, cy, portR + 3, 0, TAU);
+        fx.stroke();
+      }
+      fx.restore();
+    }
+
+    /* --- the loop ------------------------------------------------------- */
+    ctx.onFrame((dtMs) => {
+      const dt = Math.min(dtMs, 60) / 1000;
+      const t = now();
+      updateState(t);
+      updateCharge(t);
+      updateCore(dt, t);
+      renderer.render(scene, camera);
+      paint2D(t, dt);
+    });
+
+    /* --- resize --------------------------------------------------------- */
+    ctx.listen(window, "resize", () => {
+      if (ctx.width === W && ctx.height === H) return;
+      measure();
+      renderer.setSize(W, H, false);
+      camera.aspect = W / H;
+      camera.updateProjectionMatrix();
+      fxc.width = Math.round(W * ctx.dpr);
+      fxc.height = Math.round(H * ctx.dpr);
+      bakeFrame();
+      zoneKey.fill("");
+    });
+
+    /* ---------------------------------------------------------------
+     * A read-only window onto the duel so the local harness can drive a
+     * real four-handed match and assert on what actually happened. It
+     * exposes nothing the bit is not already drawing.
+     * ------------------------------------------------------------- */
+    window.__REACTOR__ = {
+      get phase() { return phase; },
+      get kind() { return roundKind; },
+      get live() { return phase === "armed" && sig.on; },
+      get round() { return roundNo; },
+      get scores() { return scores.slice(0, crew); },
+      get locked() { return locked.slice(0, crew); },
+      get armedStations() { return zoneArmed.slice(0, crew); },
+      get winner() { return winner; },
+      get crew() { return crew; },
+      get target() { return settings.target; },
+      get bestReaction() { return isFinite(bestReaction) ? Math.round(bestReaction) : null; },
+      get falseStarts() { return falseStarts; },
+      taps: () => STATIONS.slice(0, crew).map((_, i) => tapPoint(i)),
+      zoneAt,
+    };
+    ctx.onDestroy(() => { try { delete window.__REACTOR__; } catch (_) {} });
+
+    /* --- first frame, before ready(), so the host never shows a blank bit --- */
+    bakeFrame();
+    updateCore(0.016, now());
+    renderer.render(scene, camera);
+    paint2D(now(), 0.016);
+    updateChrome();
+    ctx.markVisualReady("reactor lit");
+    ctx.platform.ready();
+  },
+};

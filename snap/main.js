@@ -334,7 +334,7 @@ window.plethoraBit = {
       }
 
       g.fillStyle = ink;
-      const hy = fy - u * 0.60;
+      const hy = fy - u * 0.74;
       if (rank === "K") {
         g.beginPath();
         g.moveTo(fx - u * 0.42, hy + u * 0.20);
@@ -642,7 +642,7 @@ window.plethoraBit = {
 
       if (rich && WEAVE) {
         c.save();
-        c.globalAlpha = 0.10;
+        c.globalAlpha = 0.20;
         c.globalCompositeOperation = "overlay";
         c.fillStyle = c.createPattern(WEAVE, "repeat");
         c.fillRect(0, 0, W, H);
@@ -650,10 +650,23 @@ window.plethoraBit = {
       }
       if (rich && NOISE) {
         c.save();
-        c.globalAlpha = 0.055;
+        c.globalAlpha = 0.10;
         c.globalCompositeOperation = "overlay";
         c.fillStyle = c.createPattern(NOISE, "repeat");
         c.fillRect(0, 0, W, H);
+        c.restore();
+      }
+      if (rich) {
+        // Loose fibres. Baized cloth is never uniform, and a scatter of lit and
+        // shadowed specks is what stops a gradient from reading as plastic.
+        c.save();
+        for (let i = 0; i < 1400; i++) {
+          const x = Math.random() * W, y = Math.random() * H;
+          const lit = Math.random() < 0.5;
+          c.globalAlpha = (lit ? 0.05 : 0.055) * (1 - Math.hypot(x - L.px, y - L.py) / Math.max(W, H));
+          c.fillStyle = lit ? "#cfeedd" : "#01120a";
+          c.fillRect(x, y, 1 + Math.random() * 1.6, 1);
+        }
         c.restore();
       }
 
@@ -671,15 +684,17 @@ window.plethoraBit = {
       c.beginPath(); c.arc(0, 0, L.ringR + 36.5, 0, TAU); c.stroke();
       c.restore();
 
-      // Lamp bloom: concentric translucent discs standing in for a blur.
+      // Lamp bloom. A stack of translucent discs bands visibly at this size,
+      // so the falloff is a real radial gradient instead.
       c.save();
       c.globalCompositeOperation = "lighter";
-      for (let i = 8; i >= 1; i--) {
-        const rr = (Math.max(W, H) * 0.10) * i;
-        c.globalAlpha = 0.014;
-        c.fillStyle = "#ffe6b0";
-        c.beginPath(); c.arc(L.px, L.py - H * 0.04, rr, 0, TAU); c.fill();
-      }
+      const bloom = c.createRadialGradient(L.px, L.py - H * 0.05, 0, L.px, L.py - H * 0.05, Math.max(W, H) * 0.62);
+      bloom.addColorStop(0.00, "rgba(255,232,182,0.16)");
+      bloom.addColorStop(0.35, "rgba(255,226,166,0.07)");
+      bloom.addColorStop(0.70, "rgba(255,226,166,0.018)");
+      bloom.addColorStop(1.00, "rgba(255,226,166,0)");
+      c.fillStyle = bloom;
+      c.fillRect(0, 0, W, H);
       c.restore();
 
       // Vignette, then the rail: walnut with a brass inlay just inside it.
@@ -1077,6 +1092,14 @@ window.plethoraBit = {
         }
         g.globalAlpha = 1;
       }
+      if (ringPulse > 0) {
+        const k = 1 - ringPulse;
+        g.globalAlpha = ringPulse * 0.8;
+        g.strokeStyle = "#ffe9a8";
+        g.lineWidth = 2 + ringPulse * 5;
+        g.beginPath(); g.arc(0, 0, L.ringR * (0.45 + k * 0.62), 0, TAU); g.stroke();
+        g.globalAlpha = 1;
+      }
       if (missPulse > 0) {
         g.globalAlpha = missPulse * 0.5;
         g.strokeStyle = "rgba(255,255,255,0.7)";
@@ -1340,11 +1363,11 @@ window.plethoraBit = {
       // Swung about a pivot well below the cards, which is what makes a fan
       // look held rather than stacked. The two sevens in the middle sit a
       // little proud of the rest — the whole game in one still.
-      const cx = W / 2, cy = H * 0.255, R = 330;
+      const cx = W / 2, cy = H * 0.295, R = 280;
       const rock = Math.sin(now * 0.0007) * 0.03;
       for (let i = 0; i < FAN.length; i++) {
         const k = i - (FAN.length - 1) / 2;
-        const a = k * 0.205 + rock;
+        const a = k * 0.160 + rock;
         const pair = i === 2 || i === 3;
         const card = { id: FAN[i], rank: FAN[i].slice(0, -1), suit: FAN[i].slice(-1) };
         drawCardAt(cx + Math.sin(a) * R, cy - Math.cos(a) * R + R - (pair ? 13 : 0),
@@ -1380,7 +1403,7 @@ window.plethoraBit = {
       }
       g.restore();
 
-      if (phase !== "menu" && phase !== "deal") {
+      if (phase !== "menu") {
         for (const p of players) drawPad(p, now);
         drawBanner(now);
       }
@@ -1465,7 +1488,7 @@ window.plethoraBit = {
       /* ---- chrome, in the corner both end pads were shortened to free ---- */
       '<div style="position:absolute;right:10px;top:' + (SAFE_T + 10) + 'px;display:flex;' +
         'flex-direction:column;gap:7px;z-index:40;pointer-events:none;">' +
-        '<button data-el="mute" aria-label="Sound" style="' + btn + '">🔊</button>' +
+        '<button data-el="mute" aria-label="Sound" style="' + btn + 'font-size:17px;">♪</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + btn + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
       '</div>' +
@@ -1474,7 +1497,7 @@ window.plethoraBit = {
       '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
         'justify-content:flex-end;align-items:center;z-index:50;pointer-events:auto;' +
         'padding:0 26px ' + (SAFE_B + 26) + 'px;text-align:center;background:linear-gradient(180deg,' +
-        'rgba(3,14,9,0) 26%,rgba(3,14,9,0.80) 46%,rgba(3,14,9,0.96) 66%);">' +
+        'rgba(3,14,9,0) 20%,rgba(3,14,9,0.22) 40%,rgba(3,14,9,0.86) 57%,rgba(3,14,9,0.97) 100%);">' +
         '<div style="' + label + 'margin-bottom:6px;">A card-table race</div>' +
         '<div style="font-size:66px;font-weight:800;letter-spacing:-0.035em;line-height:0.94;' +
           'background:linear-gradient(178deg,#fff6df 6%,#e8b957 52%,#a9741e);-webkit-background-clip:text;' +
@@ -1484,7 +1507,7 @@ window.plethoraBit = {
           'Phone flat on the table, a pad each. When a card lands on its own rank, ' +
           'first hand down takes the pile.</div>' +
         '<div style="' + label + 'margin:22px 0 10px;">Players</div>' +
-        '<div data-el="seats" style="display:flex;gap:10px;"></div>' +
+        '<div data-el="seats" style="display:flex;gap:10px;width:206px;"></div>' +
         '<div style="width:100%;max-width:250px;">' +
           '<button data-el="deal" style="' + bigBtn("linear-gradient(180deg,#f0cf7f,#cf9a2e)", "#221503") +
             'margin-top:20px;letter-spacing:0.06em;">Deal</button>' +
@@ -1587,16 +1610,24 @@ window.plethoraBit = {
           () => settings.rule, (v) => { settings.rule = v; }),
         pills(shell.el("mutes"), [0, 1], ["On", "Muted"],
           () => (sound.muted ? 1 : 0), (v) => {
-            if ((v === 1) !== sound.muted) { sound.toggle(); shell.el("mute").textContent = sound.muted ? "🔇" : "🔊"; }
+            if ((v === 1) !== sound.muted) { sound.toggle(); paintMute(); }
           }),
       ].filter(Boolean);
     }
     wirePills();
-    if (settings.mute) shell.el("mute").textContent = "🔇";
 
-    shell.tap(shell.el("mute"), (e) => {
-      const m = sound.toggle();
-      e.currentTarget.textContent = m ? "🔇" : "🔊";
+    /** One glyph, struck through when muted — an emoji speaker would drag a
+     *  second colour palette into a very deliberate one. */
+    function paintMute() {
+      const b = shell.el("mute");
+      b.style.textDecoration = sound.muted ? "line-through" : "none";
+      b.style.opacity = sound.muted ? "0.45" : "1";
+    }
+    paintMute();
+
+    shell.tap(shell.el("mute"), () => {
+      sound.toggle();
+      paintMute();
       paintAllPills();
     });
     shell.tap(shell.el("cog"), () => { shell.el("cogp").style.display = "flex"; paintAllPills(); });

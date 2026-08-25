@@ -48,6 +48,16 @@ export function validateBit(dir) {
   const src = readFileSync(`${dir}/main.js`, "utf8");
   const manifest = JSON.parse(readFileSync(`${dir}/plethora.json`, "utf8"));
 
+  // Parse first. Everything below is regex and JSON checks, which happily pass
+  // a file that cannot even be parsed — so without this a half-written bit
+  // reports a clean tick and the failure only turns up at upload.
+  try {
+    new (Object.getPrototypeOf(async function () {}).constructor)("ctx", src);
+  } catch (e) {
+    return { errors: [`main.js does not parse: ${e.message}`], warnings: [],
+             bytes: Buffer.byteLength(src, "utf8") };
+  }
+
   // ---- banned constructs, reported with line numbers ----
   const lines = src.split("\n");
   for (const rule of BANNED) {

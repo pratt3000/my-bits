@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Reactor Four",
+  "description": "A two-to-four player reaction duel on one phone. Lay it flat, claim an edge each, and slap your own wedge the instant the signal comes true — not one beat before. A 3D reactor core burns in a porthole at the centre and winds up before every round: rods withdraw, gyro rings spin up, the glow spills out across the console plating. Four round types cycle so nobody settles into one reflex — go on green, tap on a matching pair, tap on exactly N dots, tap only if the equation is right — and only GO ever turns the core green, so in the rest you have to actually read it. Jump early and your station scrams: minus one, locked out. Every console repeats the master gauge rotated to its own seat, so nobody at the far edge is reading upside down. The fastest reaction anyone lands goes to the global board.",
+  "tags": [
+    "multiplayer",
+    "local-multiplayer",
+    "party",
+    "reflex",
+    "reaction",
+    "four-player",
+    "arcade",
+    "neon"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "fastest_reaction": {
+        "label": "Fastest Reaction",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
