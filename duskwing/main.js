@@ -108,7 +108,7 @@ window.plethoraBit = {
     const HOURS = [
       {
         id: "DAWN",
-        base: [[0.00, "#03202F"], [0.28, "#07414F"], [0.52, "#0C5A55"], [0.72, "#3A6430"], [0.88, "#A2560C"], [1.00, "#250B06"]],
+        base: [[0.00, "#04222F"], [0.24, "#05485C"], [0.46, "#046763"], [0.66, "#2E7A44"], [0.84, "#C4700A"], [1.00, "#2A0C06"]],
         blooms: [
           { x: 0.70, y: 0.68, r: 0.86, stops: [[0, "rgba(253,254,231,0.98)"], [0.11, "rgba(252,214,58,0.48)"], [0.34, "rgba(206,86,6,0.24)"], [1, "rgba(180,50,4,0)"]] },
           { x: 0.24, y: 0.15, r: 0.62, stops: [[0, "rgba(180,250,246,0.34)"], [0.18, "rgba(30,196,196,0.20)"], [0.50, "rgba(12,130,148,0.09)"], [1, "rgba(12,130,148,0)"]] },
@@ -118,7 +118,7 @@ window.plethoraBit = {
       },
       {
         id: "NOON",
-        base: [[0.00, "#07240F"], [0.28, "#10401A"], [0.55, "#25631F"], [0.78, "#5C8A1E"], [1.00, "#0A2410"]],
+        base: [[0.00, "#05280E"], [0.28, "#0D4A16"], [0.55, "#26761C"], [0.78, "#6BA412"], [1.00, "#08290E"]],
         blooms: [
           { x: 0.52, y: 0.30, r: 1.02, stops: [[0, "rgba(253,254,231,0.98)"], [0.14, "rgba(214,252,124,0.52)"], [0.44, "rgba(108,252,108,0.22)"], [1, "rgba(108,252,108,0)"]] },
           { x: 0.86, y: 0.74, r: 0.62, stops: [[0, "rgba(240,255,210,0.40)"], [0.34, "rgba(108,252,108,0.16)"], [1, "rgba(108,252,108,0)"]] },
@@ -127,7 +127,7 @@ window.plethoraBit = {
       },
       {
         id: "DUSK",
-        base: [[0.00, "#2A0A18"], [0.24, "#4E1024"], [0.52, "#8C2416"], [0.76, "#C2470C"], [1.00, "#240C0C"]],
+        base: [[0.00, "#33081C"], [0.24, "#5E0F26"], [0.52, "#A32410"], [0.76, "#E05A08"], [1.00, "#240C0C"]],
         blooms: [
           { x: 0.30, y: 0.62, r: 1.04, stops: [[0, "rgba(255,244,214,0.92)"], [0.15, "rgba(250,110,30,0.55)"], [0.46, "rgba(190,50,10,0.26)"], [1, "rgba(190,50,10,0)"]] },
           { x: 0.82, y: 0.24, r: 0.66, stops: [[0, "rgba(255,170,190,0.40)"], [0.34, "rgba(140,32,90,0.20)"], [1, "rgba(140,32,90,0)"]] },
@@ -224,20 +224,24 @@ window.plethoraBit = {
     let bands = [];
     const CHROME_H = 44;
 
-    // Every band flies the SAME course, sampled a fixed distance apart, so
-    // each one gets an identical sequence of blades a few seconds out of step
-    // with its neighbours. Sampling the same window in all of them would stack
-    // four identical saws in a column down the screen — correct, fair, and
-    // instantly readable as copy-paste.
-    const LANE_OFFSET = 3.7;                       // band units between lanes
-    let maxOff = 0;
+    /**
+     * Render scale, deliberately below the device ratio.
+     *
+     * This bit is fill-rate bound, not geometry bound: it paints the entire
+     * display several times over every frame (backdrop, rock, tints, finish),
+     * and every one of those passes costs the square of this number. Nothing
+     * in the play layer has a hard edge that a phone-sized pixel grid would
+     * flatter — it is soft glow and black silhouette — and the only crisp
+     * type on screen is DOM, which stays at full device resolution. So the
+     * canvas renders at 1.5x and looks the same for two-thirds of the cost.
+     */
+    const RSCALE = Math.min(ctx.dpr || 1, 1.5);
 
     function measure() {
       W = ctx.width; H = ctx.height;
-      const dpr = Math.min(ctx.dpr || 1, 3);
-      if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
-        canvas.width = Math.round(W * dpr);
-        canvas.height = Math.round(H * dpr);
+      if (canvas.width !== Math.round(W * RSCALE) || canvas.height !== Math.round(H * RSCALE)) {
+        canvas.width = Math.round(W * RSCALE);
+        canvas.height = Math.round(H * RSCALE);
       }
       PLAY_TOP = ctx.safeArea.top + CHROME_H + 4;
       PLAY_BOT = H - ctx.safeArea.bottom - 6;
@@ -247,11 +251,10 @@ window.plethoraBit = {
       for (let i = 0; i < n; i++) {
         // Index 0 is the BOTTOM band, so player 1 is nearest the near hand.
         const top = PLAY_BOT - (i + 1) * U;
-        bands.push({ i, top, mid: top + U / 2, bot: top + U, off: i * LANE_OFFSET * U });
+        bands.push({ i, top, mid: top + U / 2, bot: top + U });
       }
-      maxOff = (n - 1) * LANE_OFFSET * U;
-      WALL = clamp(W * 0.17, 50, 76);                // the lethal edge, and the pad
-      HOME = WALL + U * 0.42;                        // where a creature hatches
+      WALL = clamp(W * 0.132, 42, 60);               // the lethal edge, and the pad
+      HOME = WALL + U * 0.55;                        // where a creature hatches
       XMAX = W * 0.66;                               // furthest right flapping can carry you
     }
     measure();
@@ -279,7 +282,10 @@ window.plethoraBit = {
 
     /** The whole glow of the game: stacked low-alpha radial gradients. */
     function paintSky(t, hour, w, h) {
-      const base = t.createLinearGradient(0, 0, w * 0.22, h);
+      // Strongly diagonal. A vertical gradient gives each horizontal band a
+      // single flat colour — the picture only works if every band has light
+      // running across it as well as down the screen.
+      const base = t.createLinearGradient(w * 1.05, -h * 0.12, -w * 0.15, h * 1.10);
       for (const [p, c] of hour.base) base.addColorStop(p, c);
       t.fillStyle = base;
       t.fillRect(0, 0, w, h);
@@ -364,15 +370,15 @@ window.plethoraBit = {
       t.clearRect(0, 0, w, h);
       t.fillStyle = "#000";
       const salt = 700 + layer * 37;
-      const count = [9, 13, 17][layer];
+      const count = [13, 18, 23][layer];
       const scale = [1.00, 0.72, 0.50][layer];
       const baseY = h * [1.02, 1.06, 1.10][layer];
       for (let k = 0; k < count; k++) {
         // Every tree is drawn twice, one screen apart, so the strip tiles.
         for (const off of [0, -w]) {
           const x = hf(k, salt) * w + off;
-          const th = h * (0.34 + hf(k, salt + 1) * 0.42) * scale;
-          const tw = w * (0.014 + hf(k, salt + 2) * 0.022) * scale;
+          const th = h * (0.26 + hf(k, salt + 1) * 0.44) * scale;
+          const tw = w * (0.014 + hf(k, salt + 2) * 0.020) * scale;
           // Trunk: tapered segments with round caps.
           t.lineCap = "round";
           const lean = (hf(k, salt + 3) - 0.5) * w * 0.05;
@@ -387,15 +393,15 @@ window.plethoraBit = {
           }
           // Canopy: a chain of overlapping discs, never a polygon.
           const cx = x + lean, cy = baseY - th;
-          const blobs = 16 + Math.floor(hf(k, salt + 4) * 12);
+          const blobs = 14 + Math.floor(hf(k, salt + 4) * 10);
           t.beginPath();
           for (let b = 0; b < blobs; b++) {
             const a = hf(k * 40 + b, salt + 5) * TAU;
             const rr = hf(k * 40 + b, salt + 6);
-            const spread = w * (0.055 + hf(k, salt + 7) * 0.05) * scale;
+            const spread = w * (0.042 + hf(k, salt + 7) * 0.036) * scale;
             t.moveTo(cx + Math.cos(a) * spread * rr + spread * 0.5, cy + Math.sin(a) * spread * rr * 0.62);
             t.arc(cx + Math.cos(a) * spread * rr, cy + Math.sin(a) * spread * rr * 0.62,
-                  spread * (0.28 + rr * 0.34), 0, TAU);
+                  spread * (0.30 + rr * 0.34), 0, TAU);
           }
           t.fill();
         }
@@ -411,18 +417,35 @@ window.plethoraBit = {
       }
     }
 
-    /** Film grain: one full-screen dot field, blitted with a per-frame jitter. */
-    let grain = null;
-    function bakeGrain() {
+    /**
+     * Grain and vignette, baked together into one sheet.
+     *
+     * Both are full-screen passes and a full-screen pass is the single most
+     * expensive thing this bit does — a live radial-gradient fill over the
+     * whole display costs more than the entire cave. Composited once at boot
+     * they cost one blit, and the per-frame jitter that keeps the grain from
+     * looking like a fixed dirty lens moves the vignette by three pixels,
+     * which nobody can see.
+     */
+    let finish = null;
+    function bakeFinish() {
       const c = surface(W + 10, H + 10);
-      if (!c) { grain = null; return; }
+      if (!c) { finish = null; return; }
       const t = c.getContext("2d");
       t.fillStyle = "rgba(255,244,214,1)";
-      for (let i = 0; i < 2400; i++) {
+      for (let i = 0; i < 2200; i++) {
         t.globalAlpha = 0.05 + hf(i, 3301) * 0.09;
         t.fillRect(hf(i, 11) * (W + 10), hf(i, 13) * (H + 10), 1, 1);
       }
       t.globalAlpha = 1;
+      const vg = t.createRadialGradient((W + 10) * 0.5, (H + 10) * 0.48, H * 0.26,
+                                        (W + 10) * 0.5, (H + 10) * 0.50, H * 0.80);
+      vg.addColorStop(0, "rgba(0,0,0,0)");
+      vg.addColorStop(0.66, "rgba(0,0,0,0.22)");
+      vg.addColorStop(1, "rgba(0,0,0,0.74)");
+      t.fillStyle = vg;
+      t.fillRect(0, 0, W + 10, H + 10);
+      finish = c;
     }
 
     /**
@@ -455,7 +478,26 @@ window.plethoraBit = {
       return c;
     }
 
-    /** Draw a soft light disc in `col` at (x,y). Falls back to a live gradient. */
+    /**
+     * Draw a soft light disc, assuming the caller has already switched to
+     * 'lighter'. Every switch of globalCompositeOperation flushes whatever
+     * the renderer had batched, and this bit was switching twenty-five times
+     * a frame — so glows are grouped into one pass per band instead.
+     */
+    function glow(x, y, r, col, alpha) {
+      if (!(alpha > 0.004) || !(r > 0)) return;
+      const sp = bloomSprite(col);
+      g.globalAlpha = clamp(alpha, 0, 1);
+      if (sp) { g.drawImage(sp, x - r, y - r, r * 2, r * 2); return; }
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, rgba(col, 0.9));
+      grd.addColorStop(0.4, rgba(col, 0.25));
+      grd.addColorStop(1, rgba(col, 0));
+      g.fillStyle = grd;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+
+    /** The same, standalone, for the handful of one-off glows. */
     function bloom(x, y, r, col, alpha) {
       if (!(alpha > 0.004) || !(r > 0)) return;
       const sp = bloomSprite(col);
@@ -475,7 +517,26 @@ window.plethoraBit = {
       g.restore();
     }
 
-    function bakeAll() { bakeForest(); bakeGrain(); for (const k in skyCache) delete skyCache[k]; }
+    /**
+     * The backdrop — sky, parallax forest, fog and motes — is composited into
+     * its own surface at CSS resolution and then upscaled in a single blit.
+     *
+     * Those are five alpha-blended full-screen passes, and doing them at the
+     * canvas's own resolution was most of a frame on its own. None of it has
+     * an edge worth resolving: it is a glow, three layers of blurred forest
+     * and some dust. Compositing at 1x costs a quarter as much and the
+     * upscale is, if anything, flattering.
+     */
+    let backdrop = null, backdropG = null;
+    function bakeBackdrop() {
+      backdrop = surface(W, H);
+      backdropG = backdrop ? backdrop.getContext("2d") : null;
+    }
+
+    function bakeAll() {
+      bakeForest(); bakeFinish(); bakeBackdrop();
+      for (const k in skyCache) delete skyCache[k];
+    }
     bakeAll();
 
     /* ===============================================================
@@ -490,7 +551,22 @@ window.plethoraBit = {
     const MIN_ROCK = 0.075;                            // thinnest rock between tunnels
     const MIN_GAP  = 0.250;                            // tightest a tunnel is allowed to be
 
-    let pinches = [];                                  // closing gaps, pushed by the spawner
+    /**
+     * One independent course per band, all drawn from the same generator with
+     * the same parameters.
+     *
+     * A single shared course is strictly fair, and it stacks four identical
+     * saw blades in a vertical column down the screen — which reads instantly
+     * as copy-paste and kills the picture. Four draws from one distribution
+     * is fair the way a shuffled deck is fair, and it looks like four
+     * different tunnels bored through the same rock. Each lane carries its own
+     * hazards, its own closing gaps and a large phase offset into the terrain
+     * waves, so no two are ever in step.
+     */
+    const lanes = [];
+    function makeLane(i, seed) {
+      return { i, ph: i * 137.53, hazards: [], pinches: [], spawnX: W * 1.55, seed: seed + i * 7919 };
+    }
 
     /** Rolling lumps: a chain of soft bulges on a fixed lattice, hashed, so the
      *  rock outline is bulbous rather than a smooth sine and never repeats. */
@@ -501,7 +577,7 @@ window.plethoraBit = {
       for (let k = -1; k <= 1; k++) {
         const i = i0 + k;
         const cx = (i + 0.5 + (hf(i, salt) - 0.5) * 0.7) * cell;
-        const amp = 0.012 + hf(i, salt + 1) * 0.040;
+        const amp = 0.010 + hf(i, salt + 1) * 0.032;
         const wid = 0.24 + hf(i, salt + 2) * 0.38;
         const t = (d - cx) / wid;
         if (t > -1 && t < 1) { const q = 1 - t * t; s += amp * q * q; }
@@ -509,17 +585,19 @@ window.plethoraBit = {
       return s;
     }
 
-    /** Tunnel ceiling and floor at world position `d`, in band units 0..1. */
-    function profile(d, out) {
-      let c = 0.5 + 0.072 * Math.sin(d * 0.78) + 0.036 * Math.sin(d * 1.93 + 1.9) + 0.018 * Math.sin(d * 4.10 + 0.4);
-      let gp = 0.68 + 0.058 * Math.sin(d * 1.21 + 2.7);
-      for (let i = 0; i < pinches.length; i++) {
-        const p = pinches[i];
+    /** Tunnel ceiling and floor at world position `d` in this lane, 0..1. */
+    function profile(d, out, lane) {
+      const q = d + lane.ph;
+      let c = 0.5 + 0.064 * Math.sin(q * 0.78) + 0.032 * Math.sin(q * 1.93 + 1.9) + 0.015 * Math.sin(q * 4.10 + 0.4);
+      let gp = 0.72 + 0.048 * Math.sin(q * 1.21 + 2.7);
+      const ps = lane.pinches;
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
         const t = 1 - Math.abs(d - p.d) / p.w;
         if (t > 0) { const s = t * t * (3 - 2 * t); c += (p.c - c) * s; gp += (p.g - gp) * s; }
       }
-      let ceil = c - gp / 2 + lump(d, 11);
-      let flr  = c + gp / 2 - lump(d, 77);
+      let ceil = c - gp / 2 + lump(q, 11 + lane.i * 13);
+      let flr  = c + gp / 2 - lump(q, 77 + lane.i * 13);
       if (ceil < MIN_ROCK) ceil = MIN_ROCK;
       if (flr > 1 - MIN_ROCK) flr = 1 - MIN_ROCK;
       if (flr - ceil < MIN_GAP) { const m = (flr + ceil) / 2; ceil = m - MIN_GAP / 2; flr = m + MIN_GAP / 2; }
@@ -532,12 +610,8 @@ window.plethoraBit = {
      * All in band units: `x` is world px, everything else is a fraction of
      * a band height, so a hazard is the same shape whatever the band count.
      */
-    let hazards = [];
-    let spawnX = 0;                                    // world px reached by the generator
-    let courseSeed = 1;
-
-    function spawnOne(gate) {
-      const s = courseSeed++;
+    function spawnOne(gate, lane) {
+      const s = lane.seed++;
       const r = (k) => hf(s, k);
       const d = gate / U;                              // distance in band units
       const heat = clamp((d - 6) / 90, 0, 1);          // what is unlocked, and how mean
@@ -552,18 +626,18 @@ window.plethoraBit = {
       else type = "sawpair";
 
       if (type === "pinch") {
-        profile(d, _pf);
-        pinches.push({
+        profile(d, _pf, lane);
+        lane.pinches.push({
           d, w: 1.5 + r(2) * 1.4,
           c: clamp((_pf[0] + _pf[1]) / 2 + (r(3) - 0.5) * 0.22, 0.30, 0.70),
           g: lerp(0.47, 0.31, heat * (0.4 + r(4) * 0.6)),
         });
-        if (pinches.length > 48) pinches.shift();
+        if (lane.pinches.length > 40) lane.pinches.shift();
         return;
       }
       if (type === "saw" || type === "sawpair") {
         const mount = r(5) < 0.5 ? "ceil" : "floor";
-        hazards.push({
+        lane.hazards.push({
           type: "saw", x: gate, mount,
           rr: 0.115 + r(6) * 0.085,
           spin: (r(7) < 0.5 ? -1 : 1) * (2.2 + r(8) * 3.4),
@@ -571,7 +645,7 @@ window.plethoraBit = {
           bobF: 0.9 + r(11) * 1.1, ph: r(12) * TAU,
         });
         if (type === "sawpair") {
-          hazards.push({
+          lane.hazards.push({
             type: "saw", x: gate + U * (0.55 + r(13) * 0.4),
             mount: mount === "ceil" ? "floor" : "ceil",
             rr: 0.10 + r(14) * 0.07,
@@ -582,7 +656,7 @@ window.plethoraBit = {
         return;
       }
       if (type === "rotor") {
-        hazards.push({
+        lane.hazards.push({
           type: "rotor", x: gate,
           n: 0.5 + (r(18) - 0.5) * 0.22,
           len: 0.13 + r(19) * 0.09 + heat * 0.03,
@@ -594,7 +668,7 @@ window.plethoraBit = {
         return;
       }
       if (type === "crusher") {
-        hazards.push({
+        lane.hazards.push({
           type: "crusher", x: gate,
           from: r(25) < 0.5 ? "ceil" : "floor",
           wdt: 0.16 + r(26) * 0.16,
@@ -604,7 +678,7 @@ window.plethoraBit = {
         });
         return;
       }
-      hazards.push({
+      lane.hazards.push({
         type: "spikes", x: gate,
         from: r(30) < 0.5 ? "ceil" : "floor",
         wdt: 0.55 + r(31) * 0.75,
@@ -612,21 +686,23 @@ window.plethoraBit = {
       });
     }
 
-    /** Keep the course generated a screen and a half ahead of the camera. */
+    /** Keep every lane generated a screen and a half ahead of the camera. */
     function ensureCourse(rightEdge) {
       const dens = DIFF[settings.diff].dens;
-      let guard = 0;
-      while (spawnX < rightEdge + W && guard++ < 90) {
-        spawnOne(spawnX);
-        // The opening stretch is deliberately thin. A player who meets the
-        // first blade before they have found the rhythm of the flap simply
-        // dies, and reads it as the game's fault rather than their own.
-        const warm = spawnX / U < 9 ? 1.7 : 1;
-        const gap = U * (1.05 + hf(courseSeed, 55) * 0.95) * warm / dens;
-        spawnX += gap;
+      for (const lane of lanes) {
+        let guard = 0;
+        while (lane.spawnX < rightEdge + W && guard++ < 30) {
+          spawnOne(lane.spawnX, lane);
+          // The opening stretch is deliberately thin. A player who meets the
+          // first blade before they have found the rhythm of the flap simply
+          // dies, and reads it as the game's fault rather than their own.
+          const warm = lane.spawnX / U < 7 ? 1.9 : 1;
+          const gap = U * (1.05 + hf(lane.seed, 55) * 0.95) * warm / dens;
+          lane.spawnX += gap;
+        }
+        while (lane.hazards.length && lane.hazards[0].x < camX - U * 1.2) lane.hazards.shift();
+        while (lane.pinches.length && lane.pinches[0].d < camX / U - 4) lane.pinches.shift();
       }
-      while (hazards.length && hazards[0].x < camX - U * 1.2) hazards.shift();
-      while (pinches.length && pinches[0].d < camX / U - 4) pinches.shift();
     }
 
     /* ===============================================================
@@ -652,7 +728,7 @@ window.plethoraBit = {
 
     function seedMotes() {
       motes = [];
-      for (let i = 0; i < 46; i++) {
+      for (let i = 0; i < 34; i++) {
         motes.push({
           x: hf(i, 401) * W, y: hf(i, 403) * H,
           r: 0.7 + hf(i, 405) * 1.9,
@@ -664,17 +740,19 @@ window.plethoraBit = {
     }
     seedMotes();
 
+    const newSeed = () => ((Math.random() * 100000) | 0) + 1;
+
     function resetWorld(seed) {
       camX = 0; originX = 0; scroll = 0; elapsed = 0;
-      hazards = []; pinches = []; particles = [];
-      spawnX = W * 1.7;                                 // a clear run-up before the first blade
-      courseSeed = seed;
+      particles = [];
+      lanes.length = 0;
+      for (let i = 0; i < settings.players; i++) lanes.push(makeLane(i, seed));
       hourIdx = 0; hourPrev = 0; hourFade = 1;
       winner = -1; roundBest = 0; shake = 0; flash = 0;
       birds = [];
       for (let i = 0; i < settings.players; i++) birds.push(makeBird(i));
     }
-    resetWorld(1);
+    resetWorld(newSeed());
 
     /* ===============================================================
      * SIMULATION
@@ -683,13 +761,14 @@ window.plethoraBit = {
      * in band units per second, so the feel is identical whether the band
      * is 350px tall (two players) or 170px (four).
      * ============================================================= */
-    const GRAV = 2.6, FLAP_DV = 0.42, FLAP_HZ = 9.5, VUP = 0.62, VDOWN = 0.95;
+    const METRE = 12;                                  // metres per band unit travelled
+    const GRAV = 1.6, FLAP_DV = 0.30, FLAP_HZ = 9.5, VUP = 0.46, VDOWN = 0.72;
     const R_N = 0.066;                                 // creature radius, band units
 
     function flap(b, loud) {
       b.vn -= FLAP_DV;
       if (b.vn < -VUP) b.vn = -VUP;
-      b.vx += W * 0.021;
+      b.vx += W * 0.0495;
       b.wingV = -13;
       if (phase === "play") {
         const band = bands[b.i];
@@ -709,8 +788,8 @@ window.plethoraBit = {
     /** Autopilot for the attract loop on the title screen. */
     function autoHold(b) {
       const band = bands[b.i];
-      const look = (camX + bands[b.i].off + b.sx + W * 0.22) / U;
-      profile(look, _pf);
+      const look = (camX + b.sx + W * 0.22) / U;
+      profile(look, _pf, lanes[b.i]);
       const target = (_pf[0] + _pf[1]) / 2;
       return b.n > target + 0.03;
     }
@@ -758,10 +837,10 @@ window.plethoraBit = {
      * Both the renderer and the collision test read from this, so what you
      * see really is what kills you.
      */
-    function hazardAt(h, t, band) {
-      const sx = h.x - camX - band.off;
+    function hazardAt(h, t, band, lane) {
+      const sx = h.x - camX;
       const d = h.x / U;
-      profile(d, _pf);
+      profile(d, _pf, lane);
       const ceilY = band.top + _pf[0] * U, floorY = band.top + _pf[1] * U;
       if (h.type === "saw") {
         const r = h.rr * U;
@@ -795,22 +874,24 @@ window.plethoraBit = {
       const band = bands[b.i];
       const by = band.top + b.n * U;
       const r = R_N * U;
-      const wx = camX + band.off + b.sx;
+      const lane = lanes[b.i];
+      const wx = camX + b.sx;
 
       // Rock. Sampled at the creature's own world x, which is the only place
       // the tunnel actually has to be clear for it.
-      profile(wx / U, _pf);
+      profile(wx / U, _pf, lane);
       if (b.n - R_N < _pf[0] || b.n + R_N > _pf[1]) return "CRUSHED";
 
       // The wall on the left. Fall behind it and the dark takes you.
       if (b.sx - r < WALL * 0.88) return "LEFT BEHIND";
 
       let near = 0;
-      for (let i = 0; i < hazards.length; i++) {
-        const h = hazards[i];
-        const sx = h.x - camX - band.off;
+      const hz = lane.hazards;
+      for (let i = 0; i < hz.length; i++) {
+        const h = hz[i];
+        const sx = h.x - camX;
         if (sx < -U * 1.2 || sx > W + U * 1.2) continue;
-        const s = hazardAt(h, t, band);
+        const s = hazardAt(h, t, band, lane);
         if (s.kind === "saw") {
           const dd = Math.hypot(b.sx - s.x, by - s.y);
           if (dd < r + s.r * 0.90) return "SAWN";
@@ -848,7 +929,7 @@ window.plethoraBit = {
         scroll = clamp(rel * U, 0, W * 0.62);
         const slow = phase === "countdown" ? 0.22 : phase === "claim" ? 0.09 : phase === "over" ? 0.22 : 1;
         camX += scroll * slow * dt;
-        ensureCourse(camX + maxOff + W);
+        ensureCourse(camX + W);
       }
 
       // Before the round starts the creatures hover, unhurt, at the hatch
@@ -857,7 +938,13 @@ window.plethoraBit = {
       if (pre) {
         for (const b of birds) {
           const band = bands[b.i];
-          b.n = 0.5 + 0.035 * Math.sin(t * 2.2 + b.i * 1.4);
+          // Hovering at the middle of the BAND drops a creature into the rock
+          // wherever its tunnel happens to be meandering; hover at the middle
+          // of the tunnel instead.
+          const lane = lanes[b.i];
+          let mid = 0.5;
+          if (lane) { profile((camX + HOME) / U, _pf, lane); mid = (_pf[0] + _pf[1]) / 2; }
+          b.n = mid + 0.035 * Math.sin(t * 2.2 + b.i * 1.4);
           b.vn = 0; b.sx = HOME; b.vx = 0;
           if (b.held && b.wingV > -3) b.wingV = -7;
           b.wing += b.wingV * dt;
@@ -896,7 +983,21 @@ window.plethoraBit = {
         // Horizontal: flapping carries you forward, falling lets the cave
         // reel you back toward the wall. There is no left/right control and
         // there never will be — this is the whole tension of the game.
-        const idle = -W * 0.058;
+        //
+        // The numbers are tuned around one number: 0.56, the fraction of the
+        // time on the pad that exactly holds altitude. Holding POSITION costs
+        // more than that — about 0.66 — so simply hovering loses ground, and
+        // the only way to bank distance is to climb hard and then dive back
+        // through the gap you were aiming for anyway. That is the rhythm the
+        // whole game is made of. Even flown well a climb-and-dive cycle bleeds
+        // about 8px a second, so no flight lasts forever — which is what a
+        // distance record wants: everyone is eventually reeled into the dark,
+        // and the only question is how long you held it off.
+        // The pull back is the cave itself advancing, so it scales with the
+        // scroll: the further you get, the harder the dark on the left
+        // reels you in, and the ramp of an endless flight is expressed
+        // through the wall and not only through hazard density.
+        const idle = -scroll * 0.64;
         b.vx += (idle - b.vx) * (1 - Math.pow(0.16, dt));
         b.vx = clamp(b.vx, -W * 0.16, W * 0.34);
         b.sx += b.vx * dt;
@@ -913,7 +1014,7 @@ window.plethoraBit = {
         if (b.trail.length > 7) b.trail.pop();
 
         if (phase === "play") {
-          b.dist = (camX - originX + b.sx - HOME) / U * 8;
+          b.dist = (camX - originX + b.sx - HOME) / U * METRE;
           if (b.dist > b.best) b.best = b.dist;
           if (b.best > b.milestone + 250) {
             b.milestone = Math.floor(b.best / 250) * 250;
@@ -969,9 +1070,9 @@ window.plethoraBit = {
     let claimUntil = 0, countFrom = 0, lastHeat = -1;
 
     function beginFlight() {
-      resetWorld((Math.random() * 100000) | 0);
+      resetWorld(newSeed());
       phase = "claim";
-      claimUntil = now() + 3600;
+      claimUntil = now() + 2600;
       shell.el("title").style.display = "none";
       shell.el("over").style.display = "none";
       paintHud();
@@ -1002,6 +1103,11 @@ window.plethoraBit = {
       winner = w;
       const flight = Math.round(Math.max(...birds.map((b) => b.best)));
       roundBest = flight;
+      // The counter in the chrome strip only advances while phase is "play",
+      // so without this it freezes one metre short of the number the results
+      // card is showing directly underneath it.
+      lastDist = flight;
+      shell.el("dist").textContent = fmt(flight);
       sound.duck(0.6, 500);
       sound.sting("win");
       sound.haptic("heavy");
@@ -1022,9 +1128,12 @@ window.plethoraBit = {
             'border-bottom:1px solid rgba(255,255,255,0.06);">' +
             '<span style="width:9px;height:9px;border-radius:50%;background:' + CREW[i].ink +
               ';box-shadow:0 0 10px ' + CREW[i].ink + ';flex:none;"></span>' +
-            '<span style="flex:1;font-family:' + DISP + ';font-size:17px;letter-spacing:0.13em;' +
+            '<span style="flex:1;text-align:left;font-family:' + DISP + ';font-size:17px;letter-spacing:0.13em;' +
               'color:' + CREW[i].ink + ';">' + esc(CREW[i].name) + '</span>' +
-            '<span style="font-size:10.5px;letter-spacing:0.18em;opacity:0.42;">' + esc(b.cause || "OUT") + '</span>' +
+            // nowrap: LEFT BEHIND is two words, and left to wrap it makes one
+            // row twice the height of the others and knocks the column out.
+            '<span style="font-size:10.5px;letter-spacing:0.18em;opacity:0.5;flex:none;' +
+              'white-space:nowrap;">' + esc(b.cause || "OUT") + '</span>' +
             '<span style="font-family:' + DISP + ';font-size:19px;letter-spacing:0.06em;width:62px;' +
               'text-align:right;">' + fmt(Math.round(b.best)) + '</span>' +
           '</div>').join("");
@@ -1044,81 +1153,29 @@ window.plethoraBit = {
     /* ===============================================================
      * RENDER
      * ============================================================= */
-    const sampleC = [], sampleF = [];
+    const sampleC = [], sampleF = [], shapes = [];
     const SAMPLE_STEP = 7;
 
     function drawFrame(t) {
-      const dpr = Math.min(ctx.dpr || 1, 3);
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.setTransform(RSCALE, 0, 0, RSCALE, 0, 0);
       g.save();
       if (shake > 0.02) g.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
 
-      /* --- sky ------------------------------------------------------- */
-      const sky = skyFor(hourIdx);
-      if (sky) {
-        if (hourFade < 1) {
-          const prev = skyFor(hourPrev);
-          if (prev) g.drawImage(prev, 0, 0, W, H);
-          g.globalAlpha = hourFade;
-          g.drawImage(sky, 0, 0, W, H);
-          g.globalAlpha = 1;
-        } else {
-          g.drawImage(sky, 0, 0, W, H);
-        }
-      } else {
-        paintSky(g, HOURS[hourIdx], W, H);              // no OffscreenCanvas: live
-      }
-
-      // The sky breathes: the primary bloom swells and fades by a few percent
-      // at a quarter hertz, so a static camera still feels alive.
+      /* --- backdrop: sky, forest, fog and motes, all at 1x ----------- */
       const hour = HOURS[hourIdx];
       const br = hour.blooms[0];
-      bloom(W * br.x, H * br.y, H * br.r * (0.50 + 0.02 * Math.sin(t * 1.6)),
-            hour.ray, 0.032 + 0.014 * Math.sin(t * 1.6));
-
-      /* --- parallax forest ------------------------------------------- */
-      const alphas = [0.30, 0.52, 0.80];
-      const rates = [0.05, 0.12, 0.24];
-      for (let i = 0; i < 3; i++) {
-        const off = -((camX * rates[i]) % W);
-        g.globalAlpha = alphas[i];
-        if (forest[i]) {
-          g.drawImage(forest[i], off, 0, W, H);
-          g.drawImage(forest[i], off + W, 0, W, H);
-        }
-        g.globalAlpha = 1;
-      }
-
-      /* --- drifting fog band ----------------------------------------- */
-      const fy = H * (0.5 + 0.16 * Math.sin(t * 0.22));
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      const fg = g.createLinearGradient(0, fy - H * 0.16, 0, fy + H * 0.16);
-      fg.addColorStop(0, rgba(hour.fog, 0));
-      fg.addColorStop(0.5, rgba(hour.fog, 0.045));
-      fg.addColorStop(1, rgba(hour.fog, 0));
-      g.fillStyle = fg;
-      g.fillRect(0, fy - H * 0.16, W, H * 0.32);
-      g.restore();
-
-      /* --- dust motes ------------------------------------------------ */
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      for (const m of motes) {
-        g.globalAlpha = m.a * (0.6 + 0.4 * Math.sin(m.bob));
-        g.fillStyle = rgba(hour.mote, 1);
-        g.beginPath();
-        g.arc(m.x, m.y + Math.sin(m.bob) * 5, m.r, 0, TAU);
-        g.fill();
-      }
-      g.restore();
+      const bg = backdropG || g;                        // no OffscreenCanvas: straight to screen
+      paintBackdrop(bg, hour, br, t);
+      if (backdrop) g.drawImage(backdrop, 0, 0, W, H);
 
       const cols = Math.ceil(W / SAMPLE_STEP) + 2;
 
       /* --- per-band: ghost numeral, rock, hazards, creature ---------- */
       for (const band of bands) {
         const b = birds[band.i];
+        const lane = lanes[band.i];
         const crew = CREW[band.i];
+        if (!lane) continue;
         const dim = b && !b.alive && phase !== "title";
 
         // The player's own distance, huge and ghosted, sitting in their own
@@ -1126,16 +1183,57 @@ window.plethoraBit = {
         g.save();
         g.globalAlpha = dim ? 0.11 : 0.19;
         g.fillStyle = crew.ink;
-        g.font = "700 " + Math.round(U * 0.62) + "px " + DISP;
         g.textAlign = "right";
         g.textBaseline = "middle";
-        const label = phase === "title" ? crew.name : fmt(b ? Math.round(b.best) : 0);
-        g.fillText(label, W - U * 0.10, band.mid + U * 0.02);
+        if (phase === "countdown") {
+          // The countdown owns the middle of every band for these three
+          // seconds; a ghosted name under it is just two things in one place.
+        } else if (phase !== "play" && phase !== "over") {
+          // A seven-letter name set at numeral size runs clean off the screen.
+          tracked(g, crew.name, W - U * 0.10, band.mid, Math.min(34, U * 0.20), 5);
+        } else {
+          /*
+           * Ghosted at one alpha over four different skies, this number was
+           * bold over the teal band and completely gone over the band where
+           * a bloom happened to sit behind it — and it is the only running
+           * feedback a player gets on their own flight. A black underlay
+           * carries it: invisible against dark rock, an edge against a hot
+           * bloom, which is the same trick the silhouettes themselves use.
+           */
+          const txt = fmt(b ? Math.round(b.best) : 0);
+          const gx = W - U * 0.10, gy = band.mid + U * 0.02;
+          g.font = "700 " + Math.round(U * 0.62) + "px " + DISP;
+          g.globalAlpha = dim ? 0.10 : 0.17;
+          g.fillStyle = "#000";
+          g.fillText(txt, gx + U * 0.014, gy + U * 0.016);
+          g.globalAlpha = dim ? 0.14 : 0.25;
+          g.fillStyle = crew.ink;
+          g.fillText(txt, gx, gy);
+        }
+        g.restore();
+
+        // Every glow this band needs, in a single 'lighter' pass: the light
+        // behind each hazard and the halo around the creature. Drawn before
+        // the rock, so a glow never spills out of the tunnel it belongs to.
+        shapes.length = 0;
+        for (const h of lane.hazards) {
+          const hx = h.x - camX;
+          if (hx < -U * 1.6 || hx > W + U * 1.6) continue;
+          shapes.push(hazardAt(h, t, band, lane));
+        }
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.beginPath(); g.rect(0, band.top, W, U); g.clip();
+        for (const sh of shapes) hazardGlow(sh, hour, dim);
+        if (b && b.alive) {
+          glow(b.sx, band.top + b.n * U, R_N * U * (3.1 + b.graze * 2.2),
+               crew.rgb, (dim ? 0.10 : 0.34) + b.graze * 0.5);
+        }
         g.restore();
 
         // Rock: everything above the ceiling and below the floor, pure #000.
         for (let i = 0; i < cols; i++) {
-          profile((camX + band.off + i * SAMPLE_STEP) / U, _pf);
+          profile((camX + i * SAMPLE_STEP) / U, _pf, lane);
           sampleC[i] = _pf[0]; sampleF[i] = _pf[1];
         }
         g.fillStyle = "#000";
@@ -1155,16 +1253,17 @@ window.plethoraBit = {
         // Boulders: a chain of tangent discs on a fixed world lattice, which
         // is what makes the outline read as lumpy rock rather than a curve.
         const cell = U * 0.55;
-        const i0 = Math.floor((camX + band.off) / cell) - 1;
+        const i0 = Math.floor(camX / cell) - 1;
         g.beginPath();
         for (let k = 0; k <= Math.ceil(W / cell) + 2; k++) {
           const idx = i0 + k;
-          const wx = idx * cell + hf(idx, 601) * cell * 0.7;
-          const sx = wx - camX - band.off;
+          const salt = 601 + band.i * 97;
+          const wx = idx * cell + hf(idx, salt) * cell * 0.7;
+          const sx = wx - camX;
           if (sx < -U || sx > W + U) continue;
-          profile(wx / U, _pf);
-          const rr = U * (0.045 + hf(idx, 603) * 0.075);
-          const onCeil = hf(idx, 605) < 0.5;
+          profile(wx / U, _pf, lane);
+          const rr = U * (0.045 + hf(idx, salt + 1) * 0.075);
+          const onCeil = hf(idx, salt + 2) < 0.5;
           const y = band.top + (onCeil ? _pf[0] * U - rr * 0.55 : _pf[1] * U + rr * 0.55);
           g.moveTo(sx + rr, y);
           g.arc(sx, y, rr, 0, TAU);
@@ -1177,11 +1276,8 @@ window.plethoraBit = {
         g.beginPath();
         g.rect(0, band.top, W, U);
         g.clip();
-        for (const h of hazards) {
-          const sx = h.x - camX - band.off;
-          if (sx < -U * 1.6 || sx > W + U * 1.6) continue;
-          drawHazard(hazardAt(h, t, band), hour, dim);
-        }
+        g.fillStyle = "#000";
+        for (const sh of shapes) drawHazard(sh);
         g.restore();
 
         // The wall: black, wavy-edged, glowing in its owner's colour. It is
@@ -1191,18 +1287,27 @@ window.plethoraBit = {
         if (b) drawBird(b, band, crew, t, dim);
 
         if (dim) {
-          g.save();
-          g.globalCompositeOperation = "multiply";
-          g.fillStyle = "rgba(0,0,0,0.46)";
+          // Plain source-over rather than 'multiply': over an already dark
+          // palette the two are indistinguishable, and 'multiply' is one of
+          // the few blend modes that costs a full extra pass.
+          g.fillStyle = "rgba(0,0,0,0.66)";
           g.fillRect(0, band.top, W, U);
-          g.restore();
-          g.save();
-          g.globalAlpha = 0.55;
-          g.fillStyle = crew.ink;
-          g.textAlign = "center";
-          g.textBaseline = "middle";
-          tracked(g, "OUT · " + b.cause, W * 0.66, band.mid, Math.min(15, U * 0.105), 3.2);
-          g.restore();
+          // Not during the results card: every one of these causes is listed
+          // there in full, and four of them ghosting up through the panel
+          // collide with the rows that are actually being read.
+          if (phase !== "over") {
+            g.save();
+            g.globalAlpha = 0.62;
+            g.fillStyle = crew.ink;
+            g.textAlign = "center";
+            g.textBaseline = "middle";
+            // Centred in the tunnel, not on the screen: the wall down the
+            // left is a solid black column, so the visible strip is what
+            // this label has to look centred in.
+            tracked(g, "OUT · " + b.cause, (WALL + W) / 2, band.mid,
+                    Math.min(15, U * 0.105), 3.2);
+            g.restore();
+          }
         }
       }
 
@@ -1239,26 +1344,23 @@ window.plethoraBit = {
       if (phase === "play" && birds.filter((x) => x.alive).length === 1 && birds.length > 1) {
         const b = birds.find((x) => x.alive);
         g.save();
-        g.globalAlpha = 0.42 + 0.24 * Math.sin(t * 5);
-        g.fillStyle = CREW[b.i].ink;
-        g.textAlign = "center"; g.textBaseline = "top";
-        tracked(g, "LAST WING", W / 2, PLAY_TOP + 6, 13, 5);
+        g.textAlign = "center"; g.textBaseline = "middle";
+        platedLine(g, "LAST WING", W / 2, PLAY_TOP + 12, 13, 5, CREW[b.i].ink,
+                   0.68 + 0.28 * Math.sin(t * 5));
         g.restore();
       }
 
-      /* --- grain, vignette -------------------------------------------- */
-      if (grain) {
-        g.save();
-        g.globalAlpha = 0.5;
-        g.drawImage(grain, -5 + ((t * 37) % 9), -5 + ((t * 53) % 9));
-        g.restore();
+      /* --- grain and vignette, in one pass ------------------------------ */
+      if (finish) {
+        g.drawImage(finish, -5 + ((t * 37) % 9), -5 + ((t * 53) % 9));
+      } else {
+        const vg = g.createRadialGradient(W * 0.5, H * 0.48, H * 0.26, W * 0.5, H * 0.5, H * 0.80);
+        vg.addColorStop(0, "rgba(0,0,0,0)");
+        vg.addColorStop(0.66, "rgba(0,0,0,0.22)");
+        vg.addColorStop(1, "rgba(0,0,0,0.74)");
+        g.fillStyle = vg;
+        g.fillRect(0, 0, W, H);
       }
-      const vg = g.createRadialGradient(W * 0.5, H * 0.48, H * 0.26, W * 0.5, H * 0.5, H * 0.80);
-      vg.addColorStop(0, "rgba(0,0,0,0)");
-      vg.addColorStop(0.66, "rgba(0,0,0,0.22)");
-      vg.addColorStop(1, "rgba(0,0,0,0.74)");
-      g.fillStyle = vg;
-      g.fillRect(0, 0, W, H);
 
       if (flash > 0) {
         g.save();
@@ -1269,6 +1371,67 @@ window.plethoraBit = {
         g.restore();
       }
       g.restore();
+    }
+
+    /** Sky, three forest layers, one drifting fog band and the dust. */
+    function paintBackdrop(bg, hour, br, t) {
+      const sky = skyFor(hourIdx);
+      if (sky) {
+        if (hourFade < 1) {
+          const prev = skyFor(hourPrev);
+          if (prev) bg.drawImage(prev, 0, 0, W, H);
+          bg.globalAlpha = hourFade;
+          bg.drawImage(sky, 0, 0, W, H);
+          bg.globalAlpha = 1;
+        } else {
+          bg.drawImage(sky, 0, 0, W, H);
+        }
+      } else {
+        paintSky(bg, hour, W, H);                       // no OffscreenCanvas: live
+      }
+
+      // The sky breathes from its core only. Pulsing the whole bloom would
+      // mean compositing a disc most of the screen wide on every frame.
+      bg.save();
+      bg.globalCompositeOperation = "lighter";
+      bg.globalAlpha = 0.30 + 0.10 * Math.sin(t * 1.6);
+      const bs = bloomSprite(hour.ray);
+      const brr = H * (0.15 + 0.008 * Math.sin(t * 1.6));
+      if (bs) bg.drawImage(bs, W * br.x - brr, H * br.y - brr, brr * 2, brr * 2);
+      bg.restore();
+
+      // Parallax forest, wrapped as two sub-rectangles rather than two
+      // whole-screen blits — the naive version alpha-blends twice the
+      // display for every layer.
+      const alphas = [0.22, 0.44, 0.78];
+      const rates = [0.05, 0.12, 0.24];
+      for (let i = 0; i < 3; i++) {
+        if (!forest[i]) continue;
+        const cut = (camX * rates[i]) % W;
+        bg.globalAlpha = alphas[i];
+        if (W - cut > 0.5) bg.drawImage(forest[i], cut, 0, W - cut, H, 0, 0, W - cut, H);
+        if (cut > 0.5) bg.drawImage(forest[i], 0, 0, cut, H, W - cut, 0, cut, H);
+        bg.globalAlpha = 1;
+      }
+
+      bg.save();
+      bg.globalCompositeOperation = "lighter";
+      const fy = H * (0.5 + 0.16 * Math.sin(t * 0.22));
+      const fg = bg.createLinearGradient(0, fy - H * 0.16, 0, fy + H * 0.16);
+      fg.addColorStop(0, rgba(hour.fog, 0));
+      fg.addColorStop(0.5, rgba(hour.fog, 0.05));
+      fg.addColorStop(1, rgba(hour.fog, 0));
+      bg.fillStyle = fg;
+      bg.fillRect(0, fy - H * 0.16, W, H * 0.32);
+
+      for (const m of motes) {
+        bg.globalAlpha = m.a * (0.6 + 0.4 * Math.sin(m.bob));
+        bg.fillStyle = rgba(hour.mote, 1);
+        bg.beginPath();
+        bg.arc(m.x, m.y + Math.sin(m.bob) * 5, m.r, 0, TAU);
+        bg.fill();
+      }
+      bg.restore();
     }
 
     /** Heading type with manual tracking — canvas has no letterSpacing. */
@@ -1286,14 +1449,66 @@ window.plethoraBit = {
       return total;
     }
 
+    /** The width `tracked` would draw, without drawing it. */
+    function trackW(t, text, size, track) {
+      t.font = "700 " + size + "px " + DISP;
+      let total = 0;
+      for (const c of String(text)) total += t.measureText(c).width + track;
+      return total - track;
+    }
+
+    /**
+     * A soft dark plate under a line of type.
+     *
+     * Every one of these labels is drawn over a lit, moving sky: a magenta
+     * word crossing a white bloom is unreadable, and so is a cyan one over
+     * black rock. Feathered at both ends so it reads as smoke in the cave
+     * rather than as a UI box — same trick as the glows, stacked alpha
+     * instead of a blur.
+     */
+    function inkPlate(t, cx, cy, rx, ry, a) {
+      t.save();
+      t.translate(cx, cy);
+      t.scale(1, ry / rx);
+      const gd = t.createRadialGradient(0, 0, rx * 0.2, 0, 0, rx);
+      gd.addColorStop(0, "rgba(0,0,0," + a + ")");
+      gd.addColorStop(0.5, "rgba(0,0,0," + (a * 0.8).toFixed(3) + ")");
+      gd.addColorStop(0.78, "rgba(0,0,0," + (a * 0.34).toFixed(3) + ")");
+      gd.addColorStop(1, "rgba(0,0,0,0)");
+      t.fillStyle = gd;
+      t.fillRect(-rx, -rx, rx * 2, rx * 2);
+      t.restore();
+    }
+
+    /** A tracked line with its own plate, right- or centre-aligned. */
+    function platedLine(t, text, x, y, size, track, colour, alpha) {
+      const w = trackW(t, text, size, track);
+      const cx = t.textAlign === "right" ? x - w / 2 : x;
+      t.save();
+      t.globalAlpha = Math.min(1, alpha);
+      inkPlate(t, cx, y, w / 2 + size * 2.4, size * 1.7, 0.8);
+      t.fillStyle = colour;
+      tracked(t, text, x, y, size, track);
+      t.restore();
+      return w;
+    }
+
     /* --- hazards ---------------------------------------------------- */
-    function drawHazard(s, hour, dim) {
-      // Every hazard gets a light behind it. Pure black on a dark palette can
-      // vanish on a dim screen, and a blade you cannot see is not a hazard,
-      // it is a bug.
-      const glow = dim ? 0.05 : 0.14;
+    /**
+     * The light behind a hazard. Pure black on a dark palette can vanish on a
+     * dim screen in a bright room, and a blade you cannot see is not a hazard,
+     * it is a bug — so every one of them gets a bloom placed behind it.
+     */
+    function hazardGlow(s, hour, dim) {
+      const a = dim ? 0.05 : 0.14;
+      if (s.kind === "saw") glow(s.x, s.y, s.r * 2.1, hour.ray, a);
+      else if (s.kind === "rotor") glow(s.x, s.y, s.len * 1.5, hour.ray, a * 0.8);
+      else if (s.kind === "crusher") glow(s.x + s.w / 2, s.y + s.h * 0.5, s.w * 1.5, hour.ray, a);
+      else glow(s.x + s.w / 2, s.y, s.w * 0.8, hour.ray, a * 0.7);
+    }
+
+    function drawHazard(s) {
       if (s.kind === "saw") {
-        bloom(s.x, s.y, s.r * 2.5, hour.ray, glow);
         g.save();
         g.translate(s.x, s.y);
         g.rotate(s.a);
@@ -1326,7 +1541,6 @@ window.plethoraBit = {
         return;
       }
       if (s.kind === "rotor") {
-        bloom(s.x, s.y, s.len * 1.5, hour.ray, glow * 0.8);
         // Mast back to the rock, so the hub is bolted to something.
         g.strokeStyle = "#000";
         g.lineWidth = s.w * 0.85;
@@ -1359,7 +1573,6 @@ window.plethoraBit = {
         return;
       }
       if (s.kind === "crusher") {
-        bloom(s.x + s.w / 2, s.y + s.h * 0.5, s.w * 1.5, hour.ray, glow);
         g.fillStyle = "#000";
         // A slab with a lumpy leading face — machinery here is hard-edged but
         // the rock it is bolted into is not.
@@ -1402,7 +1615,6 @@ window.plethoraBit = {
         return;
       }
       // Spikes: a row of needles growing out of the rock.
-      bloom(s.x + s.w / 2, s.y, s.w * 0.8, hour.ray, glow * 0.7);
       g.fillStyle = "#000";
       const n = Math.max(3, Math.round(s.w / (s.h * 0.85)));
       g.beginPath();
@@ -1444,9 +1656,9 @@ window.plethoraBit = {
       // Boulders on the inner face, so the column reads as the edge of the
       // cave rather than a rectangle of chrome.
       g.beginPath();
-      for (let k = 0; k < 5; k++) {
-        const p = (k + 0.5) / 5;
-        const rr = U * (0.035 + hf(k + band.i * 9, 811) * 0.055);
+      for (let k = 0; k < 7; k++) {
+        const p = (k + 0.5) / 7;
+        const rr = U * (0.045 + hf(k + band.i * 9, 811) * 0.075);
         g.moveTo(edge + rr * 0.4, band.top + p * U);
         g.arc(edge - rr * 0.25, band.top + p * U + hf(k, 813) * 10, rr, 0, TAU);
       }
@@ -1455,24 +1667,27 @@ window.plethoraBit = {
       // Rim light in the owner's colour: the only way to find your own band
       // at a glance, and it flares the instant a finger lands on it.
       g.globalCompositeOperation = "lighter";
-      const a = (dim ? 0.16 : held ? 0.95 : 0.42) * (0.86 + 0.14 * Math.sin(t * 2.2 + band.i));
-      const grd = g.createLinearGradient(edge - 3, 0, edge + 26, 0);
-      grd.addColorStop(0, rgba(crew.rgb, a));
-      grd.addColorStop(0.28, rgba(crew.rgb, a * 0.38));
+      // Wide and soft, so it reads as light bleeding off the edge of the
+      // rock rather than a neon strip stuck to the side of the screen.
+      const a = (dim ? 0.14 : held ? 0.90 : 0.38) * (0.86 + 0.14 * Math.sin(t * 2.2 + band.i));
+      const grd = g.createLinearGradient(edge - 6, 0, edge + 42, 0);
+      grd.addColorStop(0, rgba(crew.rgb, a * 0.55));
+      grd.addColorStop(0.10, rgba(crew.rgb, a));
+      grd.addColorStop(0.34, rgba(crew.rgb, a * 0.26));
       grd.addColorStop(1, rgba(crew.rgb, 0));
       g.fillStyle = grd;
-      g.fillRect(edge - 4, band.top, 32, U);
+      g.fillRect(edge - 8, band.top, 52, U);
       g.restore();
 
       // Faint tint over the whole band, so the zone reads as owned without
       // ever tinting a silhouette.
       g.save();
       g.globalCompositeOperation = "lighter";
-      const bg = g.createLinearGradient(0, 0, W, 0);
-      bg.addColorStop(0, rgba(crew.rgb, dim ? 0.012 : held ? 0.055 : 0.028));
+      const bg = g.createLinearGradient(0, 0, W * 0.5, 0);
+      bg.addColorStop(0, rgba(crew.rgb, dim ? 0.012 : held ? 0.070 : 0.034));
       bg.addColorStop(1, rgba(crew.rgb, 0));
       g.fillStyle = bg;
-      g.fillRect(0, band.top, W, U);
+      g.fillRect(0, band.top, W * 0.5, U);
       g.restore();
 
       // Hold chevrons on the pad, fading once the round is under way.
@@ -1504,10 +1719,6 @@ window.plethoraBit = {
       const sq = 1 + clamp(sp / (U * 9), 0, 0.26);
       const ang = Math.atan2(b.vn * U, Math.max(40, b.vx + scroll)) * 0.5;
 
-      // The eyes are the only colour anywhere in the play layer, so they get a
-      // real halo — an 8px eye still has to be findable at arm's length.
-      bloom(x, y, r * (3.1 + b.graze * 2.2), crew.rgb, (dim ? 0.10 : 0.34) + b.graze * 0.5);
-
       g.save();
       g.translate(x, y);
       g.rotate(ang);
@@ -1516,14 +1727,20 @@ window.plethoraBit = {
       // Trailing tendrils, lagging three frames behind the body.
       g.strokeStyle = "#000";
       g.lineCap = "round";
+      // Five of them, splayed outward and of different lengths. Hung
+      // parallel they overlap into one black slab and the creature stops
+      // reading as a creature.
+      const tail = b.trail[Math.min(b.trail.length - 1, 4)] || { x, y };
+      const lagX = (tail.x - x) * 0.5 - 5, lagY = (tail.y - y) * 0.5;
       for (let k = 0; k < 5; k++) {
-        const off = (k - 2) * r * 0.34;
-        const tail = b.trail[Math.min(b.trail.length - 1, 4)] || { x, y };
-        const dx = (tail.x - x) * 0.55 - 6, dy = (tail.y - y) * 0.55 + r * 1.5;
-        g.lineWidth = r * 0.30;
+        const u = (k - 2) / 2;
+        const off = u * r * 0.44;
+        const len = r * (1.60 - Math.abs(u) * 0.50);
+        g.lineWidth = r * (0.27 - Math.abs(u) * 0.09);
         g.beginPath();
-        g.moveTo(off * 0.7, r * 0.55);
-        g.quadraticCurveTo(off + dx * 0.4, r * 1.1 + dy * 0.35, off * 0.6 + dx, r * 0.8 + dy);
+        g.moveTo(off * 0.6, r * 0.50);
+        g.quadraticCurveTo(off * 1.7 + lagX * 0.4, r * 0.85 + len * 0.45,
+                           off * 2.5 + lagX, r * 0.65 + len + lagY);
         g.stroke();
       }
 
@@ -1574,9 +1791,14 @@ window.plethoraBit = {
       g.save();
       g.translate(x, y);
       const look = clamp(b.vx / (W * 0.2), -1, 1);
+      // The eyes are the only colour anywhere in the play layer, so they get
+      // a real halo — an 8px eye still has to be findable at arm's length.
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      for (const s2 of [-1, 1]) glow(r * 0.40 * s2 + r * 0.20, -r * 0.10, r * 1.5, crew.rgb, dim ? 0.2 : 0.85);
+      g.restore();
       for (const s2 of [-1, 1]) {
         const ex = r * 0.40 * s2 + r * 0.20, ey = -r * 0.10;
-        bloom(ex, ey, r * 1.5, crew.rgb, dim ? 0.2 : 0.85);
         g.globalAlpha = dim ? 0.35 : 1;
         g.fillStyle = crew.ink;
         g.beginPath();
@@ -1617,20 +1839,22 @@ window.plethoraBit = {
       for (const band of bands) {
         const b = birds[band.i], crew = CREW[band.i];
         g.save();
-        g.textAlign = "left";
+        g.textAlign = "right";
         g.textBaseline = "middle";
-        g.globalAlpha = b.claimed ? 0.9 : 0.5 + 0.35 * Math.sin(t * 5 + band.i * 1.3);
-        g.fillStyle = crew.ink;
-        tracked(g, b.claimed ? crew.name + " READY" : "HOLD YOUR BAND",
-                WALL + 18, band.mid, Math.min(17, U * 0.13), 3.6);
+        // Right-hand side: the creature hovers on the left, and a label
+        // written across it is a label nobody can read. The plate is what
+        // keeps it readable over a bloom in one band and black rock in the
+        // next — the sky under this line is different in every strip.
+        platedLine(g, b.claimed ? crew.name + " READY" : "HOLD YOUR BAND",
+                   W - 18, band.mid + U * 0.24, Math.min(16, U * 0.12), 3.4, crew.ink,
+                   b.claimed ? 1 : 0.78 + 0.22 * Math.sin(t * 5 + band.i * 1.3));
         g.restore();
       }
       g.save();
-      g.globalAlpha = 0.55;
-      g.fillStyle = HOURS[hourIdx].ink;
       g.textAlign = "center";
-      g.textBaseline = "top";
-      tracked(g, "TAKING OFF IN " + Math.ceil(left), W / 2, PLAY_TOP + 6, 12, 4);
+      g.textBaseline = "middle";
+      platedLine(g, "TAKING OFF IN " + Math.ceil(left), W / 2, PLAY_TOP + 12, 12, 4,
+                 HOURS[hourIdx].ink, 0.8);
       g.restore();
     }
 
@@ -1642,16 +1866,36 @@ window.plethoraBit = {
       // easeOutBack, so the numeral lands with weight rather than fading in.
       const k = 1 - f;
       const s = 1.6 - 0.6 * (1 + 2.7 * Math.pow(k, 3) - 3.7 * Math.pow(k, 2));
-      g.save();
-      g.globalAlpha = clamp(1 - f * 0.75, 0, 1);
-      g.translate(W / 2, (PLAY_TOP + PLAY_BOT) / 2);
-      g.scale(clamp(s, 0.2, 2), clamp(s, 0.2, 2));
-      g.fillStyle = HOURS[hourIdx].ink;
-      g.textAlign = "center";
-      g.textBaseline = "middle";
-      g.font = "700 96px " + DISP;
-      g.fillText(String(n), 0, 0);
-      g.restore();
+      const sc = clamp(s, 0.2, 2);
+      const size = Math.min(84, U * 0.44);
+      /*
+       * One numeral per band, in that band's colour, rather than one in the
+       * middle of the screen.
+       *
+       * A single centred numeral lands exactly on a band divider for every
+       * even crew size — the one place on this screen nothing may sit — and
+       * it belongs to nobody. Per band it clears the dividers, and the three
+       * seconds before take-off are also the moment each player learns which
+       * colour is theirs.
+       */
+      for (const band of bands) {
+        const crew = CREW[band.i];
+        g.save();
+        g.globalAlpha = clamp(1 - f * 0.75, 0, 1);
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        // Right of the creature, which hovers over the pad on the left: a
+        // numeral landing on the moth hides the one thing its owner is
+        // looking for in the three seconds before the cave starts moving.
+        const nx = clamp(HOME + size * 0.95, W * 0.5, W - size * 0.7);
+        inkPlate(g, nx, band.mid, size * 1.5, size * 0.95, 0.7);
+        g.translate(nx, band.mid);
+        g.scale(sc, sc);
+        g.fillStyle = crew.ink;
+        g.font = "700 " + Math.round(size) + "px " + DISP;
+        g.fillText(String(n), 0, 0);
+        g.restore();
+      }
     }
 
     /* ===============================================================
@@ -1671,6 +1915,21 @@ window.plethoraBit = {
       "border-radius:15px;font-family:" + DISP + ";font-size:19px;font-weight:700;letter-spacing:0.16em;" +
       "background:" + bg + ";color:" + fg + ";margin-top:10px;-webkit-tap-highlight-color:transparent;";
     const capLine = "font-size:10px;letter-spacing:0.26em;text-transform:uppercase;opacity:0.45;";
+    /*
+     * The plate the title copy is read against.
+     *
+     * The old scrim sat at 30% through the middle, which was legible in the
+     * one case it was checked in — two players, where the middle of the
+     * screen happens to be black rock. At three and four players the same
+     * copy lands on a lit sky and a moth flies straight through the
+     * wordmark, and the caption lines vanish entirely over a bloom.
+     * So: opaque where the words are, and two clear windows above and below
+     * where the attract flight still shows through.
+     */
+    const TITLE_SCRIM =
+      "linear-gradient(180deg,rgba(4,7,10,0.80) 0%,rgba(4,7,10,0.34) 15%," +
+      "rgba(4,7,10,0.93) 27%,rgba(4,7,10,0.95) 52%,rgba(4,7,10,0.92) 72%," +
+      "rgba(4,7,10,0.36) 87%,rgba(4,7,10,0.86) 100%)";
     const panel = "position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;" +
       "justify-content:center;background:rgba(4,7,10,0.92);z-index:70;padding:22px;";
     const card = "max-width:330px;width:100%;background:rgba(14,18,20,0.98);border-radius:20px;" +
@@ -1682,7 +1941,8 @@ window.plethoraBit = {
     root.innerHTML =
       /* --- top chrome strip: distance, hour, buttons ------------------ */
       '<div style="position:absolute;left:0;right:0;top:' + SAFE_T + 'px;height:' + CHROME_H + 'px;' +
-        'display:flex;align-items:center;justify-content:space-between;padding:0 12px;pointer-events:none;">' +
+        'display:flex;align-items:center;justify-content:space-between;padding:0 12px;' +
+        'pointer-events:none;z-index:80;">' +
         '<div style="display:flex;align-items:baseline;gap:6px;">' +
           '<div data-el="dist" style="font-family:' + DISP + ';font-size:29px;font-weight:700;' +
             'letter-spacing:0.05em;line-height:1;text-shadow:0 0 18px rgba(252,220,120,0.35);">0</div>' +
@@ -1699,26 +1959,27 @@ window.plethoraBit = {
       /* --- title ------------------------------------------------------ */
       '<div data-el="title" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         'flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:26px;' +
-        'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.74) 0%,rgba(4,7,10,0.30) 30%,' +
-        'rgba(4,7,10,0.34) 64%,rgba(4,7,10,0.86) 100%);">' +
-        '<div style="' + capLine + 'opacity:0.6;">Hold your band · fly or fall</div>' +
-        '<div style="font-family:' + DISP + ';font-size:50px;line-height:1.0;font-weight:700;white-space:nowrap;' +
-          'letter-spacing:0.11em;margin:12px 0 2px 5px;background:linear-gradient(178deg,#FFF6DE 8%,#FCDC5A 46%,#FA6E1E 92%);' +
+        'text-align:center;background:' + TITLE_SCRIM + ';">' +
+        '<div style="' + capLine + 'opacity:0.72;">Hold your band · fly or fall</div>' +
+        '<div data-el="wordmark" style="font-family:' + DISP + ';font-size:46px;line-height:1.0;' +
+          'font-weight:700;white-space:nowrap;letter-spacing:0.11em;margin:12px -0.11em 2px 0;' +
+          'background:linear-gradient(178deg,#FFF6DE 8%,#FCDC5A 46%,#FA6E1E 92%);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
           'color:#FCDC5A;">DUSKWING</div>' +
-        '<div style="font-size:13.5px;line-height:1.6;opacity:0.66;max-width:264px;margin-top:8px;">' +
+        '<div style="font-size:13.5px;line-height:1.6;opacity:0.8;max-width:264px;margin-top:8px;">' +
           'The cave never stops. Hold your band to beat your wings, let go to fall, ' +
           'and stay off the dark edge on your left.</div>' +
-        '<div style="' + capLine + 'margin-top:20px;">How many of you?</div>' +
+        '<div style="' + capLine + 'opacity:0.6;margin-top:20px;">How many of you?</div>' +
         '<div data-el="crew" style="display:flex;gap:9px;margin-top:9px;"></div>' +
         '<button data-el="fly" style="' + bigBtn("linear-gradient(96deg,#FCDC5A,#FA6E1E)", "#180800") + '">TAKE FLIGHT</button>' +
-        '<div data-el="best" style="' + capLine + 'margin-top:14px;"></div>' +
+        '<div data-el="best" style="' + capLine + 'opacity:0.6;margin-top:14px;"></div>' +
       '</div>' +
 
       /* --- round over -------------------------------------------------- */
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'flex-direction:column;align-items:center;justify-content:center;z-index:55;padding:26px;' +
-        'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.94),rgba(4,7,10,0.80));">' +
+        'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.985) 0%,rgba(4,7,10,0.94) 22%,' +
+        'rgba(4,7,10,0.90) 78%,rgba(4,7,10,0.97) 100%);">' +
         '<div style="' + capLine + '">Flight ends</div>' +
         '<div data-el="over-dist" style="font-family:' + DISP + ';font-size:78px;line-height:0.92;' +
           'font-weight:700;letter-spacing:0.04em;margin-top:2px;">0</div>' +
@@ -1755,11 +2016,12 @@ window.plethoraBit = {
             '<li><b>Hold anywhere in your own band</b> and your creature beats its wings. ' +
               'Let go and it falls. That is the only control.</li>' +
             '<li>Rest your thumb on the glowing edge at the left of your band. ' +
-              'All four of you press at the same time.</li>' +
+              'Everyone presses at once — there are no turns to wait for.</li>' +
             '<li>Flapping also carries you forward; falling lets the cave pull you back ' +
               'toward that dark edge. <b>Touch it and you are gone.</b></li>' +
             '<li>Saw blades, crushers, rotors and spikes kill on contact. So does the rock.</li>' +
-            '<li>Every band flies the <b>same</b> cave, so it is a fair race.</li>' +
+            '<li>Every band gets its own tunnel, dealt from the same deck: ' +
+              'the same blades at the same odds, in a different order.</li>' +
             '<li>Whoever flies furthest takes the round. The flight itself — the furthest ' +
               'any of you got — goes to the global board.</li>' +
           '</ul>' +
@@ -1788,8 +2050,10 @@ window.plethoraBit = {
         for (let i = 0; i < kids.length; i++) {
           const on = String(get()) === kids[i].dataset.v;
           const c = colours ? colours[i] : "#FCDC5A";
-          kids[i].style.background = on ? "rgba(255,240,214,0.20)" : "rgba(255,240,214,0.07)";
-          kids[i].style.color = on ? c : "rgba(255,239,205,0.45)";
+          // The unselected pills were dim enough to read as disabled controls
+          // rather than as the other two things you are allowed to pick.
+          kids[i].style.background = on ? "rgba(255,240,214,0.20)" : "rgba(255,240,214,0.11)";
+          kids[i].style.color = on ? c : "rgba(255,239,205,0.68)";
           kids[i].style.boxShadow = on ? "inset 0 0 0 2px " + c : "none";
         }
       };
@@ -1805,7 +2069,7 @@ window.plethoraBit = {
       measure();
       seedMotes();
       bakeAll();
-      resetWorld(courseSeed || 1);
+      resetWorld(newSeed());
     }
 
     const paintCrew = pills(shell.el("crew"), [2, 3, 4], ["2", "3", "4"],
@@ -1847,13 +2111,26 @@ window.plethoraBit = {
       phase = "title";
       shell.el("over").style.display = "none";
       shell.el("title").style.display = "flex";
-      resetWorld(courseSeed || 1);
+      resetWorld(newSeed());
       paintHud();
     });
 
     function paintHud() {
       shell.el("best").textContent = settings.best ? "BEST FLIGHT " + fmt(settings.best) + " M" : "NO FLIGHT LOGGED YET";
     }
+
+    /*
+     * The wordmark is one unbreakable word set in a condensed face, so it
+     * cannot reflow — at 50px it ran the full width of a 390pt phone and was
+     * clipped at both ends on a 320pt one. Sized off the real width instead
+     * of a fixed number, and re-fitted on rotate.
+     */
+    function fitWordmark() {
+      const el = shell.el("wordmark");
+      if (!el) return;
+      el.style.fontSize = Math.max(26, Math.min(50, (ctx.width - 62) / 7.05)) + "px";
+    }
+    fitWordmark();
     paintHud();
 
     /* ===============================================================
@@ -1903,10 +2180,13 @@ window.plethoraBit = {
     /* ===============================================================
      * FRAME
      * ============================================================= */
-    let lastHour = -1, lastDist = -1;
+    let lastHour = -1, lastDist = -1, fps = 0, frames = 0, simT = 0;
     ctx.onFrame((dtMs) => {
       const dt = Math.min(dtMs, 46) / 1000;
       const t = now() / 1000;
+      fps += (1000 / Math.max(dtMs, 1) - fps) * 0.08;
+      frames++;
+      simT += dt;
 
       if (phase === "claim" && now() >= claimUntil) startCountdown();
       step(dt, t);
@@ -1929,6 +2209,7 @@ window.plethoraBit = {
       measure();
       seedMotes();
       bakeAll();
+      fitWordmark();
     });
 
     /* ===============================================================
@@ -1942,13 +2223,28 @@ window.plethoraBit = {
       // a play script must poll this rather than sleep.
       get busy() { return phase === "claim" || phase === "countdown" || (phase === "over" && now() - overAt < 400); },
       get metres() { return Math.round(roundBest); },
+      get fps() { return Math.round(fps); },
+      get frames() { return frames; },
+      // Seconds of SIMULATED time. A play script that sleeps in wall clock is
+      // really measuring the renderer, which on a software rasteriser can run
+      // an order of magnitude behind; waiting on this instead makes a test
+      // mean the same thing at 3fps as at 60.
+      get simT() { return simT; },
+      get travelled() { return Math.round((camX - originX) / U * METRE); },
       get winner() { return winner; },
       get players() { return settings.players; },
       get best() { return settings.best; },
-      birds: () => birds.map((b) => ({
-        i: b.i, alive: b.alive, n: b.n, vn: b.vn, sx: b.sx, held: b.held,
-        best: Math.round(b.best), cause: b.cause,
-      })),
+      birds: () => birds.map((b) => {
+        // ceil/floor are the tunnel a little way ahead of the creature —
+        // exactly what its owner is looking at, and nothing more.
+        const lane = lanes[b.i];
+        let c = 0.2, f = 0.8;
+        if (lane) { profile((camX + b.sx + W * 0.26) / U, _pf, lane); c = _pf[0]; f = _pf[1]; }
+        return {
+          i: b.i, alive: b.alive, n: b.n, vn: b.vn, sx: b.sx, held: b.held,
+          best: Math.round(b.best), cause: b.cause, ceil: c, floor: f,
+        };
+      }),
       // Where a finger has to land to fly creature `i`.
       zone: (i) => ({ x: Math.round(WALL * 0.5), y: Math.round(bands[i] ? bands[i].mid : 0) }),
       layout: () => ({ W, H, U, PLAY_TOP, PLAY_BOT, WALL, bands: bands.map((b) => ({ top: b.top, bot: b.bot })) }),
@@ -1957,7 +2253,7 @@ window.plethoraBit = {
 
     // The first frame is drawn before ready(), so the host never shows a blank
     // bit while the attract loop spins up.
-    ensureCourse(camX + maxOff + W);
+    ensureCourse(camX + W);
     drawFrame(now() / 1000);
     ctx.markVisualReady("cave drawn");
     ctx.platform.ready();

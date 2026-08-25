@@ -87,7 +87,7 @@ export async function openBit(dir, opts = {}) {
 
   const consoleErrors = [];
   page.on("console", m => { if (m.type() === "error") consoleErrors.push(m.text()); });
-  page.on("pageerror", e => consoleErrors.push("pageerror: " + e.message));
+  page.on("pageerror", e => consoleErrors.push("pageerror: " + (e.stack || e.message)));
 
   const cdp = await context.newCDPSession(page);
   await page.goto(origin);

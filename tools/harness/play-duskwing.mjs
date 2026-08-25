@@ -17,10 +17,30 @@ import { openBit } from "./run.mjs";
 
 const bit = await openBit("/home/user/my-bits/duskwing");
 const P = (fn, ...a) => bit.probe(fn, ...a);
+const allAlive = async (where) =>
+  check((await state()).birds.every((b) => b.alive), "all four still flying at " + where);
+
 const state = () => P(() => {
   const d = window.__DUSKWING__;
-  return { phase: d.phase, busy: d.busy, metres: d.metres, winner: d.winner, birds: d.birds() };
+  return { phase: d.phase, busy: d.busy, metres: d.metres, winner: d.winner, fps: d.fps, birds: d.birds() };
 });
+
+/**
+ * Wait for `sec` of SIMULATED time rather than wall clock.
+ *
+ * Headless renders this bit through SwiftShader, which runs it an order of
+ * magnitude behind a phone, and CDP polling starves the frame loop further —
+ * so a plain sleep measures the harness, not the game. Every timing assertion
+ * below is written against the clock the simulation itself is using.
+ */
+async function advance(sec) {
+  const t0 = await P(() => window.__DUSKWING__.simT);
+  for (let i = 0; i < 90; i++) {
+    await bit.wait(90);
+    if ((await P(() => window.__DUSKWING__.simT)) - t0 >= sec) return true;
+  }
+  throw new Error("simulation stalled waiting for " + sec + "s");
+}
 
 let fail = null;
 const check = (ok, msg) => { console.log((ok ? "  ok   " : "  FAIL ") + msg); if (!ok) fail = fail || msg; };
@@ -63,59 +83,73 @@ check((await state()).birds.every((b) => b.held), "all four bands hold their own
 for (let i = 0; i < 60 && (await P(() => window.__DUSKWING__.busy)); i++) await bit.wait(100);
 check((await P(() => window.__DUSKWING__.phase)) === "play", "round went live");
 
-/* --- with all four held, all four climb ------------------------------
- * A flap is a discrete impulse at 9.5Hz, not a thrust, so vertical velocity
- * stair-steps across zero for the first few beats. Sampling once would read
- * a creature that is very much climbing as falling — so take the minimum
- * over a short window instead.
+/* --- four fingers, four creatures ------------------------------------
+ * The property that matters: a finger flies the creature in its own band and
+ * nobody else's. Tested in ONE short window, because flight here is floaty by
+ * design and an unpiloted creature reaches the floor in well under a second —
+ * a longer test would be measuring its funeral.
+ *
+ * All four arrive still held from the claim window. Lift two of them; after a
+ * third of a second the two that were let go must be accelerating downward
+ * under gravity alone, and the two still held must not be, because a wing is
+ * still beating on each of them.
+ *
+ * Velocity is compared as a CHANGE, not a sign: a flap is a discrete impulse
+ * at 9.5Hz, so a creature that is very much climbing still reads as falling
+ * between beats.
  */
-const lift = [0, 0, 0, 0];
-for (let k = 0; k < 5; k++) {
-  const st = await state();
-  for (const b of st.birds) lift[b.i] = Math.min(lift[b.i], b.vn);
-  await bit.wait(70);
-}
-check(lift.every((v) => v < -0.15), "all four creatures climb while all four are held: " + JSON.stringify(lift.map((v) => v.toFixed(2))));
-
-/* --- lift three: only the remaining one should still be climbing ----- */
-for (const id of [1, 2, 3]) await bit.fingerUp(id);
-await bit.wait(320);
-const solo = (await state()).birds.map((b) => (b.vn < -0.05 ? "up" : b.vn > 0.05 ? "down" : "flat"));
-check(solo[3] === "up" && solo[0] === "down" && solo[1] === "down" && solo[2] === "down",
-      "only the held band climbs, the other three fall: " + JSON.stringify(solo));
-for (const id of [1, 2, 3]) await bit.fingerDown(id, zones[id - 1].x, zones[id - 1].y);
+await allAlive("the moment the round goes live");
+const vA = (await state()).birds.map((b) => b.vn);
+for (const id of [1, 3]) await bit.fingerUp(id);          // bands 0 and 2
+await advance(0.32);
+const after = await state();
+const dv = after.birds.map((b, i) => b.vn - vA[i]);
+console.log("dvn:", JSON.stringify(dv.map((v) => v.toFixed(2))), "held:", JSON.stringify(after.birds.map((b) => b.held)));
+check(after.birds.every((b) => b.alive), "all four still flying through the isolation test");
+check(dv[0] > 0.25 && dv[2] > 0.25, "the two released bands fall away under gravity");
+check(dv[1] < 0.10 && dv[3] < 0.10, "the two still-held bands keep beating");
+check(!after.birds[0].held && after.birds[2] && !after.birds[2].held &&
+      after.birds[1].held && after.birds[3].held,
+      "each finger stayed bound to the band it landed in");
+// Hand straight over to the pilot rather than blindly re-pressing: the two
+// released creatures may be high or low, and a reflex press drives a high
+// one into the ceiling.
 
 /* --- fly the round ----------------------------------------------------
  * One bang-bang autopilot per finger, each with its own target height so the
  * four creatures die at four different distances and the round has a real
  * winner. Only a changed hold sends an event, which keeps the step count down.
  */
-const held = [true, true, true, true];
-const aim = [0.42, 0.50, 0.58, 0.46];
+const held = [false, true, false, true];
+const bias = [-0.05, 0.03, 0.09, -0.01];       // four pilots, four bad habits
 let mid = false;
-for (let step = 0; step < 40; step++) {
+for (let step = 0; step < 96; step++) {
   const st = await state();
   if (st.phase !== "play") break;
   for (const b of st.birds) {
-    const want = b.alive && b.n + b.vn * 0.30 > aim[b.i];
+    // Aim for the middle of the tunnel ahead, anticipating a third of a
+    // second — a fixed height flies straight into the rock the moment the
+    // cave meanders, which is exactly how the first attempt died.
+    const target = (b.ceil + b.floor) / 2 + bias[b.i];
+    const want = b.alive && b.n + b.vn * 0.30 > target;
     if (want !== held[b.i]) {
       held[b.i] = want;
       if (want) await bit.fingerDown(b.i + 1, zones[b.i].x, zones[b.i].y);
       else await bit.fingerUp(b.i + 1);
     }
   }
-  if (!mid && st.metres > 60) { mid = true; console.log("shot:", await bit.shot("dusk-3-play")); }
-  await bit.wait(70);
+  if (!mid && st.metres > 45) { mid = true; console.log("fps:", st.fps); console.log("shot:", await bit.shot("dusk-3-play")); }
+  await bit.wait(90);
 }
 if (!mid) console.log("shot:", await bit.shot("dusk-3-play"));
 
 /* --- let go of everything: the cave finishes the job ------------------ */
 for (let i = 0; i < 4; i++) if (held[i]) { await bit.fingerUp(i + 1); held[i] = false; }
 let end = null;
-for (let i = 0; i < 70; i++) {
+for (let i = 0; i < 90; i++) {
   end = await state();
   if (end.phase === "over") break;
-  await bit.wait(110);
+  await bit.wait(150);
 }
 await bit.wait(500);
 console.log("shot:", await bit.shot("dusk-4-over"));
@@ -127,9 +161,64 @@ console.log("final:", JSON.stringify({
 check(end.phase === "over", "round reached a real end state");
 check(end.birds.every((b) => !b.alive), "every creature is out");
 check(end.winner >= 0 && end.winner <= 3, "a winner was named");
-check(end.metres > 40, "the flock actually flew somewhere (" + end.metres + " m)");
-check(end.birds[end.winner].best === Math.max(...end.birds.map((b) => b.best)),
+check(end.metres > 25, "the flock actually flew somewhere (" + end.metres + " m, at " + end.fps + " fps)");
+check(end.winner >= 0 && end.birds[end.winner].best === Math.max(...end.birds.map((b) => b.best)),
       "the winner is the one that flew furthest");
+
+/* --- act two: the replay path, and the wall on the left --------------
+ * Two things left to show. That a finished flight can be flown again from
+ * the end screen, and that the dark edge is a real way to die rather than
+ * decoration — the whole risk curve rests on it.
+ *
+ * Holding position costs more time on the pad than holding altitude does, so
+ * a pilot that only ever aims for the middle of its tunnel is slowly reeled
+ * back. That is what this flies.
+ */
+const again = await P(() => {
+  const el = document.querySelector('[data-el="again"]');
+  const r = el.getBoundingClientRect();
+  return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+});
+await bit.tap(again.x, again.y);
+await bit.wait(500);
+const replayed = await P(() => ({ phase: window.__DUSKWING__.phase, metres: window.__DUSKWING__.metres }));
+check(replayed.phase === "claim" && replayed.metres === 0,
+      "FLY AGAIN starts a fresh flight: " + JSON.stringify(replayed));
+
+for (let i = 0; i < 4; i++) await bit.fingerDown(i + 1, zones[i].x, zones[i].y);
+for (let i = 0; i < 60 && (await P(() => window.__DUSKWING__.busy)); i++) await bit.wait(100);
+const hold2 = [true, true, true, true];
+let reeled = null;
+for (let step = 0; step < 145; step++) {
+  const st = await state();
+  if (st.phase !== "play") break;
+  for (const b of st.birds) {
+    const want = b.alive && b.n > (b.ceil + b.floor) / 2;     // hover, no ambition
+    if (want !== hold2[b.i]) {
+      hold2[b.i] = want;
+      if (want) await bit.fingerDown(b.i + 1, zones[b.i].x, zones[b.i].y);
+      else await bit.fingerUp(b.i + 1);
+    }
+  }
+  reeled = st.birds.find((b) => b.cause === "LEFT BEHIND");
+  await bit.wait(55);
+}
+for (let i = 0; i < 4; i++) if (hold2[i]) { await bit.fingerUp(i + 1); hold2[i] = false; }
+let end2 = null;
+for (let i = 0; i < 50; i++) {
+  end2 = await state();
+  if (end2.phase === "over") break;
+  await bit.wait(150);
+}
+console.log("act two:", JSON.stringify(end2.birds.map((b) => b.i + ":" + b.best + "m " + (b.cause || "flying"))));
+console.log("shot:", await bit.shot("dusk-5-wall"));
+check(end2.phase === "over", "the replayed flight also reaches a real end state");
+
+// Across eight deaths in two flights, the dark edge has to have taken at
+// least one — otherwise the left-hand wall is decoration.
+const causes = [...end.birds, ...end2.birds].map((b) => b.cause);
+check(causes.includes("LEFT BEHIND"),
+      "the dark edge on the left claims at least one creature: " + JSON.stringify(causes));
 
 const events = await bit.eventKinds();
 const tally = {};

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Speed",
+  "description": "Two players, one phone, and no turns at all. Lay it flat, take a hand each, and race to dump cards onto the two shared middle piles — anything one rank above or below, aces sitting next to both kings and twos. Your playable cards lift and glow, your hand refills itself, and if neither of you can move the middle flips on its own. First to empty their hand and their pile is out.",
+  "tags": ["cards", "multiplayer", "local-multiplayer", "two-player", "fast", "reflex", "classic"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "fastest_out": {
+        "label": "Fastest Out",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

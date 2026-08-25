@@ -62,7 +62,11 @@ export function validateBit(dir) {
   const lines = src.split("\n");
   for (const rule of BANNED) {
     lines.forEach((line, i) => {
-      if (line.trimStart().startsWith("*") || line.trimStart().startsWith("//")) return;
+      // Skip comment lines. The opener has to be matched too: a line that
+      // begins "/**" is a comment, and without this a doc-comment that NAMES a
+      // banned construct in order to warn about it gets flagged as using it.
+      const t = line.trimStart();
+      if (t.startsWith("*") || t.startsWith("//") || t.startsWith("/*")) return;
       if (rule.re.test(line)) {
         (rule.soft ? warnings : errors).push(`main.js:${i + 1}  ${rule.why}\n      ${line.trim().slice(0, 110)}`);
       }

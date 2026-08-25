@@ -140,8 +140,13 @@ node tools/harness/run.mjs reactor-four --ms=2200
 node tools/harness/play-reactor-four.mjs
 ```
 
-The play script drives a genuine four-player match: four fingers arming four
+The play script drives a genuine four-player match: the settings and how-to
+panels opened and closed from the title screen, four fingers arming four
 stations in the same frame, a deliberate false start that must lock exactly one
-station, a true signal left untouched so the hold window expires and the round
-falls back to decoys, two hands racing the same signal where only the first may
-score, and a run through to a real win, the leaderboard submit and the rematch.
+station and nobody else, a true signal left untouched so the hold window expires
+and the round falls back to decoys instead of freezing, two hands racing the
+same signal where only the first may score, and a run through to a real win, the
+leaderboard submit and the rematch. The two- and three-player sector layouts are
+checked separately by probing `zoneAt` at every corner and edge midpoint, which
+is the cheapest way to prove the wedges still tile the whole screen when the
+sector list changes shape.

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Othello",
+  "description": "Othello for two people sharing one phone, in 3D. Lay it flat and take an end each — the board never turns, but each player's score and controls sit at their own edge facing them. Real moulded discs with ivory side walls stand on a recessed felt well under a straight-overhead camera, and every capture is a physical half-turn: discs lift, show their cream edge, and land on the other face, staggered outward from the disc you placed so a twelve-disc take ripples like a wave. Strict tournament rules — forced passes are spelled out, corners are celebrated, and the match's biggest winning margin goes to the global board.",
+  "tags": [
+    "multiplayer",
+    "local-multiplayer",
+    "board",
+    "strategy",
+    "two-player",
+    "classic",
+    "reversi",
+    "tabletop"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "win_margin": {
+        "label": "Biggest Win Margin",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

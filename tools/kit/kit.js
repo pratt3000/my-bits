@@ -273,7 +273,7 @@ function bakeCard(rank, suitId, w, h, theme = {}) {
     g.font = `700 ${cs}px ui-serif, Georgia, serif`;
     g.textAlign = "center"; g.textBaseline = "alphabetic";
     g.fillText(rank, w * 0.135, h * 0.135);
-    suitPath(g, suitId, w * 0.135, h * 0.205, cs * 0.30);
+    suitPath(g, suitId, w * 0.135, h * 0.208, cs * 0.44);
     g.restore();
   };
   corner(false); corner(true);
@@ -350,7 +350,7 @@ function drawCourt(g, rank, suitId, ink, w, h) {
   // The suit worn on the chest, knocked out of the mantle — drawn in ink it
   // would be ink-on-ink and vanish.
   g.fillStyle = "rgba(253,252,247,0.93)";
-  suitPath(g, suitId, fx, fy + u * 0.70, u * 0.26);
+  suitPath(g, suitId, fx, fy + u * 0.70, u * 0.38);
 
   // Face.
   g.fillStyle = "rgba(253,252,247,0.95)";

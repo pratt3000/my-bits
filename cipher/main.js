@@ -55,9 +55,7 @@ window.plethoraBit = {
   async init(ctx) {
     const TAU = Math.PI * 2;
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-    const lerp = (a, b, t) => a + (b - a) * t;
     const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-    const easeInCubic = (t) => t * t * t;
     const easeOutBack = (t, s = 1.7) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
 
     /** Escape anything that could ever be player-authored before it meets innerHTML. */
@@ -75,7 +73,7 @@ window.plethoraBit = {
     const SUN = ["#FFE24E", "#FFC21C", "#F4882A", "#D9482E", "#A62B57", "#5E1246"];
     const RED = "#CE3B31", RED_DEEP = "#8F1B10", RED_LIT = "#FF8B54";
     const BLUE = "#2A6AB4", BLUE_DEEP = "#123C6E", BLUE_LIT = "#7FB7E8";
-    const TAN = "#E3D3A4", TAN_DEEP = "#9C8F6E";
+    const TAN = "#E3D3A4";
     const NOIR = "#0B0B0D", RIM = "#B9BBA8";
     const CARD = "#F3EBD8", PLAQUE = "#FBF7EC", INK = "#2A2622";
     const LACQ = "#141210", GOLD = "#FFC21C", TAUPE = "#8C6E5E";
@@ -304,13 +302,25 @@ window.plethoraBit = {
     }
     /** Binary-search the largest size that still fits — the whole reason a
      *  ten-letter word survives a seventy-pixel tile. */
-    function fitSize(g, str, maxW, maxSize, family, weight) {
+    function fitSize(gg, str, maxW, maxSize, family, weight) {
       let lo = 7, hi = maxSize;
       while (hi - lo > 0.4) {
         const mid = (lo + hi) / 2;
-        g.font = weight + " " + mid.toFixed(1) + "px " + family;
-        if (g.measureText(str).width <= maxW) lo = mid; else hi = mid;
+        gg.font = weight + " " + mid.toFixed(1) + "px " + family;
+        if (gg.measureText(str).width <= maxW) lo = mid; else hi = mid;
       }
+      return lo;
+    }
+    /** The same, but counting the letter-spacing, which on a headline is most
+     *  of the width. Leaves the fitted font selected. */
+    function fitTracked(gg, str, maxW, maxSize, family, weight, track) {
+      let lo = 8, hi = maxSize;
+      while (hi - lo > 0.4) {
+        const mid = (lo + hi) / 2;
+        gg.font = weight + " " + mid.toFixed(1) + "px " + family;
+        if (trackWidth(gg, str, track) <= maxW) lo = mid; else hi = mid;
+      }
+      gg.font = weight + " " + lo.toFixed(1) + "px " + family;
       return lo;
     }
 
@@ -348,8 +358,8 @@ window.plethoraBit = {
       // coordinates on the handoff screen too, so the shutters can open under
       // a finger that is already down.
       const R0 = L.spineY, R1 = H - SAFE_B, room = R1 - R0;
-      const rowH = Math.min(40, room * 0.175), gap = room * 0.027;
-      const top = R0 + room * 0.19;
+      const rowH = Math.min(37, room * 0.164), gap = room * 0.040;
+      const top = R0 + room * 0.185;
       L.sm = {
         numLabelY: R0 + room * 0.10,
         pills: { x: 10, y: top, w: W - 20, h: rowH * 0.92 },
@@ -423,12 +433,14 @@ window.plethoraBit = {
     let words = [], kinds = [], shown = [];
     let turn = "red", turnNo = 0;
     let clue = null;                    // {word, num, unlimited}
+    const lastClue = { red: null, blue: null };   // shown, dimmed, in the idle band
     let clueNum = 2, clueDraft = "", typing = false;
     let guessesLeft = 0, guessedThisTurn = 0, totalGuesses = 0;
     let armed = -1, pressed = null;
     let anim = null;                    // tile turn-over
     let winner = null, ending = "";
-    let peek = false, holdOn = false, holdT = 0, holdBounce = 0;
+    let peek = false, holdOn = false, holdT = 0, holdStart = 0, holdBounce = 0;
+    let holdSeq = 0;                    // invalidates a timer from an earlier press
     let shutter = 1, shutterTo = 0;
     let sparks = [], endFx = null, oppose = null;
     let typed = 0;                      // characters of the handoff line typed
@@ -456,6 +468,7 @@ window.plethoraBit = {
         const t = kinds[i]; kinds[i] = kinds[j]; kinds[j] = t;
       }
       shown = new Array(25).fill(false);
+      lastClue.red = null; lastClue.blue = null;
       turn = "red"; turnNo = 0; totalGuesses = 0;
       winner = null; ending = ""; armed = -1; clue = null; clueNum = 2; clueDraft = "";
       sparks = []; endFx = null; oppose = null; revealAll = -1;
@@ -519,11 +532,16 @@ window.plethoraBit = {
       // the codeword, printed upright and again upside down, exactly as the
       // real cards are — both sides of the table read the grid without anyone
       // turning the phone.
-      const size = fitSize(gg, word, w - 15, Math.min(h * 0.235, 20), DISPLAY, "700");
+      // The budget has to pay for the letter-spacing too: fitSize measures the
+      // glyph run only, and tracked() then adds `track` between every pair —
+      // fitting without it pushed a seven-letter word past the plaque border
+      // and the tile clipped its last letter off.
+      const track = word.length > 6 ? 0.35 : 0.8;
+      const size = fitSize(gg, word, w - 22 - track * (word.length - 1),
+                           Math.min(h * 0.235, 20), DISPLAY, "700");
       gg.fillStyle = INK;
       gg.textAlign = "center"; gg.textBaseline = "middle";
       gg.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
-      const track = size < 11 ? 0.3 : 0.8;
       tracked(gg, word, w / 2, my + (h - 2) * 0.235, track, "center");
       gg.save();
       gg.translate(w / 2, my); gg.rotate(Math.PI); gg.translate(-w / 2, -my);
@@ -564,6 +582,12 @@ window.plethoraBit = {
         gg.fillStyle = "#FFC98A"; hood(gg); gg.fill();
         gg.restore();
         gg.fillStyle = "#2A0709"; hood(gg); gg.fill();
+        // the lit rim of the hood opening, which is what makes a dark shape
+        // read as a hood rather than as a head
+        gg.strokeStyle = "rgba(255,206,140,0.9)"; gg.lineWidth = Math.max(1.4, w * 0.026);
+        gg.beginPath();
+        gg.arc(w * 0.5, h * 0.37, w * 0.155, Math.PI * 0.86, Math.PI * 2.14);
+        gg.stroke();
       } else if (kind === "blue") {
         const rg = gg.createRadialGradient(w * 0.45, h * 0.38, 2, w * 0.45, h * 0.38, w * 0.95);
         rg.addColorStop(0, "#7FB7E8"); rg.addColorStop(0.4, "#2E6BB4");
@@ -644,10 +668,33 @@ window.plethoraBit = {
         for (const b of bits) { b(gg); gg.fill(); }
       }
 
+      // The key's glyph-per-colour pairing repeats on the covered card, so the
+      // two teams are told apart by shape as well as by hue.
+      if (kind === "red" || kind === "blue") {
+        const ex = w * 0.135, ey = h * 0.145, er = w * 0.062;
+        gg.save();
+        gg.globalAlpha = 0.9;
+        if (kind === "red") {
+          gg.fillStyle = "#FFD8B0";
+          gg.beginPath();
+          gg.moveTo(ex, ey - er); gg.quadraticCurveTo(ex + er * 0.35, ey - er * 0.35, ex + er, ey);
+          gg.quadraticCurveTo(ex + er * 0.35, ey + er * 0.35, ex, ey + er);
+          gg.quadraticCurveTo(ex - er * 0.35, ey + er * 0.35, ex - er, ey);
+          gg.quadraticCurveTo(ex - er * 0.35, ey - er * 0.35, ex, ey - er);
+          gg.fill();
+        } else {
+          gg.strokeStyle = "#DCEBF6"; gg.lineWidth = 2;
+          gg.beginPath(); gg.arc(ex, ey, er, 0, TAU); gg.stroke();
+        }
+        gg.restore();
+      }
+
       // A covered card still has to be discussable, so the word survives on a
       // stamped plate — printed both ways up, like the face it replaced.
       const plateH = Math.max(12, h * 0.19);
-      const size = fitSize(gg, word, w - 12, plateH * 0.72, DISPLAY, "700");
+      const ptrack = word.length > 6 ? 0.3 : 0.5;
+      const size = fitSize(gg, word, w - 18 - ptrack * (word.length - 1),
+                           plateH * 0.72, DISPLAY, "700");
       for (const flip of [false, true]) {
         gg.save();
         if (flip) { gg.translate(w / 2, h / 2); gg.rotate(Math.PI); gg.translate(-w / 2, -h / 2); }
@@ -656,7 +703,7 @@ window.plethoraBit = {
         gg.fillStyle = kind === "assassin" ? RIM : "rgba(250,244,230,0.94)";
         gg.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
         gg.textAlign = "center"; gg.textBaseline = "middle";
-        tracked(gg, word, w / 2, h - plateH / 2 - 1, 0.5, "center");
+        tracked(gg, word, w / 2, h - plateH / 2 - 1, ptrack, "center");
         gg.restore();
       }
       gg.restore();
@@ -817,6 +864,27 @@ window.plethoraBit = {
           g.lineTo(cx + r * 0.4, cy - r * 0.6); g.lineTo(cx + r * 0.55, cy + 2);
           g.closePath(); g.fill();
         }
+
+        // The codeword, reprinted on top of the swatch. Underneath it is card
+        // stock that this fill covers at 90%, which left the word showing at
+        // about 1.2:1 — and this is the one screen whose reader has to match
+        // every word to its colour. Same fit and same two positions as the
+        // baked face, so it lands exactly over the print it replaces.
+        const cw = words[i];
+        const tk = cw.length > 6 ? 0.35 : 0.8;
+        const sz = fitSize(g, cw, t.w - 22 - tk * (cw.length - 1),
+                           Math.min(t.h * 0.235, 20), DISPLAY, "700");
+        g.font = "700 " + sz.toFixed(1) + "px " + DISPLAY;
+        g.fillStyle = k === "neutral" ? "rgba(40,34,20,0.90)"
+                    : k === "assassin" ? "rgba(255,214,206,0.92)"
+                    : "rgba(255,250,240,0.96)";
+        g.textAlign = "center"; g.textBaseline = "middle";
+        const my = (t.h - 2) / 2, wx = t.x + t.w / 2, wy = t.y + my;
+        tracked(g, cw, wx, wy + (t.h - 2) * 0.235, tk, "center");
+        g.save();
+        g.translate(wx, wy); g.rotate(Math.PI); g.translate(-wx, -wy);
+        tracked(g, cw, wx, wy + (t.h - 2) * 0.235, tk, "center");
+        g.restore();
       }
       g.restore();
     }
@@ -854,8 +922,12 @@ window.plethoraBit = {
           gg.fillStyle = TEAM[team].ink; gg.fill();
           gg.strokeStyle = TEAM[team].lit; gg.lineWidth = 0.7; gg.stroke();
         } else {
-          gg.fillStyle = "rgba(255,255,255,0.05)"; gg.fill();
-          gg.strokeStyle = "rgba(255,255,255,0.18)"; gg.lineWidth = 0.8; gg.stroke();
+          // Empty slots carry the team's own colour at low strength, so a
+          // stack of nine unfilled cards still reads as "red has nine left"
+          // rather than as a row of blank boxes.
+          gg.fillStyle = "rgba(255,255,255,0.04)"; gg.fill();
+          gg.strokeStyle = TEAM[team].ink; gg.globalAlpha *= 0.55;
+          gg.lineWidth = 1; gg.stroke(); gg.globalAlpha /= 0.55;
         }
       }
       return n * (size + 3.2);
@@ -872,11 +944,12 @@ window.plethoraBit = {
       gg.fillStyle = o.ink || CREAM;
       gg.font = "700 " + (o.size || 17) + "px " + DISPLAY;
       gg.textAlign = "center"; gg.textBaseline = "middle";
-      tracked(gg, label, r.x + r.w / 2, r.y + r.h / 2 + 1, o.track === undefined ? 2.2 : o.track, "center");
+      tracked(gg, label, r.x + r.w / 2, r.y + (o.sub ? r.h * 0.665 : r.h / 2 + 1),
+              o.track === undefined ? 2.2 : o.track, "center");
       if (o.sub) {
-        gg.font = "400 8px " + MONO;
-        gg.fillStyle = "rgba(255,255,255,0.5)";
-        tracked(gg, o.sub, r.x + r.w / 2, r.y + 9, 1.2, "center");
+        gg.font = "700 11px " + MONO;
+        gg.fillStyle = o.subInk || (fill ? "rgba(0,0,0,0.62)" : "rgba(255,255,255,0.55)");
+        tracked(gg, o.sub, r.x + r.w / 2, r.y + r.h * 0.30, 1.6, "center");
       }
     }
 
@@ -894,8 +967,14 @@ window.plethoraBit = {
       lg.addColorStop(0.55, "rgba(17,15,13,0.96)");
       lg.addColorStop(1, "rgba(9,8,7,0.98)");
       g.fillStyle = lg; g.fill();
-      if (GRAIN) { g.save(); chamferRect(g, 0, 0, W, L.bandH, 16); g.clip();
-        g.globalAlpha = 0.35; g.fillStyle = GRAIN; g.fillRect(0, 0, W, L.bandH); g.restore(); }
+      g.save();
+      chamferRect(g, 0, 0, W, L.bandH, 16); g.clip();
+      const tg = g.createLinearGradient(0, 0, 0, L.bandH * 0.7);
+      tg.addColorStop(0, TEAM[team].ink); tg.addColorStop(1, "rgba(0,0,0,0)");
+      g.globalAlpha = active ? 0.16 : 0.09;
+      g.fillStyle = tg; g.fillRect(0, 0, W, L.bandH);
+      if (GRAIN) { g.globalAlpha = 0.35; g.fillStyle = GRAIN; g.fillRect(0, 0, W, L.bandH); }
+      g.restore();
       g.strokeStyle = "rgba(255,255,255,0.10)"; g.lineWidth = 1;
       g.beginPath(); g.moveTo(16, 0.5); g.lineTo(W, 0.5); g.stroke();
       g.fillStyle = TEAM[team].ink;                       // team hairline at the grid edge
@@ -906,10 +985,13 @@ window.plethoraBit = {
       const R2 = bandRows(seat);
       g.strokeStyle = active ? "rgba(255,194,28,0.30)" : "rgba(255,194,28,0.10)";
       g.lineWidth = 1;
-      const nearY = Math.min(L.bandH - 6, R2.confirm.y + R2.confirm.h + 12);
+      // Clamped to the seat's own safe inset: at bandH-6 the top band drew this
+      // rule at y=43 on a 47px notch, i.e. underneath it.
+      const nearY = Math.min(L.bandH - (seat === "top" ? SAFE_T : SAFE_B) - 4,
+                             R2.confirm.y + R2.confirm.h + 12);
       g.beginPath(); g.moveTo(12, nearY); g.lineTo(W - 12, nearY); g.stroke();
 
-      g.globalAlpha = active ? 1 : 0.5;
+      g.globalAlpha = active ? 1 : 0.58;
 
       // header: team, agents left, the stack of agent cards
       g.fillStyle = TEAM[team].ink;
@@ -920,15 +1002,21 @@ window.plethoraBit = {
       tracked(g, remaining(team) + " LEFT", R.hdr.x + nw + 10, R.hdr.y + R.hdr.h / 2 + 1, 1, "left");
       drawStack(g, W - 12 - (TEAM[team].agents * 10.2), R.hdr.y + 2, team, 7);
 
-      // clue balloon
+      // clue balloon — the idle team keeps its own last clue on the table,
+      // dimmed, the way the spoken one hangs around in the room
       const b = R.balloon;
-      if (active && clue) {
-        g.fillStyle = PLAQUE;
+      const show = active ? clue : lastClue[team];
+      if (show) {
+        g.fillStyle = active ? PLAQUE : "rgba(241,231,210,0.13)";
         drawBalloon(g, b.x, b.y, b.w, b.h, 12);
-        const cw = clue.word ? clue.word : "SPOKEN ALOUD";
-        const size = fitSize(g, cw, b.w - 90, 30, DISPLAY, "700");
-        g.fillStyle = clue.word ? TEAM[team].ink : "rgba(42,38,34,0.62)";
-        g.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
+        if (!active) {
+          g.strokeStyle = "rgba(241,231,210,0.28)"; g.lineWidth = 1;
+          roundRect(g, b.x, b.y, b.w, b.h, 12); g.stroke();
+        }
+        const cw = show.word ? show.word : "SPOKEN ALOUD";
+        fitTracked(g, cw, b.w - 92, 32, DISPLAY, "700", 2);
+        g.fillStyle = show.word ? (active ? TEAM[team].ink : TEAM[team].lit)
+                                : (active ? "rgba(42,38,34,0.62)" : "rgba(241,231,210,0.5)");
         g.textAlign = "left"; g.textBaseline = "middle";
         tracked(g, cw, b.x + 16, b.y + b.h / 2, 2, "left");
         const cx = b.x + b.w - 28, cy = b.y + b.h / 2;
@@ -936,7 +1024,12 @@ window.plethoraBit = {
         g.fillStyle = TEAM[team].ink; g.fill();
         g.fillStyle = "#fff"; g.font = "700 22px " + DISPLAY;
         g.textAlign = "center";
-        g.fillText(clue.display, cx, cy + 1);
+        g.fillText(show.display, cx, cy + 1);
+        if (!active) {                                    // tagged as history
+          g.fillStyle = "rgba(241,231,210,0.45)"; g.font = "400 7.5px " + MONO;
+          g.textAlign = "left"; g.textBaseline = "middle";
+          tracked(g, "LAST CLUE", b.x + 16, b.y + b.h - 12, 1.4, "left");
+        }
       } else {
         chamferRect(g, b.x, b.y, b.w, b.h, 10);
         g.fillStyle = "rgba(255,255,255,0.03)"; g.fill();
@@ -983,6 +1076,23 @@ window.plethoraBit = {
           ink: canPass ? CREAM : "rgba(241,231,210,0.35)",
           size: 15, track: 1.2,
         });
+      } else if (phase === "board") {
+        // The idle team's controls are absent, not greyed — so the space says
+        // what is happening instead of holding four dead buttons.
+        const r = R.confirm, y = r.y + r.h / 2;
+        g.save();
+        g.setLineDash([5, 7]);
+        g.strokeStyle = "rgba(241,231,210,0.22)"; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(r.x, y); g.lineTo(W - 12, y); g.stroke();
+        g.restore();
+        const line = coopBot ? "OPPOSITION MOVES AFTER EACH TURN" : TEAM[turn].name + " IS GUESSING";
+        g.font = "400 9px " + MONO;
+        const lw = trackWidth(g, line, 2) + 20;
+        g.fillStyle = "rgba(20,18,16,0.98)";
+        g.fillRect(W / 2 - lw / 2, y - 7, lw, 14);
+        g.fillStyle = "rgba(241,231,210,0.5)";
+        g.textAlign = "center"; g.textBaseline = "middle";
+        tracked(g, line, W / 2, y, 2, "center");
       }
       g.globalAlpha = 1;
       g.restore();
@@ -1038,18 +1148,6 @@ window.plethoraBit = {
         g.strokeStyle = "rgba(255,194,28,0.25)"; g.lineWidth = 1;
         const ey = top ? y + half - 8.5 : y + 8.5;
         g.beginPath(); g.moveTo(0, ey); g.lineTo(W, ey); g.stroke();
-        // deco corner brackets, only once the shutter has actually landed
-        if (e > 0.96) {
-          g.strokeStyle = "rgba(255,194,28,0.45)"; g.lineWidth = 2;
-          const m = 14, len = 26, cy2 = top ? y + m + SAFE_T : y + half - m - SAFE_B;
-          for (const sx of [1, -1]) {
-            const x0 = sx > 0 ? m : W - m;
-            g.beginPath();
-            g.moveTo(x0 + sx * len, cy2); g.lineTo(x0, cy2);
-            g.lineTo(x0, cy2 + (top ? len : -len));
-            g.stroke();
-          }
-        }
       }
       g.restore();
     }
@@ -1071,7 +1169,7 @@ window.plethoraBit = {
       g.save();
       // Rotated to the seat of whoever is being handed the phone: they read it
       // while the phone is still flat on the table.
-      g.translate(W / 2, H * 0.33);
+      g.translate(W / 2, H * 0.30);
       if (seat === "top") g.rotate(Math.PI);
       g.textAlign = "center"; g.textBaseline = "middle";
 
@@ -1090,7 +1188,10 @@ window.plethoraBit = {
               0, -62, 3, "center");
 
       g.fillStyle = CREAM;
-      const size = Math.min(30, (W - 56) / Math.max(lines[0].length, lines[1].length) * 1.85);
+      // Fit on the finished lines, not the typed prefix, so the type does not
+      // shrink under the reader as more of it arrives.
+      const size = Math.min(fitTracked(g, lines[0], W - 48, 30, DISPLAY, "700", 2.4),
+                            fitTracked(g, lines[1], W - 48, 30, DISPLAY, "700", 2.4));
       g.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
       tracked(g, s1, 0, -18, 2.4, "center");
       g.fillStyle = n > lines[0].length ? TEAM[turn].ink : CREAM;
@@ -1101,6 +1202,52 @@ window.plethoraBit = {
       g.fillStyle = "rgba(241,231,210,0.55)"; g.font = "400 9.5px " + MONO;
       tracked(g, done ? "EVERYONE ELSE: EYES UP" : "", 0, 60, 1.6, "center");
       g.restore();
+
+      // The key card, face down: the holder, the bezel and twenty-five blank
+      // chips, with the edge lights lit in the team the phone is going to. It
+      // says what is behind the shutter without showing a single colour.
+      // Centred in the lower shutter, between the seam where the two shutters
+      // meet and the hold bar. It used to be pinned to H*0.625, which put its
+      // top bezel exactly on the seam — the shutter's team-coloured edge then
+      // ran straight through the card and out to both screen edges.
+      const seam = H / 2 + 14;
+      const foot = L.sm.pad.y - 20;
+      const side = Math.min(W * 0.50, (foot - seam) * 0.80, H * 0.23);
+      const cy = (seam + foot) / 2, x0 = W / 2 - side / 2, y0 = cy - side / 2;
+      g.save();
+      g.globalAlpha = 0.85;
+      chamferRect(g, x0 - 13, y0 - 13, side + 26, side + 26, 12);
+      g.fillStyle = "rgba(140,110,94,0.30)"; g.fill();
+      g.strokeStyle = "rgba(190,155,128,0.65)"; g.lineWidth = 1.4; g.stroke();
+      roundRect(g, x0 - 5, y0 - 5, side + 10, side + 10, 5);
+      g.fillStyle = "rgba(8,8,10,0.85)"; g.fill();
+      const c = side / 5;
+      g.fillStyle = "rgba(241,231,210,0.10)";
+      for (let i = 0; i < 25; i++) {
+        roundRect(g, x0 + (i % 5) * c + 2.5, y0 + ((i / 5) | 0) * c + 2.5, c - 5, c - 5, 3);
+        g.fill();
+      }
+      for (const [ex, ey, hw, hh] of [                      // four edge lights
+        [W / 2, y0 - 9, 11, 2.4], [W / 2, y0 + side + 9, 11, 2.4],
+        [x0 - 9, cy, 2.4, 11], [x0 + side + 9, cy, 2.4, 11],
+      ]) {
+        roundRect(g, ex - hw, ey - hh, hw * 2, hh * 2, 2);
+        g.fillStyle = TEAM[turn].ink; g.fill();
+        glowRect(g, ex - hw, ey - hh, hw * 2, hh * 2, 2, TEAM[turn].lit, 4);
+      }
+      g.restore();
+
+      // deco corner brackets, clear of the hold bar at the foot
+      g.strokeStyle = "rgba(255,194,28,0.45)"; g.lineWidth = 2;
+      const m = 14, len = 26;
+      for (const [bx, by, sx, sy] of [
+        [m, SAFE_T + 10, 1, 1], [W - m, SAFE_T + 10, -1, 1],
+        [m, L.sm.pad.y - 16, 1, -1], [W - m, L.sm.pad.y - 16, -1, -1],
+      ]) {
+        g.beginPath();
+        g.moveTo(bx + sx * len, by); g.lineTo(bx, by); g.lineTo(bx, by + sy * len);
+        g.stroke();
+      }
     }
 
     /**
@@ -1262,11 +1409,19 @@ window.plethoraBit = {
       // Both agent stacks, so the spymaster can read the state of the board
       // without leaving this screen.
       const sw = 7, wR = TEAM.red.agents * (sw + 3.2), wB = TEAM.blue.agents * (sw + 3.2);
-      const x0 = (W - (wR + wB + 26)) / 2;
+      const lw = 26;                                    // room for the count
+      const x0 = (W - (wR + wB + lw * 2 + 26)) / 2;
       g.save();
       g.translate(x0, top + room * 0.70);
-      drawStack(g, 0, 0, "red", sw);
-      drawStack(g, wR + 26, 0, "blue", sw);
+      drawStack(g, lw, 0, "red", sw);
+      drawStack(g, lw * 2 + wR + 26, 0, "blue", sw);
+      // Two anonymous rows of lozenges do not say which team, or how many:
+      // the number is what the spymaster is actually reading off them.
+      g.font = "700 12px " + DISPLAY; g.textBaseline = "middle";
+      for (const [team, tx] of [["red", lw - 5], ["blue", lw * 2 + wR + 26 - 5]]) {
+        g.fillStyle = TEAM[team].ink; g.textAlign = "right";
+        g.fillText(String(remaining(team)), tx, sw * 0.7);
+      }
       g.restore();
 
       g.fillStyle = "rgba(255,194,28,0.55)"; g.font = "400 8px " + MONO;
@@ -1300,30 +1455,44 @@ window.plethoraBit = {
       return out;
     }
     function drawKeyboard() {
+      const keys = keyRects();
+      const kbTop = keys[0].y - 18;
       g.save();
-      g.fillStyle = "rgba(8,7,10,0.96)"; g.fillRect(0, 0, W, H);
+      g.fillStyle = "rgba(6,5,8,0.988)"; g.fillRect(0, 0, W, H);
+
+      const fy = H * 0.19;
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillStyle = TEAM[turn].ink; g.font = "700 11px " + MONO;
-      tracked(g, "CLUE WORD", W / 2, H * 0.30, 4, "center");
-      g.fillStyle = clueDraft ? CREAM : "rgba(241,231,210,0.25)";
+      tracked(g, "CLUE WORD", W / 2, fy, 4, "center");
+      g.fillStyle = clueDraft ? CREAM : "rgba(241,231,210,0.22)";
       const shownWord = clueDraft || "—";
       const size = fitSize(g, shownWord, W - 60, 54, DISPLAY, "700");
       g.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
-      tracked(g, shownWord, W / 2, H * 0.30 + 44, 3, "center");
+      tracked(g, shownWord, W / 2, fy + 44, 3, "center");
       g.strokeStyle = "rgba(255,194,28,0.4)"; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(W * 0.14, H * 0.30 + 76); g.lineTo(W * 0.86, H * 0.30 + 76); g.stroke();
+      g.beginPath(); g.moveTo(W * 0.14, fy + 76); g.lineTo(W * 0.86, fy + 76); g.stroke();
       g.fillStyle = "rgba(241,231,210,0.4)"; g.font = "400 9px " + MONO;
-      tracked(g, "ONE WORD ONLY", W / 2, H * 0.30 + 92, 1.6, "center");
+      tracked(g, "ONE WORD ONLY — THE NUMBER IS SET ON THE PREVIOUS SCREEN",
+              W / 2, fy + 92, 0.9, "center");
 
-      for (const k of keyRects()) {
-        const hot = pressed === k.id;
+      // The keys sit on their own slab, so the board behind never competes
+      // with them for contrast.
+      chamferRect(g, 0, kbTop, W, H - kbTop, 18);
+      const lg = g.createLinearGradient(0, kbTop, 0, H);
+      lg.addColorStop(0, "rgba(30,27,34,0.98)"); lg.addColorStop(1, "rgba(12,11,15,1)");
+      g.fillStyle = lg; g.fill();
+      g.strokeStyle = "rgba(255,194,28,0.20)"; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(18, kbTop + 0.5); g.lineTo(W, kbTop + 0.5); g.stroke();
+
+      for (const k of keys) {
+        const hot = pressed === k.id, wide = k.ch.length > 1;
         roundRect(g, k.x, k.y, k.w, k.h, 6);
-        g.fillStyle = hot ? GOLD : "#1B1A20"; g.fill();
-        g.strokeStyle = "rgba(255,255,255,0.12)"; g.lineWidth = 1; g.stroke();
-        g.beginPath(); g.moveTo(k.x + 4, k.y + 1.5); g.lineTo(k.x + k.w - 4, k.y + 1.5);
-        g.strokeStyle = "rgba(255,255,255,0.16)"; g.stroke();
+        g.fillStyle = hot ? GOLD : wide ? "#332F3C" : "#26232D"; g.fill();
+        g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 1; g.stroke();
+        g.beginPath(); g.moveTo(k.x + 5, k.y + 1.5); g.lineTo(k.x + k.w - 5, k.y + 1.5);
+        g.strokeStyle = "rgba(255,255,255,0.20)"; g.stroke();
         g.fillStyle = hot ? NOIR : "#E7E0D0";
-        g.font = (k.ch.length > 1 ? "700 11px " + MONO : "700 15px " + MONO);
+        g.font = (wide ? "700 11px " + MONO : "700 16px " + MONO);
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillText(k.ch, k.x + k.w / 2, k.y + k.h / 2 + 1);
       }
@@ -1415,7 +1584,8 @@ window.plethoraBit = {
       drawSparks();
 
       if (phase === "board" || phase === "over") {
-        drawBand("red"); drawBand("blue"); drawSpine();
+        drawBand("red"); drawBand("blue");
+        if (phase === "board") drawSpine();
       } else if (phase === "clue") {
         drawSpymasterHeader(); drawCluePanel();
       }
@@ -1603,6 +1773,7 @@ window.plethoraBit = {
       winner = who; ending = why;
       phase = "over";
       armed = -1;
+      paintChrome();
       revealAll = -1;
       endFx = { t: 0, kind: why === "assassin" ? "assassin" : "win", i: -1 };
       if (why === "assassin") {
@@ -1670,6 +1841,20 @@ window.plethoraBit = {
       return null;
     }
 
+    /** Raise the key. Called from whichever comes first — the frame that
+     *  notices the wall clock has passed 700ms, or the timer armed when the
+     *  finger landed. A device that stalls a frame (a GC pause, a tab coming
+     *  back to the front) must not leave a held finger waiting. */
+    function openKey() {
+      if (peek || !holdOn) return;
+      peek = true;
+      holdT = HOLD_MS;
+      holdBounce = 5;
+      sound.sting("success"); sound.haptic("medium");
+      if (phase === "handoff") { phase = "clue"; shutterTo = 0; paintChrome(); }
+      render();
+    }
+
     ctx.listen(canvas, "pointerdown", (e) => {
       e.preventDefault();
       firstGesture();
@@ -1680,7 +1865,11 @@ window.plethoraBit = {
       heldZones.add(hit.zone);
       live.set(e.pointerId, hit);
       pressed = hit.id;
-      if (hit.zone === "pad") { holdOn = true; holdT = 0; sound.haptic("light"); }
+      if (hit.zone === "pad") {
+        holdOn = true; holdT = 0; holdStart = performance.now(); sound.haptic("light");
+        const seq = ++holdSeq;
+        ctx.timeout(() => { if (seq === holdSeq) openKey(); }, HOLD_MS);
+      }
       else if (hit.zone === "kb" && hit.id !== "none") sound.haptic("light");
     }, { passive: false });
 
@@ -1691,9 +1880,10 @@ window.plethoraBit = {
       heldZones.delete(hit.zone);
       pressed = null;
       if (hit.zone === "pad") {
-        holdOn = false;
+        holdOn = false; holdSeq++;
         if (peek) { peek = false; holdBounce = 0; sound.haptic("light"); }
         holdT = 0;
+        render();
         return;
       }
       const now = hitTest(e.offsetX, e.offsetY);
@@ -1749,7 +1939,8 @@ window.plethoraBit = {
       };
       guessesLeft = unlimited ? 99 : clueNum + (settings.bonus ? 1 : 0);
       guessedThisTurn = 0;
-      peek = false; holdOn = false; holdT = 0;
+      lastClue[turn] = clue;
+      peek = false; holdOn = false; holdT = 0; holdSeq++;
       typing = false;
       phase = "board";
       shutter = 1; shutterTo = 0;                        // a wipe, so the key is gone
@@ -1770,8 +1961,15 @@ window.plethoraBit = {
     const bigBtn = (bg, fg) => "width:100%;padding:14px;border:none;border-radius:4px;font-family:inherit;" +
       "font-size:15px;font-weight:700;letter-spacing:0.14em;background:" + bg + ";color:" + fg + ";" +
       "margin-top:10px;pointer-events:auto;text-transform:uppercase;";
-    const panel = "max-width:330px;width:100%;background:linear-gradient(180deg,#1B1814,#100E0C);" +
-      "border-radius:4px;padding:22px;box-shadow:inset 0 0 0 1px rgba(255,194,28,0.30),0 24px 60px rgba(0,0,0,0.6);";
+    // A sheet is a column: fixed head, scrolling body, and the button pinned
+    // at the foot — a rules list long enough to scroll must never push its own
+    // way out of reach.
+    const panel = "max-width:330px;width:100%;max-height:86%;display:flex;flex-direction:column;" +
+      "background:linear-gradient(180deg,#1B1814,#100E0C);border-radius:4px;padding:20px;" +
+      "box-shadow:inset 0 0 0 1px rgba(255,194,28,0.30),0 24px 60px rgba(0,0,0,0.6);";
+    const sheetTitle = "font-family:" + DISPLAY + ";font-size:27px;letter-spacing:0.14em;" +
+      "flex:0 0 auto;color:#FFDA7A;";
+    const scroller = "flex:1 1 auto;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch;";
     const sheet = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
       "background:rgba(6,4,3,0.90);z-index:70;padding:22px;pointer-events:auto;";
     const label = "font-size:10px;letter-spacing:0.28em;text-transform:uppercase;opacity:0.5;font-family:" + MONO + ";";
@@ -1823,9 +2021,12 @@ window.plethoraBit = {
         '<div data-el="over-mirror" style="position:absolute;left:0;right:0;top:' + (ctx.safeArea.top + 16) + 'px;' +
           'transform:rotate(180deg);text-align:center;font-family:' + DISPLAY + ';font-size:30px;' +
           'letter-spacing:0.14em;opacity:0.9;"></div>' +
-        '<div style="position:absolute;left:0;right:0;bottom:0;pointer-events:auto;padding:20px 22px ' +
+        '<div style="position:absolute;left:0;right:0;bottom:0;pointer-events:auto;padding:44px 22px ' +
           (ctx.safeArea.bottom + 18) + 'px;text-align:center;background:linear-gradient(180deg,' +
-          'rgba(9,6,10,0) 0%,rgba(9,6,10,0.86) 18%,rgba(9,6,10,0.98) 40%);">' +
+          // Opaque by the time it reaches the headline: at 0.90 the live band
+          // underneath ghosted its team name and lozenges through, directly
+          // behind the largest type on the screen.
+          'rgba(9,6,10,0) 0%,rgba(9,6,10,0.94) 12%,rgba(9,6,10,1) 24%);">' +
           '<div data-el="over-label" style="' + label + '">Mission closed</div>' +
           '<div data-el="over-title" style="font-family:' + DISPLAY + ';font-size:46px;letter-spacing:0.10em;' +
             'line-height:1.05;margin-top:2px;"></div>' +
@@ -1840,33 +2041,39 @@ window.plethoraBit = {
       /* ---- settings ---- */
       '<div data-el="cogp" style="' + sheet + '">' +
         '<div style="' + panel + '">' +
-          '<div style="font-family:' + DISPLAY + ';font-size:28px;letter-spacing:0.12em;">Settings</div>' +
-          '<div style="' + label + 'margin:14px 0 7px;">Sound</div>' +
-          '<div data-el="mutes" style="display:flex;gap:6px;"></div>' +
-          '<div style="' + label + 'margin:16px 0 7px;">Red sits at the</div>' +
-          '<div data-el="seats" style="display:flex;gap:6px;"></div>' +
-          '<div style="' + label + 'margin:16px 0 7px;">Bonus guess</div>' +
-          '<div data-el="bonus" style="display:flex;gap:6px;"></div>' +
-          '<div style="font-size:11.5px;opacity:0.5;margin-top:8px;line-height:1.5;">' +
-            'The bonus guess lets a team pick up a word they missed on an earlier clue.</div>' +
-          '<div style="' + label + 'margin:16px 0 7px;">Players</div>' +
-          '<div data-el="counts2" style="display:flex;gap:6px;flex-wrap:wrap;"></div>' +
-          '<div style="font-size:11.5px;opacity:0.5;margin-top:8px;">Player count applies on the next deal.</div>' +
-          '<button data-el="cogp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:16px;">Done</button>' +
+          '<div style="' + sheetTitle + '">SETTINGS</div>' +
+          '<div style="' + scroller + '">' +
+            '<div style="' + label + 'margin:14px 0 7px;">Sound</div>' +
+            '<div data-el="mutes" style="display:flex;gap:6px;"></div>' +
+            '<div style="' + label + 'margin:16px 0 7px;">Red sits at the</div>' +
+            '<div data-el="seats" style="display:flex;gap:6px;"></div>' +
+            '<div style="font-size:11.5px;opacity:0.5;margin-top:7px;line-height:1.5;">' +
+              'Each team gets the band at its own edge of the phone, turned to face it.</div>' +
+            '<div style="' + label + 'margin:16px 0 7px;">Bonus guess</div>' +
+            '<div data-el="bonus" style="display:flex;gap:6px;"></div>' +
+            '<div style="font-size:11.5px;opacity:0.5;margin-top:7px;line-height:1.5;">' +
+              'The extra guess after the number, for picking up a word missed on an earlier clue.</div>' +
+            '<div style="' + label + 'margin:16px 0 7px;">Players</div>' +
+            '<div data-el="counts2" style="display:flex;gap:6px;flex-wrap:wrap;"></div>' +
+            '<div style="font-size:11.5px;opacity:0.5;margin:7px 0 4px;line-height:1.5;">' +
+              'Two or three play the co-op variant. Applies on the next deal.</div>' +
+          '</div>' +
+          '<button data-el="cogp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:14px;flex:0 0 auto;">Done</button>' +
         '</div>' +
       '</div>' +
 
       /* ---- how to play ---- */
       '<div data-el="helpp" style="' + sheet + '">' +
-        '<div style="' + panel + 'max-height:88%;overflow:auto;">' +
-          '<div style="font-family:' + DISPLAY + ';font-size:28px;letter-spacing:0.12em;">How to play</div>' +
-          '<ul style="font-size:13.5px;line-height:1.65;opacity:0.86;padding-left:17px;margin:12px 0 0;">' +
-            '<li>Split into two teams. Each team picks <b>one spymaster</b>; everyone else is an operative.</li>' +
-            '<li>The phone lies flat between you. Every codeword is printed twice, so both sides read the grid the right way up.</li>' +
+        '<div style="' + panel + '">' +
+          '<div style="' + sheetTitle + '">HOW TO PLAY</div>' +
+          '<ul style="' + scroller + 'font-size:13px;line-height:1.55;opacity:0.86;' +
+            'padding-left:17px;margin:10px 0 0;">' +
+            '<li>Two teams. Each picks <b>one spymaster</b>; everyone else is an operative.</li>' +
+            '<li>The phone lies flat between you. Every codeword is printed twice, so both sides read it the right way up.</li>' +
             '<li>At the start of a turn the screen shutters closed. <b>Pass the phone to that team’s spymaster.</b></li>' +
             '<li>The spymaster <b>holds the fingerprint pad</b> to read the key. Let go and it hides instantly — never put the phone down while it is up.</li>' +
             '<li>Nine words are RED, eight are BLUE, seven are bystanders and <b>one is the assassin</b>. Red goes first.</li>' +
-            '<li>The spymaster gives <b>one word and one number</b>: the number is how many codewords the clue points at. Nothing about spelling, letters or where a word sits on the grid.</li>' +
+            '<li>The spymaster gives <b>one word and one number</b> — how many codewords the clue points at. Never anything about spelling, letters or where a word sits.</li>' +
             '<li>Operatives tap a codeword to <b>arm</b> it, then press CONFIRM CONTACT. Two steps, on purpose.</li>' +
             '<li>Your own colour: it stays yours, and you may keep guessing. A bystander ends the turn. The other team’s colour ends the turn <b>and counts for them</b>.</li>' +
             '<li>The assassin ends the game at once and the team that touched it loses.</li>' +
@@ -1874,7 +2081,7 @@ window.plethoraBit = {
             '<li>First team to contact all of its agents wins — which can happen on the other team’s turn.</li>' +
             '<li>Two or three players: one team, one spymaster, racing an opposition that covers one of its own words every turn.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:16px;">Got it</button>' +
+          '<button data-el="helpp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:14px;flex:0 0 auto;">Got it</button>' +
         '</div>' +
       '</div>';
 
@@ -1943,7 +2150,7 @@ window.plethoraBit = {
       const c = el("chrome");
       if (!c) return;
       c.style.top = (L.spineY + 2) + "px";
-      c.style.display = (phase === "menu" || phase === "over") ? "none" : "flex";
+      c.style.display = (phase === "menu" || phase === "over" || phase === "handoff") ? "none" : "flex";
     }
 
     let started = false;
@@ -1977,7 +2184,7 @@ window.plethoraBit = {
       el("over").style.display = "none";
       el("menu").style.display = "flex";
       phase = "menu";
-      shutter = 0; shutterTo = 0; peek = false; endFx = null;
+      shutter = 0; shutterTo = 0; peek = false; holdOn = false; holdSeq++; endFx = null;
       paintChrome(); paintAll();
     });
 
@@ -1988,7 +2195,7 @@ window.plethoraBit = {
       if (ending === "assassin") {
         head = coop ? "ASSASSIN" : TEAM[winner].name + " WINS";
         sub = coop
-          ? "Your operatives touched the assassin. The mission is over."
+          ? "Your operatives touched the assassin."
           : TEAM[other(winner)].name + " touched the assassin — instant loss.";
       } else if (coop) {
         head = winner === "red" ? "ALL AGENTS HOME" : "OPPOSITION WINS";
@@ -2000,7 +2207,7 @@ window.plethoraBit = {
         sub = "All " + TEAM[winner].agents + " agents contacted — " + totalGuesses + " guesses in all.";
       }
       t.textContent = head;
-      t.style.color = ending === "assassin" && !coop ? TEAM[winner].ink
+      t.style.color = ending === "assassin" && coop ? "#D6342A"
                     : winner === "red" ? RED : BLUE;
       s.textContent = sub;
       m.textContent = head;
@@ -2020,16 +2227,13 @@ window.plethoraBit = {
       shutter += (shutterTo - shutter) * Math.min(1, dt * 17);
       if (Math.abs(shutter - shutterTo) < 0.004) shutter = shutterTo;
 
-      if (phase === "handoff") typed += dt * 46;
+      if (phase === "handoff") typed += (dtMs / 1000) * 46;   // real time, not frame-capped
 
       if (holdOn && !peek) {
-        holdT += dtMs;
-        if (holdT >= HOLD_MS) {
-          peek = true;
-          holdBounce = 5;
-          sound.sting("success"); sound.haptic("medium");
-          if (phase === "handoff") { phase = "clue"; shutterTo = 0; paintChrome(); }
-        }
+        // Wall clock, not accumulated frame time: on a device that drops a
+        // long frame the hold must still finish in 700 real milliseconds.
+        holdT = performance.now() - holdStart;
+        if (holdT >= HOLD_MS) openKey();
       }
       holdBounce *= Math.max(0, 1 - dt * 9);
 
@@ -2056,7 +2260,7 @@ window.plethoraBit = {
       }
 
       if (endFx) {
-        endFx.t += dt;
+        endFx.t += dtMs / 1000;      // real seconds: the cascade is choreography
         // The whole key turns over behind the result sheet, one card at a time.
         if (endFx.t > 0.5) revealAll = Math.min(24, Math.floor((endFx.t - 0.5) / 0.045));
         if (endFx.t > 3) endFx = null;

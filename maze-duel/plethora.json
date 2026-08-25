@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Maze Duel",
+  "description": "Two to four people race one hedge maze on one phone, all at the same time. Lay it flat, take a corner each, and drag a thumb-stick in your own corner of the screen — nobody's hand ever covers the board. A fresh garden is grown every round and carved symmetric, so every corner is exactly the same number of steps from the glowing heart at the middle. Pick up an amber pod, lift your thumb and tap, and a briar slams across the gap you just walked through — sealed for nine seconds, and never able to wall the goal off. First peg into the heart takes the garden; the time it took goes to the global board.",
+  "tags": [
+    "multiplayer",
+    "local-multiplayer",
+    "maze",
+    "race",
+    "party",
+    "four-player",
+    "strategy",
+    "realtime"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "fastest_solve": {
+        "label": "Fastest Solve",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

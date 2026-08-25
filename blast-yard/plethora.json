@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Blast Yard",
+  "description": "A four-thumb bomb brawl on one phone. Lay it flat, take an edge each, and every player gets their own clay control pad welded to their own side of the screen — stick on the left, one bomb button on the right, never on the play surface. Hold the button to cook the fuse, let go to throw; hold too long and it goes off in your hands. Blasts launch clay figures tumbling across a lit wooden platform floating in the dark, and the only way out is over the edge. The rim crumbles away as the round drags on, so somebody always falls. Last one standing takes the round.",
+  "tags": [
+    "multiplayer",
+    "local-multiplayer",
+    "party",
+    "arena",
+    "brawler",
+    "action",
+    "four-player",
+    "3d"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "longest_streak": {
+        "label": "Longest Streak",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

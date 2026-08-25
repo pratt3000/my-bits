@@ -58,7 +58,6 @@ window.plethoraBit = {
     const TAU = Math.PI * 2;
     const D2R = Math.PI / 180;
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-    const lerp = (a, b, t) => a + (b - a) * t;
     const now = () => performance.now();
     const rnd = (n) => Math.floor(Math.random() * n);
 
@@ -228,10 +227,11 @@ window.plethoraBit = {
     /** Where a station's readout strip sits, and how it is turned. */
     function anchor(i) {
       const k = STATIONS[i].key;
-      if (k === "bottom") return { x: cx, y: H - safeB - 50, rad: 0 };
-      if (k === "top")    return { x: cx, y: safeT + 46, rad: Math.PI };
-      if (k === "left")   return { x: 48, y: cy, rad: Math.PI / 2 };
-      return { x: W - 48, y: cy, rad: -Math.PI / 2 };
+      const rad = SEAT_RAD[k];
+      if (k === "bottom") return { x: cx, y: H - safeB - 54, rad };
+      if (k === "top")    return { x: cx, y: safeT + 50, rad };
+      if (k === "left")   return { x: 54, y: cy, rad };
+      return { x: W - 54, y: cy, rad };
     }
     /** A generous point inside a station's wedge — where a hand naturally lands. */
     function tapPoint(i) {
@@ -797,6 +797,11 @@ window.plethoraBit = {
     // the core burning through from below.
 
     let frameArt = null;
+    // Station nameplates are baked into the frame, so they also sit under
+    // the title screen — where the scrim is deliberately thin over the core
+    // and they came through as ghost text across the tagline and the CREW
+    // label. The board itself is wanted back there; the labelling is not.
+    let platesOn = false;
     const zoneArt = [null, null, null, null];
     const zoneKey = ["", "", "", ""];
 
@@ -913,14 +918,31 @@ window.plethoraBit = {
         }
         g.restore();
 
-        // Station plate, out near the seat and turned to face it.
+        // Station plate — number over colour name, turned to face the seat.
+        //
+        // Where it can go depends on which axis the console lies along, and
+        // the two cases are genuinely different on a portrait screen. A top or
+        // bottom console has the whole width of the plating inboard of it. A
+        // side console has 14px of plating outboard of it and the port bezel
+        // immediately inboard, so its plate goes past the end of the strip
+        // instead, along the same edge. Both land inside the safe area, clear
+        // of the port and clear of the strip: before this the plate for a side
+        // seat was drawn underneath the core, and every colour name was off
+        // the screen entirely — so the two players on the long edges had no
+        // name anywhere, while the game-over card announces the winner by
+        // colour.
+        const side = st.key === "left" || st.key === "right";
+        const plateX = side ? -(STRIP_W / 2 + 64) : 0;
+        const plateY = side ? -7 : -74;
         g.save();
         g.translate(a.x, a.y);
         g.rotate(a.rad);
-        g.fillStyle = rgba(st.rgb, 0.92);
-        tracked(g, "STATION " + (i + 1), 0, -58, 10, 3.8, "center");
-        g.fillStyle = "rgba(219,230,245,0.34)";
-        tracked(g, st.name, 0, 66, 8.5, 3.4, "center");
+        if (platesOn) {
+          g.fillStyle = rgba(st.rgb, 0.92);
+          tracked(g, "STATION " + (i + 1), plateX, plateY, 10, 3.8, "center", 120);
+          g.fillStyle = "rgba(219,230,245,0.42)";
+          tracked(g, st.name, plateX, plateY + 14, 8, 3.0, "center", 108);
+        }
         // Corner brackets around the readout slot.
         g.strokeStyle = rgba(st.rgb, 0.34);
         g.lineWidth = 1.6;
@@ -1107,7 +1129,7 @@ window.plethoraBit = {
         let l1 = "", l2 = "", l3 = "", c1 = rgba(st.rgb, 0.95);
         if (phase === "stations") { l1 = "STANDBY"; l2 = "TAKE"; l3 = "YOUR EDGE"; }
         else if (phase === "over") {
-          l1 = winner === i ? "WINNER" : "STAND DOWN";
+          l1 = winner === i ? "WINNER" : "FINAL";
           l2 = scores[i] + " PTS";
           c1 = winner === i ? st.ink : "rgba(219,230,245,0.5)";
         } else if (phase === "resolve") {
@@ -1121,15 +1143,20 @@ window.plethoraBit = {
           c1 = locked[i] ? "#ff6b76" : rgba(T.rgb, 0.95);
           if (locked[i]) { l1 = "SCRAM"; l2 = "LOCKED OUT"; }
         }
+        // At game over the summary card covers the middle 252pt of the screen,
+        // which is the inboard third of a side seat's strip. Shifting the
+        // column one row outboard keeps every word of it in the clear instead
+        // of leaving the top line sliced in half by the card's edge.
+        const r0 = phase === "over" ? 39 : 22;
         g.fillStyle = c1;
-        tracked(g, l1, tx, y0 + 22, 10, 1.9, "left", tw);
+        tracked(g, l1, tx, y0 + r0, 10, 1.9, "left", tw);
         if (l2) {
           g.fillStyle = "rgba(219,230,245,0.62)";
-          tracked(g, l2, tx, y0 + 39, 8.5, 1.2, "left", tw);
+          tracked(g, l2, tx, y0 + r0 + 17, 8.5, 1.2, "left", tw);
         }
         if (l3) {
           g.fillStyle = "rgba(219,230,245,0.40)";
-          tracked(g, l3, tx, y0 + 54, 8.5, 1.2, "left", tw);
+          tracked(g, l3, tx, y0 + r0 + 32, 8.5, 1.2, "left", tw);
         }
         // Round counter, bottom right of the strip.
         if (phase !== "over" && phase !== "stations") {
@@ -1232,8 +1259,7 @@ window.plethoraBit = {
     }
 
     /* --- round machine ------------------------------------------------ */
-    function beginMatch(keepCrew) {
-      if (!keepCrew) { /* crew already set by the picker */ }
+    function beginMatch() {
       scores.fill(0);
       locked.fill(false);
       roundNo = 0;
@@ -1269,15 +1295,20 @@ window.plethoraBit = {
       updateChrome();
     }
 
+    /** Swap the signal and tick. Same cue for a decoy and for the real one. */
+    function cycleSignal(want) {
+      setSignal(makeSignal(want));
+      sound.sting("tap");
+    }
+
     function beginCharge() {
       phase = "charge";
       chargeFrom = now();
-      tickAt = chargeFrom + 380;
+      tickAt = chargeFrom + 420;                 // GO has no cycles of its own
+      setSignal(makeSignal(false));
       if (roundKind === "go") {
-        setSignal(makeSignal(false));
         armAt = chargeFrom + (1150 + Math.random() * 2500) * pace();
       } else {
-        setSignal(makeSignal(false));
         cycleAt = chargeFrom + cycleMs();
         cyclesLeft = 2 + rnd(3);
       }
@@ -1287,12 +1318,14 @@ window.plethoraBit = {
     function arm() {
       phase = "armed";
       armedAt = now();
-      setSignal(makeSignal(true));
-      holdUntil = armedAt + holdMs();
       if (roundKind === "go") {
+        setSignal(makeSignal(true));
         flashWave(GREEN.hex, 1.0);
         sound.duck(0.4, 240);
+      } else {
+        cycleSignal(true);                       // indistinguishable from a decoy
       }
+      holdUntil = armedAt + holdMs();
       updateChrome();
     }
 
@@ -1300,7 +1333,7 @@ window.plethoraBit = {
       // Nobody took it inside the hold window: back to decoys, and it can come
       // true again. Without this a missed signal would freeze the round.
       phase = "charge";
-      setSignal(makeSignal(false));
+      cycleSignal(false);
       cycleAt = now() + cycleMs();
       cyclesLeft = 2 + rnd(2);
     }
@@ -1382,6 +1415,8 @@ window.plethoraBit = {
             esc(s.name) + "</span>" +
           '<span style="font-size:19px;font-weight:800;color:' + (i === w ? s.ink : "rgba(219,230,245,.6)") + ';">' +
             scores[i] + "</span></div>").join("");
+      el("over").style.background = "radial-gradient(circle at 50% 50%," +
+        st.ink + "26 0%,rgba(4,7,13,0.88) 40%,rgba(3,5,10,0.96) 100%)";
       el("over").style.display = "flex";
       setSignal({ kind: null, on: false });      // no stale equation on the consoles
       dischargeCol = st;
@@ -1436,7 +1471,7 @@ window.plethoraBit = {
     const btn = "pointer-events:auto;width:34px;height:34px;border-radius:11px;border:none;" +
       "background:rgba(150,190,240,0.14);color:#dbe6f5;font-size:14px;line-height:1;" +
       "font-family:inherit;padding:0;";
-    const bigBtn = (bg, fg) => "width:100%;padding:15px;border:none;border-radius:14px;font-family:inherit;" +
+    const bigBtn = (bg, fg) => "width:100%;box-sizing:border-box;padding:15px;border:none;border-radius:14px;font-family:inherit;" +
       "font-size:15px;font-weight:800;letter-spacing:0.10em;background:" + bg + ";color:" + fg + ";";
     const panel = "max-width:326px;width:100%;background:rgba(11,16,25,0.98);border-radius:20px;" +
       "padding:20px;border:1px solid rgba(150,190,240,0.14);pointer-events:auto;";
@@ -1450,11 +1485,15 @@ window.plethoraBit = {
       "background:rgba(3,5,10,0.92);z-index:70;pointer-events:auto;padding:" +
       (safeT + 12) + "px 20px " + (safeB + 12) + "px;";
     const crewBtn = (n, cap) =>
-      '<button data-el="crew" data-n="' + n + '" style="pointer-events:auto;flex:1;padding:14px 6px 11px;' +
-      'border:1px solid rgba(150,190,240,0.16);border-radius:15px;background:rgba(150,190,240,0.07);' +
+      '<button data-el="crew" data-n="' + n + '" style="pointer-events:auto;flex:1;padding:13px 5px 10px;' +
+      'border:1px solid rgba(150,190,240,0.16);border-radius:15px;background:rgba(10,15,24,0.82);' +
       'color:#eaf4ff;font-family:inherit;">' +
-      '<div style="font-size:27px;font-weight:800;line-height:1;">' + n + "</div>" +
-      '<div style="font-size:8px;letter-spacing:0.14em;opacity:0.52;margin-top:6px;">' + cap + "</div></button>";
+      '<div style="display:flex;gap:3px;justify-content:center;margin-bottom:8px;">' +
+        STATIONS.slice(0, n).map((s) => '<span style="width:13px;height:4px;border-radius:2px;' +
+          'background:' + s.ink + ';"></span>').join("") + "</div>" +
+      '<div style="font-size:26px;font-weight:800;line-height:1;">' + n + "</div>" +
+      '<div style="font-size:7.5px;letter-spacing:0.13em;opacity:0.5;margin-top:6px;font-family:' +
+        MONO + ';">' + cap + "</div></button>";
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT + ";color:#dbe6f5;pointer-events:none;" +
@@ -1470,21 +1509,33 @@ window.plethoraBit = {
       "</div>" +
 
       /* --- title --- */
+      // Title, hero, call to action — stacked so the reactor burns in the middle
+      // band of its own screen instead of being wallpaper behind the wordmark.
+      // The scrim is a vertical gradient that stays out of that band.
       '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
-        'align-items:center;justify-content:center;gap:0;z-index:50;padding:26px;text-align:center;' +
-        'pointer-events:auto;background:radial-gradient(circle at 50% 50%,rgba(4,7,13,0.28) 0%,' +
-        'rgba(4,7,13,0.80) 40%,rgba(3,5,10,0.95) 100%);">' +
-        '<div style="font-size:10px;letter-spacing:0.52em;text-transform:uppercase;opacity:0.45;">Reaction Duel</div>' +
-        '<div style="font-size:47px;font-weight:800;letter-spacing:-0.025em;line-height:1.02;margin-top:10px;' +
-          'background:linear-gradient(102deg,' + STATIONS[0].ink + ',' + STATIONS[2].ink + ' 38%,' +
-          STATIONS[3].ink + ' 66%,' + STATIONS[1].ink + ');-webkit-background-clip:text;background-clip:text;' +
-          '-webkit-text-fill-color:transparent;">REACTOR<br>FOUR</div>' +
-        '<div style="font-size:13.5px;opacity:0.60;max-width:250px;line-height:1.6;margin-top:14px;">' +
-          "Phone flat. Claim an edge. Slap your own wedge the instant the signal is true &mdash; " +
-          "and not one beat before.</div>" +
-        '<div style="font-size:9.5px;letter-spacing:0.34em;text-transform:uppercase;opacity:0.42;margin-top:26px;">Crew</div>' +
-        '<div style="display:flex;gap:9px;margin-top:11px;width:100%;max-width:288px;">' +
-          crewBtn(2, "TOP&middot;BOT") + crewBtn(3, "+LEFT") + crewBtn(4, "ALL EDGES") +
+        'align-items:center;justify-content:space-between;z-index:50;text-align:center;' +
+        'pointer-events:auto;padding:' + (safeT + 26) + 'px 24px ' + (safeB + 24) + 'px;' +
+        'background:linear-gradient(180deg,rgba(3,5,10,0.96) 0%,rgba(3,5,10,0.90) 22%,' +
+        'rgba(4,7,13,0.20) 38%,rgba(4,7,13,0.16) 60%,rgba(3,5,10,0.90) 76%,rgba(3,5,10,0.97) 100%);">' +
+        "<div>" +
+          '<div style="font-size:9.5px;letter-spacing:0.52em;text-transform:uppercase;opacity:0.42;' +
+            'font-family:' + MONO + ';">Reaction Duel</div>' +
+          '<div style="font-size:52px;font-weight:800;letter-spacing:-0.03em;line-height:0.95;margin-top:12px;' +
+            'background:linear-gradient(102deg,' + STATIONS[0].ink + ',' + STATIONS[2].ink + ' 38%,' +
+            STATIONS[3].ink + ' 66%,' + STATIONS[1].ink + ');-webkit-background-clip:text;background-clip:text;' +
+            '-webkit-text-fill-color:transparent;">REACTOR<br>FOUR</div>' +
+          '<div style="font-size:13px;opacity:0.62;max-width:264px;line-height:1.6;margin-top:16px;">' +
+            "Phone flat. Claim an edge. Slap your own wedge the instant the signal is true &mdash; " +
+            "and not one beat before.</div>" +
+        "</div>" +
+        "<div>" +
+          '<div style="font-size:9.5px;letter-spacing:0.36em;text-transform:uppercase;opacity:0.45;' +
+            'font-family:' + MONO + ';">Crew</div>' +
+          '<div style="display:flex;gap:9px;margin-top:12px;width:100%;max-width:300px;">' +
+            crewBtn(2, "TOP&middot;BOT") + crewBtn(3, "+LEFT") + crewBtn(4, "ALL EDGES") +
+          "</div>" +
+          '<div style="font-size:10px;letter-spacing:0.14em;opacity:0.32;margin-top:14px;' +
+            'font-family:' + MONO + ';">EACH STATION ARMS ITS OWN WEDGE</div>' +
         "</div>" +
       "</div>" +
 
@@ -1496,13 +1547,21 @@ window.plethoraBit = {
 
       /* --- match over. The banner is repeated upside down so the player at
              the far edge is not the last to know. --- */
+      // The scrim used to reach 0.93 by mid-radius and 0.98 at the corners,
+      // which buried the thing it was sitting on: every station's own strip
+      // still reports its result, rotated to its seat, and at 5% visibility
+      // nobody but the bottom player could read theirs. It is held low and
+      // even now — the summary card and both buttons carry their own opaque
+      // plates, so they do not need the whole screen blacked out behind them.
       '<div data-el="over" style="position:absolute;inset:0;display:none;flex-direction:column;' +
-        'align-items:center;justify-content:center;z-index:55;padding:24px;text-align:center;' +
-        'pointer-events:auto;background:radial-gradient(circle at 50% 50%,rgba(4,7,13,0.60) 0%,' +
-        'rgba(4,7,13,0.93) 45%,rgba(3,5,10,0.98) 100%);">' +
+        'align-items:center;justify-content:center;z-index:55;text-align:center;padding:' +
+        (safeT + 16) + 'px 24px ' + (safeB + 16) + 'px;' +
+        'pointer-events:auto;background:radial-gradient(circle at 50% 50%,rgba(4,7,13,0.52) 0%,' +
+        'rgba(4,7,13,0.60) 45%,rgba(3,5,10,0.66) 100%);">' +
         '<div data-el="over-echo" style="position:absolute;top:' + (safeT + 22) + 'px;left:0;right:0;' +
           'transform:rotate(180deg);font-size:12px;font-weight:800;letter-spacing:0.30em;opacity:0.85;"></div>' +
-        '<div style="width:100%;max-width:272px;background:rgba(9,13,21,0.94);border-radius:22px;' +
+        '<div style="width:100%;max-width:252px;box-sizing:border-box;' +
+          'background:rgba(9,13,21,0.975);border-radius:22px;' +
           'border:1px solid rgba(150,190,240,0.16);padding:22px 20px 18px;">' +
           '<div style="font-size:9.5px;letter-spacing:0.44em;text-transform:uppercase;opacity:0.45;">Core secured by</div>' +
           '<div data-el="over-name" style="font-size:42px;font-weight:800;letter-spacing:-0.01em;margin-top:4px;line-height:1.05;"></div>' +
@@ -1510,9 +1569,10 @@ window.plethoraBit = {
           '<div data-el="over-rows" style="width:100%;margin-top:16px;' +
             'border-top:1px solid rgba(150,190,240,0.14);"></div>' +
         "</div>" +
-        '<div style="width:100%;max-width:272px;display:flex;flex-direction:column;gap:9px;margin-top:16px;">' +
+        '<div style="width:100%;max-width:252px;display:flex;flex-direction:column;gap:9px;margin-top:16px;">' +
           '<button data-el="again" style="' + bigBtn("linear-gradient(96deg," + STATIONS[0].ink + "," + STATIONS[1].ink + ")", "#050a12") + '">REMATCH</button>' +
-          '<button data-el="newcrew" style="' + bigBtn("rgba(150,190,240,0.13)", "#dbe6f5") + '">CHANGE CREW</button>' +
+          '<button data-el="newcrew" style="' + bigBtn("rgba(16,23,36,0.94)", "#dbe6f5") +
+            'box-shadow:inset 0 0 0 1px rgba(150,190,240,0.24);">CHANGE CREW</button>' +
         "</div>" +
       "</div>" +
 
@@ -1624,6 +1684,7 @@ window.plethoraBit = {
         crew = settings.crew = Number(b.dataset.n);
         saveSettings();
         sectors = sectorsFor(crew);
+        platesOn = true;
         bakeFrame();
         zoneKey.fill("");
         ctx.platform.start({ crew });
@@ -1636,18 +1697,20 @@ window.plethoraBit = {
     shell.tap(shell.el("again"), () => {
       shell.el("over").style.display = "none";
       ctx.platform.interact({ type: "rematch" });
-      beginMatch(true);
+      beginMatch();
     });
     shell.tap(shell.el("newcrew"), () => {
       shell.el("over").style.display = "none";
       phase = "menu";
+      platesOn = false;
+      bakeFrame();
       shell.el("menu").style.display = "flex";
       updateChrome();
     });
     shell.tap(shell.el("skipb"), () => {
       for (let i = 0; i < crew; i++) zoneArmed[i] = true;
       shell.el("skip").style.display = "none";
-      beginMatch(true);
+      beginMatch();
     });
 
     function goStations() {
@@ -1693,7 +1756,7 @@ window.plethoraBit = {
           sound.haptic("light");
           let all = true;
           for (let k = 0; k < crew; k++) if (!zoneArmed[k]) all = false;
-          if (all) ctx.timeout(() => { if (phase === "stations") beginMatch(true); }, 260);
+          if (all) ctx.timeout(() => { if (phase === "stations") beginMatch(); }, 260);
         }
         return;
       }
@@ -1723,16 +1786,15 @@ window.plethoraBit = {
       if (phase === "brief" && t >= phaseUntil) return beginCharge();
 
       if (phase === "charge") {
-        if (t >= tickAt) {                       // audible metronome that never leaks the answer
-          tickAt = t + (roundKind === "go" ? 430 : cycleMs()) ;
-          sound.sting("tap");
-        }
         if (roundKind === "go") {
+          // GO has nothing cycling, so it gets a metronome of its own: the
+          // wait has to be audible or the red hold is just dead air.
+          if (t >= tickAt) { tickAt = t + 430; sound.sting("tap"); }
           if (t >= armAt) arm();
         } else if (t >= cycleAt) {
           cyclesLeft--;
           if (cyclesLeft <= 0) arm();
-          else { setSignal(makeSignal(false)); cycleAt = t + cycleMs(); }
+          else { cycleSignal(false); cycleAt = t + cycleMs(); }
         }
         if (t - roundStart > 30000) voidRound();
         return;
@@ -1753,7 +1815,7 @@ window.plethoraBit = {
         target = clamp(0.26 + (t - chargeFrom) / 4600, 0, 1);
         if (phase === "armed" && roundKind === "go") target = 1;
       } else if (phase === "stations") target = 0.34;
-      else if (phase === "menu") target = 0.42;
+      else if (phase === "menu") target = 0.36 + Math.sin(t * 0.0009) * 0.09;
       else target = 0.10;
       charge += (target - charge) * 0.10;
       sound.heat(phase === "charge" || phase === "armed" ? 0.25 + charge * 0.7 : 0.2);
@@ -1763,12 +1825,14 @@ window.plethoraBit = {
       // Colour: the round's own hue, going green only where green means go.
       let want = idleCol;
       if (phase === "menu" || phase === "stations") {
-        // Drift through the four station colours: the crew picker gets to see
-        // whose colour is whose before anybody sits down.
-        const f = ((t * 0.00013) % 1) * 4;
-        const A = STATIONS[Math.floor(f) % 4], B = STATIONS[(Math.floor(f) + 1) % 4];
-        const k = f - Math.floor(f);
-        tmpCol.setHex(A.hex).lerp(driftCol.setHex(B.hex), k * k * (3 - 2 * k));
+        // Cycle the four station colours so the crew picker shows whose colour
+        // is whose. It holds on each one and crosses over quickly: a slow even
+        // lerp spends most of its time on the muddy midpoints between hues.
+        const f = (t / 3400) % 4;
+        const i0 = Math.floor(f);
+        const A = STATIONS[i0 % 4], B = STATIONS[(i0 + 1) % 4];
+        const raw = clamp((f - i0 - 0.72) / 0.28, 0, 1);
+        tmpCol.setHex(A.hex).lerp(driftCol.setHex(B.hex), raw * raw * (3 - 2 * raw));
         want = tmpCol;
       } else if (phase === "brief") { tmpCol.setHex(TYPE[roundKind].hex); want = tmpCol; }
       else if (phase === "charge") { tmpCol.setHex(TYPE[roundKind].hex); want = tmpCol; }
@@ -1783,7 +1847,7 @@ window.plethoraBit = {
 
       coreMat.emissive.copy(coreCol);
       if (plasmaTex) plasmaTex.offset.x = (plasmaTex.offset.x + dt * (0.006 + charge * 0.05)) % 1;
-      coreMat.emissiveIntensity = 0.85 + heat * 2.6;
+      coreMat.emissiveIntensity = 0.52 + heat * 2.5;
       core.scale.setScalar(1 + heat * 0.14);
       core.rotation.y += dt * (0.25 + charge * 1.1);
       core.rotation.x += dt * 0.12;
@@ -1796,7 +1860,7 @@ window.plethoraBit = {
 
       for (const h of halos) {
         h.mesh.material.color.copy(coreCol);
-        h.mesh.material.opacity = h.base * (0.35 + heat * 1.00);
+        h.mesh.material.opacity = h.base * (0.50 + heat * 0.95);
         h.mesh.scale.setScalar(1 + heat * 0.10);
       }
       bloomMat.color.copy(coreCol);

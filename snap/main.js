@@ -426,7 +426,7 @@ window.plethoraBit = {
         g.font = "700 " + cs + "px " + SERIF;
         g.textAlign = "center"; g.textBaseline = "alphabetic";
         g.fillText(rank, w * 0.135, h * 0.135);
-        suitPath(g, suitId, w * 0.135, h * 0.205, cs * 0.30);
+        suitPath(g, suitId, w * 0.135, h * 0.208, cs * 0.44);
         g.restore();
       };
       corner(false); corner(true);
@@ -539,28 +539,43 @@ window.plethoraBit = {
     /**
      * Arrange the deck so snaps actually happen.
      *
-     * A fair shuffle gives about three rank-adjacent pairs in 52 cards. That is
-     * a party game where nothing happens for fifteen seconds at a time. This
-     * walks the shuffled deck and, once four to nine cards have gone by with no
-     * match, swaps a later card of the needed rank forward into place. Every
-     * card is still present exactly once — only the order is arranged. With the
-     * rank-or-suit rule the natural density is already high, so it is skipped.
+     * A fair shuffle of 52 cards yields about three rank-adjacent pairs, which
+     * is a party game where nothing happens for fifteen seconds at a stretch.
+     * This lays the deck out card by card and, once three to seven have gone by
+     * without a match, deliberately reaches into the remaining pool for a
+     * partner to the card just laid. Every card is still present exactly once —
+     * only the order is arranged. A snap arrives every five cards on average
+     * and never later than the seventh card of the hand.
+     *
+     * The order is written back reversed, because the stock is dealt with
+     * pop(). Building it forward and dealing it backward was the original bug:
+     * plants fail near the end of the layout, where partners have run out, and
+     * that end was the first thing anybody saw — whole half-decks went by with
+     * no snap at all.
+     *
+     * On the rank-or-suit rule the natural density is already high, so a
+     * natural pair counts as a plant and the reach-in almost never fires.
      */
     function stackDeck(deck, rng, sameSuitCounts) {
       const hit = (a, b) => a.rank === b.rank || (sameSuitCounts && a.suit === b.suit);
-      let since = 0;
-      for (let i = 1; i < deck.length; i++) {
-        if (hit(deck[i], deck[i - 1])) { since = 0; continue; }
-        since++;
-        if (since < 4 + Math.floor(rng() * 6)) continue;
-        for (let j = i + 1; j < deck.length; j++) {
-          if (deck[j].rank === deck[i - 1].rank) {
-            const t = deck[i]; deck[i] = deck[j]; deck[j] = t;
-            break;
+      const pool = deck.slice(), out = [];
+      const nextGap = () => 3 + Math.floor(rng() * 5);
+      let want = nextGap();
+      while (pool.length) {
+        const prev = out[out.length - 1];
+        let idx = -1;
+        if (prev && want <= 0) {
+          for (let i = 0; i < pool.length; i++) {
+            if (pool[i].rank === prev.rank) { idx = i; break; }
           }
         }
-        since = 0;
+        if (idx < 0) idx = Math.floor(rng() * pool.length);
+        const card = pool.splice(idx, 1)[0];
+        if (prev && hit(card, prev)) want = nextGap();
+        else want--;
+        out.push(card);
       }
+      for (let i = 0; i < deck.length; i++) deck[i] = out[out.length - 1 - i];
       return deck;
     }
 
@@ -593,7 +608,7 @@ window.plethoraBit = {
       for (let i = 16; i >= 1; i--) {
         const k = i / 16;
         const sp = SHADOW_PAD * k;
-        c.globalAlpha = 0.032;
+        c.globalAlpha = 0.022;
         roundRect(c, SHADOW_PAD - sp, SHADOW_PAD - sp, CARD_W + sp * 2, CARD_H + sp * 2, CARD_R + sp * 0.7);
         c.fill();
       }
@@ -629,6 +644,9 @@ window.plethoraBit = {
       const usedR = n >= 4 ? L.sideW : 0;
       L.px = usedL + (W - usedL - usedR) / 2;
       L.py = (L.bandTop + L.bandBot) / 2;
+      // The free band between the side pads. Anything centred on the table has
+      // to fit inside it, or it is drawn across somebody's count.
+      L.bandW = W - usedL - usedR;
       L.ringR = Math.min((W - usedL - usedR) / 2 - 12, bh / 2 - 16, 118);
       L.sx = L.px - 13;                       // the stock sits a hair behind the pile
       L.sy = L.py - 17;
@@ -960,7 +978,8 @@ window.plethoraBit = {
 
       lastSnap = { seat: p.seat, name: p.name, ms, n };
       if (ms >= MIN_REACTION && (bestMs === 0 || ms < bestMs)) bestMs = ms;
-      banner = { t0: now, ink: p.ink, rad: p.rad, big: p.name.toUpperCase() + " SNAPS", small: "+" + n + " cards   ·   " + ms + " ms" };
+      banner = { t0: now, ink: p.ink, rad: p.rad, life: clamp(flipEvery * 1.6, 900, 1700),
+        big: p.name.toUpperCase() + " SNAPS", small: "+" + n + " cards   ·   " + ms + " ms" };
 
       p.flashT = 1;
       shake = 1;
@@ -1025,10 +1044,22 @@ window.plethoraBit = {
       const mirror = shell.el("over-mirror");
       mirror.textContent = winner ? winner.name + " wins" : "Dead heat";
       mirror.style.color = winner ? winner.ink : CREAM;
+      shell.el("over-mirror-rows").innerHTML = players.map((p) =>
+        '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;">' +
+          '<span style="width:8px;height:8px;border-radius:3px;background:' + p.ink + ';"></span>' +
+          '<span style="opacity:0.72;">' + esc(p.name) + '</span>' +
+          '<b style="font-weight:700;">' + p.cards + '</b>' +
+        '</span>').join("");
       const dead = pile.length;
+      // Only claim nobody snapped when nobody did. A hand where every claim
+      // came in under the reaction floor still had snaps in it, and saying
+      // otherwise in front of the people who made them is simply wrong.
+      const taken = claims.reduce((n, c) => n + (c.verdict === "snap" ? 1 : 0), 0);
       shell.el("over-sub").textContent = bestMs > 0
         ? "fastest snap " + bestMs + " ms"
-        : "not one clean snap all deck";
+        : taken > 0
+          ? taken + (taken === 1 ? " snap taken" : " snaps taken")
+          : "not one clean snap all deck";
       shell.el("over-rows").innerHTML = players.map((p) =>
         '<div style="display:flex;align-items:center;gap:10px;margin:8px 0;">' +
           '<div style="width:9px;height:9px;border-radius:3px;background:' + p.ink + ';flex:none;"></div>' +
@@ -1065,21 +1096,35 @@ window.plethoraBit = {
     /* ===============================================================
      * DRAWING
      * ============================================================= */
-    function drawCardAt(x, y, rot, scale, card, faceUp, lift) {
-      const w = CARD_W * scale, h = CARD_H * scale;
+    /**
+     * One card's shadow. Separate from the card so a cluster of them can share
+     * a single shadow: seven cards converging on the same spot stack seven
+     * shadows, and the deck arrives wearing a black hole instead.
+     */
+    function cardShadow(x, y, rot, scale, lift) {
       g.save();
       g.translate(x, y);
       g.rotate(rot);
       if (shadowArt) {
-        const spread = 1 + lift * 1.2;              // airborne cards throw wider
+        // The higher the card, the wider and fainter the shadow it throws.
+        const spread = 1 + lift * 1.7;
         const sw = (CARD_W + SHADOW_PAD * 2) * scale * spread;
         const sh = (CARD_H + SHADOW_PAD * 2) * scale * spread;
-        g.globalAlpha = clamp(0.95 - lift * 0.30, 0.3, 0.95);
+        g.globalAlpha = clamp(1 - lift * 0.9, 0.25, 1);
         g.drawImage(shadowArt, -sw / 2, -sh / 2 + (3 + lift * 12) * scale, sw, sh);
         g.globalAlpha = 1;
       } else {
-        dropShadow(g, w, h, CARD_R * scale, lift);
+        dropShadow(g, CARD_W * scale, CARD_H * scale, CARD_R * scale, lift);
       }
+      g.restore();
+    }
+
+    function drawCardAt(x, y, rot, scale, card, faceUp, lift, shadow) {
+      const w = CARD_W * scale, h = CARD_H * scale;
+      if (shadow !== false) cardShadow(x, y, rot, scale, lift);
+      g.save();
+      g.translate(x, y);
+      g.rotate(rot);
       const src = faceUp ? (art && art.faces[card.id]) : (art && art.back);
       if (src) {
         g.drawImage(src, -w / 2, -h / 2, w, h);
@@ -1285,12 +1330,13 @@ window.plethoraBit = {
       // The colour is a second pass on top. Folded into the leather gradient it
       // mixed with the green showing through and every pad came out olive.
       const wash = g.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
-      wash.addColorStop(0.00, hexA(p.ink, (armed ? 0.34 : 0.15) + p.flashT * 0.4));
-      wash.addColorStop(0.62, hexA(p.ink, 0));
+      wash.addColorStop(0.00, hexA(p.ink, (armed ? 0.34 : 0.15) + p.flashT * 0.55));
+      wash.addColorStop(0.62, hexA(p.ink, p.flashT * 0.22));
       g.fillStyle = wash;
       g.fill();
-      g.strokeStyle = p.lock > 0 ? "rgba(255,90,90,0.75)" : hexA(p.ink, armed ? 0.95 : 0.42);
-      g.lineWidth = armed || p.lock > 0 ? 2.4 : 1.4;
+      g.strokeStyle = p.lock > 0 ? "rgba(255,90,90,0.75)"
+        : hexA(p.ink, Math.max(armed ? 0.95 : 0.42, p.flashT));
+      g.lineWidth = armed || p.lock > 0 ? 2.4 : 1.4 + p.flashT * 1.6;
       g.stroke();
 
       // Inner tread, the concentric inset that makes it read as a pad you hit.
@@ -1307,9 +1353,18 @@ window.plethoraBit = {
         g.fill();
       }
 
+      // The win flash. It used to be a flat white fill at 0.55, which bleached
+      // the pad to a dead grey slab at exactly the moment the player's colour
+      // matters most — you won, and your corner of the table stopped being
+      // yours. It is a warm lamp bloom now: the colour lives in the ink wash
+      // above, and this is only the highlight on top of it.
       if (p.flashT > 0) {
+        const f = easeOut(p.flashT);
+        const bloom = g.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) * 0.62);
+        bloom.addColorStop(0.00, "rgba(255,247,226," + (f * 0.26).toFixed(3) + ")");
+        bloom.addColorStop(1.00, "rgba(255,247,226,0)");
         roundRect(g, -w / 2, -h / 2, w, h, rr);
-        g.fillStyle = "rgba(255,255,255," + (p.flashT * 0.55).toFixed(3) + ")";
+        g.fillStyle = bloom;
         g.fill();
       }
 
@@ -1399,19 +1454,27 @@ window.plethoraBit = {
     function drawBanner(now) {
       if (!banner) return;
       const age = now - banner.t0;
-      if (age > 1700) { banner = null; return; }
+      if (age > banner.life) { banner = null; return; }
       const inT = clamp(age / 170, 0, 1);
-      const out = clamp((1700 - age) / 260, 0, 1);
+      const out = clamp((banner.life - age) / 280, 0, 1);
       const pop = 1 + 0.35 * (1 - easeOut(inT));
       g.save();
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.font = "800 30px " + FONT;
+      const tw = g.measureText(banner.big).width + 44;
+      // The shout runs along the winner's own axis, so at a side seat it is the
+      // height of the table it has to fit, not the width. Four-handed, a
+      // full-size "VIOLET SNAPS" was 60px wider than the gap between the side
+      // pads and laid itself straight across two other people's counts.
+      const along = Math.abs(Math.abs(banner.rad) - Math.PI / 2) < 0.1
+        ? (L.bandBot - L.bandTop) - 24
+        : L.bandW - 14;
+      const fit = Math.min(1, along / tw);
+
       g.globalAlpha = out;
       g.translate(L.px, L.py);
       g.rotate(banner.rad);
-      g.scale(pop, pop);
-      g.textAlign = "center"; g.textBaseline = "middle";
-
-      g.font = "800 30px " + FONT;
-      const tw = g.measureText(banner.big).width + 44;
+      g.scale(pop * fit, pop * fit);
       roundRect(g, -tw / 2, -40, tw, 80, 18);
       g.fillStyle = "rgba(6,18,12,0.80)"; g.fill();
       g.strokeStyle = hexA(banner.ink, 0.75); g.lineWidth = 2; g.stroke();
@@ -1427,15 +1490,18 @@ window.plethoraBit = {
     /* --- the deal and the count-in -------------------------------- */
     function drawDeal(now) {
       const t = clamp(dealT / 0.85, 0, 1);
-      const n = 9;
+      const n = 7;
+      // One shadow for the whole arriving deck, laid down first so the cards
+      // land on it, and held back until the first card is nearly home.
+      if (t > 0.14) cardShadow(L.sx, L.sy, -0.03, 1, 0.06);
       for (let i = 0; i < n; i++) {
-        const k = clamp((t - i * 0.055) / 0.30, 0, 1);
+        const k = clamp((t - i * 0.065) / 0.30, 0, 1);
         if (k <= 0) continue;
         const p = easeOut(k);
         const a = (i / n) * TAU + 1.1;
-        const x = lerp(L.px + Math.cos(a) * W * 0.9, L.sx - i * 1.4, p);
-        const y = lerp(L.py + Math.sin(a) * H * 0.7, L.sy - i * 1.8, p);
-        drawCardAt(x, y, lerp(a * 1.6, -0.03, p), 1, null, false, 0.5 * (1 - p));
+        const x = lerp(L.px + Math.cos(a) * W * 0.9, L.sx - i * 1.1, p);
+        const y = lerp(L.py + Math.sin(a) * H * 0.7, L.sy - i * 1.4, p);
+        drawCardAt(x, y, lerp(a * 1.6, -0.03, p), 1, null, false, 0, false);
       }
     }
 
@@ -1515,7 +1581,10 @@ window.plethoraBit = {
       }
 
       if (flash.a > 0.004) {
-        g.globalAlpha = flash.a * 0.42;
+        // A tint over the whole table, not a wash. At 0.42 the peak frame was
+        // a single flat colour: the felt, the cards and three other people's
+        // pads all went the winner's yellow at once.
+        g.globalAlpha = flash.a * 0.27;
         g.fillStyle = flash.ink;
         g.fillRect(0, 0, W, H);
         g.globalAlpha = 1;
@@ -1585,14 +1654,23 @@ window.plethoraBit = {
     const btn = "pointer-events:auto;width:38px;height:38px;border-radius:12px;border:none;" +
       "background:rgba(6,22,15,0.72);color:" + CREAM + ";font-size:15px;line-height:1;" +
       "font-family:inherit;padding:0;box-shadow:inset 0 0 0 1px rgba(216,169,74,0.30);";
-    const bigBtn = (bg, fg) => "width:100%;padding:15px;border:none;border-radius:15px;font-family:inherit;" +
+    const bigBtn = (bg, fg, edge) => "width:100%;padding:15px;border:none;border-radius:15px;font-family:inherit;" +
       "font-size:16px;font-weight:700;background:" + bg + ";color:" + fg + ";margin-top:11px;" +
-      "pointer-events:auto;";
+      "pointer-events:auto;" + (edge ? "box-shadow:inset 0 0 0 1px " + edge + ";" : "");
+    // The way out of a sheet is the only control on it, and a flat translucent
+    // slab read as the disabled one. It gets the brass hairline the panels and
+    // the pads already wear, so it looks like part of the same table.
+    const QUIET = "linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.055))";
+    const QUIET_EDGE = "rgba(216,169,74,0.42)";
     const panel = "max-width:322px;width:100%;background:linear-gradient(180deg,#14311f,#0b2015);" +
       "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(216,169,74,0.28),0 20px 60px rgba(0,0,0,0.55);";
     const label = "font-size:11px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.52;";
-    const sheetCss = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
-      "background:rgba(3,12,8,0.90);z-index:70;padding:24px;pointer-events:auto;";
+    // overflow-y:auto so a long panel on a short phone scrolls rather than
+    // centring itself off both ends, which puts its close button out of reach.
+    const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
+      "align-items:safe center;justify-content:center;" +
+      "background:rgba(3,12,8,0.90);z-index:70;padding:" + (SAFE_T + 14) + "px 24px " +
+      (SAFE_B + 14) + "px;overflow-y:auto;pointer-events:auto;";
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT + ";color:" + CREAM + ";pointer-events:none;";
@@ -1630,11 +1708,22 @@ window.plethoraBit = {
       '<div data-el="over" style="position:absolute;inset:0;display:none;flex-direction:column;' +
         'align-items:center;justify-content:center;z-index:60;padding:26px;text-align:center;' +
         'pointer-events:auto;background:radial-gradient(120% 60% at 50% 45%,rgba(3,16,10,0.82),rgba(2,9,6,0.97));">' +
-        // A mirrored headline for whoever is sitting at the other end, so the
-        // result is not upside down for half the table. In the flow rather than
-        // absolutely placed, or it lands on the card below it at some heights.
-        '<div data-el="over-mirror" style="transform:rotate(180deg);font-size:27px;' +
-          'font-weight:800;opacity:0.9;margin-bottom:16px;"></div>' +
+        // The result, turned round for whoever is sitting at the other end.
+        // A bare rotated headline read as a duplicate of the panel below it —
+        // the same two words twice, one of them upside down and floating on
+        // nothing. It is the same plate as the main one now, just compact: an
+        // eyebrow, the winner, and every count, so the far seat is told the
+        // whole result rather than shown a stray word. In the flow rather than
+        // absolutely placed, or it lands on the panel at some heights.
+        '<div style="transform:rotate(180deg);max-width:300px;width:100%;margin-bottom:18px;' +
+          'background:linear-gradient(180deg,#14311f,#0b2015);border-radius:18px;padding:12px 16px 13px;' +
+          'box-shadow:inset 0 0 0 1px rgba(216,169,74,0.26),0 14px 36px rgba(0,0,0,0.45);">' +
+          '<div style="' + label + 'font-size:9.5px;">Hand over</div>' +
+          '<div data-el="over-mirror" style="font-size:25px;font-weight:800;margin-top:2px;' +
+            'letter-spacing:-0.02em;line-height:1.15;"></div>' +
+          '<div data-el="over-mirror-rows" style="display:flex;flex-wrap:wrap;gap:6px 13px;' +
+            'justify-content:center;margin-top:8px;"></div>' +
+        '</div>' +
         '<div style="max-width:300px;width:100%;' + panel + 'padding:22px 20px 20px;">' +
           '<div style="' + label + '">Hand over</div>' +
           '<div data-el="over-title" style="font-size:36px;font-weight:800;margin-top:5px;letter-spacing:-0.02em;line-height:1.1;"></div>' +
@@ -1644,7 +1733,7 @@ window.plethoraBit = {
         '</div>' +
         '<div style="width:100%;max-width:300px;margin-top:16px;">' +
           '<button data-el="again" style="' + bigBtn("linear-gradient(180deg,#f0cf7f,#cf9a2e)", "#221503") + '">Deal again</button>' +
-          '<button data-el="quit" style="' + bigBtn("rgba(255,255,255,0.10)", CREAM) + '">Change players</button>' +
+          '<button data-el="quit" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + '">Change players</button>' +
         '</div>' +
       '</div>' +
 
@@ -1661,7 +1750,7 @@ window.plethoraBit = {
           '<div style="' + label + '">Players</div>' +
           '<div data-el="counts" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
           '<div style="font-size:12px;opacity:0.45;margin-top:8px;">Changes apply on the next deal.</div>' +
-          '<button data-el="cogp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:16px;">Done</button>' +
+          '<button data-el="cogp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Done</button>' +
         '</div>' +
       '</div>' +
 
@@ -1679,7 +1768,7 @@ window.plethoraBit = {
             '<li>When the deck runs out, the biggest pile wins the hand.</li>' +
             '<li>Your fastest hand of the night goes to the global board.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:16px;">Got it</button>' +
+          '<button data-el="helpp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Got it</button>' +
         '</div>' +
       '</div>';
 
@@ -1701,9 +1790,17 @@ window.plethoraBit = {
       const paint = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
-          b.style.background = on ? "rgba(216,169,74,0.30)" : "rgba(255,255,255,0.07)";
-          b.style.color = on ? "#ffeec2" : "rgba(244,236,216,0.55)";
-          b.style.boxShadow = on ? "inset 0 0 0 1px rgba(216,169,74,0.55)" : "none";
+          // A brass chip, the same metal as the Deal button. At 30% over the
+          // panel's green the selected chip mixed down to a khaki that read as
+          // the disabled one — the wrong answer looked no different from the
+          // right one, which is the whole job of a segmented control.
+          b.style.background = on
+            ? "linear-gradient(180deg,#f2d289,#cf9a2e)"
+            : "linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.045))";
+          b.style.color = on ? "#241704" : "rgba(244,236,216,0.62)";
+          b.style.boxShadow = on
+            ? "inset 0 1px 0 rgba(255,252,238,0.55),0 2px 8px rgba(0,0,0,0.35)"
+            : "inset 0 0 0 1px rgba(216,169,74,0.16)";
         }
       };
       for (const b of host.querySelectorAll("button")) {

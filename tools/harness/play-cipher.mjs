@@ -57,8 +57,9 @@ async function brief(num, { word, shots } = {}) {
   if (shots) await bit.shot(shots + "-handoff");
 
   const pad = await P(() => window.__CIPHER__.padXY());
+  await bit.wait(150);                       // let the renderer settle after a shot
   await bit.fingerDown(1, pad.x, pad.y);
-  await bit.wait(900);                       // 700ms hold, then the key is up
+  await bit.wait(1200);                      // 700ms hold, then the key is up
   const up = await P(() => ({ peek: window.__CIPHER__.peek, phase: window.__CIPHER__.phase }));
   if (!up.peek) throw new Error("the hold did not expose the key");
   if (shots) await bit.shot(shots + "-key");
@@ -123,6 +124,7 @@ st = await state();
 if (st.turn !== "blue") throw new Error("the bystander did not end red's turn");
 await brief(1);
 await contact(pick(st, "blue", 1)[0]);
+await bit.shot("cipher-blue");                    // blue's band, rotated to their seat
 const pass = await P(() => window.__CIPHER__.bandXY("pass"));
 await bit.tap(pass.x, pass.y);                    // END TURN, legal after one guess
 await settle();
@@ -137,10 +139,23 @@ await bit.wait(1400);
 await bit.shot("cipher-end");
 const end = await state();
 
+// The record is a property of the match, so it must be submitted exactly once
+// and carry the whole match's guess count.
+const log = await bit.events();
+const submits = log.filter((e) => e.kind === "memory.record.submit");
+const beds = log.filter((e) => e.kind === "music.play");
+
+console.log("record:   ", JSON.stringify(submits.map((e) => e.args)));
+console.log("music:    ", JSON.stringify(beds.map((e) => e.args[0])),
+            "| stings:", log.filter((e) => e.kind === "music.sting").map((e) => e.args[0]).join(","));
 console.log("winner:   ", end.winner, "| phase:", end.phase);
 console.log("guesses:  ", end.guesses);
 console.log("remaining:", JSON.stringify(end.remaining));
-const ok = end.winner === "red" && end.remaining.red === 0 && end.phase === "over" && end.guesses === 11;
+const ok = end.winner === "red" && end.remaining.red === 0 && end.phase === "over" &&
+           end.guesses === 11 &&
+           submits.length === 1 && submits[0].args[0] === "fewest_guesses" &&
+           submits[0].args[1] === 11 &&
+           beds.length === 1;
 console.log(ok ? "PASS — red contacted all nine agents in a real match" : "FAIL");
 
 const errs = (await bit.errors()).filter((e) => !/404/.test(e));

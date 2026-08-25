@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Ratscrew",
+  "description": "Egyptian Ratscrew for two to four people around one phone. Lay it flat and take the pad on your own edge — that pad is your face-down stack, turned the right way up for where you are sitting. Tap it to throw a card onto the baize, where it lands with a shadow and a crooked little bounce. Turn up a face card and the next player owes tribute: four chances for an ace, three for a king, two for a queen, one for a jack — and a face card during payment flips the whole debt back onto them. The moment the middle shows a double, a sandwich or two cards adding to ten, every pad on the table goes gold and the first hand down takes the pile. Slap at nothing and it burns a card off your stack. Run out and you are done — last player still holding cards wins. The race is settled by whichever finger the phone felt first, so several hands landing in the same instant still leave exactly one winner, and the fastest clean slap of the night goes to the global board.",
+  "tags": [
+    "multiplayer",
+    "local-multiplayer",
+    "cards",
+    "party",
+    "reflex",
+    "reaction",
+    "tabletop",
+    "four-player"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "fastest_slap": {
+        "label": "Fastest Slap",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
