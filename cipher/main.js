@@ -20,7 +20,9 @@
  * gesture, and no way to leave the key sitting face-up on a table.
  *
  * THE BOARD IS ORIENTATION-NEUTRAL, THE CHROME IS NOT. Every codeword is
- * printed twice on its tile, once upright and once rotated 180 degrees,
+ * printed once on its tile at full size, with the whole grid turning to face
+ * whichever team is guessing — it used to be printed twice, once upright and
+ * once rotated 180 degrees,
  * exactly as the physical cards are, so both sides of the table read the grid
  * without anybody turning the phone. Only the two HUD bands rotate: each team
  * gets the band at its own edge, turned to face it, and the idle one drops
@@ -378,7 +380,35 @@ window.plethoraBit = {
       const c = i % 5, r = (i / 5) | 0;
       return { x: L.gx + c * (L.cell + GUT), y: L.gy + r * (L.cell + GUT), w: L.cell, h: L.cell };
     }
-    function tileAt(x, y) {
+    /**
+     * The grid turns 180 degrees to face whoever is guessing.
+     *
+     * Codenames is turn-based, so only one team ever reads the board at a
+     * time, and turning it for them buys the codeword the whole tile instead
+     * of half of it. `boardFlip` is applied in exactly two places: around the
+     * grid draw, and inverted here on every pointer.
+     */
+    let boardFlip = 0;
+    function gridCentre() {
+      return { x: L.gx + L.gw / 2, y: L.gy + L.gw / 2 };
+    }
+    function pushGrid(gg) {
+      gg.save();
+      if (boardFlip) {
+        const c = gridCentre();
+        gg.translate(c.x, c.y); gg.rotate(Math.PI); gg.translate(-c.x, -c.y);
+      }
+    }
+    /** Screen point -> un-turned grid space. */
+    function gridPoint(x, y) {
+      if (!boardFlip) return { x, y };
+      const c = gridCentre();
+      return { x: 2 * c.x - x, y: 2 * c.y - y };
+    }
+
+    function tileAt(sx0, sy0) {
+      const gp = gridPoint(sx0, sy0);
+      const x = gp.x, y = gp.y;
       const c = Math.floor((x - L.gx) / (L.cell + GUT));
       const r = Math.floor((y - L.gy) / (L.cell + GUT));
       if (c < 0 || c > 4 || r < 0 || r > 4) return -1;
@@ -480,6 +510,9 @@ window.plethoraBit = {
     function beginTurn(team) {
       turn = team;
       turnNo++;
+      // Turn the grid to face whichever team is about to guess. seatOf tells
+      // us which physical edge they are at; the far edge needs the half turn.
+      boardFlip = seatOf(team) === "top" ? Math.PI : 0;
       clue = null; clueNum = 2; clueDraft = "";
       guessedThisTurn = 0; guessesLeft = 0; armed = -1;
       typed = 0;
@@ -529,24 +562,25 @@ window.plethoraBit = {
       gg.fillStyle = "#D8CDB2"; gg.fill();
       gg.strokeStyle = "#9C8F6E"; gg.lineWidth = 0.8; gg.stroke();
 
-      // the codeword, printed upright and again upside down, exactly as the
-      // real cards are — both sides of the table read the grid without anyone
-      // turning the phone.
+      // The codeword, printed ONCE and as large as the plaque allows.
+      //
+      // It used to be printed twice, upright and upside down, so both sides of
+      // the table could read it without turning the phone. On a 70px tile that
+      // gave each copy about 28px of height for up to ten letters, and the
+      // result was two rows of tiny type per tile and a grid that read as
+      // noise. Codenames is turn-based — only one team is guessing at a time —
+      // so the whole board turns to face them instead, and the word gets the
+      // entire tile.
+      //
       // The budget has to pay for the letter-spacing too: fitSize measures the
-      // glyph run only, and tracked() then adds `track` between every pair —
-      // fitting without it pushed a seven-letter word past the plaque border
-      // and the tile clipped its last letter off.
-      const track = word.length > 6 ? 0.35 : 0.8;
-      const size = fitSize(gg, word, w - 22 - track * (word.length - 1),
-                           Math.min(h * 0.235, 20), DISPLAY, "700");
+      // glyph run only, and tracked() then adds `track` between every pair.
+      const track = word.length > 7 ? 0.3 : 0.7;
+      const size = fitSize(gg, word, w - 16 - track * (word.length - 1),
+                           Math.min(h * 0.40, 30), DISPLAY, "700");
       gg.fillStyle = INK;
       gg.textAlign = "center"; gg.textBaseline = "middle";
       gg.font = "700 " + size.toFixed(1) + "px " + DISPLAY;
       tracked(gg, word, w / 2, my + (h - 2) * 0.235, track, "center");
-      gg.save();
-      gg.translate(w / 2, my); gg.rotate(Math.PI); gg.translate(-w / 2, -my);
-      tracked(gg, word, w / 2, my + (h - 2) * 0.235, track, "center");
-      gg.restore();
     }
 
     /** The four agent faces. Flat, high contrast, one rim light — never modelled. */
@@ -691,11 +725,12 @@ window.plethoraBit = {
 
       // A covered card still has to be discussable, so the word survives on a
       // stamped plate — printed both ways up, like the face it replaced.
-      const plateH = Math.max(12, h * 0.19);
-      const ptrack = word.length > 6 ? 0.3 : 0.5;
-      const size = fitSize(gg, word, w - 18 - ptrack * (word.length - 1),
-                           plateH * 0.72, DISPLAY, "700");
-      for (const flip of [false, true]) {
+      const plateH = Math.max(15, h * 0.26);
+      const ptrack = word.length > 7 ? 0.28 : 0.5;
+      const size = fitSize(gg, word, w - 14 - ptrack * (word.length - 1),
+                           plateH * 0.74, DISPLAY, "700");
+      // Printed once, for the same reason the face is: the board turns.
+      for (const flip of [false]) {
         gg.save();
         if (flip) { gg.translate(w / 2, h / 2); gg.rotate(Math.PI); gg.translate(-w / 2, -h / 2); }
         gg.fillStyle = kind === "neutral" ? "rgba(52,48,34,0.72)" : "rgba(6,6,9,0.62)";
@@ -1579,7 +1614,9 @@ window.plethoraBit = {
       if (phase === "menu") { drawMenuArt(); return; }
 
       drawGridFrame();
+      pushGrid(g);
       for (let i = 0; i < 25; i++) drawTile(i);
+      g.restore();
       if (peek && (phase === "clue" || phase === "handoff")) drawKeyOverlay(1);
       drawSparks();
 
@@ -2069,7 +2106,7 @@ window.plethoraBit = {
           '<ul style="' + scroller + 'font-size:13px;line-height:1.55;opacity:0.86;' +
             'padding-left:17px;margin:10px 0 0;">' +
             '<li>Two teams. Each picks <b>one spymaster</b>; everyone else is an operative.</li>' +
-            '<li>The phone lies flat between you. Every codeword is printed twice, so both sides read it the right way up.</li>' +
+            '<li>The phone lies flat between you. The grid turns to face whichever team is guessing, so the codewords are always the right way up for them.</li>' +
             '<li>At the start of a turn the screen shutters closed. <b>Pass the phone to that team’s spymaster.</b></li>' +
             '<li>The spymaster <b>holds the fingerprint pad</b> to read the key. Let go and it hides instantly — never put the phone down while it is up.</li>' +
             '<li>Nine words are RED, eight are BLUE, seven are bystanders and <b>one is the assassin</b>. Red goes first.</li>' +
@@ -2310,7 +2347,13 @@ window.plethoraBit = {
       get guesses() { return totalGuesses; },
       get peek() { return peek; },
       get remaining() { return { red: remaining("red"), blue: remaining("blue") }; },
-      tileXY(i) { const t = tileRect(i); return { x: t.x + t.w / 2, y: t.y + t.h / 2 }; },
+      /** SCREEN centre of a tile, which is not its grid centre once the
+       *  board has turned to face the other team. gridPoint is its own
+       *  inverse, so it converts in both directions. */
+      tileXY(i) {
+        const t = tileRect(i);
+        return gridPoint(t.x + t.w / 2, t.y + t.h / 2);
+      },
       padXY() { const r = L.sm.pad; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
       transmitXY() { const r = L.sm.trans; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
       chipXY() { const r = L.sm.chip; return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
