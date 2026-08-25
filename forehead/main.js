@@ -157,11 +157,18 @@ window.plethoraBit = {
       const TRIGGER = 0.62;                 // ~38 degrees off neutral
       const REARM = 0.34;                   // must come back near level first
 
+      // ctx.sensors is read through in full every time rather than aliased
+      // into a local. The upload validator statically tracks calls made
+      // through ctx, and binding one of its namespace objects to a variable
+      // defeats that: the draft comes back 400 "unsupported remote resources",
+      // a message that names the loader APIs and has nothing to do with the
+      // actual cause. Aliasing scalars like ctx.width is fine; aliasing a
+      // namespace — sensors, music, audio, storage, memory — is not.
       function vec() {
-        const s = ctx.sensors;
-        const a = s && (s.accelerationIncludingGravity || s.accelerometer);
+        const a = ctx.sensors &&
+          (ctx.sensors.accelerationIncludingGravity || ctx.sensors.accelerometer);
         if (a && typeof a.x === "number") return { x: a.x, y: a.y, z: a.z };
-        const t = s && s.tilt;
+        const t = ctx.sensors && ctx.sensors.tilt;
         if (t && typeof t.x === "number") return { x: t.x, y: t.y, z: 1 };
         return null;
       }

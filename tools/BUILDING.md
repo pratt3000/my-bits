@@ -36,6 +36,13 @@ uploads.
 | any `http(s)://` that is not `libs.plethora.studio` | *"unsupported remote resources"* | There are no packaged assets (`maxAssets: 0`). Generate everything. |
 | a permission-gated API with no matching `manifest.permissions` entry | 400 | Declare it. The validator checks both directions — a declared permission you never use is also flagged. |
 
+**Never alias a `ctx` namespace object into a variable.** `const s = ctx.sensors`
+then `s.tilt` gets the draft rejected with the same *"unsupported remote
+resources"* message; reading `ctx.sensors.tilt` through in full is fine. The
+upload validator statically tracks calls made through `ctx`, and binding one of
+its namespaces to a local defeats that. Aliasing *scalars* — `let W = ctx.width`
+— is fine, and every accepted bit does it.
+
 An offscreen drawing surface is `new OffscreenCanvas(w, h)`, never
 `document.createElement("canvas")`. Guard it: some WebViews lack it, so every
 bake site needs a live-drawing fallback rather than a blank screen.
@@ -122,6 +129,25 @@ Platform-owned. Declare a `memory.records` channel in the manifest and call
 For a couch game the honest record is a property of the *match* — longest
 rally, fastest win, best combined score — not of one of the people sharing the
 phone.
+
+## An unresolved upload rejection
+
+Five bits (`forehead`, `snap`, `reactor-four`, `go-fish`, `cheat`) are refused
+with `400 bad_request` and the *"unsupported remote resources"* message, and the
+cause is **not** characterised. What is established:
+
+- It is not the manifest. The same manifest with a trivial source is accepted.
+- It is not size (the smallest rejected bit is 30KB; a 123KB bit is accepted),
+  nor comments, nor emoji, nor the count of `ctx.` references, nor any single
+  construct found by feature-correlating the five against the nineteen accepted.
+- **It is cumulative within a file.** Split `forehead`'s body in half and each
+  half uploads cleanly on its own; concatenated, they are rejected. So it is a
+  threshold or an interaction, not one bad line — which is why bisecting to a
+  single trigger does not converge.
+
+`504 deadline_exceeded` is different and is genuinely just a slow server: the
+draft is usually created anyway, and a retry reports `updated`. `tools/upload.mjs`
+backs off and retries those.
 
 ## Verifying before upload
 

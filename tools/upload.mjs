@@ -40,26 +40,46 @@ for (const bit of bits) {
     continue;
   }
 
-  let res, body;
-  try {
-    res = await fetch("https://api.plethora.studio/v1/agent/bits/drafts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Plethora-Agent ${token}` },
-      body: JSON.stringify({
-        title: manifest.title,
-        description: manifest.description,
-        tags: manifest.tags,
-        source,
-        manifest,
-        generated: true,
-      }),
-    });
-    body = await res.json();
-  } catch (e) {
-    console.log(`✗ ${bit}: ${e.message}`);
-    results.push({ bit, ok: false, why: e.message });
-    continue;
+  // 504 deadline_exceeded is marked retryable by the API and happens often on
+  // the larger bits, so back off and try again rather than reporting a failure
+  // that is really just a slow server.
+  let res, body, attempt = 0;
+  while (attempt < 5) {
+    attempt++;
+    try {
+      res = await fetch("https://api.plethora.studio/v1/agent/bits/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Plethora-Agent ${token}` },
+        body: JSON.stringify({
+          title: manifest.title,
+          description: manifest.description,
+          tags: manifest.tags,
+          source,
+          manifest,
+          generated: true,
+        }),
+      });
+      body = await res.json().catch(() => ({}));
+    } catch (e) {
+      body = null;
+      if (attempt >= 5) {
+        console.log(`✗ ${bit}: ${e.message}`);
+        results.push({ bit, ok: false, why: e.message });
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      continue;
+    }
+    if (res.status === 504 || body?.error?.retryable) {
+      if (attempt < 5) {
+        console.log(`  … ${bit}: ${res.status}, retrying (${attempt}/5)`);
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+    }
+    break;
   }
+  if (!body) continue;
 
   if (res.ok && body.ok) {
     const d = body.data || {};

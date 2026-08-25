@@ -31,6 +31,8 @@ const BANNED = [
   { re: /<script/i,                             why: "script tag injection is not permitted." },
   { re: /\.innerHTML\s*=\s*[^;]*\bhttps?:\/\//, why: "remote URL inside injected markup." },
   { re: /localStorage|sessionStorage|indexedDB/, why: "raw browser storage — use ctx.storage (permission-gated)." },
+  { re: /(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*ctx\.(?:sensors|motion|music|audio|camera|microphone|storage|memory|platform|registry|assets|mediapipe)\s*[;,)]/,
+    why: "aliasing a ctx namespace into a variable — the upload validator tracks calls through ctx and a local binding defeats it. Read ctx.<namespace>.<member> through in full. Aliasing scalars like ctx.width is fine." },
   { re: /\bnew\s+Audio\s*\(/,                   why: "new Audio() is permission-guarded; prefer ctx.audio / ctx.music." },
   { re: /\b(?:webkitAudioContext|AudioContext)\s*\(/, why: "raw AudioContext is permission-guarded; prefer ctx.music / ctx.audio." },
   { re: /\bsetTimeout\s*\(/,                    why: "bare setTimeout — use ctx.timeout so the runtime owns cleanup.", soft: true },
