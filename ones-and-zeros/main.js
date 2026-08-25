@@ -110,6 +110,11 @@ window.plethoraBit = {
     const paint = (deg, lit) => PALETTE[((deg / 7.5) | 0) % HUES * LITS + lit];
 
     // ---- surfaces ----------------------------------------------------------
+    // Two runtime canvases: a backdrop painted once and left alone, and the
+    // live layer cleared every frame on top of it. Layer order is creation
+    // order, so the backdrop has to come first.
+    const backCanvas = ctx.createCanvas2D();
+    const backCtx = backCanvas.getContext("2d");
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
     const g = canvas.getContext("2d");
     const ui = ctx.createRoot({ touchAction: "manipulation" });
@@ -365,17 +370,11 @@ window.plethoraBit = {
     }
 
     // ---- rendering ---------------------------------------------------------
-    // The static backdrop (vignette + faint cell grid) is baked once; only live
-    // and just-died cells are drawn per frame.
-    const back = document.createElement("canvas");
-    const backCtx = back.getContext("2d");
-
+    // The static backdrop (gradient, faint cell grid, vignette) is painted once
+    // onto its own layer; only live and just-died cells are drawn per frame.
     function buildBack() {
-      const dpr = ctx.dpr || 1;
-      back.width = Math.max(1, Math.round(W * dpr));
-      back.height = Math.max(1, Math.round(H * dpr));
-      backCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const c = backCtx;
+      c.clearRect(0, 0, W, H);
       const sky = c.createLinearGradient(0, 0, W * 0.4, H);
       sky.addColorStop(0, "#0b0f1e");
       sky.addColorStop(0.5, "#0a0d18");
@@ -399,7 +398,7 @@ window.plethoraBit = {
     }
 
     function render(now) {
-      g.drawImage(back, 0, 0, W, H);
+      g.clearRect(0, 0, W, H);            // the backdrop layer shows through
       const glow = population < 900;      // skip the halo pass on busy boards
       const half = cell / 2;
       let live = 0;                       // counted here so the readout stays
@@ -479,67 +478,60 @@ window.plethoraBit = {
       "justify-content:center;cursor:pointer;touch-action:manipulation;transition:opacity 0.15s,transform 0.12s;" +
       "box-shadow:0 2px 14px rgba(0,0,0,0.45);";
 
-    function chip(label, aria) {
-      const b = document.createElement("button");
-      b.textContent = label;
-      b.setAttribute("aria-label", aria || label);
-      b.style.cssText = CHIP;
-      return b;
-    }
+    // Chrome is declared as markup on the runtime-owned root and then wired up
+    // by data-id, which is the sanctioned way to build DOM in a Bit. Every
+    // label below is a literal from this file — no outside text reaches innerHTML.
+    const chipHtml = (id, label, aria, extra) =>
+      '<button data-id="' + id + '" aria-label="' + aria + '" style="' + CHIP + (extra || "") + '">' + label + "</button>";
 
-    const topBar = document.createElement("div");
-    topBar.style.cssText =
-      "position:absolute;left:12px;right:12px;top:calc(" + ctx.safeArea.top + "px + 12px);" +
-      "display:flex;gap:10px;align-items:center;pointer-events:none;";
-    ui.appendChild(topBar);
-
-    const helpBtn = chip("?", "How it works");
-    const soundBtn = chip("♪", "Toggle sound");
-    const gap = document.createElement("div");
-    gap.style.cssText = "flex:1;";
-    const stats = document.createElement("div");
-    stats.style.cssText =
+    const BAR = "position:absolute;left:12px;right:12px;display:flex;pointer-events:none;";
+    const STATS =
       "pointer-events:none;height:44px;padding:0 14px;border-radius:14px;display:flex;align-items:center;" +
       "font:600 13px/1 " + FONT + ";color:#cfe0ff;background:rgba(22,28,48,0.72);" +
       "backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-variant-numeric:tabular-nums;" +
       "box-shadow:0 2px 14px rgba(0,0,0,0.45);";
-    stats.textContent = "gen 0 · 0";
-    topBar.append(helpBtn, soundBtn, gap, stats);
 
-    // Stamp tray sits above the transport row and only appears when asked for.
-    const tray = document.createElement("div");
-    tray.style.cssText =
-      "position:absolute;left:0;right:0;bottom:calc(" + ctx.safeArea.bottom + "px + 82px);" +
-      "display:none;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;" +
-      "padding:4px 12px 6px;pointer-events:auto;";
-    ui.appendChild(tray);
+    ui.innerHTML =
+      '<div style="' + BAR + "top:calc(" + ctx.safeArea.top + 'px + 12px);gap:10px;align-items:center;">' +
+        chipHtml("help", "?", "How it works") +
+        chipHtml("sound", "♪", "Toggle sound") +
+        '<div style="flex:1;"></div>' +
+        '<div data-id="stats" style="' + STATS + '">gen 0 · 0</div>' +
+      "</div>" +
 
-    const bottomBar = document.createElement("div");
-    bottomBar.style.cssText =
-      "position:absolute;left:12px;right:12px;bottom:calc(" + ctx.safeArea.bottom + "px + 22px);" +
-      "display:flex;gap:8px;justify-content:center;pointer-events:none;";
-    ui.appendChild(bottomBar);
+      // Stamp tray sits above the transport row and only appears when asked for.
+      '<div data-id="tray" style="position:absolute;left:0;right:0;bottom:calc(' + ctx.safeArea.bottom + 'px + 82px);' +
+        'display:none;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 12px 6px;pointer-events:auto;"></div>' +
 
-    const playBtn = chip("⏸", "Pause");
-    playBtn.style.cssText += "min-width:64px;background:linear-gradient(180deg,#6ee7ff,#4aa8f0);color:#04121f;font-size:19px;";
-    const stepBtn = chip("⏭", "Step one generation");
-    const diceBtn = chip("🎲", "New random board");
-    const clearBtn = chip("🧹", "Clear the board");
-    const speedBtn = chip(SPEEDS[1].label, "Speed");
-    const stampBtn = chip("✦", "Stamps");
-    bottomBar.append(playBtn, stepBtn, diceBtn, clearBtn, speedBtn, stampBtn);
+      '<div style="' + BAR + "bottom:calc(" + ctx.safeArea.bottom + 'px + 22px);gap:8px;justify-content:center;">' +
+        chipHtml("play", "⏸", "Pause",
+          "min-width:64px;background:linear-gradient(180deg,#6ee7ff,#4aa8f0);color:#04121f;font-size:19px;") +
+        chipHtml("step", "⏭", "Step one generation") +
+        chipHtml("dice", "🎲", "New random board") +
+        chipHtml("clear", "🧹", "Clear the board") +
+        chipHtml("speed", SPEEDS[1].label, "Speed") +
+        chipHtml("stamp", "✦", "Stamps") +
+      "</div>" +
 
-    const toastRow = document.createElement("div");
-    toastRow.style.cssText =
-      "position:absolute;left:12px;right:12px;top:calc(" + ctx.safeArea.top + "px + 66px);" +
-      "display:flex;justify-content:center;pointer-events:none;";
-    ui.appendChild(toastRow);
-    const toast = document.createElement("div");
-    toast.style.cssText =
-      "opacity:0;transition:opacity 0.25s;padding:9px 15px;border-radius:14px;text-align:center;" +
-      "background:rgba(14,20,38,0.92);color:#e8eefc;font:600 13px/1.35 " + FONT + ";" +
-      "box-shadow:0 4px 18px rgba(0,0,0,0.5);";
-    toastRow.appendChild(toast);
+      '<div style="' + BAR + "top:calc(" + ctx.safeArea.top + 'px + 66px);justify-content:center;">' +
+        '<div data-id="toast" style="opacity:0;transition:opacity 0.25s;padding:9px 15px;border-radius:14px;' +
+        "text-align:center;background:rgba(14,20,38,0.92);color:#e8eefc;font:600 13px/1.35 " + FONT + ";" +
+        'box-shadow:0 4px 18px rgba(0,0,0,0.5);"></div>' +
+      "</div>";
+
+    const el = (id) => ui.querySelector('[data-id="' + id + '"]');
+    const helpBtn = el("help");
+    const soundBtn = el("sound");
+    const stats = el("stats");
+    const tray = el("tray");
+    const playBtn = el("play");
+    const stepBtn = el("step");
+    const diceBtn = el("dice");
+    const clearBtn = el("clear");
+    const speedBtn = el("speed");
+    const stampBtn = el("stamp");
+    const toast = el("toast");
+
     let toastToken = 0;
     function say(text) {
       toast.textContent = text;
@@ -548,11 +540,10 @@ window.plethoraBit = {
       ctx.timeout(() => { if (mine === toastToken) toast.style.opacity = "0"; }, 2200);
     }
 
-    const help = document.createElement("div");
-    help.style.cssText =
-      "position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:22px;" +
-      "pointer-events:auto;background:rgba(6,9,20,0.88);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);";
-    help.innerHTML =
+    ui.insertAdjacentHTML("beforeend",
+      '<div data-id="helpPanel" style="position:absolute;inset:0;display:none;align-items:center;' +
+      "justify-content:center;padding:22px;pointer-events:auto;background:rgba(6,9,20,0.88);" +
+      'backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);">' +
       '<div style="max-width:330px;color:#e8eefc;font:400 15px/1.55 ' + FONT + ';">' +
       '<h2 style="font:800 22px/1.2 ' + FONT + ';margin-bottom:4px;">Ones &amp; Zeros</h2>' +
       '<p style="opacity:0.6;margin-bottom:12px;">Conway\'s Game of Life</p>' +
@@ -564,8 +555,8 @@ window.plethoraBit = {
       "<li>• <b>Drag</b> to draw or rub out cells. <b>✦</b> drops classic patterns.</li>" +
       "<li>• The edges wrap around, and a board that goes quiet gets a little new life.</li>" +
       "</ul>" +
-      '<p style="margin-top:16px;opacity:0.6;">Tap anywhere to close.</p></div>';
-    ui.appendChild(help);
+      '<p style="margin-top:16px;opacity:0.6;">Tap anywhere to close.</p></div></div>');
+    const help = el("helpPanel");
     ctx.listen(help, "click", () => { help.style.display = "none"; });
 
     // ---- sound -------------------------------------------------------------
@@ -609,23 +600,29 @@ window.plethoraBit = {
     }
 
     function buildTray() {
-      tray.innerHTML = "";
+      let html = "";
       for (const s of STAMPS) {
         if (s.w > cols - 1 || s.h > rows - 1) continue;   // will not fit this board
-        const b = chip(s.label, "Place a " + s.label);
-        b.style.cssText += "font-size:13px;flex:0 0 auto;";
-        b.dataset.stamp = s.label;
-        ctx.listen(b, "click", () => {
-          armed = armed === s ? null : s;
-          syncTray();
-          if (armed) say("Tap the board to place a " + s.label + ".");
-          tick("light");
-          chime("tap");
-        });
-        tray.appendChild(b);
+        html += '<button data-stamp="' + s.label + '" aria-label="Place a ' + s.label + '" style="' +
+          CHIP + 'font-size:13px;flex:0 0 auto;">' + s.label + "</button>";
       }
+      tray.innerHTML = html;
       syncTray();
     }
+
+    // One delegated handler, so rebuilding the tray on a resize cannot pile up
+    // listeners on discarded buttons.
+    ctx.listen(tray, "click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("[data-stamp]") : null;
+      if (!btn) return;
+      const s = STAMPS.find((k) => k.label === btn.getAttribute("data-stamp"));
+      if (!s) return;
+      armed = armed === s ? null : s;
+      syncTray();
+      if (armed) say("Tap the board to place a " + s.label + ".");
+      tick("light");
+      chime("tap");
+    });
     function syncTray() {
       for (const b of tray.children) {
         const on = !!armed && b.dataset.stamp === armed.label;

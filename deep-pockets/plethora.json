@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Deep Pockets",
+  "description": "A small plot of land, one rusty trowel, and the core of the Earth 1000 metres straight down. Dig with your thumb, fill your backpack with everything from bottle caps to void crystal, haul it up and sell it, then buy a shovel that can chew through the next stratum. Ten strata, seven shovels, treasure halls, falling boulders, gas pockets, lava, and eight dinosaur bones to reassemble into a tyrannosaur. Someone is waiting at the core. He has been waiting a while.",
+  "tags": [
+    "game",
+    "mining",
+    "adventure",
+    "upgrade",
+    "collect",
+    "exploration",
+    "long-play"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "local": {
+      "progress": {
+        "label": "Dig progress"
+      }
+    },
+    "records": {
+      "depth": {
+        "label": "Deepest Dig",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "fortune": {
+        "label": "Lifetime Earnings",
+        "valueType": "number",
+        "order": "desc",
+        "format": "compact",
+        "periods": [
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "core_run": {
+        "label": "Time to the Core",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    },
+    "tallies": {
+      "verdict": {
+        "label": "Was it worth it?",
+        "type": "single_choice",
+        "options": [
+          "Worth every blister",
+          "My thumb has evolved",
+          "I am going back down",
+          "Gary was the real treasure"
+        ],
+        "visibility": "after_vote",
+        "rules": [
+          {
+            "type": "replace_previous",
+            "by": "user"
+          }
+        ]
+      }
+    },
+    "worlds": {
+      "flags": {
+        "label": "Flags at the core",
+        "type": "points",
+        "rules": [
+          {
+            "type": "rate_limit",
+            "max": 2,
+            "per": "day",
+            "by": "user"
+          }
+        ],
+        "attribution": true
+      }
+    }
+  }
+}
