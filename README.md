@@ -17,6 +17,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ninth-watchfire/`](ninth-watchfire)   | A five-minute animated story in twelve chapters, with one choice that's yours. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`ripcord/`](ripcord)                   | Spin your phone — the gyroscope sets your top's RPM, then it battles two rivals. |
 | [`backseat-rain/`](backseat-rain)       | Sit in the back seat of a car in the rain and race the drops down the window. |
 | [`ball-pool/`](ball-pool)               | Eight-ball pool — aim, spin, and break against a bot, or pass the phone.    |
 | [`pour-decisions/`](pour-decisions)     | Pull the tap and fill to the line — but the head is mostly air, and it gives beer back as it falls. |
