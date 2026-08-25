@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "N-Body",
+  "description": "Gravity you can throw. Press and hold anywhere and a world appears, gaining mass while you hold it. Drag outward to aim: the line shows exactly where it will go, the first tick on it is a circular orbit and the second is escape velocity, so putting a planet into a clean orbit is a decision rather than a lucky flick. Every body pulls on every other one, so orbits, captures and slingshots all fall out of the force law rather than being scripted. Bodies that touch merge and keep their combined momentum, and enough mass in one place ignites a star that lights the planets around it. Four systems to seed: a star and its planets, binary stars, a collapsing disc, and two clusters closing.",
+  "tags": [
+    "physics",
+    "space",
+    "sandbox",
+    "toy",
+    "generative",
+    "relaxing",
+    "simulation",
+    "sensory"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": []
+}

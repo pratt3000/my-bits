@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Window Seat",
+  "description": "A cosy room on a wet night, and the window you are sitting beside. Condensation gathers on the glass, beads pool and lean in the wind, and when one gets heavy enough it breaks loose and runs — swallowing every drop in its path and tearing a clear track through the mist. Three drops get backed: pick one, sweep loose beads into its path, and watch it race the others down to the sill. Turn away from the glass and the room is still there — string lights, a lamp, books, the rain going on outside.",
+  "tags": [
+    "rain",
+    "cosy",
+    "relaxing",
+    "asmr",
+    "satisfying",
+    "sensory",
+    "ambient",
+    "water",
+    "racing",
+    "3d"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "motion",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "local": {
+      "window_stats": {
+        "label": "Your window"
+      }
+    },
+    "records": {
+      "streak": {
+        "label": "Best Streak",
+        "valueType": "streak",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "wins": {
+        "label": "Races Won",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
