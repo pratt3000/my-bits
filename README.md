@@ -17,6 +17,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ninth-watchfire/`](ninth-watchfire)   | A five-minute animated story in twelve chapters, with one choice that's yours. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`pocket-planet/`](pocket-planet)       | A tiny 3D globe to walk around and build on — trees grow in real time.       |
 | [`last-straw/`](last-straw)             | Find a needle in a 3D haystack — 20,000 straws, one needle, saved digs.     |
 | [`idol-dash/`](idol-dash)               | Endless temple runner — swipe to turn, jump and slide as the ruins blur past. |
 | [`chameleon-hunt/`](chameleon-hunt)     | 3D hide-and-seek — find humanoids camouflaged into five arenas before time runs out. |
