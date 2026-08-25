@@ -17,6 +17,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ninth-watchfire/`](ninth-watchfire)   | A five-minute animated story in twelve chapters, with one choice that's yours. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`pixel-fog/`](pixel-fog)               | Rub a living mosaic off nine San Francisco views to find a fact hidden in each. |
 | [`deep-pockets/`](deep-pockets)         | Digging game — mine ten strata to the core of the Earth, sell the loot, upgrade the shovel. |
 
 ## Layout convention
@@ -55,3 +56,19 @@ Publishing stays manual. An agent pairs with the creator at
 <https://create.plethora.studio/agent-pair>, then `POST`s `{ source, manifest }`
 to `/v1/agent/bits/drafts` with an `Authorization: Plethora-Agent <token>`
 header. Drafts are reviewed and published from the Plethora app or dashboard.
+
+Pairing is durable — the creator approves a code once and the agent reuses the
+returned `accessToken` until it is revoked. Only the bootstrap exchange is
+one-time, and the pairing code itself expires after 10 minutes, so mint it when
+there is something ready to upload rather than at the start of the work.
+
+## Known upload-validator false positives
+
+The validator reports several unrelated problems with one message about
+unsupported remote resources and registry loaders. Collected so far:
+
+- `document.createElement("canvas")` — see [`cairn/`](cairn).
+- Querying a canvas for its layout box, including *naming* that call in a
+  comment — see [`cairn/`](cairn) and [`pixel-fog/`](pixel-fog).
+- `const ph = <call expression>` — the local's name alone. See
+  [`pixel-fog/`](pixel-fog), which also records how to bisect a rejection.
