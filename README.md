@@ -17,6 +17,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ninth-watchfire/`](ninth-watchfire)   | A five-minute animated story in twelve chapters, with one choice that's yours. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`mandelbrot/`](mandelbrot)             | Pinch 68 levels into the Mandelbrot set, and hear each point's orbit sing.  |
 | [`n-body/`](n-body)                     | Gravity you can throw — grow a world, launch it, watch orbits and collisions form. |
 | [`wave-interference/`](wave-interference) | Two fingers become wave sources — watch the fringes, hear them beat.       |
 | [`turing-soup/`](turing-soup)           | Reaction–diffusion dish — drag to inject, steer feed/kill, watch coral grow.  |
