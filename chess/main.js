@@ -1,46 +1,44 @@
 /**
- * Chess — two players, one phone, real pieces.
+ * Chess — two players, one phone, drawn flat.
  *
- * The phone lies flat between the players. White sits at the near edge, Black
- * at the far edge, and the board never moves: Black plays "upside down"
- * exactly as at a real board, which is both correct and familiar, and it means
- * the board never rotates under anybody's finger. Each player's HUD lives in
- * the band at their own edge, rotated to face them — the same reason a real
- * tournament board engraves its far-side coordinates upside down.
+ * This was a 3D board and it did not work. Seen from straight overhead — the
+ * only fair angle when two people are playing each other across a table — a
+ * lathe-turned Staunton piece is a disc. The profile that makes a chess set
+ * readable is its SIDE, and from above you cannot see any of it: a bishop, a
+ * pawn and a queen are three circles of slightly different diameter. So the
+ * board is now flat, and the pieces are the flat vector silhouettes every
+ * chess site uses, for exactly this reason.
  *
- * The pieces are turned, not drawn. Every Staunton piece except the knight is
- * a rotational solid — a profile swept about a vertical axis — which is
- * precisely what THREE.LatheGeometry builds, so the base flare, the scotia
- * sweep, the collar ring and the finial are all real geometry catching a real
- * key light rather than a sprite pretending to be one. The knight is the one
- * piece that breaks rotational symmetry, so it is extruded from a carved
- * silhouette instead, which is also what makes it read at 45px.
+ * Everything else about the seating is unchanged and still right. The phone
+ * lies flat between the players, White at the near edge and Black at the far
+ * one, and THE BOARD NEVER TURNS — Black plays it upside down exactly as at a
+ * real board. Each player's HUD sits in the band at their own edge, rotated to
+ * face them, which is the same reason a tournament board engraves its far-side
+ * coordinates upside down.
  *
- * The rules are the whole game, so they are not approximated. Move generation
- * is pseudo-legal followed by make / test / unmake against king safety, which
- * is the single test that correctly handles pins, discovered check, moving out
- * of check, and the en-passant discovery case where removing two pawns from
- * one rank exposes your own king. Castling, promotion, the fifty-move clock,
- * threefold repetition and insufficient material are all implemented. The
- * engine block below is delimited so tools/harness/perft-chess.mjs can lift it
- * out and verify it against the published node counts.
+ * The rules engine below is untouched from the 3D version and is delimited so
+ * tools/harness/perft-chess.mjs can lift it out and verify it against the
+ * published node counts. It matches exactly at every depth tested, including
+ * the two positions that trap en-passant discovered check and castling rights.
  *
- * Contract notes: no packaged assets (maxAssets is 0), so the board's wood is
- * painted into an OffscreenCanvas at boot. The overlay is markup on
- * ctx.createRoot(); pointer maths uses offsetX/offsetY. document.createElement
- * and getBoundingClientRect are both rejected at upload.
+ * Dropping three.js also drops the only dependency this bit had, and with it
+ * the 1.2MB module download that preceded the first frame.
+ *
+ * Contract notes: no packaged assets (maxAssets is 0), so the board's wood and
+ * every piece are canvas paths. The overlay is markup on ctx.createRoot() with
+ * pointer-events off on the root itself, because that element sits above the
+ * canvas and would otherwise swallow every tap. Pointer maths uses
+ * offsetX/offsetY, never getBoundingClientRect.
  */
 window.plethoraBit = {
   meta: {
     title: "Chess",
     runtime: "plethora-bit@2",
-    tags: ["multiplayer", "local-multiplayer", "chess", "board", "two-player"],
+    tags: ["chess", "multiplayer", "local-multiplayer", "board", "two-player"],
     permissions: ["backgroundMusic", "haptics", "storage"],
   },
 
   async init(ctx) {
-    const THREE = await ctx.importModule("three", "0.164.1");
-
 /* ===== ENGINE START ===== */
     /**
      * Board is a flat 64-array, index = rank * 8 + file, so index 0 is a1 and
@@ -323,254 +321,210 @@ window.plethoraBit = {
       return out;
     }
 /* ===== ENGINE END ===== */
+    const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+    const TAU = Math.PI * 2;
+    const esc = (s) => String(s).replace(/[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
     /* ---------------------------------------------------------------
-     * Pieces.
+     * The pieces.
      *
-     * A Staunton set is turned on a lathe: every piece but the knight is
-     * a single profile swept about a vertical axis. Feeding that profile
-     * to LatheGeometry gives the real thing — flared base, concave
-     * scotia, waisted shaft, collar ring, finial — as actual geometry
-     * that catches the key light down its left flank the way the
-     * reference photographs do.
-     *
-     * Profiles are [radius, height] in square-widths, read bottom to top.
+     * Flat silhouettes in a unit box, drawn the way every chess site
+     * draws them: a solid body in the player's colour with a heavy
+     * contrasting outline, so a white piece on a light square and a
+     * black piece on a dark square both stay legible. Each path is
+     * authored in a 0..1 square with the piece standing on y = 0.94.
      * ------------------------------------------------------------- */
-    const PROFILES = {
-      p: [[0.00, 0.000], [0.215, 0.000], [0.215, 0.030], [0.200, 0.052], [0.150, 0.075],
-          [0.108, 0.118], [0.086, 0.185], [0.080, 0.240], [0.104, 0.268], [0.128, 0.282],
-          [0.090, 0.296], [0.086, 0.306], [0.130, 0.330], [0.140, 0.372], [0.118, 0.410],
-          [0.070, 0.436], [0.000, 0.446]],
-      r: [[0.00, 0.000], [0.235, 0.000], [0.235, 0.034], [0.216, 0.060], [0.160, 0.088],
-          [0.140, 0.150], [0.138, 0.290], [0.150, 0.322], [0.196, 0.346], [0.206, 0.372],
-          [0.196, 0.392], [0.206, 0.404], [0.206, 0.470], [0.000, 0.470]],
-      n: [[0.00, 0.000], [0.230, 0.000], [0.230, 0.034], [0.210, 0.060], [0.156, 0.090],
-          [0.134, 0.140], [0.132, 0.200], [0.000, 0.210]],
-      b: [[0.00, 0.000], [0.232, 0.000], [0.232, 0.032], [0.212, 0.058], [0.152, 0.086],
-          [0.106, 0.150], [0.088, 0.250], [0.084, 0.300], [0.124, 0.328], [0.146, 0.348],
-          [0.104, 0.366], [0.098, 0.378], [0.150, 0.416], [0.160, 0.470], [0.132, 0.532],
-          [0.076, 0.578], [0.030, 0.600], [0.052, 0.614], [0.052, 0.632], [0.000, 0.646]],
-      q: [[0.00, 0.000], [0.256, 0.000], [0.256, 0.036], [0.234, 0.064], [0.168, 0.096],
-          [0.114, 0.170], [0.094, 0.300], [0.090, 0.372], [0.136, 0.402], [0.162, 0.424],
-          [0.116, 0.444], [0.110, 0.458], [0.170, 0.500], [0.216, 0.566], [0.226, 0.612],
-          [0.186, 0.630], [0.150, 0.640], [0.088, 0.660], [0.056, 0.686], [0.078, 0.706],
-          [0.078, 0.726], [0.000, 0.742]],
-      k: [[0.00, 0.000], [0.262, 0.000], [0.262, 0.038], [0.240, 0.068], [0.172, 0.100],
-          [0.116, 0.180], [0.096, 0.320], [0.092, 0.400], [0.140, 0.432], [0.166, 0.456],
-          [0.118, 0.476], [0.112, 0.492], [0.172, 0.536], [0.214, 0.606], [0.222, 0.652],
-          [0.182, 0.672], [0.146, 0.686], [0.104, 0.714], [0.104, 0.744], [0.000, 0.752]],
+    function pieceBase(p, w) {
+      // The flared foot every piece stands on.
+      p.moveTo(0.22, 0.94);
+      p.lineTo(0.78, 0.94);
+      p.lineTo(0.72, 0.86);
+      p.lineTo(0.28, 0.86);
+      p.closePath();
+    }
+
+    const PIECE = {
+      p(p) {                                   // pawn
+        p.moveTo(0.30, 0.88);
+        p.bezierCurveTo(0.30, 0.72, 0.40, 0.66, 0.43, 0.60);
+        p.bezierCurveTo(0.36, 0.55, 0.36, 0.44, 0.44, 0.41);
+        p.bezierCurveTo(0.38, 0.36, 0.40, 0.26, 0.50, 0.26);
+        p.bezierCurveTo(0.60, 0.26, 0.62, 0.36, 0.56, 0.41);
+        p.bezierCurveTo(0.64, 0.44, 0.64, 0.55, 0.57, 0.60);
+        p.bezierCurveTo(0.60, 0.66, 0.70, 0.72, 0.70, 0.88);
+        p.closePath();
+      },
+      r(p) {                                   // rook
+        p.moveTo(0.26, 0.88);
+        p.lineTo(0.30, 0.46);
+        p.lineTo(0.26, 0.46);
+        p.lineTo(0.26, 0.26);
+        p.lineTo(0.35, 0.26);
+        p.lineTo(0.35, 0.33);
+        p.lineTo(0.44, 0.33);
+        p.lineTo(0.44, 0.26);
+        p.lineTo(0.56, 0.26);
+        p.lineTo(0.56, 0.33);
+        p.lineTo(0.65, 0.33);
+        p.lineTo(0.65, 0.26);
+        p.lineTo(0.74, 0.26);
+        p.lineTo(0.74, 0.46);
+        p.lineTo(0.70, 0.46);
+        p.lineTo(0.74, 0.88);
+        p.closePath();
+      },
+      n(p) {                                   // knight — the one asymmetric piece
+        p.moveTo(0.30, 0.88);
+        p.bezierCurveTo(0.28, 0.66, 0.34, 0.54, 0.44, 0.47);
+        p.lineTo(0.38, 0.40);
+        p.bezierCurveTo(0.30, 0.44, 0.26, 0.40, 0.26, 0.35);
+        p.bezierCurveTo(0.26, 0.28, 0.33, 0.24, 0.38, 0.27);
+        p.lineTo(0.42, 0.20);
+        p.lineTo(0.46, 0.26);
+        p.lineTo(0.50, 0.17);
+        p.bezierCurveTo(0.64, 0.19, 0.74, 0.31, 0.75, 0.48);
+        p.bezierCurveTo(0.76, 0.66, 0.74, 0.78, 0.72, 0.88);
+        p.closePath();
+      },
+      b(p) {                                   // bishop
+        p.moveTo(0.28, 0.88);
+        p.bezierCurveTo(0.28, 0.72, 0.38, 0.66, 0.42, 0.62);
+        p.lineTo(0.58, 0.62);
+        p.bezierCurveTo(0.62, 0.66, 0.72, 0.72, 0.72, 0.88);
+        p.closePath();
+        p.moveTo(0.50, 0.16);
+        p.bezierCurveTo(0.64, 0.26, 0.68, 0.42, 0.62, 0.56);
+        p.lineTo(0.38, 0.56);
+        p.bezierCurveTo(0.32, 0.42, 0.36, 0.26, 0.50, 0.16);
+        p.closePath();
+      },
+      q(p) {                                   // queen
+        p.moveTo(0.24, 0.88);
+        p.lineTo(0.30, 0.56);
+        p.lineTo(0.70, 0.56);
+        p.lineTo(0.76, 0.88);
+        p.closePath();
+        p.moveTo(0.30, 0.52);
+        p.lineTo(0.20, 0.24);
+        p.lineTo(0.34, 0.38);
+        p.lineTo(0.42, 0.18);
+        p.lineTo(0.50, 0.36);
+        p.lineTo(0.58, 0.18);
+        p.lineTo(0.66, 0.38);
+        p.lineTo(0.80, 0.24);
+        p.lineTo(0.70, 0.52);
+        p.closePath();
+      },
+      k(p) {                                   // king
+        p.moveTo(0.26, 0.88);
+        p.lineTo(0.32, 0.58);
+        p.lineTo(0.68, 0.58);
+        p.lineTo(0.74, 0.88);
+        p.closePath();
+        p.moveTo(0.32, 0.54);
+        p.bezierCurveTo(0.26, 0.44, 0.30, 0.32, 0.40, 0.32);
+        p.bezierCurveTo(0.45, 0.32, 0.48, 0.35, 0.50, 0.38);
+        p.bezierCurveTo(0.52, 0.35, 0.55, 0.32, 0.60, 0.32);
+        p.bezierCurveTo(0.70, 0.32, 0.74, 0.44, 0.68, 0.54);
+        p.closePath();
+        p.moveTo(0.455, 0.30);                 // the cross
+        p.lineTo(0.455, 0.20);
+        p.lineTo(0.40, 0.20);
+        p.lineTo(0.40, 0.13);
+        p.lineTo(0.455, 0.13);
+        p.lineTo(0.455, 0.06);
+        p.lineTo(0.545, 0.06);
+        p.lineTo(0.545, 0.13);
+        p.lineTo(0.60, 0.13);
+        p.lineTo(0.60, 0.20);
+        p.lineTo(0.545, 0.20);
+        p.lineTo(0.545, 0.30);
+        p.closePath();
+      },
     };
 
-    /**
-     * Height of each piece as a multiple of its authored profile, chosen so
-     * the finished set lands on real Staunton proportions relative to a
-     * square: pawn 0.80, rook 0.87, knight 1.05, bishop 1.16, queen 1.38,
-     * king 1.58. A single global scale would leave the king and queen the
-     * same height, which is the one distinction that has to survive.
-     */
-    const HS = { p: 1.42, r: 1.46, n: 1.46, b: 1.44, q: 1.50, k: 1.68 };
-    const RS = 1.14;                          // bases are ~36% of a square wide
+    /** Draw one piece, filling its square. */
+    function drawPiece(g, letter, x, y, size, scale) {
+      const white = isWhite(letter);
+      const t = letter.toLowerCase();
+      const s = size * (scale || 1);
+      const off = (size - s) / 2;
+      g.save();
+      g.translate(x + off, y + off);
+      g.scale(s, s);
 
-    /** Sweep a profile into a solid, in the board's own unit scale. */
-    function lathe(profile, unit, hs) {
-      const pts = profile.map(([r, h]) =>
-        new THREE.Vector2(Math.max(r, 0.0001) * RS * unit, h * hs * unit));
-      const g = new THREE.LatheGeometry(pts, 40);
-      g.computeVertexNormals();
-      return g;
-    }
+      const path = new Path2D();
+      PIECE[t](path);
+      pieceBase(path);
 
-    /**
-     * The knight. It is the one piece that is not a solid of revolution —
-     * carved rather than turned — so it is extruded from a silhouette and
-     * sat on a turned base. That break in the shape language is exactly
-     * what makes a knight findable at a glance on a small board.
-     */
-    function knightHead(unit, hs) {
-      const s = new THREE.Shape();
-      s.moveTo(-0.150, 0.150);
-      s.bezierCurveTo(-0.175, 0.300, -0.130, 0.400, -0.060, 0.455);   // arched neck
-      s.lineTo(-0.020, 0.560);                                        // ear
-      s.lineTo(0.020, 0.470);
-      s.lineTo(0.062, 0.545);                                         // second ear
-      s.lineTo(0.086, 0.440);
-      s.bezierCurveTo(0.170, 0.430, 0.235, 0.386, 0.245, 0.330);      // brow to muzzle
-      s.lineTo(0.212, 0.300);
-      s.lineTo(0.238, 0.268);
-      s.bezierCurveTo(0.190, 0.226, 0.120, 0.208, 0.060, 0.210);      // jaw
-      s.bezierCurveTo(0.030, 0.190, 0.030, 0.170, 0.040, 0.150);
-      s.closePath();
-      const g = new THREE.ExtrudeGeometry(s, {
-        depth: 0.185, bevelEnabled: true, bevelThickness: 0.020,
-        bevelSize: 0.022, bevelSegments: 3, curveSegments: 14,
-      });
-      g.translate(0, 0, -0.0925);
-      // Sat on top of its turned base, scaled to the same set proportions.
-      g.scale(RS * unit * 1.28, hs * unit * 1.28, RS * unit * 1.28);
-      g.translate(0, 0.135 * hs * unit, 0);
-      return g;
-    }
+      // A soft contact shadow so the piece sits ON the square rather than
+      // floating over it. Drawn as a squashed ellipse, not a blur filter.
+      g.save();
+      g.globalAlpha = 0.18;
+      g.fillStyle = "#000";
+      g.beginPath();
+      g.ellipse(0.5, 0.925, 0.30, 0.052, 0, 0, TAU);
+      g.fill();
+      g.restore();
 
-    /** Rook crenellations: the four blocks that break its cylinder. */
-    function crenels(unit, hs) {
-      const parts = [];
-      const w = 0.115 * RS * unit, h = 0.085 * hs * unit;
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-        const g = new THREE.BoxGeometry(w, h, w * 0.72);
-        g.rotateY(-a);
-        g.translate(Math.cos(a) * 0.145 * RS * unit, 0.470 * hs * unit + h / 2,
-                    Math.sin(a) * 0.145 * RS * unit);
-        parts.push(g);
-      }
-      return parts;
-    }
-
-    /** The king's cross and the queen's coronet, as small solids on top. */
-    function finial(type, unit, hs) {
-      const parts = [];
-      const R = RS * unit, Yh = hs * unit;
-      if (type === "k") {
-        const up = new THREE.BoxGeometry(0.048 * R, 0.150 * Yh, 0.042 * R);
-        up.translate(0, 0.812 * Yh, 0);
-        const across = new THREE.BoxGeometry(0.130 * R, 0.046 * Yh, 0.042 * R);
-        across.translate(0, 0.818 * Yh, 0);
-        parts.push(up, across);
-      } else if (type === "q") {
-        for (let i = 0; i < 5; i++) {
-          const a = (i / 5) * Math.PI * 2;
-          const g = new THREE.ConeGeometry(0.032 * R, 0.085 * Yh, 8);
-          g.translate(Math.cos(a) * 0.150 * R, 0.660 * Yh, Math.sin(a) * 0.150 * R);
-          parts.push(g);
-        }
-      } else if (type === "b") {
-        // The mitre's single angled slit, cut as a thin dark wedge.
-        const g = new THREE.BoxGeometry(0.020 * R, 0.110 * Yh, 0.150 * R);
-        g.rotateX(-0.5);
-        g.translate(0, 0.556 * Yh, 0.030 * R);
-        parts.push(g);
-      }
-      return parts;
+      g.fillStyle = white ? "#F7F4EC" : "#2B2724";
+      g.strokeStyle = white ? "#3B3733" : "#0B0A09";
+      g.lineWidth = 0.038;
+      g.lineJoin = "round";
+      g.fill(path);
+      g.stroke(path);
+      // One interior line, which is what separates a chess glyph from a blob:
+      // the bishop's slit, the king's collar, the rook's belt.
+      g.lineWidth = 0.026;
+      g.strokeStyle = white ? "#8A857C" : "#6A635C";
+      g.beginPath();
+      if (t === "b") { g.moveTo(0.44, 0.34); g.lineTo(0.56, 0.34); }
+      else if (t === "k") { g.moveTo(0.34, 0.56); g.lineTo(0.66, 0.56); }
+      else if (t === "r") { g.moveTo(0.30, 0.46); g.lineTo(0.70, 0.46); }
+      else if (t === "q") { g.moveTo(0.30, 0.55); g.lineTo(0.70, 0.55); }
+      else if (t === "p") { g.moveTo(0.43, 0.60); g.lineTo(0.57, 0.60); }
+      else { g.moveTo(0.40, 0.40); g.lineTo(0.44, 0.34); }   // knight's cheek
+      g.stroke();
+      g.restore();
     }
 
     /* ---------------------------------------------------------------
-     * Layout. The board is a square in the middle of the screen with a
-     * HUD band at each end. Anchoring each player's controls at their
-     * own outer edge means the two sets of thumbs approach from opposite
-     * sides and the board between them is a permanent no-touch buffer —
-     * the input zones physically cannot overlap.
+     * Layout, settings and sound
      * ------------------------------------------------------------- */
     let W = ctx.width, H = ctx.height;
     const L = {};
     function measure() {
       W = ctx.width; H = ctx.height;
       L.board = Math.min(W - 14, H * 0.475);
+      L.sq = L.board / 8;
       L.bx = (W - L.board) / 2;
       L.by = (H - L.board) / 2;
-      L.unit = L.board / 8;
-      L.bandTop = L.by;                       // far player's band: 0 .. by
-      L.bandBot = H - (L.by + L.board);       // near player's band
     }
     measure();
 
-    const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-    const esc = (s) => String(s).replace(/[&<>"']/g,
-      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-
-    /* ---------------------------------------------------------------
-     * Board texture: real wood, painted once.
-     * ------------------------------------------------------------- */
-    function surface(w, h) {
-      if (typeof OffscreenCanvas === "undefined") return null;
-      return new OffscreenCanvas(w, h);
-    }
-
     const THEMES = {
-      wood:  { light: "#D9C69C", dark: "#96603C", frame: "#6B3F23", bevel: "#3A2314",
-               grain: 0.055, name: "Walnut" },
-      green: { light: "#EBECD0", dark: "#6F8C56", frame: "#3D4A34", bevel: "#232B1D",
-               grain: 0.018, name: "Tournament" },
-      slate: { light: "#C8CEDA", dark: "#5A6981", frame: "#333B4B", bevel: "#1C2230",
-               grain: 0.022, name: "Slate" },
+      green: { light: "#EEEED2", dark: "#769656", edge: "#5C7A44", name: "Green" },
+      wood:  { light: "#E9D9B4", dark: "#A9744C", edge: "#7A4A2B", name: "Walnut" },
+      slate: { light: "#D6DBE4", dark: "#6E7A90", edge: "#4A5262", name: "Slate" },
     };
+    const MARK = "rgba(246,201,74,0.62)";      // selection / last move
+    const HINT = "rgba(30,26,20,0.26)";        // legal-move dot
+    const DANGER = "#C4432E";
 
-    /**
-     * One square of board, with straight grain running in a single
-     * direction and a faint per-square tonal drift so no two squares are
-     * identical — the thing that separates real wood from a checkerboard.
-     */
-    function makeBoardTexture(theme) {
-      const S = 128, T = S * 8;
-      const c = surface(T, T);
-      if (!c) return null;
-      const g = c.getContext("2d");
-      for (let r = 0; r < 8; r++) {
-        for (let f = 0; f < 8; f++) {
-          const dark = (f + r) % 2 === 0;      // a1 (f=0,r=0) is dark
-          const x = f * S, y = (7 - r) * S;
-          g.fillStyle = dark ? theme.dark : theme.light;
-          g.fillRect(x, y, S, S);
-          // Per-square drift.
-          g.globalAlpha = 0.06;
-          g.fillStyle = ((f * 7 + r * 13) % 3 === 0) ? "#000000" : "#ffffff";
-          g.fillRect(x, y, S, S);
-          g.globalAlpha = theme.grain;
-          for (let i = 0; i < 34; i++) {
-            const gy = y + Math.random() * S;
-            g.strokeStyle = Math.random() < 0.5 ? "#000000" : "#ffffff";
-            g.lineWidth = 0.5 + Math.random() * 1.6;
-            g.beginPath();
-            g.moveTo(x, gy);
-            g.bezierCurveTo(x + S * 0.33, gy + (Math.random() - 0.5) * 5,
-                            x + S * 0.66, gy + (Math.random() - 0.5) * 5, x + S, gy);
-            g.stroke();
-          }
-          g.globalAlpha = 1;
-        }
-      }
-      // One continuous seam grid, hairline.
-      g.strokeStyle = "rgba(0,0,0,0.13)";
-      g.lineWidth = 1.5;
-      for (let i = 0; i <= 8; i++) {
-        g.beginPath(); g.moveTo(i * S, 0); g.lineTo(i * S, T); g.stroke();
-        g.beginPath(); g.moveTo(0, i * S); g.lineTo(T, i * S); g.stroke();
-      }
-      // Coordinate glyphs, in-square, in the opposite square's colour.
-      g.font = `600 ${S * 0.20}px ui-sans-serif, system-ui, sans-serif`;
-      for (let f = 0; f < 8; f++) {
-        const dark = (f + 0) % 2 === 0;
-        g.fillStyle = dark ? theme.light : theme.dark;
-        g.globalAlpha = 0.55;
-        g.textAlign = "right"; g.textBaseline = "bottom";
-        g.fillText(NAMES[f], f * S + S - S * 0.09, 8 * S - S * 0.07);
-      }
-      for (let r = 0; r < 8; r++) {
-        const dark = (7 + r) % 2 === 0;
-        g.fillStyle = dark ? theme.light : theme.dark;
-        g.globalAlpha = 0.55;
-        g.textAlign = "left"; g.textBaseline = "top";
-        g.fillText(String(r + 1), 7 * S + S * 0.08, (7 - r) * S + S * 0.06);
-      }
-      g.globalAlpha = 1;
-      return c;
-    }
-
-    /* ---------------------------------------------------------------
-     * Settings
-     * ------------------------------------------------------------- */
     const saved = (function () {
       try { return ctx.storage.get("chess") || {}; } catch (_) { return {}; }
     })();
     const settings = {
-      theme: THEMES[saved.theme] ? saved.theme : "wood",
-      hints: saved.hints !== false,          // show legal-move markers
+      theme: THEMES[saved.theme] ? saved.theme : "green",
+      hints: saved.hints !== false,
       mute: !!saved.mute,
     };
     function saveSettings() { try { ctx.storage.set("chess", settings); } catch (_) {} }
 
     const sound = (function () {
       let muted = settings.mute, bed = null, unlocked = false;
-      const start = () => ctx.music.play({ preset: "drift", volume: 0.22, tempo: 74, intensity: 0.18 });
+      const start = () => ctx.music.play({ preset: "drift", volume: 0.2, tempo: 72, intensity: 0.16 });
       return {
         get muted() { return muted; },
         async unlock() {
@@ -593,203 +547,13 @@ window.plethoraBit = {
     })();
 
     /* ---------------------------------------------------------------
-     * Scene. The camera looks straight down. Two people are playing each
-     * other across this board, so any tilt would give one of them a
-     * better view of it.
-     * ------------------------------------------------------------- */
-    const glCanvas = ctx.createCanvas({ touchAction: "none" });
-    const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(ctx.dpr, 2));
-    renderer.setSize(W, H, false);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.94;
-    ctx.onDestroy(() => renderer.dispose());
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, W / H, 0.5, 80);
-    camera.up.set(0, 0, -1);
-
-    /* Board world units: one square is 1.0, so the board spans -4..4. */
-    const U = 1;
-    function placeCamera() {
-      // A PerspectiveCamera's fov is VERTICAL, and this screen is portrait, so
-      // the horizontal extent is the binding one: solve the distance from the
-      // width the board has to occupy, or only half the files fit.
-      //
-      // The fov is deliberately wide. Straight down, a lathe-turned piece is a
-      // disc — you lose the profile that makes a Staunton set readable. A wide
-      // fov leans the pieces outward from the centre, so each player sees the
-      // near side of their own men and the far side of their opponent's,
-      // exactly as at a real board. It stays fair because the spread is
-      // radial: both ends are the same distance from the camera. Wider than
-      // this and the back ranks lean far enough to overlap and spill off the
-      // board; 38 degrees is where the profile reads without the pile-up.
-      camera.aspect = W / H;
-      const halfWidthWorld = 4 * U * (W / L.board);
-      const tanHalfFov = Math.tan((38 / 2) * Math.PI / 180);
-      camera.position.set(0, halfWidthWorld / (tanHalfFov * camera.aspect), 0);
-      camera.lookAt(0, 0, 0);
-      camera.up.set(0, 0, -1);
-      camera.updateProjectionMatrix();
-    }
-    placeCamera();
-
-    /** Screen pixels to board square, or -1 outside the board. */
-    function pickSquare(px, py) {
-      const f = Math.floor((px - L.bx) / L.unit);
-      const r = 7 - Math.floor((py - L.by) / L.unit);
-      if (f < 0 || f > 7 || r < 0 || r > 7) return -1;
-      return sq(f, r);
-    }
-    /** Board square to its world centre. File 0 is at -3.5; rank 0 nearest the viewer. */
-    const worldOf = (i) => ({ x: (fileOf(i) - 3.5) * U, z: (3.5 - rankOf(i)) * U });
-
-    /* --- board mesh --- */
-    const boardGroup = new THREE.Group();
-    scene.add(boardGroup);
-    let boardMesh = null, boardTex = null;
-
-    function buildBoard() {
-      const theme = THEMES[settings.theme];
-      scene.background = new THREE.Color(theme.bevel).multiplyScalar(0.55);
-      if (boardMesh) { boardGroup.remove(boardMesh); boardMesh.geometry.dispose(); }
-      if (boardTex) boardTex.dispose();
-
-      const canvasTex = makeBoardTexture(theme);
-      const mat = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0.06 });
-      if (canvasTex) {
-        boardTex = new THREE.CanvasTexture(canvasTex);
-        boardTex.colorSpace = THREE.SRGBColorSpace;
-        boardTex.anisotropy = 8;
-        mat.map = boardTex;
-      } else {
-        mat.color = new THREE.Color(theme.dark);   // no OffscreenCanvas: plain board
-      }
-      boardMesh = new THREE.Mesh(new THREE.PlaneGeometry(8 * U, 8 * U), mat);
-      boardMesh.rotation.x = -Math.PI / 2;
-      boardMesh.receiveShadow = true;
-      boardGroup.add(boardMesh);
-
-      // Frame: a raised walnut surround with a bevel, as on a real board.
-      if (!buildBoard.frame) {
-        const fr = new THREE.Group();
-        const t = 0.62 * U, o = 4 * U + t / 2;
-        const fmat = new THREE.MeshStandardMaterial({ color: 0x7A4A2B, roughness: 0.55, metalness: 0.10 });
-        buildBoard.fmat = fmat;
-        for (const [x, z, sx, sz] of [
-          [0, -o, 8 * U + t * 2, t], [0, o, 8 * U + t * 2, t],
-          [-o, 0, t, 8 * U], [o, 0, t, 8 * U],
-        ]) {
-          const m = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.16 * U, sz), fmat);
-          m.position.set(x, 0.045 * U, z);
-          m.castShadow = true; m.receiveShadow = true;
-          fr.add(m);
-        }
-        boardGroup.add(fr);
-        buildBoard.frame = fr;
-      }
-      buildBoard.fmat.color.set(theme.frame);
-    }
-    buildBoard();
-
-    /* --- lights --- */
-    scene.add(new THREE.AmbientLight(0x8d9ab2, 0.34));
-    scene.add(new THREE.HemisphereLight(0xc3d2e8, 0x241c14, 0.36));
-    // A single soft key from the upper left, as in every reference photograph:
-    // it puts a bright highlight down each turned column's left flank and a
-    // short, tight contact shadow under each flared base.
-    const key = new THREE.DirectionalLight(0xfff2dc, 2.5);
-    key.position.set(-6.2 * U, 7.4 * U, -5.0 * U);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.left = -6.5 * U; key.shadow.camera.right = 6.5 * U;
-    key.shadow.camera.top = 6.5 * U; key.shadow.camera.bottom = -6.5 * U;
-    key.shadow.camera.near = 1; key.shadow.camera.far = 26 * U;
-    key.shadow.bias = -0.0016;
-    key.shadow.normalBias = 0.02;
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0x9fb6d8, 0.30);
-    fill.position.set(5 * U, 6 * U, 5 * U);
-    scene.add(fill);
-
-    /* --- piece meshes ---
-     * Six geometries built once and shared; only the material differs by
-     * colour. Thirty-two lathes built individually would cost a second of
-     * boot on a phone for no visible gain.
-     */
-    const GEO = {};
-    for (const t of ["p", "n", "b", "r", "q", "k"]) GEO[t] = lathe(PROFILES[t], U, HS[t]);
-
-    const MAT = {
-      w: new THREE.MeshStandardMaterial({ color: 0xF2E4C6, roughness: 0.40, metalness: 0.04 }),
-      b: new THREE.MeshStandardMaterial({ color: 0x1A1410, roughness: 0.34, metalness: 0.10 }),
-    };
-    const ACCENT = {
-      w: new THREE.MeshStandardMaterial({ color: 0xF6EEDC, roughness: 0.36, metalness: 0.05 }),
-      b: new THREE.MeshStandardMaterial({ color: 0x4A423B, roughness: 0.36, metalness: 0.08 }),
-    };
-
-    /** One piece: its turned body, plus whatever solids sit on top of it. */
-    function buildPiece(type, colour) {
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(GEO[type], MAT[colour]);
-      body.castShadow = true;
-      body.receiveShadow = true;
-      g.add(body);
-
-      if (type === "r") for (const cg of crenels(U, HS.r)) {
-        const m = new THREE.Mesh(cg, MAT[colour]); m.castShadow = true; g.add(m);
-      }
-      if (type === "k" || type === "q") for (const fg of finial(type, U, HS[type])) {
-        const m = new THREE.Mesh(fg, ACCENT[colour]); m.castShadow = true; g.add(m);
-      }
-      if (type === "b") for (const fg of finial("b", U, HS.b)) {
-        const m = new THREE.Mesh(fg, colour === "w" ? MAT.b : ACCENT.b); g.add(m);
-      }
-      if (type === "n") {
-        const head = new THREE.Mesh(knightHead(U, HS.n), MAT[colour]);
-        head.castShadow = true;
-        head.receiveShadow = true;
-        // Knights face their opponent, so the two sides look at each other.
-        head.rotation.y = colour === "w" ? 0 : Math.PI;
-        g.add(head);
-      }
-      g.userData.type = type;
-      g.userData.colour = colour;
-      return g;
-    }
-
-    // A pool keyed by piece letter, so a promotion to a ninth queen is free.
-    const piecePool = {};
-    function takePiece(letter) {
-      const type = letter.toLowerCase();
-      const colour = isWhite(letter) ? "w" : "b";
-      const k = letter;
-      (piecePool[k] ||= []);
-      const m = piecePool[k].pop() || buildPiece(type, colour);
-      m.visible = true;
-      scene.add(m);
-      return m;
-    }
-    function returnPiece(letter, mesh) {
-      mesh.visible = false;
-      scene.remove(mesh);
-      (piecePool[letter] ||= []).push(mesh);
-    }
-
-    /* ---------------------------------------------------------------
-     * Game state
+     * State
      * ------------------------------------------------------------- */
     let state = startPosition();
-    let meshAt = new Array(64).fill(null);
-    let selected = -1, legalForSelected = [];
-    let lastMove = null, over = null, pendingPromo = null;
-    let anim = null;                          // { mesh, from, to, t, dur, arc, after }
+    let selected = -1, legalForSelected = [], lastMove = null, over = null;
+    let pendingPromo = null, anim = null;
     const moveList = [];
 
-    /** Repetition key: pieces, side to move, castling rights, en-passant file. */
     function posKey(s) {
       return s.board.join("") + s.turn +
         (s.castling.K ? "K" : "") + (s.castling.Q ? "Q" : "") +
@@ -800,10 +564,9 @@ window.plethoraBit = {
     function insufficientMaterial(s) {
       const men = [];
       for (const p of s.board) if (p !== 0 && p.toLowerCase() !== "k") men.push(p);
-      if (men.length === 0) return true;                               // K vs K
-      if (men.length === 1) return "bn".includes(men[0].toLowerCase()); // K+B or K+N
+      if (men.length === 0) return true;
+      if (men.length === 1) return "bn".includes(men[0].toLowerCase());
       if (men.length === 2 && men.every((m) => m.toLowerCase() === "b")) {
-        // K+B vs K+B is drawn only when both bishops are on one colour.
         const on = [];
         for (let i = 0; i < 64; i++) if (s.board[i] !== 0 && s.board[i].toLowerCase() === "b")
           on.push((fileOf(i) + rankOf(i)) & 1);
@@ -812,69 +575,123 @@ window.plethoraBit = {
       return false;
     }
 
-    function syncBoard() {
+    /* --- geometry: the board never turns, so this is a plain mapping --- */
+    const sqX = (i) => L.bx + fileOf(i) * L.sq;
+    const sqY = (i) => L.by + (7 - rankOf(i)) * L.sq;
+    function pickSquare(px, py) {
+      const f = Math.floor((px - L.bx) / L.sq);
+      const r = 7 - Math.floor((py - L.by) / L.sq);
+      if (f < 0 || f > 7 || r < 0 || r > 7) return -1;
+      return sq(f, r);
+    }
+
+    /* ---------------------------------------------------------------
+     * Painting
+     * ------------------------------------------------------------- */
+    const canvas = ctx.createCanvas2D({ touchAction: "none" });
+    const g = canvas.getContext("2d");
+
+    function roundRect(q, x, y, w, h, r) {
+      const k = Math.min(r, w / 2, h / 2);
+      q.beginPath();
+      q.moveTo(x + k, y);
+      q.arcTo(x + w, y, x + w, y + h, k);
+      q.arcTo(x + w, y + h, x, y + h, k);
+      q.arcTo(x, y + h, x, y, k);
+      q.arcTo(x, y, x + w, y, k);
+      q.closePath();
+    }
+
+    function paint() {
+      const th = THEMES[settings.theme];
+      g.fillStyle = "#1D1B18";
+      g.fillRect(0, 0, W, H);
+
+      // Frame.
+      g.fillStyle = th.edge;
+      roundRect(g, L.bx - 7, L.by - 7, L.board + 14, L.board + 14, 8);
+      g.fill();
+
+      // Squares. a1 is dark, and h1 is light under White's right hand.
       for (let i = 0; i < 64; i++) {
-        const want = state.board[i];
-        const have = meshAt[i];
-        if (have && have.userData.letter !== want) { returnPiece(have.userData.letter, have); meshAt[i] = null; }
-        if (want !== 0 && !meshAt[i]) {
-          const m = takePiece(want);
-          m.userData.letter = want;
-          meshAt[i] = m;
-        }
-        if (meshAt[i]) {
-          const w = worldOf(i);
-          meshAt[i].position.set(w.x, 0.09 * U, w.z);
-          meshAt[i].scale.setScalar(1);
-        }
+        const dark = (fileOf(i) + rankOf(i)) % 2 === 0;
+        g.fillStyle = dark ? th.dark : th.light;
+        g.fillRect(sqX(i), sqY(i), L.sq + 0.5, L.sq + 0.5);
       }
-    }
 
-    /* --- board overlays: selection, last move, legal targets, check --- */
-    const overlay = new THREE.Group();
-    scene.add(overlay);
-    const flatGeo = new THREE.PlaneGeometry(U * 0.995, U * 0.995);
-    const dotGeo = new THREE.CircleGeometry(U * 0.155, 24);
-    const ringGeo = new THREE.RingGeometry(U * 0.375, U * 0.455, 32);
-    function overlayMesh(geo, colour, alpha) {
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color: colour, transparent: true, opacity: alpha, depthWrite: false,
-      }));
-      m.rotation.x = -Math.PI / 2;
-      return m;
-    }
-    function paintOverlays() {
-      while (overlay.children.length) {
-        const c = overlay.children.pop();
-        c.material.dispose();
-      }
-      const put = (m, i, y) => { const w = worldOf(i); m.position.set(w.x, y, w.z); overlay.add(m); };
-
+      // Last move and selection, under the pieces.
       if (lastMove) {
-        put(overlayMesh(flatGeo, 0xF2C14A, 0.30), lastMove.from, 0.012 * U);
-        put(overlayMesh(flatGeo, 0xF2C14A, 0.30), lastMove.to, 0.012 * U);
+        g.fillStyle = MARK;
+        g.globalAlpha = 0.55;
+        g.fillRect(sqX(lastMove.from), sqY(lastMove.from), L.sq, L.sq);
+        g.fillRect(sqX(lastMove.to), sqY(lastMove.to), L.sq, L.sq);
+        g.globalAlpha = 1;
       }
-      if (selected >= 0) put(overlayMesh(flatGeo, 0xF2C14A, 0.48), selected, 0.016 * U);
+      if (selected >= 0) {
+        g.fillStyle = MARK;
+        g.fillRect(sqX(selected), sqY(selected), L.sq, L.sq);
+      }
 
-      if (selected >= 0 && settings.hints) {
-        for (const m of legalForSelected) {
-          const capture = state.board[m.to] !== 0 || m.ep;
-          put(overlayMesh(capture ? ringGeo : dotGeo, 0x1E1A14, capture ? 0.36 : 0.30), m.to, 0.02 * U);
-        }
-      }
+      // The king in check gets a hand-built radial falloff — concentric rings
+      // with a ramped alpha, because the canvas blur filter is off-limits.
       if (!over && inCheck(state, state.turn)) {
         const k = findKing(state.board, state.turn);
-        // A hand-built radial falloff: the canvas blur property is off-limits,
-        // so the glow is concentric rings with a ramped alpha.
-        for (let i = 0; i < 6; i++) {
-          const rr = 0.16 + i * 0.08;
-          const g = new THREE.RingGeometry(U * (rr - 0.05), U * rr, 28);
-          const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-            color: 0xC4432E, transparent: true, opacity: 0.55 * (1 - i / 6), depthWrite: false,
-          }));
-          m.rotation.x = -Math.PI / 2;
-          put(m, k, 0.018 * U);
+        const cx = sqX(k) + L.sq / 2, cy = sqY(k) + L.sq / 2;
+        for (let i = 6; i >= 1; i--) {
+          g.fillStyle = "rgba(196,67,46," + (0.09 * (7 - i) / 6).toFixed(3) + ")";
+          g.beginPath();
+          g.arc(cx, cy, L.sq * 0.10 * i, 0, TAU);
+          g.fill();
         }
+      }
+
+      // Coordinates, in-square in the opposite square's colour.
+      g.font = "700 " + (L.sq * 0.21) + "px -apple-system, system-ui, sans-serif";
+      for (let f = 0; f < 8; f++) {
+        const i = sq(f, 0);
+        g.fillStyle = (f % 2 === 0) ? th.light : th.dark;
+        g.globalAlpha = 0.7;
+        g.textAlign = "right"; g.textBaseline = "bottom";
+        g.fillText(NAMES[f], sqX(i) + L.sq - L.sq * 0.08, sqY(i) + L.sq - L.sq * 0.05);
+      }
+      for (let r = 0; r < 8; r++) {
+        const i = sq(7, r);
+        g.fillStyle = ((7 + r) % 2 === 0) ? th.light : th.dark;
+        g.textAlign = "left"; g.textBaseline = "top";
+        g.fillText(String(r + 1), sqX(i) + L.sq * 0.07, sqY(i) + L.sq * 0.05);
+      }
+      g.globalAlpha = 1;
+
+      // Pieces, skipping whichever one is currently in flight.
+      for (let i = 0; i < 64; i++) {
+        const p = state.board[i];
+        if (p === 0) continue;
+        if (anim && anim.hideAt === i) continue;
+        drawPiece(g, p, sqX(i), sqY(i), L.sq, selected === i ? 1.06 : 1);
+      }
+
+      // Legal-move markers, over the pieces so a capture ring is not hidden.
+      if (selected >= 0 && settings.hints) {
+        for (const m of legalForSelected) {
+          const cx = sqX(m.to) + L.sq / 2, cy = sqY(m.to) + L.sq / 2;
+          const capture = state.board[m.to] !== 0 || m.ep;
+          g.strokeStyle = HINT; g.fillStyle = HINT;
+          if (capture) {
+            g.lineWidth = L.sq * 0.085;
+            g.beginPath(); g.arc(cx, cy, L.sq * 0.42, 0, TAU); g.stroke();
+          } else {
+            g.beginPath(); g.arc(cx, cy, L.sq * 0.155, 0, TAU); g.fill();
+          }
+        }
+      }
+
+      // The moving piece, on top.
+      if (anim) {
+        const t = 1 - Math.pow(1 - clamp(anim.t / anim.dur, 0, 1), 3);
+        const x = anim.fx + (anim.tx - anim.fx) * t;
+        const y = anim.fy + (anim.ty - anim.fy) * t;
+        const lift = anim.arc ? Math.sin(t * Math.PI) * L.sq * 0.16 : 0;
+        drawPiece(g, anim.letter, x, y - lift, L.sq, 1);
       }
     }
 
@@ -911,96 +728,87 @@ window.plethoraBit = {
     }
 
     /* ---------------------------------------------------------------
-     * HUD. One band per player at their own outer edge, the far one
-     * rotated 180 so it reads right-way-up from that side of the table —
-     * the same reason a tournament board engraves its far coordinates
-     * upside down.
+     * Overlay
      * ------------------------------------------------------------- */
     const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+    const ST = ctx.safeArea.top, SB = ctx.safeArea.bottom;
     const PLAQUE =
-      "background:linear-gradient(180deg,#4A2F1C,#35210F);border-radius:12px;" +
-      "border-top:1px solid rgba(214,168,110,0.35);border-left:1px solid rgba(214,168,110,0.28);" +
-      "border-bottom:1px solid rgba(0,0,0,0.5);border-right:1px solid rgba(0,0,0,0.4);";
+      "background:linear-gradient(180deg,#3A3733,#26241F);border-radius:12px;" +
+      "border-top:1px solid rgba(230,225,210,0.18);border-bottom:1px solid rgba(0,0,0,0.45);";
     const PILL = (accent) =>
-      "padding:11px 20px;border:1px solid " + accent + ";border-radius:999px;background:#2F2620;" +
-      "color:#E8D9B4;font-family:inherit;font-size:14px;font-weight:700;letter-spacing:0.06em;" +
-      "text-transform:uppercase;box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);";
+      "padding:11px 20px;border:1px solid " + accent + ";border-radius:999px;background:#2A2724;" +
+      "color:#EFEAE0;font-family:inherit;font-size:14px;font-weight:700;letter-spacing:0.06em;" +
+      "text-transform:uppercase;";
+    const BIG = "width:100%;padding:13px;border:none;border-radius:14px;font-family:inherit;" +
+      "font-size:15px;font-weight:700;background:rgba(239,234,224,0.14);color:#EFEAE0;";
 
     function band(who, top) {
       const rot = top ? "transform:rotate(180deg);" : "";
-      const edge = top ? "top:" + (ctx.safeArea.top + 6) + "px;" : "bottom:" + (ctx.safeArea.bottom + 6) + "px;";
-      return '<div data-el="band-' + who + '" style="position:absolute;left:0;right:0;' + edge + rot +
+      const edge = top ? "top:" + (ST + 6) + "px;" : "bottom:" + (SB + 6) + "px;";
+      return '<div style="position:absolute;left:0;right:0;' + edge + rot +
         'display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none;">' +
         '<div data-el="cap-' + who + '" style="height:19px;font-size:15px;letter-spacing:1px;opacity:0.8;"></div>' +
         '<div style="' + PLAQUE + 'padding:7px 17px;display:flex;align-items:center;gap:9px;">' +
           '<span style="width:13px;height:13px;border-radius:50%;background:' +
-            (who === "w" ? "#EFE3C8" : "#1B1611") + ';border:1px solid rgba(214,168,110,0.5);"></span>' +
-          '<span data-el="name-' + who + '" style="font-size:15px;font-weight:700;letter-spacing:0.10em;' +
-            'text-transform:uppercase;color:#E8D9B4;">' + (who === "w" ? "White" : "Black") + '</span>' +
+            (who === "w" ? "#F7F4EC" : "#2B2724") + ';border:1px solid rgba(230,225,210,0.45);"></span>' +
+          '<span style="font-size:15px;font-weight:700;letter-spacing:0.10em;' +
+            'text-transform:uppercase;color:#EFEAE0;">' + (who === "w" ? "White" : "Black") + '</span>' +
           '<span data-el="turn-' + who + '" style="font-size:11px;letter-spacing:0.16em;' +
-            'text-transform:uppercase;color:#F2C14A;opacity:0;">to move</span>' +
+            'text-transform:uppercase;color:#F6C94A;opacity:0;">to move</span>' +
         '</div>' +
-        '<button data-el="act-' + who + '" style="' + PILL("#8A6A45") + 'pointer-events:auto;opacity:0.35;">Resign</button>' +
+        '<button data-el="act-' + who + '" style="' + PILL("#6E6A62") + 'pointer-events:auto;opacity:0.35;">Resign</button>' +
       '</div>';
     }
 
     const root = ctx.createRoot({ touchAction: "none" });
-    // The overlay sits above the WebGL canvas, so it must be transparent to
-    // pointers or it swallows every tap meant for the board. Only the pieces
-    // of chrome that are meant to be pressed opt back in.
-    root.style.cssText += ";font-family:" + FONT + ";color:#E8D9B4;pointer-events:none;";
+    root.style.cssText += ";font-family:" + FONT + ";color:#EFEAE0;pointer-events:none;";
     root.innerHTML =
       band("b", true) + band("w", false) +
-      // Chrome sits in the strip between the board and White's HUD. It cannot
-      // go down either side: the board is 376px wide on a 390px screen, so the
-      // margins are 7px and a side column would cover the h-file.
-      '<div data-el="chrome" style="position:absolute;left:0;right:0;top:' + (L.by + L.board + 9) + 'px;' +
+      // Chrome sits between the board and White's HUD. It cannot go down
+      // either side: the board is 376px wide on a 390px screen.
+      '<div style="position:absolute;left:0;right:0;top:' + (L.by + L.board + 9) + 'px;' +
         'display:flex;gap:9px;justify-content:center;z-index:40;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="pointer-events:auto;width:36px;height:36px;' +
-          'border-radius:11px;border:1px solid rgba(214,168,110,0.28);background:#2F2620;color:#E8D9B4;' +
+          'border-radius:11px;border:none;background:rgba(239,234,224,0.13);color:#EFEAE0;' +
           'font-size:15px;font-family:inherit;padding:0;">🔊</button>' +
         '<button data-el="cog" aria-label="Settings" style="pointer-events:auto;width:36px;height:36px;' +
-          'border-radius:11px;border:1px solid rgba(214,168,110,0.28);background:#2F2620;color:#E8D9B4;' +
+          'border-radius:11px;border:none;background:rgba(239,234,224,0.13);color:#EFEAE0;' +
           'font-size:15px;font-family:inherit;padding:0;">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="pointer-events:auto;width:36px;height:36px;' +
-          'border-radius:11px;border:1px solid rgba(214,168,110,0.28);background:#2F2620;color:#E8D9B4;' +
+          'border-radius:11px;border:none;background:rgba(239,234,224,0.13);color:#EFEAE0;' +
           'font-size:15px;font-family:inherit;padding:0;">?</button>' +
       '</div>' +
-      // Promotion picker, drawn in the promoting player's own rotation.
-      '<div data-el="promo" style="position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;' +
-        'justify-content:center;background:rgba(18,14,10,0.82);z-index:60;">' +
+      '<div data-el="promo" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
+        'align-items:center;justify-content:center;background:rgba(16,15,13,0.84);z-index:60;">' +
         '<div data-el="promo-inner" style="' + PLAQUE + 'padding:18px;text-align:center;">' +
           '<div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.65;' +
             'margin-bottom:12px;">Promote to</div>' +
           '<div data-el="promo-row" style="display:flex;gap:9px;"></div>' +
         '</div>' +
       '</div>' +
-      // Terminal state.
-      '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;flex-direction:column;' +
-        'align-items:center;justify-content:center;gap:5px;background:rgba(18,14,10,0.88);z-index:65;' +
-        'padding:26px;text-align:center;">' +
+      '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
+        'flex-direction:column;align-items:center;justify-content:center;gap:5px;' +
+        'background:rgba(16,15,13,0.9);z-index:65;padding:26px;text-align:center;">' +
         '<div data-el="over-title" style="font-size:38px;font-weight:800;letter-spacing:0.04em;' +
-          'text-transform:uppercase;color:#F2C14A;"></div>' +
+          'text-transform:uppercase;color:#F6C94A;"></div>' +
         '<div data-el="over-line" style="font-size:14px;opacity:0.66;"></div>' +
-        '<button data-el="again" style="' + PILL("#8A6A45") + 'margin-top:22px;">New game</button>' +
+        '<button data-el="again" style="' + PILL("#6E6A62") + 'margin-top:22px;">New game</button>' +
       '</div>' +
-      // Settings.
-      '<div data-el="cogp" style="position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;' +
-        'justify-content:center;background:rgba(18,14,10,0.9);z-index:70;padding:24px;">' +
+      '<div data-el="cogp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
+        'align-items:center;justify-content:center;background:rgba(16,15,13,0.92);z-index:70;padding:24px;">' +
         '<div style="max-width:320px;width:100%;' + PLAQUE + 'padding:22px;">' +
-          '<div style="font-size:19px;font-weight:700;margin-bottom:15px;letter-spacing:0.04em;">Settings</div>' +
+          '<div style="font-size:19px;font-weight:700;margin-bottom:15px;">Settings</div>' +
           '<div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.55;">Board</div>' +
           '<div data-el="themes" style="display:flex;gap:7px;margin:9px 0 17px;"></div>' +
           '<div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.55;">Legal move hints</div>' +
           '<div data-el="hints" style="display:flex;gap:7px;margin:9px 0 4px;"></div>' +
-          '<button data-el="cogp-close" style="' + PILL("#8A6A45") + 'width:100%;margin-top:20px;">Done</button>' +
+          '<button data-el="cogp-close" style="' + BIG + 'margin-top:20px;">Done</button>' +
         '</div>' +
       '</div>' +
-      // Instructions.
-      '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;' +
-        'justify-content:center;background:rgba(18,14,10,0.9);z-index:70;padding:24px;">' +
+      '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
+        'align-items:center;justify-content:center;background:rgba(16,15,13,0.92);z-index:70;padding:24px;">' +
         '<div style="max-width:320px;width:100%;' + PLAQUE + 'padding:22px;">' +
-          '<div style="font-size:19px;font-weight:700;margin-bottom:11px;letter-spacing:0.04em;">How to play</div>' +
+          '<div style="font-size:19px;font-weight:700;margin-bottom:11px;">How to play</div>' +
           '<ul style="font-size:14px;line-height:1.72;opacity:0.86;padding-left:18px;margin:0;">' +
             '<li>Put the phone flat between you. White sits at the bottom edge, Black at the top.</li>' +
             '<li>The board never turns. Black plays it upside down, exactly as at a real board.</li>' +
@@ -1009,7 +817,7 @@ window.plethoraBit = {
             '<li>Castling, en passant and promotion all work. A pawn reaching the far rank lets you choose.</li>' +
             '<li>Draws are called automatically: stalemate, dead position, fifty moves, fivefold repetition.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + PILL("#8A6A45") + 'width:100%;margin-top:17px;">Got it</button>' +
+          '<button data-el="helpp-close" style="' + BIG + 'margin-top:17px;">Got it</button>' +
         '</div>' +
       '</div>';
 
@@ -1028,7 +836,6 @@ window.plethoraBit = {
         const act = el("act-" + who);
         act.style.opacity = mine ? "1" : "0.35";
         act.style.pointerEvents = mine ? "auto" : "none";
-        // Captured material: the pieces this player has taken.
         const taken = [];
         const full = { p: 8, n: 2, b: 2, r: 2, q: 1 };
         for (const t of ["q", "r", "b", "n", "p"]) {
@@ -1045,11 +852,9 @@ window.plethoraBit = {
      * Playing a move
      * ------------------------------------------------------------- */
     function commit(m) {
-      const mover = state.turn;
       const san = toSAN(state, m);
-      const fromW = worldOf(m.from), toW = worldOf(m.to);
-      const mesh = meshAt[m.from];
-      const captured = m.ep ? meshAt[sq(fileOf(m.to), rankOf(m.from))] : meshAt[m.to];
+      const letter = state.board[m.from];
+      const captured = m.ep ? state.board[sq(fileOf(m.to), rankOf(m.from))] : state.board[m.to];
 
       make(state, m);
       state.history.push(posKey(state));
@@ -1060,19 +865,13 @@ window.plethoraBit = {
       sound.haptic(captured ? "medium" : "light");
       sound.sting(captured ? "coin" : "tap");
 
-      // Slide the piece rather than teleporting it. A knight lifts slightly
-      // at the midpoint so its jump reads as a jump.
+      // Slide the piece rather than snapping it. A knight lifts at the
+      // midpoint so its jump reads as a jump.
       anim = {
-        mesh, captured,
-        fx: fromW.x, fz: fromW.z, tx: toW.x, tz: toW.z,
-        t: 0, dur: 0.18,
-        arc: mesh && mesh.userData.type === "n" ? 0.30 * U : 0,
-        after: () => {
-          syncBoard();
-          paintOverlays();
-          paintHud();
-          checkTerminal();
-        },
+        letter, hideAt: m.to,
+        fx: sqX(m.from), fy: sqY(m.from), tx: sqX(m.to), ty: sqY(m.to),
+        t: 0, dur: 0.16, arc: letter.toLowerCase() === "n",
+        after: () => { paintHud(); checkTerminal(); },
       };
       ctx.platform.interact({ type: "move", san });
     }
@@ -1108,9 +907,6 @@ window.plethoraBit = {
       sound.sting(result === "draw" ? "fail" : "win");
       sound.haptic(result === "draw" ? "warning" : "success");
       ctx.platform.complete({ result, moves: moveList.length });
-
-      // The record belongs to the match, not to one of the two people at the
-      // table: how quickly this board produced a mate.
       if (result !== "draw") {
         try { ctx.memory.record("fastest_mate").submit(Math.ceil(moveList.length / 2),
           { label: Math.ceil(moveList.length / 2) + " moves" }); } catch (_) {}
@@ -1122,7 +918,7 @@ window.plethoraBit = {
       const row = el("promo-row");
       row.innerHTML = ["q", "r", "b", "n"].map((t) =>
         '<button data-p="' + t + '" style="width:56px;height:56px;border-radius:12px;' +
-        'border:1px solid rgba(214,168,110,0.4);background:#2F2620;color:#E8D9B4;font-size:30px;' +
+        'border:1px solid rgba(230,225,210,0.35);background:#2A2724;color:#EFEAE0;font-size:30px;' +
         'line-height:1;font-family:inherit;padding:0;">' + GLYPH[t] + '</button>').join("");
       for (const b of row.querySelectorAll("button")) {
         tap(b, () => {
@@ -1132,23 +928,22 @@ window.plethoraBit = {
           if (pick) commit(pick);
         });
       }
-      // Shown in the promoting player's own rotation, so they are not reading
-      // their own choice upside down.
+      // Shown in the promoting player's own rotation.
       el("promo-inner").style.transform = state.turn === BLACK ? "rotate(180deg)" : "none";
       el("promo").style.display = "flex";
     }
 
     /* --- input: tap to select, tap to move --- */
-    ctx.listen(glCanvas, "pointerdown", async (e) => {
+    ctx.listen(canvas, "pointerdown", async (e) => {
       if (over || anim || pendingPromo) return;
       await sound.unlock();
       ctx.platform.start();
       const i = pickSquare(e.offsetX, e.offsetY);
-      if (i < 0) { selected = -1; legalForSelected = []; paintOverlays(); return; }
+      if (i < 0) { selected = -1; legalForSelected = []; return; }
 
       if (selected >= 0) {
         const picks = legalForSelected.filter((m) => m.to === i);
-        if (picks.length > 1) return offerPromotion(selected, i, picks);   // four promotion choices
+        if (picks.length > 1) return offerPromotion(selected, i, picks);
         if (picks.length === 1) return commit(picks[0]);
       }
       const p = state.board[i];
@@ -1160,7 +955,6 @@ window.plethoraBit = {
         selected = -1;
         legalForSelected = [];
       }
-      paintOverlays();
       e.preventDefault();
     }, { passive: false });
 
@@ -1175,24 +969,24 @@ window.plethoraBit = {
     function pills(host, values, labels, get, set) {
       host.innerHTML = values.map((v, i) =>
         '<button data-v="' + v + '" style="flex:1;padding:10px 0;border-radius:10px;' +
-        'border:1px solid rgba(214,168,110,0.24);font-family:inherit;font-size:13px;' +
+        'border:1px solid rgba(230,225,210,0.2);font-family:inherit;font-size:13px;' +
         'font-weight:600;">' + labels[i] + '</button>').join("");
-      const paint = () => {
+      const paint2 = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
-          b.style.background = on ? "#5A4028" : "#2A211A";
-          b.style.color = on ? "#F2C14A" : "rgba(232,217,180,0.55)";
+          b.style.background = on ? "#5A5348" : "#211F1C";
+          b.style.color = on ? "#F6C94A" : "rgba(239,234,224,0.55)";
         }
       };
       for (const b of host.querySelectorAll("button")) {
-        tap(b, () => { set(b.dataset.v); saveSettings(); paint(); sound.haptic("light"); });
+        tap(b, () => { set(b.dataset.v); saveSettings(); paint2(); sound.haptic("light"); });
       }
-      paint();
+      paint2();
     }
-    pills(el("themes"), ["wood", "green", "slate"], ["Walnut", "Green", "Slate"],
-      () => settings.theme, (v) => { settings.theme = v; buildBoard(); });
+    pills(el("themes"), ["green", "wood", "slate"], ["Green", "Walnut", "Slate"],
+      () => settings.theme, (v) => { settings.theme = v; });
     pills(el("hints"), ["true", "false"], ["On", "Off"],
-      () => String(settings.hints), (v) => { settings.hints = v === "true"; paintOverlays(); });
+      () => String(settings.hints), (v) => { settings.hints = v === "true"; });
 
     function resign(who) {
       over = who === "w" ? "b" : "w";
@@ -1206,70 +1000,36 @@ window.plethoraBit = {
     tap(el("act-b"), () => resign("b"));
 
     function newGame() {
-      for (let i = 0; i < 64; i++) if (meshAt[i]) { returnPiece(meshAt[i].userData.letter, meshAt[i]); meshAt[i] = null; }
       state = startPosition();
       state.history.push(posKey(state));
       moveList.length = 0;
       selected = -1; legalForSelected = []; lastMove = null; over = null; anim = null;
       el("over").style.display = "none";
-      syncBoard(); paintOverlays(); paintHud();
+      paintHud();
       ctx.platform.interact({ type: "new_game" });
     }
     tap(el("again"), newGame);
 
-    /* ---------------------------------------------------------------
-     * Frame
-     * ------------------------------------------------------------- */
-    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-    let checkPulse = 0;
-
+    /* --- frame --- */
     ctx.onFrame((dtMs) => {
       const dt = Math.min(dtMs, 50) / 1000;
-
       if (anim) {
         anim.t += dt;
-        const t = Math.min(anim.t / anim.dur, 1);
-        const e = easeOutCubic(t);
-        if (anim.mesh) {
-          anim.mesh.position.x = anim.fx + (anim.tx - anim.fx) * e;
-          anim.mesh.position.z = anim.fz + (anim.tz - anim.fz) * e;
-          anim.mesh.position.y = 0.09 * U + Math.sin(t * Math.PI) * anim.arc;
-        }
-        // The taken piece shrinks away rather than blinking out.
-        if (anim.captured) {
-          const s = 1 - e;
-          anim.captured.scale.setScalar(Math.max(s, 0.001));
-        }
-        if (t >= 1) { const a = anim; anim = null; a.after(); }
+        if (anim.t >= anim.dur) { const a = anim; anim = null; a.after(); }
       }
-
-      // The check ring breathes: continuous, low-frequency, ignorable but present.
-      if (!over && !anim && inCheck(state, state.turn)) {
-        checkPulse += dt;
-        const a = 0.35 + Math.sin(checkPulse * 2.2) * 0.15;
-        for (const c of overlay.children) {
-          if (c.material.color.getHex() === 0xC4432E) c.material.opacity = a * c.userData.k;
-        }
-      }
-
-      renderer.render(scene, camera);
+      paint();
     });
 
     ctx.listen(window, "resize", () => {
       if (ctx.width === W && ctx.height === H) return;
       measure();
-      renderer.setSize(ctx.width, ctx.height, false);
-      placeCamera();
     });
 
     /* --- boot --- */
     state.history.push(posKey(state));
-    syncBoard();
-    paintOverlays();
     paintHud();
 
-    // A read-only window for the local harness, so a scripted game can assert
-    // on real positions. It exposes nothing the board does not already show.
+    // A read-only window for the local harness.
     window.__CHESS__ = {
       get fen() { return state.board.join(""); },
       get turn() { return state.turn; },
@@ -1278,16 +1038,15 @@ window.plethoraBit = {
       get legal() { return legalMoves(state).length; },
       get check() { return inCheck(state, state.turn); },
       get sel() { return selected; },
-      // True while a piece is sliding: the board rejects input until it lands.
       get busy() { return anim !== null; },
       squareXY: (name) => {
         const i = NAMES.indexOf(name[0]) + (Number(name[1]) - 1) * 8;
-        return { x: L.bx + (fileOf(i) + 0.5) * L.unit, y: L.by + (7 - rankOf(i) + 0.5) * L.unit };
+        return { x: sqX(i) + L.sq / 2, y: sqY(i) + L.sq / 2 };
       },
     };
     ctx.onDestroy(() => { try { delete window.__CHESS__; } catch (_) {} });
 
-    renderer.render(scene, camera);
+    paint();
     ctx.markVisualReady("board set");
     ctx.platform.ready();
   },

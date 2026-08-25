@@ -3,10 +3,22 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Chess",
-  "description": "Chess for two people and one phone, with pieces that are turned rather than drawn. Lay it flat between you — White at the near edge, Black at the far one — and the board never moves, exactly as at a real board. Every Staunton piece but the knight is a profile swept on a lathe, so the flared base, the waisted shaft and the collar ring are real geometry catching a real key light. Full rules: castling, en passant, underpromotion, stalemate, dead position, the fifty-move clock and repetition. Three boards: walnut, tournament green and slate.",
-  "tags": ["chess", "multiplayer", "local-multiplayer", "board", "two-player", "strategy", "classic", "3d"],
-  "permissions": ["backgroundMusic", "haptics", "storage"],
-  "dependencies": ["three@0.164.1"],
+  "description": "Chess for two people and one phone, drawn flat so you can actually tell the pieces apart. Lay it between you \u2014 White at the near edge, Black at the far one \u2014 and the board never turns, exactly as at a real board. Full rules: castling, en passant, underpromotion, stalemate, dead position, the fifty-move clock and repetition, all verified against the published perft counts. Three boards: tournament green, walnut and slate.",
+  "tags": [
+    "chess",
+    "multiplayer",
+    "local-multiplayer",
+    "board",
+    "two-player",
+    "strategy",
+    "classic"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
   "memory": {
     "records": {
       "fastest_mate": {
@@ -14,8 +26,15 @@
         "valueType": "number",
         "order": "asc",
         "format": "integer",
-        "periods": ["daily", "weekly", "all_time"],
-        "scopes": ["following", "global"],
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
         "dedupe": "best_per_user"
       }
     }

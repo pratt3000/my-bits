@@ -45,36 +45,28 @@ figures, so the test runs the shipped code rather than a copy that can drift:
 Kiwipete traps castling rights; position 3 traps the en-passant discovered
 check. All six positions match exactly.
 
-## The pieces are turned, not drawn
+## This was 3D, and it did not work
 
-Every Staunton piece except the knight is a rotational solid — a profile swept
-about a vertical axis — which is exactly what `THREE.LatheGeometry` builds. So
-the flared base, the concave scotia, the waisted shaft, the collar ring and the
-finial are real geometry catching a real key light down their left flank, the
-way the reference photographs do. The knight is the one piece that breaks
-rotational symmetry, so it is extruded from a carved silhouette instead, and
-that break is what makes it findable at a glance on a small board.
+The pieces were real lathe-turned Staunton solids under a real key light, and
+from the only camera angle this game can honestly use they were unreadable.
 
-Heights follow real set proportions relative to a square — pawn 0.80, rook
-0.87, knight 1.05, bishop 1.16, queen 1.38, king 1.58. A single global scale
-would leave the king and queen the same height, which is the one distinction
-that has to survive.
+The camera has to be **directly overhead**: two people are playing each other
+across the board, and any tilt gives one of them a better view of it. But the
+profile that makes a chess set readable is its *side* — the flared base, the
+waisted shaft, the mitre, the coronet — and from straight above you see none of
+it. A bishop, a pawn and a queen are three circles of slightly different
+diameter. Widening the field of view to lean the pieces outward helped at the
+edges and did nothing in the middle.
 
-## Why the camera is where it is
+So the board is flat and the pieces are the flat vector silhouettes every chess
+site uses, for exactly this reason. Each is a path in a unit square: a solid
+body in the player's colour, a heavy contrasting outline so a white piece on a
+light square and a black piece on a dark square both stay legible, one interior
+line to separate a glyph from a blob, and a squashed ellipse of a contact
+shadow so it sits *on* the square.
 
-Directly overhead, because two people are playing each other across this board
-and any tilt would give one of them a better view of it.
-
-The field of view is deliberately wide at 38°. Straight down, a lathe-turned
-piece is a disc and you lose the profile that makes a Staunton set readable. A
-wider view leans the pieces outward from the centre, so each player sees the
-near side of their own men and the far side of their opponent's — exactly as at
-a real board. It stays fair because the spread is radial: both ends are the
-same distance from the camera. Wider than 38° and the back ranks lean far
-enough to overlap and spill off the board.
-
-The key light sits low, which throws long shadows. That is most of what
-separates a piece from the board when you are looking straight down at it.
+Dropping three.js also dropped the only dependency this bit had, and with it a
+1.2MB module download that happened before the first frame.
 
 ## Two bugs worth remembering
 
