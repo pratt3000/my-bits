@@ -121,6 +121,51 @@ cover, the suit sheet and the result panel all sit on translucent grounds — so
 a faint "ROSE · 1 card plays" printed itself through all three. It is now drawn
 only while somebody is actually looking at their hand.
 
+## Five more a design pass found
+
+Every one of these is a thing that only shows up on a real 390px screen, in a
+state the play script reaches but never looks at.
+
+**The table's printed edge ran under the notch and under the home bar.** The
+frame was inset a flat 10.5px from all four sides, so on a phone the dynamic
+island cut its top corners off and the home indicator sat on its bottom edge —
+a frame sliced by the hardware reads as a rendering fault rather than as the rim
+of a table. It is now inset to the safe area top and bottom.
+
+**A four-player rail overflowed its own plaques.** Three opponents on a 390px
+screen give each plaque about 114px, and the layout put name, count, unit,
+score and "pts" in it. "10 CARDS" ran off the plaque and off the screen behind
+it, and so did "ONE CARD" — which is the single most important state in Crazy
+Eights. The unit is what got cut on a narrow plaque: the little fan of backs
+sits immediately left of the number and is already a picture of the unit, and
+one card left still announces itself three other ways (orange numeral, pulsing
+orange plaque, a banner across the table). The plaques also gained a 16px
+gutter, because at 12px they were landing on the table's printed edge.
+
+**The "up next" chevron sat on top of the name.** Pinned to the plaque's
+top-right corner it printed through the last letter of "COBALT" and "SAFFRON" —
+the same collision the *word* "next" was replaced to avoid. On a narrow plaque
+it now sits at the far end of the number's own row, which is the one part of a
+114px plaque guaranteed to be empty.
+
+**The prompt band's two halves met in the middle.** The message was laid out
+from the left and the "rank OR suit" group from the right, and neither knew
+about the other: "nothing plays — tap the deck" against a two-character rank
+left seven pixels between them, and any font with wider metrics than the test
+engine's closes that to an overlap. The right group is now measured first and
+the message picks the longest wording that fits the room left over — so on a
+`10` it says "nothing plays — draw" instead.
+
+**Two banners were narrower than their own second line.** The plaque was sized
+off the headline alone, so a short title over a long subtitle — "PLAY IT" over
+"the deck gave you one", "HEARTS" over "named by Saffron" — drew a box that its
+own subtitle ran out through on both sides. Both lines are measured now. The
+banner ground also went from 0.86 to 0.95 opaque, because it lands on the pile
+and the pips of the card under it printed through the small line.
+
+A sixth, which is only wording: the wide plaque read **"1 ONE CARD"**, the label
+sitting directly after the numeral. It says "1 CARD" now, in orange.
+
 ## Rules, and the one house ruling
 
 Standard: seven cards each (five with four players), match the discard by rank

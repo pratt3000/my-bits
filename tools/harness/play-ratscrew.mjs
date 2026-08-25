@@ -68,7 +68,9 @@ await bit.wait(700);
 await bit.shot("ratscrew-1-title");
 console.log("baked deck art:", (await rs()).baked);
 
-/* --- Settings: three players, tens on, so every rule is exercised. --- */
+/* --- Settings: three players, tens on, so every rule is exercised. The short
+       deal is thirty cards at three seats, which a rules simulation says is
+       comfortably past the point where a game can finish without one. --- */
 const cog = await dom('[data-el="cog"]');
 await bit.tap(cog.x, cog.y);
 await bit.wait(240);
@@ -100,7 +102,7 @@ await bit.shot("ratscrew-3b-deal");
 check(await reached((s) => s && s.phase === "play", 8000), "reached the play phase");
 let st = await rs();
 check(st.counts.length === 3, "three players seated (got " + st.counts.length + ")");
-check(st.total === st.deckN && st.deckN === 18, "18 cards dealt, six each (got " + st.total + ")");
+check(st.total === st.deckN && st.deckN === 30, "30 cards dealt, ten each (got " + st.total + ")");
 const pads = {};
 for (const c of st.counts) pads[c.seat] = await bit.probe((s) => window.__RATSCREW__.pad(s), c.seat);
 
@@ -245,7 +247,7 @@ const again = await dom('[data-el="again"]');
 await bit.tap(again.x, again.y);
 check(await reached((s) => s && s.phase === "play" && s.total === s.deckN, 6000), "rematch dealt a fresh game");
 st = await rs();
-check(st.counts.every((c) => !c.out && c.cards === 6), "rematch reset every stack to six");
+check(st.counts.every((c) => !c.out && c.cards === 10), "rematch reset every stack to ten");
 await bit.shot("ratscrew-9-rematch");
 
 const errs = (await bit.errors()).filter((e) => !/404/.test(e));

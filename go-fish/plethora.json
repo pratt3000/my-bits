@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Go Fish",
+  "description": "Go Fish for two to four people and one phone, played in bright deep water with fish drifting past the cards. The phone goes round the table behind a cover that names whoever should be holding it, so a hand is only ever secret while it is in the right hands. On your turn you may only ask for a rank you are actually holding — the rule casual play forgets — and the phone enforces it by only offering the ranks in your fan. Every ask is then read out loud on a big public board that prints the same words upside down as well, so the person opposite reads it too: that overheard information is the entire game. Four of a kind is a book, and a book lands with a slam, a shockwave and a burst of bubbles. Most books when the ocean runs dry wins the table.",
+  "tags": [
+    "cards",
+    "multiplayer",
+    "local-multiplayer",
+    "family",
+    "turn-based",
+    "party",
+    "kids",
+    "memory"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "most_books": {
+        "label": "Most Books in a Game",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

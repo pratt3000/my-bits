@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Cheat",
+  "description": "Cheat — also called BS, or I Doubt It — for three to five people around one phone. The whole deck is dealt out and the claim marches round in rank order: Aces, Twos, Threes, wrapping after Kings. On your turn the phone is yours alone: a cover names you, lifts on a tap, and your hand is laid out sorted so you can pick one to four cards and play them face down as the current rank. They do not have to be that rank. Then the phone goes flat in the middle of the table and every other player gets a CHEAT button on the edge they are actually sitting at, turned the right way up for them, all live at the same instant — and the first hand down wins, settled by which finger the phone felt first. Called and lying, you take the whole pile; called and honest, the caller does. Empty your hand and survive one last challenge window to win. The table's longest unbroken run of lies goes to the global board, and is never shown mid-game.",
+  "tags": [
+    "multiplayer",
+    "local-multiplayer",
+    "cards",
+    "party",
+    "bluffing",
+    "social",
+    "tabletop",
+    "pass-and-play"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "longest_bluff_run": {
+        "label": "Longest Bluff Run",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

@@ -111,7 +111,7 @@ window.plethoraBit = {
     })();
     const settings = {
       players: clamp(saved.players || 2, 2, 4),
-      deal: saved.deal === undefined ? 0 : saved.deal,      // 0 = six each, 1 = whole deck
+      deal: saved.deal === undefined ? 0 : saved.deal,      // 0 = short, 1 = whole deck
       tens: saved.tens === undefined ? 1 : saved.tens,      // top-ten slap on/off
       mute: !!saved.mute,
     };
@@ -585,8 +585,14 @@ window.plethoraBit = {
       const st = ctx.safeArea.top, sb = ctx.safeArea.bottom;
       const n = settings.players;
       L.chrome = 46;
-      L.sideW = n >= 3 ? Math.round(Math.min(84, W * 0.20)) : 0;
-      L.endH = Math.round(H * (n >= 3 ? 0.185 : 0.213));
+      // The side seats' pad is the one that cannot be as big as everybody
+      // else's — a phone is tall, and the width two of them have to share is
+      // the width the middle of the table also needs. It is still the pad this
+      // game's whole argument rests on, so it takes every pixel the centre can
+      // spare: wider than a thumb, and running nearly the full height of the
+      // band instead of stopping 15% short of it at each end.
+      L.sideW = n >= 3 ? Math.round(Math.min(90, W * 0.232)) : 0;
+      L.endH = Math.round(H * (n >= 3 ? 0.175 : 0.213));
 
       // Each end pad is shortened by the chrome column on the side that is its
       // own player's right — screen-right for the bottom player, screen-left
@@ -600,8 +606,8 @@ window.plethoraBit = {
       L.bandTop = st + L.endH;
       L.bandBot = H - sb - L.endH;
       const bh = L.bandBot - L.bandTop;
-      L.rects.left = { x: 8, y: L.bandTop + bh * 0.15, w: L.sideW - 16, h: bh * 0.70 };
-      L.rects.right = { x: W - L.sideW + 8, y: L.bandTop + bh * 0.15, w: L.sideW - 16, h: bh * 0.70 };
+      L.rects.left = { x: 8, y: L.bandTop + bh * 0.055, w: L.sideW - 14, h: bh * 0.89 };
+      L.rects.right = { x: W - L.sideW + 8, y: L.bandTop + bh * 0.055, w: L.sideW - 14, h: bh * 0.89 };
 
       const usedL = n >= 3 ? L.sideW : 0;
       const usedR = n >= 4 ? L.sideW : 0;
@@ -611,7 +617,7 @@ window.plethoraBit = {
       // to fit inside it, or it is drawn across somebody's count.
       L.bandW = W - usedL - usedR;
       L.bandH = bh;
-      L.ringR = Math.min(L.bandW / 2 - 12, bh / 2 - 16, 104);
+      L.ringR = Math.min(L.bandW / 2 - 10, bh / 2 - 16, 104);
     }
     layout();
 
@@ -790,7 +796,20 @@ window.plethoraBit = {
       bakeTable();
       players = makePlayers(settings.players);
       const deck = freshDeck();
-      const per = settings.deal === 0 ? 6 : Math.floor(52 / settings.players);
+      // The short game is sized by the table, not by a fixed hand.
+      //
+      // It used to deal six each whatever the seating, and a rules simulation
+      // over thousands of games said that was a bad game: at two players a
+      // six-each deal ran out with NO slap at all in a quarter of them. The
+      // headline mechanic simply never fired, and two players is the default.
+      // Slap density tracks the total number of cards on the table rather than
+      // the hand size — matching ranks are what is scarce in a thin deal — and
+      // it falls below one game in a hundred at about thirty-two cards. So the
+      // short game always puts thirty-odd on the table: sixteen each at two,
+      // ten at three, eight at four.
+      const per = settings.deal === 0
+        ? Math.max(6, Math.floor(32 / settings.players))
+        : Math.floor(52 / settings.players);
       deckN = per * settings.players;
       for (let i = 0; i < deckN; i++) players[i % players.length].deck.push(deck[i]);
       pile = [];
@@ -1476,7 +1495,7 @@ window.plethoraBit = {
       // the only shape that reads the same from all four sides.
       if (phase === "play" && !slapNow && !pendingCollect && players[turn] && !players[turn].out) {
         const p = players[turn];
-        const bob = Math.sin(now * 0.006) * 2.5;
+        const bob = Math.sin(now * 0.006) * 2;
         g.save();
         // rotate by the seat's own angle, not its negative: rotating the other
         // way sent the left player's arrow to the right-hand edge of the ring,
@@ -1503,7 +1522,7 @@ window.plethoraBit = {
         g.save();
         g.translate(L.px, L.py);
         g.rotate(rad);
-        g.translate(0, L.ringR + 34);
+        g.translate(0, L.ringR + 38);
         g.font = "800 12px " + FONT;
         g.textAlign = "center"; g.textBaseline = "middle";
         const pw = g.measureText(text).width + 30;
@@ -1516,9 +1535,13 @@ window.plethoraBit = {
         g.fillStyle = ink;
         tracked(g, text, 0, 0.5, 2);
 
-        // Tribute pips ride directly above the plate rather than floating on
-        // their own arc, so each end seat gets one object to read instead of
-        // two things stacked up the middle of the table.
+        // Tribute pips ride with the plate rather than floating on their own
+        // arc, so each end seat gets one object to read instead of two things
+        // stacked up the middle of the table — but on the far side of it, not
+        // between the plate and the ring. That gap belongs to the turn
+        // chevron, and during a tribute the chevron points at the debtor,
+        // which is the same seat the pips are drawn for: an arrowhead landed
+        // exactly between two pips and the three of them read as one blob.
         if (tribute && !slapNow && !pendingCollect) {
           const cred = players[tribute.creditor];
           const total = TRIBUTE[tribute.rank];
@@ -1526,7 +1549,7 @@ window.plethoraBit = {
             const px = (i - (total - 1) / 2) * 11;
             const paid = i >= tribute.left;
             g.beginPath();
-            g.arc(px, -20, paid ? 2.4 : 3.8, 0, TAU);
+            g.arc(px, 21, paid ? 2.4 : 3.8, 0, TAU);
             g.fillStyle = paid ? "rgba(255,244,214,0.18)" : cred.ink;
             g.fill();
           }
@@ -1657,7 +1680,7 @@ window.plethoraBit = {
         }
         g.restore();
         g.fillStyle = "rgba(245,237,218,0.42)";
-        g.font = "800 " + Math.round(Math.min(lh * 0.18, 17)) + "px " + FONT;
+        g.font = "800 " + Math.round(clamp(lh * 0.18, 11, 17)) + "px " + FONT;
         tracked(g, p.name.toUpperCase() + " IS OUT", 0, 0, 3.4);
         g.restore();
         return;
@@ -1674,7 +1697,7 @@ window.plethoraBit = {
         }
         g.restore();
         g.fillStyle = "#ff8f8f";
-        g.font = "700 " + Math.round(Math.min(lh * 0.15, 14)) + "px " + FONT;
+        g.font = "700 " + Math.round(clamp(lh * 0.15, 11, 14)) + "px " + FONT;
         tracked(g, "BURNED", 0, -lh * 0.20, 2.6);
         const barW = lw * 0.40 * (p.lock / LOCK_S);
         roundRect(g, -lw * 0.20, lh * 0.20 - 3, lw * 0.40, 6, 3);
@@ -1691,12 +1714,19 @@ window.plethoraBit = {
 
       miniStack(-lw * 0.16, lh * 0.03, p.deck.length, clamp(lh / 140 * 0.52, 0.20, 0.38));
 
+      // Type on a pad is sized off the pad's shallow axis, which is right for
+      // the end seats and was quietly ruinous for the side ones: a side pad is
+      // half as deep, so its name came out at 8px and its state chip — SLAP,
+      // FLIP, PAY 2, the one word in this game anybody has to read in a
+      // hurry — at 7px. A floor, because half the seats at a four-player table
+      // were being told the most urgent thing on the screen in the smallest
+      // type on it.
       g.fillStyle = hexA(p.ink, 0.92);
-      g.font = "700 " + Math.round(Math.min(lh * 0.13, 12)) + "px " + FONT;
+      g.font = "700 " + Math.round(clamp(lh * 0.13, 9.5, 12)) + "px " + FONT;
       tracked(g, p.name.toUpperCase(), 0, -lh * 0.27, 3);
 
       g.fillStyle = armed ? "#fffdf4" : CREAM;
-      g.font = "800 " + Math.round(Math.min(lh * 0.40, 46)) + "px " + FONT;
+      g.font = "800 " + Math.round(clamp(lh * 0.40, 27, 46)) + "px " + FONT;
       g.fillText(String(p.deck.length), lw * 0.07, lh * 0.10);
 
       // One line of state, and only one: SLAP beats everything, then the
@@ -1707,8 +1737,8 @@ window.plethoraBit = {
       else if (mine) { chip = "FLIP"; chipInk = p.ink; }
       if (chip) {
         g.fillStyle = chipInk;
-        g.font = "800 " + Math.round(Math.min(lh * 0.115, 11)) + "px " + FONT;
-        tracked(g, chip, 0, lh * 0.37, 3.5);
+        g.font = "800 " + Math.round(clamp(lh * 0.115, 10, 11.5)) + "px " + FONT;
+        tracked(g, chip, 0, lh * 0.34, 3.5);
       }
       g.restore();
     }
@@ -1792,8 +1822,41 @@ window.plethoraBit = {
       { id: "8S", x: -28, y: 2, r: -0.19 },
       { id: "8H", x: 32, y: -6, r: 0.17 },
     ];
+    /**
+     * The gap the title art has to live in: under the far seat's Deal bar and
+     * above the wordmark. Measured off the two blocks themselves rather than
+     * guessed from the screen height, because the guess is what put the heap
+     * where it did not fit.
+     */
+    function heapBand() {
+      let top = SAFE_T + 120, bot = H - 378;
+      const m = shell.el("menu");
+      if (m && m.style.display !== "none") {
+        // offsetTop/offsetHeight rather than a client rect: the menu is the
+        // offset parent, so these are already in the canvas's own coordinates,
+        // and a rotated child reports its laid-out box either way.
+        const a = m.firstElementChild, b = m.lastElementChild;
+        if (a && b && a.offsetHeight > 0 && b.offsetHeight > 0
+            && b.offsetTop - (a.offsetTop + a.offsetHeight) > 60) {
+          top = a.offsetTop + a.offsetHeight + 10;
+          bot = b.offsetTop - 10;
+        }
+      }
+      return { top, bot };
+    }
+
     function drawHeap(now) {
-      const cx = W / 2, cy = H * 0.335;
+      // The heap is sized to the gap it has, not to a number that happened to
+      // look right on a tall screen. At 667 the fixed version pushed the pile
+      // down over the wordmark and "EGYPTIAN" came out grey-on-white across
+      // the face of the eight of spades — the one line on the title that has
+      // to be read against felt, printed on a playing card instead.
+      //
+      // 112 is the heap's own half-height at full size: the tallest card
+      // offset plus half a card.
+      const band = heapBand();
+      const hs = clamp((band.bot - band.top) / 2 / 112, 0.60, 1);
+      const cx = W / 2, cy = (band.top + band.bot) / 2;
       const rock = Math.sin(now * 0.0008) * 0.02;
       const pulse = 0.5 + 0.5 * Math.sin(now * 0.0032);
 
@@ -1803,7 +1866,7 @@ window.plethoraBit = {
         g.save();
         g.globalAlpha = c.a;
         const card = { id: c.id, rank: c.id.slice(0, -1), suit: c.id.slice(-1) };
-        drawCardAt(cx + c.x, cy + c.y, c.r + rock * 0.5, 0.72, card, true, 0.04);
+        drawCardAt(cx + c.x * hs, cy + c.y * hs, c.r + rock * 0.5, 0.72 * hs, card, true, 0.04);
         g.restore();
       }
 
@@ -1814,19 +1877,19 @@ window.plethoraBit = {
       for (let i = 5; i >= 1; i--) {
         g.globalAlpha = 0.13 * (1 - i / 6) * (0.35 + 0.65 * pulse);
         g.strokeStyle = GOLD;
-        g.lineWidth = i * 8;
-        g.beginPath(); g.arc(0, 0, 128 + i * 3, 0, TAU); g.stroke();
+        g.lineWidth = i * 8 * hs;
+        g.beginPath(); g.arc(0, 0, (128 + i * 3) * hs, 0, TAU); g.stroke();
       }
       g.globalAlpha = 0.42 + 0.32 * pulse;
       g.strokeStyle = GOLD; g.lineWidth = 1.8;
-      g.beginPath(); g.arc(0, 0, 132, 0, TAU); g.stroke();
+      g.beginPath(); g.arc(0, 0, 132 * hs, 0, TAU); g.stroke();
       g.globalAlpha = 0.18 + 0.14 * pulse;
       g.lineWidth = 1;
-      g.beginPath(); g.arc(0, 0, 149 + pulse * 9, 0, TAU); g.stroke();
+      g.beginPath(); g.arc(0, 0, (149 + pulse * 9) * hs, 0, TAU); g.stroke();
       // Motes drifting in the lamp light above the felt.
       for (let i = 0; i < 14; i++) {
         const a = i * 0.4488 + now * 0.00016 * (i % 3 ? 1 : -1);
-        const rr = 118 + ((i * 37) % 74);
+        const rr = (118 + ((i * 37) % 74)) * hs;
         g.globalAlpha = 0.10 + 0.16 * (0.5 + 0.5 * Math.sin(now * 0.0013 + i));
         g.fillStyle = i % 4 === 0 ? CREAM : GOLD;
         g.beginPath(); g.arc(Math.cos(a) * rr, Math.sin(a) * rr * 0.86, 1.5, 0, TAU); g.fill();
@@ -1836,7 +1899,7 @@ window.plethoraBit = {
 
       for (const c of HEAP) {
         const card = { id: c.id, rank: c.id.slice(0, -1), suit: c.id.slice(-1) };
-        drawCardAt(cx + c.x, cy + c.y, c.r + rock, 0.90, card, true, 0.10);
+        drawCardAt(cx + c.x * hs, cy + c.y * hs, c.r + rock, 0.90 * hs, card, true, 0.10);
       }
     }
 
@@ -1992,7 +2055,13 @@ window.plethoraBit = {
      */
     const panelFlex = panel + "display:flex;flex-direction:column;box-sizing:border-box;" +
       "max-height:100%;overflow:hidden;";
-    const scrollBody = "flex:1 1 auto;min-height:0;overflow-y:auto;margin:0 -4px;padding:0 4px;";
+    // The last visible line of a scrolling panel gets sliced by the container
+    // edge, which reads as a rendering fault rather than as "there is more
+    // below". A mask fading the bottom of the box turns the same cut into an
+    // intentional one, and costs no extra element to do it.
+    const fade = "linear-gradient(180deg,#000 calc(100% - 18px),transparent)";
+    const scrollBody = "flex:1 1 auto;min-height:0;overflow-y:auto;margin:0 -4px;padding:0 4px;" +
+      "-webkit-mask-image:" + fade + ";mask-image:" + fade + ";";
     const label = "font-size:11px;letter-spacing:0.24em;text-transform:uppercase;opacity:0.52;";
     const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
       "justify-content:center;" +
@@ -2011,10 +2080,27 @@ window.plethoraBit = {
       '</div>' +
 
       /* ---- title ---- */
+      //
+      // Two ways in, one at each end. A phone lying flat between four people
+      // has no "bottom of the screen": a single Deal button down there is a
+      // game only the person it happens to be pointing at can start, and the
+      // player sitting opposite has to reach across the table and press a
+      // button that is upside down to them. The far seat gets the same two
+      // controls — how many are playing, and go — turned round to face it.
       '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
-        'justify-content:flex-end;align-items:center;z-index:50;pointer-events:auto;' +
-        'padding:0 26px ' + (SAFE_B + 24) + 'px;text-align:center;background:linear-gradient(180deg,' +
-        'rgba(3,14,9,0) 18%,rgba(3,14,9,0.22) 36%,rgba(3,14,9,0.88) 54%,rgba(3,14,9,0.98) 100%);">' +
+        'justify-content:space-between;align-items:center;z-index:50;pointer-events:auto;' +
+        'padding:' + (SAFE_T + 10) + 'px 26px ' + (SAFE_B + 24) + 'px;text-align:center;' +
+        'background:linear-gradient(180deg,' +
+        'rgba(3,14,9,0) 11%,rgba(3,14,9,0.34) 29%,rgba(3,14,9,0.92) 47%,rgba(3,14,9,0.99) 100%);">' +
+        '<div style="transform:rotate(180deg) translateX(12px);max-width:268px;width:100%;display:flex;gap:9px;' +
+          'align-items:center;padding:9px;box-sizing:border-box;border-radius:17px;' +
+          'background:linear-gradient(180deg,rgba(19,46,30,0.94),rgba(9,27,18,0.94));' +
+          'box-shadow:inset 0 0 0 1px rgba(217,154,82,0.26),0 12px 30px rgba(0,0,0,0.45);">' +
+          '<div data-el="seats2" style="display:flex;gap:6px;flex:0 0 116px;"></div>' +
+          '<button data-el="deal2" style="' + bigBtn(GOLDBTN, "#221503") +
+            'margin-top:0;flex:1 1 auto;padding:11px 0;font-size:14.5px;letter-spacing:0.06em;">Deal</button>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;align-items:center;width:100%;">' +
         '<div style="' + label + 'margin-bottom:8px;font-size:10.5px;">Egyptian</div>' +
         '<div style="font-size:47px;font-weight:800;letter-spacing:0.02em;line-height:0.95;' +
           'background:linear-gradient(178deg,#fff6df 6%,#f0c25c 48%,#a3691a);-webkit-background-clip:text;' +
@@ -2031,6 +2117,7 @@ window.plethoraBit = {
           '<button data-el="deal" style="' + bigBtn(GOLDBTN, "#221503") +
             'margin-top:18px;letter-spacing:0.06em;">Deal</button>' +
         '</div>' +
+        '</div>' +
       '</div>' +
 
       /* ---- game over ---- */
@@ -2046,7 +2133,11 @@ window.plethoraBit = {
         // is the same plate as the main one, just compact — an eyebrow, the
         // winner and every count — so the far seat is told the whole result
         // rather than shown a stray upside-down word.
-        '<div style="transform:rotate(180deg);max-width:300px;width:100%;margin-bottom:18px;' +
+        // Stepped clear of the chrome column, exactly as the top pad is on the
+        // table: a 300px plate centred on a 390px screen runs its corner under
+        // the help button, and the far seat's own Deal again ends up with a
+        // question mark sitting on it.
+        '<div style="transform:rotate(180deg) translateX(12px);max-width:268px;width:100%;margin-bottom:18px;' +
           'background:linear-gradient(180deg,#132e1e,#0a1d14);border-radius:18px;padding:12px 16px 13px;' +
           'box-shadow:inset 0 0 0 1px rgba(217,154,82,0.26),0 14px 36px rgba(0,0,0,0.45);">' +
           '<div style="' + label + 'font-size:9.5px;">Game over</div>' +
@@ -2054,6 +2145,11 @@ window.plethoraBit = {
             'letter-spacing:-0.02em;line-height:1.15;"></div>' +
           '<div data-el="over-mirror-rows" style="display:flex;flex-wrap:wrap;gap:6px 13px;' +
             'justify-content:center;margin-top:8px;"></div>' +
+          // Being told the result and then having to reach across the table to
+          // press somebody else's button is not being at the table. The far
+          // seat deals the rematch from its own end.
+          '<button data-el="again2" style="' + bigBtn(GOLDBTN, "#221503") +
+            'margin-top:11px;padding:11px;font-size:14.5px;letter-spacing:0.04em;">Deal again</button>' +
         '</div>' +
         '<div style="max-width:300px;width:100%;' + panel + 'padding:22px 20px 20px;">' +
           '<div style="' + label + '">Game over</div>' +
@@ -2077,13 +2173,14 @@ window.plethoraBit = {
           '<div data-el="mutes" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + label + '">Players</div>' +
           '<div data-el="counts" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
-          '<div style="' + label + '">Cards each</div>' +
+          '<div style="' + label + '">Length</div>' +
           '<div data-el="deals" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
+          '<div data-el="deal-note" style="font-size:12px;opacity:0.45;margin:-9px 0 18px;line-height:1.5;"></div>' +
           '<div style="' + label + '">Tens slap</div>' +
           '<div data-el="tenses" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
           '<div style="font-size:12px;opacity:0.45;margin-top:8px;line-height:1.5;">' +
-            'Tens: two number cards in a row adding to ten. Off by default in some houses — ' +
-            'it roughly doubles how often the table is live.</div>' +
+            'Tens: two number cards in a row adding to ten. Off in some houses — ' +
+            'it is worth about half again as many live tables.</div>' +
           '</div>' +
           '<button data-el="cogp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;flex:none;">Done</button>' +
         '</div>' +
@@ -2198,13 +2295,24 @@ window.plethoraBit = {
       return paint;
     }
     let repaints = [];
-    function paintAllPills() { for (const f of repaints) f(); }
+    function paintAllPills() {
+      for (const f of repaints) f();
+      const note = shell.el("deal-note");
+      if (note) {
+        const per = settings.deal === 0
+          ? Math.max(6, Math.floor(32 / settings.players))
+          : Math.floor(52 / settings.players);
+        note.textContent = per + " cards each, " + per * settings.players + " on the table.";
+      }
+    }
     repaints = [
       pills(shell.el("seats"), [2, 3, 4], ["2", "3", "4"],
         () => settings.players, (v) => { settings.players = v; if (phase === "menu") { layout(); bakeTable(); } }),
+      pills(shell.el("seats2"), [2, 3, 4], ["2", "3", "4"],
+        () => settings.players, (v) => { settings.players = v; if (phase === "menu") { layout(); bakeTable(); } }),
       pills(shell.el("counts"), [2, 3, 4], ["2", "3", "4"],
         () => settings.players, (v) => { settings.players = v; }),
-      pills(shell.el("deals"), [0, 1], ["Six each", "Whole deck"],
+      pills(shell.el("deals"), [0, 1], ["Short", "Whole deck"],
         () => settings.deal, (v) => { settings.deal = v; }),
       pills(shell.el("tenses"), [0, 1], ["Off", "On"],
         () => settings.tens, (v) => { settings.tens = v; }),
@@ -2213,6 +2321,7 @@ window.plethoraBit = {
           if ((v === 1) !== sound.muted) { sound.toggle(); paintMute(); }
         }),
     ].filter(Boolean);
+    paintAllPills();
 
     /** One glyph, struck through when muted — an emoji speaker would drag a
      *  second colour palette into a very deliberate one. */
@@ -2243,17 +2352,21 @@ window.plethoraBit = {
     shell.tap(shell.el("help"), () => { showSheet("helpp", true); });
     shell.tap(shell.el("helpp-close"), () => { showSheet("helpp", false); });
 
-    shell.tap(shell.el("deal"), async () => {
+    const startMatch = async () => {
       ctx.platform.start({ players: settings.players, deal: settings.deal ? "full" : "six", tens: !!settings.tens });
       await sound.unlock();
       shell.el("menu").style.display = "none";
       newMatch();
-    });
-    shell.tap(shell.el("again"), () => {
+    };
+    shell.tap(shell.el("deal"), startMatch);
+    shell.tap(shell.el("deal2"), startMatch);
+    const rematch = () => {
       shell.el("over").style.display = "none";
       newMatch();
       ctx.platform.interact({ type: "replay" });
-    });
+    };
+    shell.tap(shell.el("again"), rematch);
+    shell.tap(shell.el("again2"), rematch);
     shell.tap(shell.el("quit"), () => {
       shell.el("over").style.display = "none";
       shell.el("menu").style.display = "flex";

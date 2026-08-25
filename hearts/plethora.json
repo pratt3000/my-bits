@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Hearts",
+  "description": "The full game of Hearts for exactly four people and one phone. Pass three cards left, right, across and then not at all; the two of clubs leads; follow suit or throw what you like. Every heart is a point, the queen of spades is thirteen, and points are the last thing you want — unless you take every one of them, which puts 26 on everybody else instead. The table stays on screen the whole time and your hand appears only while you are looking at it, so the phone can go round the table without ever being covered. Lowest score wins.",
+  "tags": ["cards", "multiplayer", "local-multiplayer", "trick-taking", "classic", "four-player", "strategy"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "lowest_win": {
+        "label": "Lowest Winning Score",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

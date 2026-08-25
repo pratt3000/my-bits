@@ -702,6 +702,14 @@ window.plethoraBit = {
       // and it sits in the prompt band rather than under the fan — the fan is
       // where the thumb already is and a button there gets brushed.
       L.pass = { x: W / 2, y: L.promptY, w: 168, h: 44 };
+
+      // The printed edge of the table. It has to stay inside the safe area:
+      // inset a flat 10.5px from every side it ran under the notch at the top
+      // and under the home indicator at the bottom, so on a real phone the
+      // island sliced its top corners off and the bottom edge disappeared
+      // behind the home bar — a frame that is cut by the hardware reads as a
+      // rendering fault rather than as the rim of a card table.
+      L.frame = { x: 10.5, y: st + 8.5, w: W - 21, h: H - st - sb - 17 };
     }
     layout();
 
@@ -827,7 +835,7 @@ window.plethoraBit = {
       c.lineWidth = 9;
       c.strokeStyle = "rgba(0,0,0,0.45)";
       c.strokeRect(-4.5, -4.5, W + 9, H + 9);
-      roundRect(c, 10.5, 10.5, W - 21, H - 21, 16);
+      roundRect(c, L.frame.x, L.frame.y, L.frame.w, L.frame.h, 16);
       c.strokeStyle = "rgba(232,185,95,0.15)";
       c.lineWidth = 1.2;
       c.stroke();
@@ -1561,6 +1569,27 @@ window.plethoraBit = {
       const skip = flyer && flyer.target === "discard" ? 1 : 0;
       const end = discard.length - skip;
       const show = discard.slice(Math.max(0, end - 4), end);
+
+      // The landing ring, drawn under the cards rather than over them. It used
+      // to expand twenty pixels on every side with a stroke that got *fatter*
+      // and a corner radius that grew to 23 — which is a rounded rectangle the
+      // size and shape of one of this bit's own panels, sitting around the pile
+      // for half a second after every play and reading as chrome. A ring thrown
+      // off a card gets thinner and fainter as it leaves it.
+      if (discardPulse > 0) {
+        const k = 1 - discardPulse;
+        g.save();
+        g.globalAlpha = discardPulse * discardPulse * 0.5;
+        g.strokeStyle = "#ffe6b8";
+        g.lineWidth = 0.6 + 2.4 * discardPulse;
+        g.translate(L.discard.x, L.discard.y);
+        roundRect(g, -CARD_W * TABLE_S / 2 - k * 10, -CARD_H * TABLE_S / 2 - k * 10,
+          CARD_W * TABLE_S + k * 20, CARD_H * TABLE_S + k * 20, CARD_R * TABLE_S + k * 7);
+        g.stroke();
+        g.restore();
+        g.globalAlpha = 1;
+      }
+
       if (show.length) {
         // One shadow for the whole pile, thrown by the card on top of it.
         const t0 = show[show.length - 1];
@@ -1576,19 +1605,6 @@ window.plethoraBit = {
         roundRect(g, -CARD_W * TABLE_S / 2, -CARD_H * TABLE_S / 2, CARD_W * TABLE_S, CARD_H * TABLE_S, CARD_R * TABLE_S);
         g.strokeStyle = CREAM; g.lineWidth = 1.4;
         g.setLineDash([5, 5]); g.stroke(); g.setLineDash([]);
-        g.restore();
-        g.globalAlpha = 1;
-      }
-      if (discardPulse > 0) {
-        g.save();
-        g.globalAlpha = discardPulse * 0.55;
-        g.strokeStyle = "#ffe6b8";
-        g.lineWidth = 1.5 + (1 - discardPulse) * 5;
-        const k = 1 - discardPulse;
-        g.translate(L.discard.x, L.discard.y);
-        roundRect(g, -CARD_W * TABLE_S / 2 - k * 20, -CARD_H * TABLE_S / 2 - k * 20,
-          CARD_W * TABLE_S + k * 40, CARD_H * TABLE_S + k * 40, CARD_R + k * 14);
-        g.stroke();
         g.restore();
         g.globalAlpha = 1;
       }
@@ -1649,8 +1665,11 @@ window.plethoraBit = {
       const others = [];
       for (let k = 1; k < n; k++) others.push((turn + k) % n);
 
+      // 16px of gutter, not 12: at four players the plaques were landing 1.5px
+      // off the table's printed edge and reading as if they were sitting on top
+      // of it. This also lines the rail up with the header text above it.
       const gap = 8;
-      const pw = Math.min(212, (W - 24 - gap * (others.length - 1)) / others.length);
+      const pw = Math.min(212, (W - 32 - gap * (others.length - 1)) / others.length);
       const startX = (W - (pw * others.length + gap * (others.length - 1))) / 2;
       const y = L.railTop, h = L.railH;
       const wide = pw >= 150;
@@ -1699,51 +1718,70 @@ window.plethoraBit = {
           g.globalAlpha = 1;
         }
 
-        const tx = x + (wide ? 62 : 47);
+        const tx = x + (wide ? 62 : 41);
+        const right = x + pw - (wide ? 18 : 10);
+        const count = String(p.hand.length);
         g.textAlign = "left"; g.textBaseline = "alphabetic";
 
         g.fillStyle = hexA(p.ink, 0.95);
-        g.font = "800 10px " + FONT;
-        trackedL(g, p.name.toUpperCase(), tx, y + 23, 1.7);
+        g.font = "800 " + (wide ? 10 : 9.5) + "px " + FONT;
+        const nameSp = wide ? 1.7 : 1.5;
+        const nameTxt = p.name.toUpperCase();
+        trackedL(g, nameTxt, tx, y + (wide ? 23 : 21), nameSp);
 
-        g.fillStyle = CREAM;
-        g.font = "800 26px " + FONT;
-        g.fillText(String(p.hand.length), tx, y + 51);
-        const numW = g.measureText(String(p.hand.length)).width;
+        g.fillStyle = one ? "#ff9d6b" : CREAM;
+        g.font = "800 " + (wide ? 26 : 24) + "px " + FONT;
+        g.fillText(count, tx, y + (wide ? 51 : 49));
+        const numW = g.measureText(count).width;
 
-        g.fillStyle = one ? "#ff9d6b" : INK_SOFT;
-        g.font = "700 8.5px " + FONT;
-        trackedL(g, one ? "ONE CARD" : "CARDS", tx + numW + 8, y + 43, 1.5);
-
-        // On a wide plaque the running score goes to the far edge, or the left
-        // half is a column of text against forty empty pixels of leather.
-        g.fillStyle = "rgba(248,239,219,0.46)";
-        g.font = "600 9.5px " + FONT;
+        // A four-player plaque is 114px across, and name + count + unit + score
+        // + "pts" does not fit in it: "10 CARDS" ran off the plaque and off the
+        // screen behind it, and so did "ONE CARD", which is the moment in this
+        // game that matters most. The unit is the thing to cut, because the
+        // little fan of backs sits immediately left of the number and is
+        // already a picture of the unit — and one card left still announces
+        // itself three other ways: the number goes orange, the plaque pulses
+        // orange, and a banner says so across the table.
         if (wide) {
+          // "CARD", not "ONE CARD": the label sits directly after the numeral,
+          // so the alarm state used to read "1 ONE CARD". The orange numeral,
+          // the pulsing orange plaque and the banner across the table are what
+          // carry the alarm; the label only has to be grammatical.
+          g.fillStyle = one ? "#ff9d6b" : INK_SOFT;
+          g.font = "700 8.5px " + FONT;
+          trackedL(g, one ? "CARD" : "CARDS", tx + numW + 8, y + 43, 1.5);
+
           g.textAlign = "right";
           g.font = "700 15px " + FONT;
           g.fillStyle = "rgba(248,239,219,0.80)";
-          g.fillText(String(p.score), x + pw - 18, y + 47);
+          g.fillText(String(p.score), right, y + 47);
           g.font = "700 8px " + FONT;
           g.fillStyle = "rgba(248,239,219,0.42)";
           g.textAlign = "left";
-          trackedL(g, "PTS", x + pw - 18 - trackWidth(g, "PTS", 1.6), y + 60, 1.6);
+          trackedL(g, "PTS", right - trackWidth(g, "PTS", 1.6), y + 60, 1.6);
         } else {
-          g.fillText(p.score + " pts", tx + numW + 8, y + 56);
+          g.font = "600 9.5px " + FONT;
+          g.fillStyle = "rgba(248,239,219,0.50)";
+          g.fillText(p.score + " pts", tx, y + 62);
         }
 
-        // "Up next" is a double chevron rather than the word, because on a
-        // three-opponent rail each plaque is 117px wide and the word landed on
-        // top of the name. The brighter border carries most of the meaning
-        // anyway; this is the confirmation.
+        // "Up next" is a double chevron rather than the word, because the word
+        // landed on top of the name. Pinned to the plaque's top-right corner it
+        // did exactly the same thing to any name longer than "Rose" — "COBALT"
+        // and "SAFFRON" both wore it through their last letter. A wide plaque
+        // has room for it up there; a narrow one puts it at the far end of the
+        // number's own row, which is the one part of a 114px plaque that is
+        // guaranteed to be empty.
         if (next) {
+          const cx = wide ? x + pw - 17 : right - 7;
+          const cy = wide ? y + 16 : y + 40;
           g.fillStyle = BRASS;
           for (const [dx, al] of [[0, 1], [-7, 0.45]]) {
             g.globalAlpha = al;
             g.beginPath();
-            g.moveTo(x + pw - 17 + dx, y + 11);
-            g.lineTo(x + pw - 11 + dx, y + 16);
-            g.lineTo(x + pw - 17 + dx, y + 21);
+            g.moveTo(cx + dx, cy - 5);
+            g.lineTo(cx + dx + 6, cy);
+            g.lineTo(cx + dx, cy + 5);
             g.closePath(); g.fill();
           }
           g.globalAlpha = 1;
@@ -1791,35 +1829,54 @@ window.plethoraBit = {
       g.font = "800 10.5px " + FONT;
       g.fillText(p.name.toUpperCase(), x - w / 2 + 29, y - 9);
 
-      g.font = "600 12px " + FONT;
-      let msg = "";
-      if (!revealed) msg = "pass the phone along";
-      else if (legal.length) msg = legal.length + (legal.length === 1 ? " card plays" : " cards play");
-      else if (canDraw()) msg = "nothing plays — tap the deck";
-      else msg = "nothing plays";
-      g.fillStyle = legal.length || !revealed ? INK_SOFT : "#ffb3a0";
-      g.fillText(msg, x - w / 2 + 29, y + 9);
-
       // What has to be matched, drawn rather than named, and laid out from the
-      // right edge inward so the pieces cannot collide at any rank width.
+      // right edge inward so the pieces cannot collide at any rank width. Its
+      // left edge is measured *before* the message is drawn, because the two
+      // were laid out from opposite ends and met in the middle: "nothing plays
+      // — tap the deck" against a two-character rank left seven pixels between
+      // them, and a font with slightly wider metrics than this one closes that.
       const t = top();
+      const small = named ? "EIGHT" : "OR";
+      const curEnd = x + w / 2 - 44;                 // right edge of the small word
+      let groupLeft = x + w / 2;
+      let sw = 0, rankW = 0;
+      if (t) {
+        g.font = "700 9px " + FONT;
+        sw = trackWidth(g, small, 1.6);
+        groupLeft = curEnd - sw;
+        if (!named) {
+          g.font = "800 19px " + SERIF;
+          rankW = g.measureText(t.rank).width;
+          groupLeft = curEnd - sw - 9 - rankW;
+        }
+      }
+
+      const msgX = x - w / 2 + 29;
+      const room = groupLeft - 10 - msgX;
+      let choices;
+      if (!revealed) choices = ["pass the phone along", "pass the phone"];
+      else if (legal.length) choices = [legal.length + (legal.length === 1 ? " card plays" : " cards play")];
+      else if (canDraw()) choices = ["nothing plays — tap the deck", "nothing plays — draw", "tap the deck"];
+      else choices = ["nothing plays"];
+      g.font = "600 12px " + FONT;
+      let msg = choices[choices.length - 1];
+      for (const c of choices) { if (g.measureText(c).width <= room) { msg = c; break; } }
+      g.fillStyle = legal.length || !revealed ? INK_SOFT : "#ffb3a0";
+      g.fillText(msg, msgX, y + 9);
+
       if (t) {
         const suit = activeSuit();
         g.textBaseline = "middle";
         g.fillStyle = isRed(suit) ? "#ff8b92" : CREAM;
         suitPath(g, suit, x + w / 2 - 28, y - 1, 12);
-        let cur = x + w / 2 - 44;                    // right edge of the next item
         g.font = "700 9px " + FONT;
-        const small = named ? "EIGHT" : "OR";
         g.fillStyle = named ? BRASS : INK_SOFT;
-        const sw = trackWidth(g, small, 1.6);
-        trackedL(g, small, cur - sw, y, 1.6);
-        cur -= sw + 9;
+        trackedL(g, small, curEnd - sw, y, 1.6);
         if (!named) {
           g.fillStyle = CREAM;
           g.font = "800 19px " + SERIF;
           g.textAlign = "right";
-          g.fillText(t.rank, cur, y);
+          g.fillText(t.rank, curEnd - sw - 9, y);
         }
       }
       g.restore();
@@ -1879,9 +1936,18 @@ window.plethoraBit = {
       g.translate(W / 2, y);
       g.scale(pop, pop);
       g.font = "800 22px " + FONT;
-      const tw = Math.min(g.measureText(banner.big).width + 40, W - 40);
+      const bigW = g.measureText(banner.big).width;
+      // Both lines, not just the headline. Sized off the headline alone, a
+      // short title over a long subtitle — "PLAY IT" over "the deck gave you
+      // one", "HEARTS" over "named by Saffron" — drew a plaque narrower than
+      // its own second line, which then ran out through both walls of it.
+      g.font = "600 11px " + FONT;
+      const smallW = trackWidth(g, banner.small, 0.5);
+      const tw = Math.min(Math.max(bigW, smallW) + 40, W - 40);
       roundRect(g, -tw / 2, -30, tw, 60, 16);
-      g.fillStyle = "rgba(14,5,2,0.86)"; g.fill();
+      // Nearly opaque: the banner lands on top of the pile, and at 0.86 the
+      // pips of the card underneath printed through its second line.
+      g.fillStyle = "rgba(14,5,2,0.95)"; g.fill();
       g.strokeStyle = hexA(banner.ink[0] === "#" ? banner.ink : "#ffffff", 0.72);
       g.lineWidth = 1.8; g.stroke();
       g.fillStyle = banner.ink;

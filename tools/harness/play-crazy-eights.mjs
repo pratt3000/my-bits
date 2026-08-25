@@ -198,6 +198,20 @@ console.log("  final scores:", JSON.stringify(s.players.map((p) => p.name + " " 
 
 check(s.phase === "match", "reached the game-over screen, got " + s.phase);
 check(!!s.matchWinner, "a winner is named: " + s.matchWinner);
+
+// Everything below reads the game-over screen, so it only means anything if we
+// got there. Deals are random and a two-handed round can run long, so the loop
+// does sometimes hit its step cap — and when it did, this used to die on
+// `.score of undefined`, a stack trace that reads like a bug in the bit rather
+// than a script that ran out of turns. Report the miss and stop.
+const reachedEnd = s.phase === "match" && !!s.matchWinner;
+if (!reachedEnd) {
+  console.log("\nFAILED: " + (fails.length || 1) + " (never reached the game over screen in "
+    + steps + " interactions — rerun, or raise the cap)");
+  await bit.close();
+  process.exit(1);
+}
+
 check(Math.max(...s.players.map((p) => p.score)) >= s.target,
   "somebody crossed the " + s.target + " target");
 check(s.players.find((p) => p.name === s.matchWinner).score ===

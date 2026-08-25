@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Rummy",
+  "description": "Gin Rummy for exactly two people and one phone. Ten cards each, draw one and throw one, and build sets and runs until the cards you cannot use are worth ten or less — then knock. The bit reads your hand for you and finds the arrangement that leaves the least deadwood, so a seven that could be a run or a set is always put wherever it hurts least. Gin pays twenty-five. Undercut the knocker and it pays you instead. First to a hundred takes the match.",
+  "tags": ["cards", "multiplayer", "local-multiplayer", "two-player", "classic", "pass-and-play", "strategy"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "fewest_hands": {
+        "label": "Fewest Hands to 100",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

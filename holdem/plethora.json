@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Hold'em",
+  "description": "Texas Hold'em for two to six people and one phone. Real felt, real chips, and a full rules engine: blinds that rotate and climb, minimum raises, side pots when somebody is all in for less, and an exact seven-card evaluator that ranks all twenty-one hands and splits the pot on a true tie. Your two hole cards live behind a cover that names whoever should be holding the phone and closes again the moment they act — everything else, the board, the pot and every bet, stays face up for the whole table.",
+  "tags": ["cards", "poker", "multiplayer", "local-multiplayer", "pass-and-play", "classic", "strategy", "party"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "biggest_pot": {
+        "label": "Biggest Pot",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

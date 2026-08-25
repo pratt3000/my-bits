@@ -128,6 +128,38 @@ Four things learned by looking at the render rather than the code:
 The cards that actually make the slap are ringed in gold while the window is
 open. That is how somebody learns the sandwich rule without opening the panel.
 
+## A simulation changed the design
+
+The short game used to deal six cards each whatever the seating. It looked
+fine on screen and it played fine in the harness, and it was quietly a bad
+game — which only came out by replaying the rules headlessly a few thousand
+times instead of watching one match.
+
+`slapKind` and the tribute loop were lifted into a plain Node script and run
+over four thousand games per configuration, counting how often a slappable
+table ever appeared:
+
+| Cards in play | 2 players | 3 players | 4 players |
+| --- | --- | --- | --- |
+| six each | **25.9%** | 4.3% | 1.1% |
+| ~32 total | 0.8% | 0.3% | 0.0% |
+| whole deck | 0.1% | 0.0% | 0.0% |
+
+Those are the percentages of games that finish with **no slap in them at all**.
+A quarter of two-player short games — the default seating, the first thing
+anybody plays — never once fired the mechanic the game is named for.
+
+What matters is the number of cards on the table, not the size of a hand:
+matching ranks are what a thin deal is short of. The rate falls under one game
+in a hundred at about thirty-two cards, so the short game is now sized by the
+table rather than by a fixed hand — sixteen each at two players, ten at three,
+eight at four. The settings panel prints the resulting count under the toggle,
+because "Short" on its own does not tell anybody what they are agreeing to.
+
+The simulation lives at `tools/harness/` working notes rather than in the
+repo — it is a measuring instrument, not a test, and the number it produced is
+baked into `newMatch()`.
+
 ## Two edge cases that only exist because a pile is claimed on a delay
 
 * **The creditor can die inside their own collection window.** They have no
@@ -166,7 +198,7 @@ a reaction to something a human could actually see.
 
 ## Settings
 
-Players (2–4), six cards each or the whole deck, the tens rule on or off, and
+Players (2–4), a short game or the whole deck, the tens rule on or off, and
 mute. All persisted with `ctx.storage`. A full-screen panel stops the game clock
 while it is up and gives the time back on close, so an open slap window never
 bills somebody for their reading time.
@@ -188,7 +220,7 @@ The play script deals three players with tens on, brings all three pads down in
 one frame and proves the race resolves to exactly one winner, proves a wrong
 slap costs a card and locks the pad, waits for a real tribute, plays the game
 out to a single survivor, and then deals a rematch from the end screen —
-asserting all 18 cards are still accounted for at the finish. A separate render
+asserting all 30 cards are still accounted for at the finish. A separate render
 pass covers the four-seat layout, which is the tightest the centre band ever
 gets and the only one where the right-hand pad exists at all, and a second one
 runs the whole thing on a 375x667 screen to check the rules panel's way out is
