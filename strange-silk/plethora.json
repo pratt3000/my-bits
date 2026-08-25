@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Strange Silk",
+  "description": "Nobody draws this. A chaotic equation is iterated over a million times from a single seed, and the picture is simply where its orbit spent time — filigree threads of light on deep ink. Tap anywhere for a new seed. Then drag: two of the equation's four constants follow your finger sideways and two follow it up and down, so you can take hold of the maths and bend the figure live.",
+  "tags": [
+    "generative",
+    "art",
+    "abstract",
+    "math",
+    "calm",
+    "sensory",
+    "fidget"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic"
+  ],
+  "dependencies": []
+}

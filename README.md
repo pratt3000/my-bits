@@ -17,6 +17,19 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ninth-watchfire/`](ninth-watchfire)   | A five-minute animated story in twelve chapters, with one choice that's yours. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`strange-silk/`](strange-silk)         | Chaotic attractors iterated a million times — tap for a new seed, a new painting. |
+| [`morphogen/`](morphogen)               | Turing's reaction–diffusion live: coral, spots and worms from two numbers.   |
+| [`orrery/`](orrery)                     | Bodies on whole-number orbits ring bells as they cross the top — self-playing music. |
+| [`paper-loom/`](paper-loom)             | A print that lays itself out: recursive cuts, Truchet motifs, chosen palettes. |
+| [`heartwood/`](heartwood)               | A tree grown by space colonization, one reach toward the light at a time.    |
+
+### Generative art set
+
+`strange-silk`, `morphogen`, `orrery`, `paper-loom` and `heartwood` are five
+takes on the same brief — art made by an autonomous system, re-seeded on tap —
+deliberately drawn from five different families so no two feel alike:
+deterministic chaos, chemistry, music, graphic design, and botany. Each shows
+its seed, and a tap anywhere throws a new one.
 | [`whirligig/`](whirligig)               | Fidget spinner as a gear train — flick a plate of packed discs, all meshed. |
 | [`sketch-hop/`](sketch-hop)             | Endless doodle jumper on graph paper — bounce up the page, dodge monsters. Ships as *Sketch Hop II*. |
 | [`windmill-cove/`](windmill-cove)       | Mini golf in the Golf With Your Friends mould — seven courses, nine holes each. |
@@ -64,6 +77,22 @@ of truth, and they win over anything cached locally:
 
 Packaged assets are disabled (`maxAssets: 0`), so generate visuals and audio
 procedurally or use approved pinned registry libraries.
+
+### Upload-validator gotchas
+
+Several constraints are enforced at upload but are not in `sdk.md`, and their
+error messages point at the wrong thing. Found the hard way, documented where
+they bit:
+
+- [`cairn/`](cairn#what-the-upload-validator-rejects) — `document.createElement("canvas")`
+  and `canvas.getBoundingClientRect()`.
+- [`heartwood/`](heartwood#what-the-upload-validator-rejects) — `addColorStop()`
+  with a colour the validator cannot resolve to a literal, plus notes on how to
+  bisect one of these cheaply.
+
+A rejected upload creates nothing, so probe uploads are free; unreachable code
+is still scanned; and constructs that merely *look* exotic are usually fine if
+some already-uploaded bit in this repo uses them.
 
 ## Publishing
 
