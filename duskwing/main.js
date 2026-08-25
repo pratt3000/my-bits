@@ -247,6 +247,7 @@ window.plethoraBit = {
     const g = canvas.getContext("2d");
 
     let W = 0, H = 0, U = 0, PLAY_TOP = 0, PLAY_BOT = 0, WALL = 0, HOME = 0, XMAX = 0;
+    let STACK_BOT = 0;      // bottom of the stack of bands; below PLAY_BOT only when solo centres one
     let bands = [];
     const CHROME_H = 44;
 
@@ -272,23 +273,39 @@ window.plethoraBit = {
       PLAY_TOP = ctx.safeArea.top + CHROME_H + 4;
       PLAY_BOT = H - ctx.safeArea.bottom - 6;
       const n = settings.players;
-      U = (PLAY_BOT - PLAY_TOP) / n;                 // one band height = one world unit
+      // One band height is one world unit, and every distance in the cave —
+      // hazard size, spacing, scroll speed — is expressed in those units. So a
+      // solo band the full height of the screen does not just make the cave
+      // taller, it makes the whole world twice as large: the scroll clamp
+      // (a screen-pixel cap) stops tracking it, the pull toward the dark edge
+      // doubles while the flap that fights it does not, and the creature is
+      // reeled into the wall before it has covered ten metres.
+      //
+      // Solo keeps the two-player world and centres its single band, which
+      // costs some screen and keeps the flight the one that was balanced.
+      U = (PLAY_BOT - PLAY_TOP) / Math.max(n, 2);
+      STACK_BOT = n === 1 ? PLAY_TOP + (PLAY_BOT - PLAY_TOP + U) / 2 : PLAY_BOT;
       bands = [];
       for (let i = 0; i < n; i++) {
         // Index 0 is the BOTTOM band, so player 1 is nearest the near hand.
-        const top = PLAY_BOT - (i + 1) * U;
+        const top = STACK_BOT - (i + 1) * U;
         bands.push({ i, top, mid: top + U / 2, bot: top + U });
       }
       WALL = clamp(W * 0.132, 42, 60);               // the lethal edge, and the pad
-      HOME = WALL + U * 0.55;                        // where a creature hatches
       XMAX = W * 0.66;                               // furthest right flapping can carry you
+      // Where a creature hatches: partway along the corridor between the wall
+      // and the furthest a flap can carry it. Measured off U — the band height
+      // — this lands beyond XMAX the moment one band is the whole screen, and
+      // a solo creature hatches outside its own playfield and is taken by the
+      // dark edge before it has flapped once.
+      HOME = WALL + (XMAX - WALL) * 0.45;
     }
     measure();
 
     /** Which band owns a screen y. Chrome strip owns nothing. */
     function bandAt(y) {
       if (y < PLAY_TOP - 2) return -1;
-      const i = Math.floor((PLAY_BOT - y) / U);
+      const i = Math.floor((STACK_BOT - y) / U);
       return clamp(i, 0, bands.length - 1);
     }
 
@@ -786,6 +803,14 @@ window.plethoraBit = {
      * Gravity, the flap impulse and the vertical clamps are all expressed
      * in band units per second, so the feel is identical whether the band
      * is 350px tall (two players) or 170px (four).
+     *
+     * The HORIZONTAL axis was not. The pull toward the dark edge is derived
+     * from the scroll, which is `rel * U`, so it doubles when the band does —
+     * but the forward beat of a wing and the speed clamps were written in
+     * screen widths and did not. Two-player Duskwing was roughly twice as
+     * hard as four-player for that reason alone, and a solo band would have
+     * been harder still. They are in band units now, matched to the
+     * four-player balance the game was tuned at.
      * ============================================================= */
     const METRE = 12;                                  // metres per band unit travelled
     const GRAV = 1.6, FLAP_DV = 0.30, FLAP_HZ = 9.5, VUP = 0.46, VDOWN = 0.72;
@@ -794,7 +819,7 @@ window.plethoraBit = {
     function flap(b, loud) {
       b.vn -= FLAP_DV;
       if (b.vn < -VUP) b.vn = -VUP;
-      b.vx += W * 0.0495;
+      b.vx += U * 0.109;                 // was W * 0.0495, which is U * 0.109 at four players
       b.wingV = -13;
       if (phase === "play") {
         const band = bands[b.i];
@@ -1025,7 +1050,7 @@ window.plethoraBit = {
         // through the wall and not only through hazard density.
         const idle = -scroll * 0.64;
         b.vx += (idle - b.vx) * (1 - Math.pow(0.16, dt));
-        b.vx = clamp(b.vx, -W * 0.16, W * 0.34);
+        b.vx = clamp(b.vx, -U * 0.35, U * 0.75);   // same values at four players, in band units
         b.sx += b.vx * dt;
         if (b.sx > XMAX) { b.sx = XMAX; if (b.vx > 0) b.vx *= 0.4; }
 
@@ -1134,18 +1159,22 @@ window.plethoraBit = {
       // card is showing directly underneath it.
       lastDist = flight;
       shell.el("dist").textContent = fmt(flight);
+      const fresh = flight > settings.best;
+      if (fresh) { settings.best = flight; save(); }
       sound.duck(0.6, 500);
       sound.sting("win");
       sound.haptic("heavy");
       flash = 1;
 
-      const fresh = flight > settings.best;
-      if (fresh) { settings.best = flight; save(); }
-
-      shell.el("over-who").textContent = CREW[w].name + " FLEW FURTHEST";
+      const solo = birds.length === 1;
+      shell.el("over-who").textContent = solo
+        ? (fresh ? "A NEW BEST FLIGHT" : "FLIGHT OVER")
+        : CREW[w].name + " FLEW FURTHEST";
       shell.el("over-who").style.color = CREW[w].ink;
       shell.el("over-dist").textContent = fmt(flight);
-      shell.el("over-note").textContent = fresh ? "A NEW BEST FLIGHT" : "BEST FLIGHT " + fmt(settings.best) + " M";
+      shell.el("over-note").textContent = (fresh && !solo)
+        ? "A NEW BEST FLIGHT" : "BEST FLIGHT " + fmt(settings.best) + " M";
+      shell.el("over-list").style.display = solo ? "none" : "";
       shell.el("over-list").innerHTML = birds
         .map((b, i) => ({ b, i }))
         .sort((a, c) => c.b.best - a.b.best)
@@ -2114,9 +2143,13 @@ window.plethoraBit = {
       resetWorld(newSeed());
     }
 
-    const paintCrew = pills(shell.el("crew"), [2, 3, 4], ["2", "3", "4"],
+    /* Solo is a real way to play this one: the cave does not care how many
+     * creatures are in it, and one band the full height of the screen is the
+     * same game with the whole cave to yourself. Everything downstream — the
+     * bands, the death test, the round end — is already written over n. */
+    const paintCrew = pills(shell.el("crew"), [1, 2, 3, 4], ["solo", "2", "3", "4"],
       () => settings.players, (v) => { settings.players = v; rebuildForCrew(); paintSetCrew && paintSetCrew(); });
-    const paintSetCrew = pills(shell.el("setcrew"), [2, 3, 4], ["2", "3", "4"],
+    const paintSetCrew = pills(shell.el("setcrew"), [1, 2, 3, 4], ["solo", "2", "3", "4"],
       () => settings.players, (v) => { settings.players = v; rebuildForCrew(); paintCrew && paintCrew(); });
     pills(shell.el("setdiff"), [0, 1, 2], ["GENTLE", "NORMAL", "BRUTAL"],
       () => settings.diff, (v) => { settings.diff = v; });
