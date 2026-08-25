@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Whirligig",
+  "description": "A paper plate packed with hundreds of concentric-ring discs, meshed into one machine. Flick it: every disc rolls against the ones it touches, nested discs orbit their hosts, and the whole plate leans and precesses as it coasts down.",
+  "tags": [
+    "fidget",
+    "generative",
+    "art",
+    "sensory",
+    "toy",
+    "kinetic"
+  ],
+  "permissions": [
+    "haptics",
+    "backgroundMusic"
+  ],
+  "dependencies": []
+}
