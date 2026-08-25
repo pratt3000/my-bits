@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Cairn",
+  "description": "Zen rock balancing with real physics. Stack procedurally generated stones — river stone, slate, granite, basalt, sandstone, quartz, obsidian, moss stone — on a plinth in shallow water. Each stone hangs from wherever your finger grabbed it, so you press it down to feel it seat, steady the tower with a second finger, then let go and watch it wobble. Three modes: still Zen, the swelling Tide, and a Storm of gusts and slick stone — each with its own global leaderboard.",
+  "tags": [
+    "zen",
+    "physics",
+    "balance",
+    "relaxing",
+    "game",
+    "sensory",
+    "fidget",
+    "nature"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "zen_stack": {
+        "label": "Zen Cairn",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "tide_stack": {
+        "label": "Tide Cairn",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "storm_stack": {
+        "label": "Storm Cairn",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
