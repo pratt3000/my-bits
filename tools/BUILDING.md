@@ -59,6 +59,20 @@ This is the whole point of these bits, and it has its own failure modes.
   phone changes hands with the screen covered. Gate it behind a
   "pass to <name> → hold to look" screen.
 - **Keep controls off the bottom edge** (`ctx.safeArea.bottom`).
+- **The overlay must be transparent to pointers.** `ctx.createRoot()` returns an
+  element filling the container, and it is created *after* the canvas, so it
+  sits on top and silently swallows every tap meant for the play surface. Give
+  the root `pointer-events: none` and opt individual controls back in with
+  `pointer-events: auto`. This one is invisible until you script real input:
+  the bit boots, renders and animates perfectly while ignoring the player.
+- **Nothing fits in the side margins.** A board sized to a 390px-wide screen
+  leaves ~7px each side, so a side-mounted button column covers the outermost
+  file or column. Put chrome in a horizontal strip above or below the play
+  area instead.
+- **Wait on the animation, not on the state.** A move commits its state change
+  immediately and *then* animates; input stays blocked until the animation
+  lands. A play script that waits for the state to change taps into a busy
+  board and the input is silently dropped. Expose a `busy` flag and poll it.
 
 ## 3D or 2D
 

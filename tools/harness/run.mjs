@@ -45,15 +45,20 @@ export async function openBit(dir, opts = {}) {
   const server = createServer((req, res) => {
     const url = req.url.split("?")[0];
     let file = null;
+    // No caching. Without this Chromium serves a stale main.js between runs
+    // and an edit silently does nothing — which reads as "my fix had no
+    // effect" and sends you hunting the wrong bug.
+    const noCache = { "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache" };
     if (url === "/" || url === "/host.html") {
-      res.writeHead(200, { "Content-Type": "text/html" });
+      res.writeHead(200, Object.assign({ "Content-Type": "text/html" }, noCache));
       return res.end(html);
     }
     if (url.startsWith("/bit/")) file = join(bitDir, url.slice(5));
     else file = join(HARNESS, url.slice(1));
     if (!file.startsWith(bitDir) && !file.startsWith(HARNESS)) { res.writeHead(403); return res.end(); }
     if (!existsSync(file) || !statSync(file).isFile()) { res.writeHead(404); return res.end("not found"); }
-    res.writeHead(200, { "Content-Type": MIME[extname(file)] || "application/octet-stream" });
+    res.writeHead(200, Object.assign(
+      { "Content-Type": MIME[extname(file)] || "application/octet-stream" }, noCache));
     res.end(readFileSync(file));
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));

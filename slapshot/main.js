@@ -660,7 +660,10 @@ window.plethoraBit = {
       "font-size:16px;font-weight:700;background:" + bg + ";color:" + fg + ";margin-top:10px;";
 
     const root = ctx.createRoot({ touchAction: "none" });
-    root.style.cssText += ";font-family:" + FONT + ";color:#dceaff;";
+    // The overlay sits above the WebGL canvas, so it must be transparent to
+    // pointers or it swallows every drag meant for a mallet. Only the chrome
+    // that is meant to be pressed opts back in.
+    root.style.cssText += ";font-family:" + FONT + ";color:#dceaff;pointer-events:none;";
     root.innerHTML =
       // --- top player's score, upside down for their seat ---
       '<div data-el="s2" style="position:absolute;right:20px;top:' + (SAFE_T + 30) + 'px;' +
@@ -686,7 +689,7 @@ window.plethoraBit = {
         'justify-content:center;pointer-events:none;font-size:74px;font-weight:800;' +
         'color:#eaf4ff;text-shadow:0 0 32px rgba(120,200,255,0.55);"></div>' +
       // --- title / start ---
-      '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
+      '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;flex-direction:column;' +
         'align-items:center;justify-content:center;gap:8px;background:rgba(3,6,13,0.82);z-index:50;' +
         'padding:26px;text-align:center;">' +
         '<div style="font-size:13px;letter-spacing:0.42em;text-transform:uppercase;opacity:0.5;">Air Hockey</div>' +
@@ -699,7 +702,7 @@ window.plethoraBit = {
           'max-width:230px;margin-top:20px;">Face off</button>' +
       '</div>' +
       // --- match over ---
-      '<div data-el="over" style="position:absolute;inset:0;display:none;flex-direction:column;' +
+      '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;flex-direction:column;' +
         'align-items:center;justify-content:center;gap:6px;background:rgba(3,6,13,0.9);z-index:55;' +
         'padding:26px;text-align:center;">' +
         '<div data-el="over-title" style="font-size:40px;font-weight:800;"></div>' +
@@ -708,7 +711,7 @@ window.plethoraBit = {
           'max-width:230px;margin-top:22px;">Rematch</button>' +
       '</div>' +
       // --- settings ---
-      '<div data-el="cogp" style="position:absolute;inset:0;display:none;align-items:center;' +
+      '<div data-el="cogp" style="position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;' +
         'justify-content:center;background:rgba(3,6,13,0.92);z-index:70;padding:24px;">' +
         '<div style="max-width:320px;width:100%;background:rgba(14,22,38,0.98);border-radius:22px;' +
           'padding:22px;border:1px solid rgba(160,205,255,0.12);">' +
@@ -721,7 +724,7 @@ window.plethoraBit = {
         '</div>' +
       '</div>' +
       // --- how to play ---
-      '<div data-el="helpp" style="position:absolute;inset:0;display:none;align-items:center;' +
+      '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;' +
         'justify-content:center;background:rgba(3,6,13,0.92);z-index:70;padding:24px;">' +
         '<div style="max-width:320px;width:100%;background:rgba(14,22,38,0.98);border-radius:22px;' +
           'padding:22px;border:1px solid rgba(160,205,255,0.12);">' +
