@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Slapshot",
+  "description": "Two-player air hockey on one phone, in 3D. Lay it flat, take an end each, and drag your mallet with a finger \u2014 both of you at once. A lit puck skids across brushed ice under a straight-overhead camera, so neither end gets the better view. Rails catch the rim light, the puck drags its own shadow, and the goal that ends it detonates. First to the target wins; the longest rally you two keep alive goes to the global board.",
+  "tags": [
+    "multiplayer",
+    "local-multiplayer",
+    "arcade",
+    "two-player",
+    "sports",
+    "neon",
+    "party",
+    "reflex"
+  ],
+  "permissions": [
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "longest_rally": {
+        "label": "Longest Rally",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "fastest_win": {
+        "label": "Fastest Win",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

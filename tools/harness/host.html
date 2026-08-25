@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>bit harness</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overscroll-behavior: none; }
+  #bit-container { position: fixed; inset: 0; overflow: hidden; }
+</style>
+<div id="bit-container"></div>
+<script>
+  window.__BIT_MANIFEST__ = __MANIFEST__;
+  window.__BIT_SAFE_AREA__ = __SAFEAREA__;
+  window.__BIT_LIBS__ = __LIBS__;
+  window.__BIT_ERRORS__ = [];
+  addEventListener("error", e => window.__BIT_ERRORS__.push(String(e.message || e.error)));
+  addEventListener("unhandledrejection", e => window.__BIT_ERRORS__.push("unhandled rejection: " + String(e.reason)));
+</script>
+<script src="ctx-mock.js"></script>
+<script src="__ENTRY__"></script>
+<script>
+  (async () => {
+    try {
+      if (!window.plethoraBit || typeof window.plethoraBit.init !== "function") {
+        throw new Error("bit did not define window.plethoraBit.init");
+      }
+      await window.plethoraBit.init(window.__PLETHORA_CTX__);
+      window.__BIT_INITED__ = true;
+    } catch (e) {
+      window.__BIT_ERRORS__.push("init threw: " + String(e && e.stack || e));
+      window.__BIT_INITED__ = "failed";
+    }
+  })();
+</script>
