@@ -10,8 +10,8 @@
  * Four decisions drive the whole build.
  *
  * **Both control decks are on screen at once, one at each physical end.** The
- * bottom deck belongs to Azure, the top deck to Ember and is drawn rotated a
- * half turn so it reads right-way-up from that seat. Only the deck whose turn
+ * bottom deck always belongs to whoever is shooting, and swaps ends with the
+ * turn. Only the deck whose turn
  * it is lights up; the other is scrimmed and refuses input. That means neither
  * player ever loses sight of their own health or their remaining arsenal, and
  * neither ever has to reach across the other's hands.
@@ -436,24 +436,29 @@ window.plethoraBit = {
     fitCanvas();
 
     /* --- the one render transform, and its one inverse -------------------
-     * Ember's deck is drawn rotated a half turn about its own centre. Every
-     * pointer that lands on it is mapped back through exactly this inverse
-     * and nothing else, which is the only way that transform stays honest. */
-    function deckTop(who) { return who === 0 ? BOT_Y : TOP_Y; }
+     * NOTHING ROTATES. Both players sit on the SAME side of the phone.
+     *
+     * This is a side-view game, and a side view has a handedness: hills fall
+     * away to the right, tanks face each other along a line. Seat somebody
+     * opposite and the battlefield is upside down for them — their own tank is
+     * on the wrong side and the terrain reads inverted. Rotating their control
+     * deck does not fix that, because the deck is not the part they have to
+     * read. The world is.
+     *
+     * Turn-based play means the two never need to act at once, so they simply
+     * share a viewpoint, and the deck belonging to whoever is shooting is the
+     * one at the BOTTOM, under their hands. It swaps ends when the turn does.
+     * Every pointer maps back through exactly this inverse and nothing else. */
+    function deckTop(who) { return who === turn ? BOT_Y : TOP_Y; }
     function pushDeck(gg, who) {
       gg.save();
-      if (who === 0) gg.translate(0, BOT_Y);
-      else { gg.translate(W, TOP_Y + DECK_H); gg.rotate(Math.PI); }
+      gg.translate(0, deckTop(who));
     }
     function deckToScreen(who, lx, ly) {
-      return who === 0
-        ? { x: lx, y: BOT_Y + ly }
-        : { x: W - lx, y: TOP_Y + DECK_H - ly };
+      return { x: lx, y: deckTop(who) + ly };
     }
     function screenToDeck(who, px, py) {
-      return who === 0
-        ? { x: px, y: py - BOT_Y }
-        : { x: W - px, y: TOP_Y + DECK_H - py };
+      return { x: px, y: py - deckTop(who) };
     }
     const inRect = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
@@ -1618,7 +1623,7 @@ window.plethoraBit = {
         const half = blockW(String(p.text), s) / 2;
         gg.translate(clamp(p.x, Math.min(half + 4, W / 2), Math.max(W - half - 4, W / 2)),
                      p.y - k * 30 + 3.5 * s);
-        if (p.flip) gg.rotate(Math.PI);
+        // Nothing flips: both players read the screen from the same side.
         // Hard dark outline rather than a drop shadow: these numbers land on
         // top of the fireball that caused them, and Ember's orange ink over an
         // orange blast is the one pairing this palette cannot survive.
@@ -1662,15 +1667,12 @@ window.plethoraBit = {
         gg.fillStyle = "rgba(255,236,190," + (flash * 0.4).toFixed(3) + ")";
         gg.fillRect(0, BF_TOP, W, BF_H);
       }
-      // Volley counter. Centred so it belongs to neither seat, and turned to
-      // face whoever is acting — same rule as the banner and the damage
-      // numbers, so no text in this window is ever upside down for the player
-      // it is currently talking to.
+      // Volley counter, centred so it belongs to neither player. Nothing in
+      // this window rotates any more: both players read it from the same side.
       if (phase !== "title") {
         gg.globalAlpha = 0.5;
         gg.save();
         gg.translate(W / 2, BF_TOP + 9 + 7);
-        if (turn === 1) gg.rotate(Math.PI);
         blockText(gg, "VOLLEY " + volley, 0, -7, 2, { align: "center", colour: "#F0C9B4" });
         gg.restore();
         gg.globalAlpha = 1;
@@ -2218,8 +2220,10 @@ window.plethoraBit = {
         blockText(gg, label, x0 + 24, -7, 2, { align: "left", colour: def.ink });
         gg.restore();
       };
-      seat("EMBER SITS HERE", PLAYERS_DEF[1], TOP_Y + DECK_H - 20, true);
-      seat("AZURE SITS HERE", PLAYERS_DEF[0], BOT_Y + 24, false);
+      // Both labels upright: the two players share a side, and the controls
+      // come to whoever is shooting rather than each having a fixed end.
+      seat("EMBER SHOOTS RIGHT TO LEFT", PLAYERS_DEF[1], TOP_Y + DECK_H - 20, false);
+      seat("AZURE SHOOTS LEFT TO RIGHT", PLAYERS_DEF[0], BOT_Y + 24, false);
     }
 
     /* =================================================================
@@ -2277,7 +2281,7 @@ window.plethoraBit = {
           'width:214px;height:56px;font-size:17px;">START MATCH</button>' +
         '<div style="position:absolute;left:0;right:0;top:' + (START_Y + 66) + 'px;text-align:center;' +
           'font-size:12px;opacity:0.5;line-height:1.6;padding:0 34px;">' +
-          'Lay the phone flat between you. Each deck faces its own seat.</div>' +
+          'Sit side by side. The controls come to whoever is shooting.</div>' +
       '</div>' +
 
       // match over

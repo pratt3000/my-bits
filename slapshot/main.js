@@ -534,15 +534,19 @@ window.plethoraBit = {
 
       for (const k of ["p1", "p2"]) {
         const pad = pads[k];
-        // The mallet chases the finger rather than teleporting to it. That
-        // gives it a real velocity to hand the puck, and stops a flick across
-        // the screen from launching the puck at an impossible speed.
+        // The mallet chases the finger rather than teleporting to it, so that
+        // it has a real velocity to hand the puck — but only just. The time
+        // constant is ~9ms, which closes about 85% of the gap in a single
+        // 60fps frame: near enough to instant that the mallet sits under your
+        // finger, far enough from it that a swing still carries weight. The
+        // old value closed only a tenth of the gap per frame and the mallet
+        // visibly trailed behind the thumb pushing it.
         const ax = pad.tx - pad.x, az = pad.tz - pad.z;
-        const follow = 1 - Math.pow(0.0016, dt);
+        const follow = 1 - Math.exp(-dt / 0.009);
         const nx2 = pad.x + ax * follow, nz2 = pad.z + az * follow;
         pad.vx = (nx2 - pad.x) / Math.max(dt, 0.0001);
         pad.vz = (nz2 - pad.z) / Math.max(dt, 0.0001);
-        const cap = 9.5;
+        const cap = 16;
         const pv = Math.hypot(pad.vx, pad.vz);
         if (pv > cap) { pad.vx = pad.vx / pv * cap; pad.vz = pad.vz / pv * cap; }
         pad.x = nx2; pad.z = nz2;

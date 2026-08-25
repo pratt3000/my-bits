@@ -707,12 +707,18 @@ window.plethoraBit = {
           options = legalMoves(game, game.turn, value);
           paintTurn();
           if (options.length === 0) {
-            // A six always earns another roll, even when it cannot be used.
+            // Nothing is playable. The turn still does not move on by itself:
+            // it waits to be acknowledged, so a player always sees why they
+            // got nothing rather than watching the dice hand over on its own.
             sound.sting("fail");
-            ctx.timeout(() => { if (value === 6 && sixes < 3) { phase = "roll"; paintTurn(); } else endTurn(); }, 700);
-          } else if (options.length === 1) {
-            ctx.timeout(() => play(options[0]), 420);   // no choice to make
+            phase = "stuck";
+            paintTurn();
           } else {
+            // Always wait for a tap, even when there is only one legal move.
+            // Playing it automatically reads as the game skipping your turn —
+            // you rolled, you looked away for a second, and the dice were
+            // suddenly with the next player. A turn should never advance
+            // without its owner having touched something.
             phase = "choose";
             paintTurn();
           }
@@ -768,6 +774,14 @@ window.plethoraBit = {
           else endTurn();
         },
       };
+    }
+
+    /** Acknowledge a roll that had no legal move. */
+    function clearStuck() {
+      if (phase !== "stuck") return;
+      const sixAgain = roll === 6 && sixes < 3;
+      if (sixAgain) { phase = "roll"; paintTurn(); }
+      else endTurn();
     }
 
     function endTurn() {
@@ -936,7 +950,10 @@ window.plethoraBit = {
       el("turnbar").innerHTML = phase === "over" ? "" :
         '<span style="color:' + seat.css + ';font-weight:800;">' + seat.name + '</span>' +
         '<span style="opacity:0.6;"> &nbsp;' +
-          (phase === "roll" ? "tap the die" : phase === "choose" ? "pick a token" : "…") + '</span>';
+          (phase === "roll" ? "tap the die"
+            : phase === "choose" ? "pick a token"
+            : phase === "stuck" ? "no move — tap to pass"
+            : "…") + '</span>';
       for (const seat2 of SEATS) {
         const plate = el("pname-" + seat2.id);
         if (plate) plate.style.boxShadow = seat2 === seat && phase !== "over"
@@ -988,6 +1005,8 @@ window.plethoraBit = {
         e.preventDefault();
         return;
       }
+
+      if (phase === "stuck") { clearStuck(); e.preventDefault(); return; }
 
       if (phase === "choose") {
         const cell = pickCell(x, y);

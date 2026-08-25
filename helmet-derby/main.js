@@ -83,20 +83,37 @@ window.plethoraBit = {
     })();
 
     /* ---------------------------------------------------------------
-     * Arena. The play area is the top of the screen; the bottom strip
-     * belongs to the two thumb pairs.
+     * Arena — and the reason this bit is sideways.
+     *
+     * A phone held upright gives two people about 7cm of shared edge to put
+     * four thumbs on. Turned, it gives them 15cm. A bit cannot ask the device
+     * to rotate, so the game renders itself a quarter turn inside the portrait
+     * canvas and asks the player to turn the phone instead; the title screen
+     * animates that request.
+     *
+     * Everything below works in LANDSCAPE coordinates. W and H are the logical
+     * landscape dimensions — deliberately swapped from the container — and the
+     * quarter turn is applied in exactly two places: once on the canvas at the
+     * top of paint(), and once in reverse on every pointer. Nothing else in
+     * the file knows the screen is portrait.
      * ------------------------------------------------------------- */
-    let W = ctx.width, H = ctx.height;
+    let SW = ctx.width, SH = ctx.height;        // the real, portrait container
+    let W = ctx.height, H = ctx.width;          // logical landscape
     const L = {};
     function measure() {
-      W = ctx.width; H = ctx.height;
+      SW = ctx.width; SH = ctx.height;
+      W = SH; H = SW;
       L.padH = 168;
-      L.padY = H - ctx.safeArea.bottom - L.padH;
-      L.top = ctx.safeArea.top + 6;
+      // Turned sideways, the notch and home bar are on the LEFT and RIGHT of
+      // the landscape view, so they no longer eat the top and bottom.
+      L.padY = H - 8 - L.padH;
+      L.top = 8;
+      L.insetL = ctx.safeArea.bottom;           // was the home bar
+      L.insetR = ctx.safeArea.top;              // was the notch
       L.floor = L.padY - 26;
-      L.wallL = 10;
-      L.wallR = W - 10;
-      L.scale = Math.min(W, 390) / 390;
+      L.wallL = 10 + L.insetL;
+      L.wallR = W - 10 - L.insetR;
+      L.scale = Math.min(H, 390) / 390;
     }
     measure();
 
@@ -423,8 +440,15 @@ window.plethoraBit = {
       g.restore();
     }
 
+    // Note: there is no screen->logical pointer inverse here because there are
+    // no raw canvas pointer handlers. Every control is a DOM button living
+    // inside the rotated root, so the browser has already done that transform.
+
     function paint() {
       g.save();
+      // The one quarter turn. Logical (x,y) lands at screen (SW - y, x).
+      g.translate(SW, 0);
+      g.rotate(Math.PI / 2);
       if (shake > 0.0004) g.translate((Math.random() - 0.5) * shake * W, (Math.random() - 0.5) * shake * W);
 
       const sky = g.createLinearGradient(0, 0, 0, L.floor);
@@ -475,7 +499,7 @@ window.plethoraBit = {
      * their own corner and their forearms never meet in the middle.
      * ------------------------------------------------------------- */
     const FONT = "-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-    const ST = ctx.safeArea.top, SB = ctx.safeArea.bottom;
+    const ST = 10, SB = 10;   // landscape: the notch and home bar are now side insets
     const BIG = "width:100%;padding:15px;border:none;border-radius:15px;font-family:inherit;" +
       "font-size:16px;font-weight:800;";
     const BTN = "pointer-events:auto;width:34px;height:34px;border-radius:11px;border:none;" +
@@ -497,6 +521,19 @@ window.plethoraBit = {
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT + ";color:#fff4e0;pointer-events:none;";
+    // The overlay turns with the game. Sized to the LOGICAL landscape box and
+    // rotated a quarter turn about its own origin, so every coordinate written
+    // below is landscape and matches what the canvas draws underneath it.
+    function layoutRoot() {
+      root.style.width = W + "px";
+      root.style.height = H + "px";
+      root.style.inset = "auto";
+      root.style.left = "0px";
+      root.style.top = "0px";
+      root.style.transformOrigin = "0 0";
+      root.style.transform = "translate(" + SW + "px,0) rotate(90deg)";
+    }
+    layoutRoot();
     root.innerHTML =
       padMarkup(0) + padMarkup(1) +
       '<div data-el="score" style="position:absolute;left:0;right:0;top:' + (ST + 8) + 'px;' +
@@ -508,21 +545,43 @@ window.plethoraBit = {
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
-        'flex-direction:column;align-items:center;justify-content:center;gap:9px;' +
-        'background:rgba(14,8,22,0.93);z-index:50;padding:26px;text-align:center;">' +
-        '<div style="font-size:11px;letter-spacing:0.4em;text-transform:uppercase;opacity:0.5;">Sit side by side</div>' +
-        '<div style="font-size:48px;font-weight:900;letter-spacing:-0.02em;line-height:1.05;' +
-          'background:linear-gradient(96deg,#ff5a45,#4cc9f0);-webkit-background-clip:text;' +
-          'background-clip:text;-webkit-text-fill-color:transparent;">Helmet Derby</div>' +
-        '<div style="font-size:14.5px;opacity:0.68;max-width:280px;line-height:1.55;">' +
-          'Two buttons each, in your own corner. Touch the other car\'s helmet with any part ' +
-          'of yours and the point is yours.</div>' +
-        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;margin-top:14px;">First to</div>' +
-        '<div data-el="tc" style="display:flex;gap:8px;"></div>' +
-        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;margin-top:8px;">Arena</div>' +
-        '<div data-el="ac" style="display:flex;gap:8px;"></div>' +
-        '<button data-el="go" style="' + BIG + 'max-width:230px;margin-top:16px;' +
-          'background:linear-gradient(96deg,#ff5a45,#4cc9f0);color:#140d1c;">Start</button>' +
+        'align-items:center;justify-content:center;gap:30px;background:rgba(14,8,22,0.93);' +
+        'z-index:50;padding:18px 26px;">' +
+        // Two columns. A landscape view is 390px tall, and the portrait stack
+        // ran off the bottom and took the start button with it.
+        '<div style="flex:1;max-width:330px;text-align:right;">' +
+          '<div data-el="rotate" style="display:flex;justify-content:flex-end;margin-bottom:2px;">' +
+            '<svg width="46" height="46" viewBox="0 0 62 62" aria-hidden="true">' +
+              '<rect x="20" y="6" width="22" height="38" rx="4" fill="none" ' +
+                'stroke="rgba(255,244,224,0.85)" stroke-width="2.5">' +
+                '<animateTransform attributeName="transform" type="rotate" ' +
+                  'values="0 31 31; 0 31 31; -90 31 31; -90 31 31" ' +
+                  'keyTimes="0; 0.35; 0.7; 1" dur="2.4s" repeatCount="indefinite"/>' +
+              '</rect>' +
+              '<path d="M14 52 a18 18 0 0 1 34 0" fill="none" stroke="#ff5a45" ' +
+                'stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>' +
+              '<path d="M44 46 l5 6 -7 3 z" fill="#ff5a45"/>' +
+            '</svg>' +
+          '</div>' +
+          '<div style="font-size:10.5px;letter-spacing:0.28em;text-transform:uppercase;' +
+            'color:#ff5a45;opacity:0.9;">Turn the phone sideways</div>' +
+          '<div style="font-size:40px;font-weight:900;letter-spacing:-0.02em;line-height:1.04;' +
+            'margin:4px 0 6px;background:linear-gradient(96deg,#ff5a45,#4cc9f0);' +
+            '-webkit-background-clip:text;background-clip:text;' +
+            '-webkit-text-fill-color:transparent;">Helmet Derby</div>' +
+          '<div style="font-size:13px;opacity:0.66;line-height:1.5;">' +
+            'Sit side by side, two buttons each in your own corner. Touch the other ' +
+            'car\'s helmet with any part of yours and the point is yours.</div>' +
+        '</div>' +
+        '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:7px;align-items:stretch;' +
+          'min-width:196px;">' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;">First to</div>' +
+          '<div data-el="tc" style="display:flex;gap:7px;"></div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.5;margin-top:5px;">Arena</div>' +
+          '<div data-el="ac" style="display:flex;gap:7px;"></div>' +
+          '<button data-el="go" style="' + BIG + 'margin-top:11px;' +
+            'background:linear-gradient(96deg,#ff5a45,#4cc9f0);color:#140d1c;">Start</button>' +
+        '</div>' +
       '</div>' +
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:5px;' +
@@ -551,7 +610,8 @@ window.plethoraBit = {
           'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:11px;">How to play</div>' +
           '<ul style="font-size:14px;line-height:1.7;opacity:0.86;padding-left:18px;margin:0;">' +
-            '<li>Sit <b>side by side</b>, each holding your own end of the phone.</li>' +
+            '<li><b>Turn the phone sideways.</b> It gives the two of you twice the edge to hold.</li>' +
+            '<li>Sit <b>side by side</b>, each holding your own end.</li>' +
             '<li>Your two buttons are in your own bottom corner. Nothing is mirrored — ' +
               '◀ is always left and ▶ is always right, for both of you.</li>' +
             '<li>On the ground the buttons drive you. <b>In the air they spin you</b>, which is how you land on someone.</li>' +
@@ -676,6 +736,7 @@ window.plethoraBit = {
     ctx.listen(window, "resize", () => {
       if (ctx.width === W && ctx.height === H) return;
       measure();
+      layoutRoot();
       if (phase === "play") resetRound(settings.arena);
     });
 
