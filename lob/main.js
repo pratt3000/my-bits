@@ -2264,7 +2264,11 @@ window.plethoraBit = {
      * ================================================================= */
     const FONTF = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
     const CHROME_Y = BF_TOP + 8;
-    const START_Y = BOT_Y + Math.round(DECK_H * 0.42);
+    // The footnote hangs 66px below the button and needs another 40 for two
+    // lines, so on a short screen the button has to come up rather than push
+    // its own caption off the bottom of the phone.
+    const START_Y = Math.min(BOT_Y + Math.round(DECK_H * 0.42),
+                             H - SAFE_B - 66 - 44 - 8 - 56);
     const CARD_W = Math.min(334, W - 34);
     // Ten rules did not fit in 596px, so the card faded its own text out under
     // a scroll mask and then left 150px of empty screen below itself — which
@@ -2571,7 +2575,12 @@ window.plethoraBit = {
 
       if (phase !== "aim" || !players) return;
       if (held.size > 0) return;                 // one live pointer per deck
-      const who = py >= BOT_Y ? 0 : py <= BF_TOP ? 1 : -1;
+      // Both players sit on the same side, so the bottom deck is always the
+      // one belonging to whoever is shooting — see deckTop(). Reading a seat
+      // off the screen half is what the old two-sided seating did, and it
+      // survived the rewrite: it made every one of player two's taps land as
+      // player one's, and player two could never fire at all.
+      const who = py >= BOT_Y ? turn : py <= BF_TOP ? 1 - turn : -1;
       if (who !== turn) {
         if (who >= 0) sound.sting("fail");       // the dimmed deck refuses, audibly
         return;

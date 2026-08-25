@@ -246,18 +246,49 @@ window.plethoraBit = {
     const SPAN = 8 + 2 * RIM;
     const FOV = 58;
 
-    const SAFE_T = ctx.safeArea.top, SAFE_B = ctx.safeArea.bottom;
+    /* Both ends of a two-sided board have to clear the hardware, and a notch
+     * is deeper than a home indicator — so honouring each edge exactly makes
+     * the two halves of the screen 13px out of step, which is precisely what
+     * a player sees when they look at a board that is supposed to be a mirror.
+     * Both ends clear the deeper of the two instead. It costs a few pixels at
+     * the bottom and buys an exact mirror. */
+    const SAFE = Math.max(ctx.safeArea.top, ctx.safeArea.bottom);
+    const SAFE_T = SAFE, SAFE_B = SAFE;
     let W = ctx.width, H = ctx.height;
     const L = {};
+
+    /* What one end's chrome actually needs, top padding to bottom padding.
+     * The controls are functional — 44px is the smallest target a thumb hits
+     * reliably — so this is a floor, not a preference. A board sized first and
+     * a strip given the leftovers looks right on the phone it was built
+     * against and stacks the masthead on top of the button on a shorter one. */
+    const CHROME = 8          // padding against the board
+                 + 12         // territory bar
+                 + 10 + 13    // gap, caption
+                 + 14 + 44    // gap, score chips
+                 + 14 + 44    // gap, controls
+                 + 6 + SAFE;  // padding against the hardware
+
+    /* The title band carries different furniture in the same space. Everything
+     * but the masthead is fixed, so the masthead takes what is left — which is
+     * how a 44px word stops landing on top of the start button on a short
+     * screen. */
+    const TITLE_FIXED = 10 + 12 + 14 + 46 + 30 + 6 + SAFE;
+
     function measure() {
       W = ctx.width; H = ctx.height;
-      L.unit = Math.min((W - 14) / SPAN, (H - SAFE_T - SAFE_B) * 0.54 / SPAN);
+      // strip = H/2 - unit*(4 + RIM) - 6, so a strip floor is a cap on unit.
+      const unitForChrome = (H / 2 - 6 - CHROME) / (4 + RIM);
+      L.unit = Math.min((W - 14) / SPAN, (H - SAFE_T - SAFE_B) * 0.54 / SPAN, unitForChrome);
       L.board = L.unit * 8;
       L.bx = (W - L.board) / 2;
       L.by = (H - L.board) / 2;                 // board is centred: the camera is
       // The moulded rim stands outside the felt, so a strip measured from the
       // felt would sit on top of it. Both strips stop at the board's real edge.
       L.strip = Math.max(96, L.by - RIM * L.unit - 6);
+      // The masthead is the one piece of chrome with no job but to be read, so
+      // it is what gives way when the strip is short.
+      L.disp = Math.round(Math.max(24, Math.min(44, (L.strip - TITLE_FIXED) / 1.14)));
     }
     measure();
 
@@ -1013,8 +1044,8 @@ window.plethoraBit = {
           'background:linear-gradient(to top,#070B0C 52%,rgba(7,11,12,0));">' +
           '<div style="font-family:' + BODY + ';font-size:9px;letter-spacing:0.3em;' +
             'color:' + BRASS + ';opacity:0.9;">Reversi &middot; two players &middot; one phone</div>' +
-          '<div style="font-family:' + DISP + ';font-size:44px;font-weight:700;line-height:1;' +
-            'letter-spacing:0.14em;text-indent:0.14em;color:#F2F6F1;">OTHELLO</div>' +
+          '<div style="font-family:' + DISP + ';font-size:' + L.disp + 'px;font-weight:700;' +
+            'line-height:1.14;letter-spacing:0.14em;text-indent:0.14em;color:#F2F6F1;">OTHELLO</div>' +
           '<div style="display:flex;align-items:center;gap:9px;font-family:' + BODY + ';font-size:10px;' +
             'letter-spacing:0.24em;color:rgba(207,224,212,0.6);">' +
             swatch(top ? BLACK : WHITE, 13) + line + '</div>' +
