@@ -1,10 +1,12 @@
 /*
- * The other two things that have to work in Cipher, in one short session:
- * the CO-OP variant that two or three players get, and the assassin.
+ * The assassin, in one short session.
  *
- *   pick 2 players -> co-op, one team against a simulated opposition
- *   deal, hand off, hold the pad, transmit a clue
+ *   deal, hand off, hold the pad, end the briefing
  *   contact one red agent, then touch the assassin
+ *
+ * This used to open on the two-player co-op variant, which no longer exists:
+ * Cipher is one team against the other at every count now, so the deal it
+ * tests is the ordinary one.
  *
  * The assassin is the only input in the game that can end it outright, which
  * is exactly why it takes two deliberate taps — arm the tile, then confirm
@@ -44,9 +46,9 @@ async function contact(i) {
   await settle();
 }
 
-/* ---- two players: the co-op variant ---- */
-const two = await domXY('[data-el="counts"] button[data-v="2"]');
-await bit.tap(two.x, two.y);
+/* ---- an ordinary four-player deal: two teams ---- */
+const four = await domXY('[data-el="counts"] button[data-v="4"]');
+await bit.tap(four.x, four.y);
 await bit.wait(200);
 await bit.tap(...Object.values(await domXY('[data-el="begin"]')));
 await untilPhase("handoff");
@@ -98,7 +100,7 @@ console.log("end:                ", JSON.stringify(end));
 
 const ok = mid.remaining.red === 8 && armedOnly.winner === null &&
            end.ending === "assassin" && end.winner === "blue" && end.phase === "over";
-console.log(ok ? "PASS — co-op deal, armed assassin held, confirm ended the game"
+console.log(ok ? "PASS — two-team deal, armed assassin held, confirm ended the game"
                : "FAIL");
 
 const errs = (await bit.errors()).filter((e) => !/404/.test(e));

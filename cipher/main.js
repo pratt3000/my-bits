@@ -181,15 +181,19 @@ window.plethoraBit = {
       try { return ctx.storage.get("cipher") || {}; } catch (_) { return {}; }
     })();
     const settings = {
-      players: clamp(saved.players || 4, 2, 8),
+      players: clamp(saved.players || 4, 4, 8),
       redSeat: saved.redSeat === "top" ? "top" : "bottom",
       mute: !!saved.mute,
     };
     function saveSettings() {
       try { ctx.storage.set("cipher", settings); } catch (_) {}
     }
-    /** Two or three at the table is the official co-op variant. */
-    const isCoop = () => settings.players <= 3;
+    /* One team against the other, on one phone, at every player count.
+     * Two and three used to fall into the official co-op variant — one team
+     * racing a simulated opposition — which is a different game, and getting
+     * it by picking a small number rather than by choosing it read as the
+     * game quietly changing its mind. Two teams need four people anyway:
+     * a spymaster and at least one operative on each side. */
 
     /* ===============================================================
      * SOUND — a low drifting bed under a talking game, cues on the
@@ -498,13 +502,23 @@ window.plethoraBit = {
     function bandRows(seat) {
       const s = L.bandU / 170;
       const safe = seat === "top" ? SAFE_T : SAFE_B;
-      const off = Math.max(0, (L.bandH - safe - L.bandU) / 2);
+      /* Pushed to the far end of the band rather than centred in it.
+       *
+       * The balloon used to be a 60-unit block holding a clue plaque and a row
+       * of guess pips; it is one line of text now, and centring what is left
+       * put a hole between the score and the buttons at both ends. Local y
+       * grows outward in both bands — the far one is rotated — so aligning to
+       * the end of the band puts the buttons under their own player's thumb
+       * and leaves the empty space against the board, where it reads as table
+       * rather than as a gap. */
+      const content = 130 * s;
+      const off = Math.max(0, L.bandH - safe - content);
       return {
-        hdr:     { x: 12, y: off + 2 * s, w: W - 24, h: 24 * s },
-        balloon: { x: 12, y: off + 30 * s, w: W - 24, h: 60 * s },
-        pips:    { x: 12, y: off + 94 * s, w: W - 24, h: 18 * s },
-        confirm: { x: 12, y: off + 118 * s, w: W - 24 - 106, h: 44 * s },
-        pass:    { x: W - 12 - 100, y: off + 118 * s, w: 100, h: 44 * s },
+        hdr:     { x: 12, y: off,            w: W - 24, h: 24 * s },
+        balloon: { x: 12, y: off + 30 * s,   w: W - 24, h: 26 * s },
+        pips:    { x: 12, y: off + 60 * s,   w: W - 24, h: 0 },
+        confirm: { x: 12, y: off + 66 * s,   w: W - 24 - 106, h: 44 * s },
+        pass:    { x: W - 12 - 100, y: off + 66 * s, w: 100, h: 44 * s },
       };
     }
 
@@ -528,7 +542,7 @@ window.plethoraBit = {
     let peek = false, holdOn = false, holdT = 0, holdStart = 0, holdBounce = 0;
     let holdSeq = 0;                    // invalidates a timer from an earlier press
     let shutter = 1, shutterTo = 0;
-    let sparks = [], endFx = null, oppose = null;
+    let sparks = [], endFx = null;
     let typed = 0;                      // characters of the handoff line typed
     let wedgeT = 0, reticle = 0, pulse = 0, revealAll = -1;
 
@@ -537,7 +551,7 @@ window.plethoraBit = {
       for (let i = 0; i < 25; i++) if (kinds[i] === team && !shown[i]) n++;
       return n;
     }
-    const busy = () => anim !== null || endFx !== null || oppose !== null ||
+    const busy = () => anim !== null || endFx !== null ||
                        Math.abs(shutter - shutterTo) > 0.02;
 
     function newDeal() {
@@ -556,7 +570,7 @@ window.plethoraBit = {
       shown = new Array(25).fill(false);
       turn = "red"; turnNo = 0; totalGuesses = 0;
       winner = null; ending = ""; armed = -1; clue = null;
-      sparks = []; endFx = null; oppose = null; revealAll = -1;
+      sparks = []; endFx = null; revealAll = -1;
       L.tileArt = null;
       bakeTiles();
       beginTurn("red");
@@ -1050,7 +1064,6 @@ window.plethoraBit = {
 
     function drawBand(team) {
       const seat = seatOf(team), active = team === turn && phase === "board";
-      const coopBot = isCoop() && team === "blue";
       const R = bandRows(seat);
       g.save();
       bandTransform(seat);
@@ -1091,7 +1104,7 @@ window.plethoraBit = {
       // header: team, agents left, the stack of agent cards
       g.fillStyle = TEAM[team].ink;
       g.font = "700 20px " + DISPLAY; g.textAlign = "left"; g.textBaseline = "middle";
-      const nm = coopBot ? "OPPOSITION" : TEAM[team].name;
+      const nm = TEAM[team].name;
       const nw = tracked(g, nm, R.hdr.x, R.hdr.y + R.hdr.h / 2, 3, "left");
       g.font = "400 9px " + MONO; g.fillStyle = "rgba(241,231,210,0.55)";
       tracked(g, remaining(team) + " LEFT", R.hdr.x + nw + 10, R.hdr.y + R.hdr.h / 2 + 1, 1, "left");
@@ -1100,15 +1113,17 @@ window.plethoraBit = {
       /* One line of state where the clue balloon and the guess pips used to
        * be. Neither had anything left to show: the clue is spoken in the room,
        * and without a number there is no allowance to count down. */
-      const b = R.balloon;
-      const line = !active
-        ? (phase === "board" ? TEAM[turn].name + " IS GUESSING" : "STANDING BY")
-        : clue ? "GUESS, THEN END THE TURN"
-        : "AWAITING THE BRIEFING";
-      g.fillStyle = active && clue ? "rgba(241,231,210,0.72)" : "rgba(241,231,210,0.34)";
-      g.font = "400 10px " + MONO;
-      g.textAlign = "center"; g.textBaseline = "middle";
-      tracked(g, line, b.x + b.w / 2, b.y + b.h / 2, 2.2, "center");
+      // Only the active band says anything here. The idle one already has the
+      // dashed rule below it naming whoever is guessing, and printing the same
+      // sentence twice in one band is how it read before.
+      if (active) {
+        const b = R.balloon;
+        g.fillStyle = clue ? "rgba(241,231,210,0.72)" : "rgba(241,231,210,0.34)";
+        g.font = "400 10px " + MONO;
+        g.textAlign = "center"; g.textBaseline = "middle";
+        tracked(g, clue ? "GUESS, THEN END THE TURN" : "AWAITING THE BRIEFING",
+                b.x + b.w / 2, b.y + b.h / 2, 2.2, "center");
+      }
 
       // buttons — only the team whose turn it is gets any
       if (active) {
@@ -1136,7 +1151,7 @@ window.plethoraBit = {
         g.strokeStyle = "rgba(241,231,210,0.22)"; g.lineWidth = 1;
         g.beginPath(); g.moveTo(r.x, y); g.lineTo(W - 12, y); g.stroke();
         g.restore();
-        const line = coopBot ? "OPPOSITION MOVES AFTER EACH TURN" : TEAM[turn].name + " IS GUESSING";
+        const line = TEAM[turn].name + " IS GUESSING";
         g.font = "400 9px " + MONO;
         const lw = trackWidth(g, line, 2) + 20;
         g.fillStyle = "rgba(20,18,16,0.98)";
@@ -1206,7 +1221,6 @@ window.plethoraBit = {
     /** The two lines are decided before a character is typed, so the
      *  instruction never reflows under the reader as it comes in. */
     function handoffLines() {
-      if (isCoop()) return ["PASS THE PHONE", "TO THE SPYMASTER"];
       return ["PASS THE PHONE TO THE", TEAM[turn].name + " SPYMASTER"];
     }
 
@@ -1235,7 +1249,7 @@ window.plethoraBit = {
 
       g.fillStyle = TEAM[turn].ink;
       g.font = "700 10px " + MONO;
-      tracked(g, (isCoop() ? "OPERATION" : TEAM[turn].name + " TURN") + "  ·  TRANSMISSION " + turnNo,
+      tracked(g, TEAM[turn].name + " TURN  ·  TRANSMISSION " + turnNo,
               0, -62, 3, "center");
 
       g.fillStyle = CREAM;
@@ -1434,7 +1448,7 @@ window.plethoraBit = {
 
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillStyle = TEAM[turn].ink; g.font = "700 32px " + DISPLAY;
-      tracked(g, (isCoop() ? "" : TEAM[turn].name + " ") + "SPYMASTER",
+      tracked(g, TEAM[turn].name + " SPYMASTER",
               W / 2, top + room * 0.40, 4, "center");
       g.fillStyle = "rgba(241,231,210,0.5)"; g.font = "400 9px " + MONO;
       tracked(g, "ANGLE THE SCREEN AWAY FROM THE TABLE", W / 2, top + room * 0.55, 1.4, "center");
@@ -1714,16 +1728,6 @@ window.plethoraBit = {
 
     function endTurn() {
       if (winner) return;
-      if (isCoop() && turn === "red") {
-        // The simulated opposition takes its turn by covering one of its own
-        // words, exactly as the two-player rules say to.
-        const pool = [];
-        for (let i = 0; i < 25; i++) if (kinds[i] === "blue" && !shown[i]) pool.push(i);
-        if (!pool.length) return endGame("blue", "agents");
-        const pick = pool[(Math.random() * pool.length) | 0];
-        oppose = { i: pick, t: 0 };
-        return;
-      }
       beginTurn(other(turn));
     }
 
@@ -1739,15 +1743,10 @@ window.plethoraBit = {
       }
       sound.duck(0.55, 500);
       if (why !== "assassin") { sound.sting("win"); sound.haptic("success"); }
-      const coop = isCoop();
-      const won = coop ? who === "red" : true;
-      ctx.platform.complete({
-        result: coop ? (who === "red" ? "win" : "loss") : who,
-        guesses: totalGuesses, reason: why,
-      });
+      ctx.platform.complete({ result: who, guesses: totalGuesses, reason: why });
       // The record belongs to the match, not to one of the eight people
       // sharing the phone: how few contacts this board took to settle.
-      if (why !== "assassin" && won) {
+      if (why !== "assassin") {
         try {
           ctx.memory.record("fewest_guesses").submit(totalGuesses,
             { label: totalGuesses + " guesses" });
@@ -1992,7 +1991,7 @@ window.plethoraBit = {
             '<div style="' + label + 'margin:16px 0 7px;">Players</div>' +
             '<div data-el="counts2" style="display:flex;gap:6px;flex-wrap:wrap;"></div>' +
             '<div style="font-size:11.5px;opacity:0.5;margin:7px 0 4px;line-height:1.5;">' +
-              'Two or three play the co-op variant. Applies on the next deal.</div>' +
+              'Split into two teams with a spymaster each. Applies on the next deal.</div>' +
           '</div>' +
           '<button data-el="cogp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:14px;flex:0 0 auto;">Done</button>' +
         '</div>' +
@@ -2015,7 +2014,6 @@ window.plethoraBit = {
             '<li>The assassin ends the game at once and the team that touched it loses.</li>' +
             '<li>You get the number plus one guess, and may stop after the first with END TURN.</li>' +
             '<li>First team to contact all of its agents wins — which can happen on the other team’s turn.</li>' +
-            '<li>Two or three players: one team, one spymaster, racing an opposition that covers one of its own words every turn.</li>' +
           '</ul>' +
           '<button data-el="helpp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:14px;flex:0 0 auto;">Got it</button>' +
         '</div>' +
@@ -2053,14 +2051,10 @@ window.plethoraBit = {
     function paintAll() {
       for (const f of repaints) if (f) f();
       const note = el("modenote");
-      if (note) {
-        note.textContent = isCoop()
-          ? "CO-OP — ONE TEAM VS THE OPPOSITION"
-          : "TWO TEAMS · ONE SPYMASTER EACH";
-      }
+      if (note) note.textContent = "TWO TEAMS · ONE SPYMASTER EACH";
       paintMute();
     }
-    const COUNTS = [2, 3, 4, 5, 6, 7, 8];
+    const COUNTS = [4, 5, 6, 7, 8];
     function wirePills() {
       repaints = [
         pills(el("counts"), COUNTS, COUNTS, () => settings.players, (v) => { settings.players = Number(v); }),
@@ -2123,26 +2117,13 @@ window.plethoraBit = {
     });
 
     function showOver() {
-      const coop = isCoop();
       const t = el("over-title"), s = el("over-sub"), m = el("over-mirror");
-      let head, sub;
-      if (ending === "assassin") {
-        head = coop ? "ASSASSIN" : TEAM[winner].name + " WINS";
-        sub = coop
-          ? "Your operatives touched the assassin."
-          : TEAM[other(winner)].name + " touched the assassin — instant loss.";
-      } else if (coop) {
-        head = winner === "red" ? "ALL AGENTS HOME" : "OPPOSITION WINS";
-        sub = winner === "red"
-          ? "Every one of your nine agents contacted in " + totalGuesses + " guesses."
-          : "The opposition contacted all eight of theirs first.";
-      } else {
-        head = TEAM[winner].name + " WINS";
-        sub = "All " + TEAM[winner].agents + " agents contacted — " + totalGuesses + " guesses in all.";
-      }
+      const head = TEAM[winner].name + " WINS";
+      const sub = ending === "assassin"
+        ? TEAM[other(winner)].name + " touched the assassin — instant loss."
+        : "All " + TEAM[winner].agents + " agents contacted — " + totalGuesses + " guesses in all.";
       t.textContent = head;
-      t.style.color = ending === "assassin" && coop ? "#D6342A"
-                    : winner === "red" ? RED : BLUE;
+      t.style.color = winner === "red" ? RED : BLUE;
       s.textContent = sub;
       m.textContent = head;
       m.style.color = t.style.color;
@@ -2176,21 +2157,6 @@ window.plethoraBit = {
         anim.t += dtMs;
         if (was < FLIP_MS / 2 && anim.t >= FLIP_MS / 2) anim.mid();
         if (anim.t >= FLIP_MS) { const a = anim; anim = null; a.after(); }
-      }
-
-      if (oppose) {
-        oppose.t += dtMs;
-        if (oppose.t > 320 && !shown[oppose.i]) {
-          shown[oppose.i] = true;
-          spark(oppose.i, BLUE_LIT, 10);
-          sound.sting("danger"); sound.haptic("warning");
-        }
-        if (oppose.t > 820) {
-          const done = remaining("blue") === 0;
-          oppose = null;
-          if (done) endGame("blue", "agents");
-          else beginTurn("red");
-        }
       }
 
       if (endFx) {
