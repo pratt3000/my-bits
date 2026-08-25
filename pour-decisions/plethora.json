@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Pour Decisions",
+  "description": "Hold to pull the tap and fill the glass to the line — 59%, 88%, 26%. Only the beer counts, and the head is mostly air, so the level keeps rising after you let go. Eight glasses, eight shapes, and by the last one the only way to land it is the way a bartender would: pour, let it settle, top it up.",
+  "tags": [
+    "game",
+    "skill",
+    "precision",
+    "beer",
+    "physics",
+    "sound",
+    "satisfying",
+    "timing"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "Round Total",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
