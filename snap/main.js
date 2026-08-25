@@ -1051,14 +1051,15 @@ window.plethoraBit = {
       }
       drawCardAt(L.sx - 1.5, L.sy - 1.9, -0.031, 1, null, false, 0.06);
 
-      // A brass count plate on the deck, so nobody has to guess how much
-      // table is left. It is drawn twice, back to back, for the two end seats.
+      // A brass count plate riveted to the layout ring, so nobody has to guess
+      // how much table is left. Drawn twice, back to back, for the two end
+      // seats — the ring itself carries the same reading for the side seats.
       const txt = String(n);
       for (const rad of [0, Math.PI]) {
         g.save();
-        g.translate(L.sx, L.sy);
+        g.translate(L.px, L.py);
         g.rotate(rad);
-        g.translate(0, CARD_H * 0.5 + 15);
+        g.translate(0, L.ringR);
         g.font = "700 11px " + FONT;
         g.textAlign = "center"; g.textBaseline = "middle";
         const w = g.measureText(txt).width + 22;
@@ -1202,14 +1203,16 @@ window.plethoraBit = {
         g.globalAlpha = 1;
       }
 
-      // Body: dark leather with the player's colour bleeding in from their own
-      // edge, so the pad looks lit from where they are sitting.
+      // Body: dark leather lit from the player's own edge. The gradient runs
+      // along the seat's own axis, so the colour always pools on the side the
+      // player is actually sitting on rather than at the top of the screen.
+      const nx = -Math.sin(p.rad), ny = Math.cos(p.rad);
+      const ext = (Math.abs(nx) * w + Math.abs(ny) * h) / 2;
       roundRect(g, -w / 2, -h / 2, w, h, rr);
-      const gx = Math.sin(p.rad) * w * 0.5, gy = -Math.cos(p.rad) * h * 0.5;
-      const base = g.createLinearGradient(-gx, -gy, gx, gy);
-      const heat = armed ? 0.30 : 0.15;
-      base.addColorStop(0, "rgba(6,20,14,0.86)");
-      base.addColorStop(1, hexA(p.ink, heat + p.flashT * 0.5));
+      const base = g.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
+      base.addColorStop(0.00, hexA(p.ink, (armed ? 0.36 : 0.17) + p.flashT * 0.45));
+      base.addColorStop(0.55, "rgba(9,27,18,0.90)");
+      base.addColorStop(1.00, "rgba(4,15,10,0.95)");
       g.fillStyle = base;
       g.fill();
       g.strokeStyle = hexA(p.ink, armed ? 0.95 : 0.42);
@@ -1260,27 +1263,52 @@ window.plethoraBit = {
         roundRect(g, -lw * 0.20, lh * 0.20 - 3, barW, 6, 3);
         g.fillStyle = "#ff5a5a"; g.fill();
       } else {
-        g.fillStyle = hexA(p.ink, 0.88);
+        // Your winnings sit on your own pad as an actual stack of cards. A
+        // progress bar would say the same thing in a language this table does
+        // not speak.
+        miniStack(-lw * 0.26, lh * 0.02, p.cards, clamp(lh / 140 * 0.46, 0.19, 0.33));
+
+        const tx = lw * 0.09;
+        g.fillStyle = hexA(p.ink, 0.90);
         g.font = "700 " + Math.round(Math.min(lh * 0.13, 12)) + "px " + FONT;
-        tracked(g, p.name.toUpperCase(), 0, -lh * 0.27, 3);
+        tracked(g, p.name.toUpperCase(), tx, -lh * 0.24, 3);
 
         g.fillStyle = armed ? "#fffdf4" : CREAM;
         g.font = "800 " + Math.round(Math.min(lh * 0.40, 46)) + "px " + FONT;
-        g.fillText(String(p.cards), 0, lh * 0.03);
-
-        const barW = lw * 0.46;
-        roundRect(g, -barW / 2, lh * 0.29 - 3.5, barW, 7, 3.5);
-        g.fillStyle = "rgba(0,0,0,0.30)"; g.fill();
-        roundRect(g, -barW / 2, lh * 0.29 - 3.5, barW * (p.cards / DECK_N), 7, 3.5);
-        g.fillStyle = p.ink; g.fill();
+        g.fillText(String(p.cards), tx, lh * 0.10);
 
         if (armed) {
           g.fillStyle = BRASS;
-          g.font = "700 " + Math.round(Math.min(lh * 0.11, 11)) + "px " + FONT;
-          tracked(g, "SLAM", 0, lh * 0.415, 3.5);
+          g.font = "700 " + Math.round(Math.min(lh * 0.115, 11)) + "px " + FONT;
+          tracked(g, "SLAM", tx, lh * 0.36, 3.5);
         }
       }
       g.restore();
+    }
+
+    /** A player's won pile, drawn small. Thickness follows the count. */
+    function miniStack(x, y, count, sc) {
+      const cw = CARD_W * sc, ch = CARD_H * sc;
+      if (count <= 0) {
+        g.save();
+        g.globalAlpha = 0.20;
+        roundRect(g, x - cw / 2, y - ch / 2, cw, ch, CARD_R * sc);
+        g.strokeStyle = CREAM; g.lineWidth = 1;
+        g.setLineDash([4, 4]); g.stroke(); g.setLineDash([]);
+        g.restore();
+        return;
+      }
+      const layers = Math.min(9, Math.ceil(count / 6));
+      for (let i = layers; i >= 2; i--) {
+        g.save();
+        g.translate(x - i * 0.9, y - i * 1.5);
+        g.rotate(-0.018 * i);
+        roundRect(g, -cw / 2, -ch / 2, cw, ch, CARD_R * sc);
+        g.fillStyle = "#5d1520"; g.fill();
+        g.strokeStyle = "rgba(0,0,0,0.40)"; g.lineWidth = 1; g.stroke();
+        g.restore();
+      }
+      drawCardAt(x - 0.9, y - 1.5, -0.018, sc, null, false, 0.04);
     }
 
     /** #rrggbb plus an alpha, without dragging in a colour library. */
@@ -1340,7 +1368,7 @@ window.plethoraBit = {
       for (let i = 0; i < 3; i++) {
         const on = i < lit;
         const x = L.px + (i - 1) * 26;
-        const y = L.py + L.ringR + 26;
+        const y = L.py + L.ringR + 30;
         g.beginPath();
         g.arc(x, y, on ? 7 : 5, 0, TAU);
         g.fillStyle = on ? BRASS : "rgba(255,244,214,0.20)";
@@ -1487,7 +1515,7 @@ window.plethoraBit = {
     root.innerHTML =
       /* ---- chrome, in the corner both end pads were shortened to free ---- */
       '<div style="position:absolute;right:10px;top:' + (SAFE_T + 10) + 'px;display:flex;' +
-        'flex-direction:column;gap:7px;z-index:40;pointer-events:none;">' +
+        'flex-direction:column;gap:7px;z-index:90;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="' + btn + 'font-size:17px;">♪</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + btn + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
@@ -1517,16 +1545,20 @@ window.plethoraBit = {
       /* ---- match over ---- */
       '<div data-el="over" style="position:absolute;inset:0;display:none;flex-direction:column;' +
         'align-items:center;justify-content:center;z-index:60;padding:26px;text-align:center;' +
-        'pointer-events:auto;background:radial-gradient(120% 60% at 50% 45%,rgba(3,16,10,0.80),rgba(2,9,6,0.97));">' +
+        'pointer-events:auto;background:radial-gradient(120% 60% at 50% 45%,rgba(3,16,10,0.82),rgba(2,9,6,0.97));">' +
         // A mirrored headline for whoever is sitting at the other end, so the
-        // result is not upside down for half the table.
-        '<div data-el="over-mirror" style="position:absolute;left:0;right:0;top:' + (SAFE_T + 24) + 'px;' +
-          'transform:rotate(180deg);font-size:26px;font-weight:800;opacity:0.85;"></div>' +
-        '<div style="' + label + '">Hand over</div>' +
-        '<div data-el="over-title" style="font-size:38px;font-weight:800;margin-top:6px;letter-spacing:-0.02em;"></div>' +
-        '<div data-el="over-sub" style="font-size:13px;opacity:0.6;margin-top:4px;letter-spacing:0.04em;"></div>' +
-        '<div data-el="over-rows" style="width:100%;max-width:280px;margin-top:22px;"></div>' +
-        '<div style="width:100%;max-width:250px;margin-top:10px;">' +
+        // result is not upside down for half the table. Placed on the baize
+        // below their pad rather than on top of it.
+        '<div data-el="over-mirror" style="position:absolute;left:0;right:0;top:29%;' +
+          'transform:rotate(180deg);font-size:27px;font-weight:800;opacity:0.9;"></div>' +
+        '<div style="max-width:300px;width:100%;' + panel + 'padding:22px 20px 20px;">' +
+          '<div style="' + label + '">Hand over</div>' +
+          '<div data-el="over-title" style="font-size:36px;font-weight:800;margin-top:5px;letter-spacing:-0.02em;line-height:1.1;"></div>' +
+          '<div data-el="over-sub" style="font-size:12.5px;opacity:0.58;margin-top:5px;letter-spacing:0.05em;"></div>' +
+          '<div style="height:1px;background:rgba(216,169,74,0.22);margin:18px 0 14px;"></div>' +
+          '<div data-el="over-rows"></div>' +
+        '</div>' +
+        '<div style="width:100%;max-width:300px;margin-top:16px;">' +
           '<button data-el="again" style="' + bigBtn("linear-gradient(180deg,#f0cf7f,#cf9a2e)", "#221503") + '">Deal again</button>' +
           '<button data-el="quit" style="' + bigBtn("rgba(255,255,255,0.10)", CREAM) + '">Change players</button>' +
         '</div>' +

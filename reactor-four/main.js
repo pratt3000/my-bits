@@ -126,7 +126,7 @@ window.plethoraBit = {
      * wrapped: audio is a nicety and must never break play.
      * ------------------------------------------------------------- */
     const sound = (function () {
-      let muted = settings.mute, bed = null, unlocked = false;
+      let muted = settings.mute, bed = null, unlocked = false, lastHeat = -1;
       const start = () => ctx.music.play({ preset: "techno", volume: 0.30, tempo: 120, intensity: 0.25 });
       return {
         get muted() { return muted; },
@@ -137,7 +137,14 @@ window.plethoraBit = {
         },
         sting(n) { if (!muted) { try { ctx.music.sting(n); } catch (_) {} } },
         duck(a, ms) { if (!muted) { try { ctx.music.duck(a, ms); } catch (_) {} } },
-        heat(v) { if (!muted && bed) { try { bed.setIntensity(clamp(v, 0, 1)); } catch (_) {} } },
+        heat(v) {
+          // The bed is driven every frame; only tell it when the number has
+          // actually moved, or the audio graph gets 60 writes a second.
+          const c = clamp(v, 0, 1);
+          if (Math.abs(c - lastHeat) < 0.03) return;
+          lastHeat = c;
+          if (!muted && bed) { try { bed.setIntensity(c); } catch (_) {} }
+        },
         tempo(v) { if (!muted && bed) { try { bed.setTempo(v); } catch (_) {} } },
         haptic(k) { try { ctx.platform.haptic(k); } catch (_) {} },
         toggle() {
@@ -249,12 +256,20 @@ window.plethoraBit = {
 
     /** Letter-spaced caps, drawn per glyph so the tracking is identical on
      *  every engine — ctx.letterSpacing is not universally present. */
-    function tracked(g, text, x, y, size, track, align) {
-      g.font = "700 " + size + "px " + MONO;
+    function tracked(g, text, x, y, size, track, align, maxW) {
       const chars = String(text).split("");
       let total = 0;
-      for (const c of chars) total += g.measureText(c).width + track;
-      total -= track;
+      // Shrink until it fits, tracking included — fitting the glyphs alone and
+      // then adding spacing is how a label ends up reading "TAP ON A PAI".
+      for (let guard = 0; guard < 40; guard++) {
+        g.font = "700 " + size + "px " + MONO;
+        total = 0;
+        for (const c of chars) total += g.measureText(c).width + track;
+        total -= track;
+        if (!maxW || total <= maxW || size <= 5) break;
+        size -= 0.5;
+        track = Math.max(0.4, track * 0.92);
+      }
       let px = align === "center" ? x - total / 2 : align === "right" ? x - total : x;
       g.textAlign = "left";
       for (const c of chars) {
@@ -457,7 +472,7 @@ window.plethoraBit = {
       // Radial vents.
       for (let k = 0; k < 48; k++) {
         const a = k * TAU / 48;
-        g.strokeStyle = k % 4 === 0 ? "rgba(120,160,220,0.18)" : "rgba(90,120,170,0.07)";
+        g.strokeStyle = k % 4 === 0 ? "rgba(130,175,235,0.34)" : "rgba(95,130,185,0.14)";
         g.lineWidth = k % 4 === 0 ? 3 : 1.4;
         g.beginPath();
         g.moveTo(m + Math.cos(a) * m * 0.30, m + Math.sin(a) * m * 0.30);
@@ -466,7 +481,7 @@ window.plethoraBit = {
       }
       // Containment rings.
       for (const r of [0.34, 0.48, 0.62, 0.78, 0.93]) {
-        g.strokeStyle = "rgba(110,150,205,0.13)";
+        g.strokeStyle = "rgba(120,160,215,0.26)";
         g.lineWidth = r > 0.7 ? 2.5 : 1.5;
         g.beginPath();
         g.arc(m, m, m * r, 0, TAU);
@@ -500,16 +515,74 @@ window.plethoraBit = {
         map: chamberTex || null,
       })
     );
-    chamber.position.z = -P(230);
+    chamber.position.z = -P(185);
     scene.add(chamber);
+
+    /**
+     * The core's skin. A flat emissive sphere reads as a sticker; this bakes a
+     * veined plasma into an equirectangular map and multiplies the emission
+     * through it, so the surface has structure that churns as the core turns.
+     */
+    function plasmaTexture() {
+      const TW = 640, TH = 320;
+      const c = surface(TW, TH);
+      if (!c) return null;
+      const g = c.getContext("2d");
+      g.fillStyle = "#0a0d14";
+      g.fillRect(0, 0, TW, TH);
+      // Soft cells: the body of the plasma.
+      for (let k = 0; k < 90; k++) {
+        const x = Math.random() * TW, y = Math.random() * TH;
+        const r = 18 + Math.random() * 78;
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        const a = 0.10 + Math.random() * 0.42;
+        gr.addColorStop(0, "rgba(255,255,255," + a + ")");
+        gr.addColorStop(0.55, "rgba(255,255,255," + a * 0.32 + ")");
+        gr.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = gr;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      // Veins: hot filaments arcing across the surface.
+      g.lineCap = "round";
+      for (let k = 0; k < 130; k++) {
+        let x = Math.random() * TW, y = Math.random() * TH;
+        let a = Math.random() * TAU;
+        g.beginPath();
+        g.moveTo(x, y);
+        for (let j = 0; j < 7; j++) {
+          a += (Math.random() - 0.5) * 1.3;
+          x += Math.cos(a) * 13; y += Math.sin(a) * 13;
+          g.lineTo(x, y);
+        }
+        g.strokeStyle = "rgba(255,255,255," + (0.18 + Math.random() * 0.55) + ")";
+        g.lineWidth = 0.8 + Math.random() * 2.6;
+        g.stroke();
+      }
+      // Cool patches, so the sphere is never uniformly bright.
+      for (let k = 0; k < 26; k++) {
+        const x = Math.random() * TW, y = Math.random() * TH;
+        const r = 30 + Math.random() * 90;
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, "rgba(4,6,10,0.72)");
+        gr.addColorStop(1, "rgba(4,6,10,0)");
+        g.fillStyle = gr;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = THREE.RepeatWrapping;
+      t.wrapT = THREE.ClampToEdgeWrapping;
+      ctx.onDestroy(() => t.dispose());
+      return t;
+    }
+    const plasmaTex = plasmaTexture();
 
     // --- the core --------------------------------------------------------
     const coreCol = new THREE.Color(IDLE.hex);
     const coreMat = new THREE.MeshStandardMaterial({
-      color: 0x0a0d14, emissive: coreCol.clone(), emissiveIntensity: 1.0,
-      roughness: 0.35, metalness: 0.2,
+      color: 0x080b12, emissive: coreCol.clone(), emissiveIntensity: 1.0,
+      emissiveMap: plasmaTex || null, roughness: 0.45, metalness: 0.15,
     });
-    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(P(52), 4), coreMat);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(P(70), 56, 40), coreMat);
     scene.add(core);
 
     // A faceted cage riding just off the surface. Counter-rotating, it makes
@@ -518,14 +591,14 @@ window.plethoraBit = {
       color: coreCol.clone(), wireframe: true, transparent: true, opacity: 0.30,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    const cage = new THREE.Mesh(new THREE.IcosahedronGeometry(P(63), 1), cageMat);
+    const cage = new THREE.Mesh(new THREE.IcosahedronGeometry(P(84), 1), cageMat);
     scene.add(cage);
 
     // Nested back-faced shells: the cheapest honest stand-in for volume. Each
     // one adds light where the sightline is longest, so the core has a falloff
     // instead of an edge.
     const halos = [];
-    for (const [r, op] of [[70, 0.20], [86, 0.13], [104, 0.085], [126, 0.05]]) {
+    for (const [r, op] of [[80, 0.11], [98, 0.068], [120, 0.040], [148, 0.022]]) {
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(P(r), 32, 24),
         new THREE.MeshBasicMaterial({
@@ -546,18 +619,18 @@ window.plethoraBit = {
       color: coreCol.clone(), map: bloomTex || null, transparent: true,
       opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    const bloom = new THREE.Mesh(new THREE.PlaneGeometry(P(430), P(430)), bloomMat);
+    const bloom = new THREE.Mesh(new THREE.PlaneGeometry(P(360), P(360)), bloomMat);
     bloom.position.z = P(70);
     scene.add(bloom);
 
     // --- gyroscope rings -------------------------------------------------
     const ringMat = new THREE.MeshStandardMaterial({
-      color: 0x30405c, roughness: 0.25, metalness: 0.95,
-      emissive: coreCol.clone(), emissiveIntensity: 0.35,
+      color: 0x1b2536, roughness: 0.22, metalness: 1.0,
+      emissive: coreCol.clone(), emissiveIntensity: 0.18,
     });
     const rings = [];
-    for (const [r, ax] of [[86, "x"], [95, "y"], [104, "z"]]) {
-      const m = new THREE.Mesh(new THREE.TorusGeometry(P(r), P(3.2), 10, 72), ringMat);
+    for (const [r, ax] of [[90, "x"], [99, "y"], [108, "z"]]) {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(P(r), P(2.6), 10, 80), ringMat);
       if (ax === "x") m.rotation.x = 0.5;
       if (ax === "y") { m.rotation.y = 0.9; m.rotation.x = 1.1; }
       if (ax === "z") { m.rotation.x = 1.5; m.rotation.z = 0.4; }
@@ -621,34 +694,51 @@ window.plethoraBit = {
     // The master gauge. Smoked glass across the core's face, carrying whatever
     // the round asks people to read. GO rounds hide it, so the bare core is
     // itself the signal.
-    const plateW = 196, plateH = 118;
-    const plateSurf = surface(512, 320);
+    const plateW = 170, plateH = 98;
+    const plateSurf = surface(512, 295);
     const plateTex = plateSurf ? new THREE.CanvasTexture(plateSurf) : null;
     if (plateTex) { plateTex.colorSpace = THREE.SRGBColorSpace; ctx.onDestroy(() => plateTex.dispose()); }
+    // depthTest off and a late renderOrder: the additive halos live in front of
+    // the core's surface, and without this the master gauge reads through them.
     const plate = new THREE.Mesh(
       new THREE.PlaneGeometry(P(plateW), P(plateH)),
-      new THREE.MeshBasicMaterial({ map: plateTex || null, transparent: true, depthWrite: false })
+      new THREE.MeshBasicMaterial({
+        map: plateTex || null, transparent: true, depthWrite: false, depthTest: false,
+      })
     );
-    plate.position.z = P(62);
+    plate.renderOrder = 40;
+    plate.position.z = P(150);
     plate.visible = false;
     scene.add(plate);
 
     function paintPlate(sig) {
       if (!plateSurf || !plateTex) return;
       const g = plateSurf.getContext("2d");
-      const w = 512, h = 320;
+      const w = 512, h = 295;
       g.clearRect(0, 0, w, h);
       // Smoked glass so the readout survives against a white-hot core.
-      roundRect(g, 6, 6, w - 12, h - 12, 26);
-      g.fillStyle = "rgba(4,7,13,0.86)";
+      roundRect(g, 8, 8, w - 16, h - 16, 24);
+      g.fillStyle = "rgba(3,5,10,0.90)";
       g.fill();
-      g.lineWidth = 4;
-      g.strokeStyle = "rgba(150,190,240,0.42)";
-      g.stroke();
-      roundRect(g, 16, 16, w - 32, h - 32, 18);
+      for (const [lw, al] of [[9, 0.10], [5, 0.22], [2.4, 0.85]]) {
+        g.lineWidth = lw;
+        g.strokeStyle = "rgba(180,214,255," + al + ")";
+        g.stroke();
+      }
+      roundRect(g, 20, 20, w - 40, h - 40, 15);
       g.lineWidth = 1.5;
-      g.strokeStyle = "rgba(150,190,240,0.16)";
+      g.strokeStyle = "rgba(180,214,255,0.16)";
       g.stroke();
+      // Corner brackets: an instrument face, not a text box.
+      g.strokeStyle = "rgba(180,214,255,0.55)";
+      g.lineWidth = 3;
+      for (const sx of [0, 1]) for (const sy of [0, 1]) {
+        const bx = sx ? w - 26 : 26, by = sy ? h - 26 : 26;
+        const dx = sx ? -22 : 22, dy = sy ? -18 : 18;
+        g.beginPath();
+        g.moveTo(bx + dx, by); g.lineTo(bx, by); g.lineTo(bx, by + dy);
+        g.stroke();
+      }
       g.save();
       g.translate(30, 34);
       payloadArt(g, w - 60, h - 68, sig, { ink: "#eef7ff", label: false });
@@ -684,6 +774,8 @@ window.plethoraBit = {
      */
     function paintFrame(g) {
       g.clearRect(0, 0, W, H);
+      const edge = 15;                                   // hazard band depth
+
       for (let i = 0; i < crew; i++) {
         const st = STATIONS[i];
         const a = anchor(i);
@@ -691,72 +783,124 @@ window.plethoraBit = {
         clipZone(g, i);
         clipOutsidePort(g);
 
-        // Plate gradient: brighter at the seat, sinking to black at the core.
-        const outer = ray((sectors[i][0] + ((sectors[i][1] - sectors[i][0] + 360) % 360) / 2), 1);
+        // Plate: lit steel where the player's hands are, sinking toward the
+        // core so the port's own light has something to fall on.
+        const mid = sectors[i][0] + ((sectors[i][1] - sectors[i][0] + 360) % 360) / 2;
+        const outer = ray(mid, 1);
         const gr = g.createLinearGradient(outer.x, outer.y, cx, cy);
-        gr.addColorStop(0, rgba(st.rgb, 0.16));
-        gr.addColorStop(0.35, "rgba(16,22,32,0.97)");
-        gr.addColorStop(1, "rgba(7,10,16,1)");
+        gr.addColorStop(0.00, "rgb(" + Math.round(20 + st.rgb[0] * 0.13) + "," +
+          Math.round(26 + st.rgb[1] * 0.13) + "," + Math.round(36 + st.rgb[2] * 0.13) + ")");
+        gr.addColorStop(0.34, "#141b27");
+        gr.addColorStop(0.72, "#0d131d");
+        gr.addColorStop(1.00, "#080c13");
         g.fillStyle = gr;
         g.fillRect(0, 0, W, H);
 
+        // Brushed grain. A flat fill on a phone reads as a bug, not a panel.
+        g.globalAlpha = 0.05;
+        for (let k = 0; k < 260; k++) {
+          const y = Math.random() * H;
+          g.strokeStyle = Math.random() < 0.5 ? "#ffffff" : "#000000";
+          g.lineWidth = Math.random() * 1.5;
+          g.beginPath();
+          g.moveTo(Math.random() * W, y);
+          g.lineTo(Math.random() * W + 60, y + (Math.random() - 0.5) * 2);
+          g.stroke();
+        }
+        g.globalAlpha = 1;
+
+        // Conduits: radial runs from the seat into the core, a few of them lit.
+        for (let k = 0; k < 15; k++) {
+          const deg = sectors[i][0] + ((sectors[i][1] - sectors[i][0] + 360) % 360) * (k + 0.5) / 15;
+          const p0 = ray(deg, portR / (H / 2) * 1.06), p1 = ray(deg, 3);
+          const lit = k % 4 === 1;
+          g.strokeStyle = lit ? rgba(st.rgb, 0.16) : "rgba(150,180,220,0.055)";
+          g.lineWidth = lit ? 2.2 : 1;
+          g.beginPath();
+          g.moveTo(p0.x, p0.y);
+          g.lineTo(p1.x, p1.y);
+          g.stroke();
+        }
+
         // Radar arcs stepping out from the port.
-        for (let k = 0; k < 9; k++) {
-          const r = portR + 22 + k * 46;
-          g.strokeStyle = rgba(st.rgb, k === 0 ? 0.20 : 0.055);
-          g.lineWidth = k === 0 ? 1.6 : 1;
+        for (let k = 0; k < 11; k++) {
+          const r = portR + 20 + k * 42;
+          g.strokeStyle = k === 0 ? rgba(st.rgb, 0.34)
+            : k % 3 === 0 ? rgba(st.rgb, 0.13) : "rgba(150,180,220,0.085)";
+          g.lineWidth = k === 0 ? 2 : k % 3 === 0 ? 1.4 : 1;
           g.beginPath();
           g.arc(cx, cy, r, 0, TAU);
           g.stroke();
         }
-        // Rivet grid — flat plating with nothing on it reads as unfinished.
-        g.fillStyle = "rgba(150,180,220,0.055)";
-        for (let ry = 26; ry < H; ry += 34) {
-          for (let rx = 20; rx < W; rx += 34) {
+
+        // Rivets.
+        g.fillStyle = "rgba(180,205,240,0.10)";
+        for (let ry = 24; ry < H; ry += 40) {
+          for (let rx = 20; rx < W; rx += 40) {
             g.beginPath();
-            g.arc(rx, ry, 1.3, 0, TAU);
+            g.arc(rx, ry, 1.5, 0, TAU);
             g.fill();
           }
         }
 
-        // Hazard banding along the outer edge of the wedge.
+        // Hazard banding along the screen edges this wedge actually reaches —
+        // the strip that ends up right under the player's hand.
         g.save();
-        g.globalAlpha = 0.30;
-        const bandR0 = Math.max(W, H) * 0.62, bandR1 = bandR0 + 16;
         g.beginPath();
-        g.arc(cx, cy, bandR1, 0, TAU);
-        g.arc(cx, cy, bandR0, 0, TAU, true);
+        g.rect(0, 0, W, edge);
+        g.rect(0, H - edge, W, edge);
+        g.rect(0, 0, edge, H);
+        g.rect(W - edge, 0, edge, H);
         g.clip();
-        for (let k = -H; k < W + H; k += 26) {
+        g.fillStyle = "rgba(6,9,14,0.9)";
+        g.fillRect(0, 0, W, H);
+        for (let k = -H; k < W + H; k += 24) {
           g.fillStyle = rgba(st.rgb, 0.55);
           g.beginPath();
-          g.moveTo(k, 0); g.lineTo(k + 13, 0); g.lineTo(k + 13 + H, H); g.lineTo(k + H, H);
+          g.moveTo(k, 0); g.lineTo(k + 12, 0); g.lineTo(k + 12 + H, H); g.lineTo(k + H, H);
           g.closePath(); g.fill();
         }
         g.restore();
+        // A hairline inboard of the hazard band, so it reads as an applied strip.
+        g.strokeStyle = rgba(st.rgb, 0.30);
+        g.lineWidth = 1;
+        g.strokeRect(edge + 0.5, edge + 0.5, W - edge * 2 - 1, H - edge * 2 - 1);
 
         // The lit rail: a thick arc hugging the port in the station's colour,
         // so at a glance you can see which slice of the rim belongs to you.
         g.save();
         wedgePath(g, i);
         g.clip();
-        for (const [w, al] of [[16, 0.07], [10, 0.13], [5, 0.55], [2, 1]]) {
+        for (const [w, al] of [[22, 0.05], [14, 0.10], [7, 0.28], [3.4, 0.75], [1.4, 1]]) {
           g.strokeStyle = rgba(st.rgb, al);
           g.lineWidth = w;
           g.beginPath();
-          g.arc(cx, cy, portR + 7, 0, TAU);
+          g.arc(cx, cy, portR + 9, 0, TAU);
           g.stroke();
         }
         g.restore();
 
-        // Station name, out near the seat and turned to face it.
+        // Station plate, out near the seat and turned to face it.
         g.save();
         g.translate(a.x, a.y);
         g.rotate(a.rad);
-        g.fillStyle = rgba(st.rgb, 0.85);
-        tracked(g, "STATION " + (i + 1), 0, -56, 9.5, 3.4, "center");
-        g.fillStyle = "rgba(219,230,245,0.30)";
-        tracked(g, st.name, 0, 62, 8.5, 3.2, "center");
+        g.fillStyle = rgba(st.rgb, 0.92);
+        tracked(g, "STATION " + (i + 1), 0, -58, 10, 3.8, "center");
+        g.fillStyle = "rgba(219,230,245,0.34)";
+        tracked(g, st.name, 0, 66, 8.5, 3.4, "center");
+        // Corner brackets around the readout slot.
+        g.strokeStyle = rgba(st.rgb, 0.34);
+        g.lineWidth = 1.6;
+        for (const sx of [-1, 1]) {
+          for (const sy of [-1, 1]) {
+            const bx = sx * (STRIP_W / 2 + 9), by = sy * (STRIP_H / 2 + 9);
+            g.beginPath();
+            g.moveTo(bx - sx * 13, by);
+            g.lineTo(bx, by);
+            g.lineTo(bx, by - sy * 11);
+            g.stroke();
+          }
+        }
         g.restore();
         g.restore();
       }
@@ -766,41 +910,49 @@ window.plethoraBit = {
         const p = ray(sectors[i][0], 3);
         g.save();
         clipOutsidePort(g);
-        g.strokeStyle = "rgba(6,9,14,0.95)";
-        g.lineWidth = 5;
+        g.strokeStyle = "rgba(4,6,11,0.95)";
+        g.lineWidth = 6;
         g.beginPath(); g.moveTo(cx, cy); g.lineTo(p.x, p.y); g.stroke();
-        g.strokeStyle = "rgba(150,180,220,0.22)";
+        g.strokeStyle = "rgba(170,200,240,0.28)";
         g.lineWidth = 1;
         g.beginPath(); g.moveTo(cx, cy); g.lineTo(p.x, p.y); g.stroke();
         g.restore();
       }
 
-      // Port bezel: a machined ring with a graduated scale around it.
+      // Port bezel: a machined collar with a graduated scale around it.
       g.save();
       clipOutsidePort(g);
-      const bez = g.createRadialGradient(cx, cy, portR, cx, cy, portR + 18);
-      bez.addColorStop(0, "#39465c");
-      bez.addColorStop(0.35, "#1b2434");
-      bez.addColorStop(1, "rgba(11,15,22,0)");
+      const bez = g.createRadialGradient(cx, cy, portR, cx, cy, portR + 26);
+      bez.addColorStop(0.00, "#4a596f");
+      bez.addColorStop(0.22, "#212b3c");
+      bez.addColorStop(1.00, "rgba(11,15,22,0)");
       g.fillStyle = bez;
       g.beginPath();
-      g.arc(cx, cy, portR + 18, 0, TAU);
+      g.arc(cx, cy, portR + 26, 0, TAU);
       g.fill();
-      g.strokeStyle = "rgba(190,215,250,0.55)";
-      g.lineWidth = 1.4;
+      g.strokeStyle = "rgba(205,228,255,0.70)";
+      g.lineWidth = 1.6;
       g.beginPath();
       g.arc(cx, cy, portR + 1.5, 0, TAU);
       g.stroke();
-      for (let k = 0; k < 72; k++) {
-        const a = k * TAU / 72;
-        const long = k % 6 === 0;
-        const r0 = portR + 6, r1 = portR + (long ? 15 : 10);
-        g.strokeStyle = long ? "rgba(200,225,255,0.42)" : "rgba(160,190,230,0.18)";
-        g.lineWidth = long ? 1.8 : 1;
+      for (let k = 0; k < 84; k++) {
+        const ang = k * TAU / 84;
+        const long = k % 7 === 0;
+        const r0 = portR + 7, r1 = portR + (long ? 19 : 12);
+        g.strokeStyle = long ? "rgba(210,232,255,0.55)" : "rgba(170,200,240,0.24)";
+        g.lineWidth = long ? 2 : 1;
         g.beginPath();
-        g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
-        g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+        g.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
+        g.lineTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
         g.stroke();
+      }
+      // Four bolt heads on the collar, on the mitre diagonals.
+      for (let k = 0; k < 4; k++) {
+        const ang = Math.PI / 4 + k * Math.PI / 2;
+        const bx = cx + Math.cos(ang) * (portR + 17), by = cy + Math.sin(ang) * (portR + 17);
+        g.beginPath(); g.arc(bx, by, 4.2, 0, TAU);
+        g.fillStyle = "#3d4a60"; g.fill();
+        g.strokeStyle = "rgba(210,232,255,0.4)"; g.lineWidth = 1; g.stroke();
       }
       g.restore();
     }
@@ -848,7 +1000,7 @@ window.plethoraBit = {
         g.fillRect(bx + k * seg, by, Math.max(1.4, seg - 1.1), 5);
       }
       g.fillStyle = "rgba(219,230,245,0.34)";
-      tracked(g, "OF " + settings.target, sx, y0 + 76, 7.5, 1.8, "center");
+      tracked(g, "OF " + settings.target, sx, y0 + 76, 7.5, 1.8, "center", 56);
 
       // --- centre panel --------------------------------------------------
       const mx = x0 + 64, mw = 124, mh = 64, my = y0 + 12;
@@ -866,7 +1018,7 @@ window.plethoraBit = {
         g.fillText(label, mx, y0 + 56);
         g.fillStyle = "rgba(219,230,245,0.62)";
         tracked(g, roundKind === "count" ? "TAP ON " + countTarget : T.rule,
-          mx, y0 + 75, 8.5, 1.9, "left");
+          mx, y0 + 75, 8.5, 1.9, "left", 190);
       } else if (phase === "stations") {
         roundRect(g, mx, my, mw, mh, 9);
         g.fillStyle = zoneArmed[i] ? rgba(st.rgb, 0.18) : "rgba(150,180,220,0.06)";
@@ -889,6 +1041,14 @@ window.plethoraBit = {
           g.clip();
           g.translate(mx, my);
           payloadArt(g, mw, mh, sig, { ink: "#e8f2ff" });
+          g.restore();
+        } else if (phase === "over") {
+          g.save();
+          roundRect(g, mx, my, mw, mh, 9);
+          g.clip();
+          g.fillStyle = winner === i ? st.ink : "rgba(219,230,245,0.34)";
+          tracked(g, winner === i ? "CORE HELD" : "STAND DOWN",
+            mx + mw / 2, my + mh / 2 + 4, 11, 2.4, "center");
           g.restore();
         } else if (dead) {
           g.save();
@@ -929,16 +1089,14 @@ window.plethoraBit = {
           if (locked[i]) { l1 = "SCRAM"; l2 = "LOCKED OUT"; }
         }
         g.fillStyle = c1;
-        tracked(g, l1, tx, y0 + 26, 10, 1.9, "left");
+        tracked(g, l1, tx, y0 + 26, 10, 1.9, "left", tw);
         if (l2) {
           g.fillStyle = "rgba(219,230,245,0.62)";
-          const s2 = fitFont(g, l2, tw, 8.5, "700", MONO);
-          tracked(g, l2, tx, y0 + 44, s2, 1.2, "left");
+          tracked(g, l2, tx, y0 + 44, 8.5, 1.2, "left", tw);
         }
         if (l3) {
           g.fillStyle = "rgba(219,230,245,0.40)";
-          const s3 = fitFont(g, l3, tw, 8.5, "700", MONO);
-          tracked(g, l3, tx, y0 + 60, s3, 1.2, "left");
+          tracked(g, l3, tx, y0 + 60, 8.5, 1.2, "left", tw);
         }
         // Round counter, bottom right of the strip.
         if (phase !== "over" && phase !== "stations") {
@@ -1192,6 +1350,7 @@ window.plethoraBit = {
           '<span style="font-size:19px;font-weight:800;color:' + (i === w ? s.ink : "rgba(219,230,245,.6)") + ';">' +
             scores[i] + "</span></div>").join("");
       el("over").style.display = "flex";
+      setSignal({ kind: null, on: false });      // no stale equation on the consoles
       dischargeCol = st;
       flashWave(st.hex, 1.8);
       blastMotes();
@@ -1235,8 +1394,8 @@ window.plethoraBit = {
     /* =============================================================
      * OVERLAY — one markup string on the runtime-owned root.
      * ============================================================= */
-    const btn = "pointer-events:auto;width:38px;height:38px;border-radius:12px;border:none;" +
-      "background:rgba(150,190,240,0.13);color:#dbe6f5;font-size:15px;line-height:1;" +
+    const btn = "pointer-events:auto;width:34px;height:34px;border-radius:11px;border:none;" +
+      "background:rgba(150,190,240,0.14);color:#dbe6f5;font-size:14px;line-height:1;" +
       "font-family:inherit;padding:0;";
     const bigBtn = (bg, fg) => "width:100%;padding:15px;border:none;border-radius:14px;font-family:inherit;" +
       "font-size:15px;font-weight:800;letter-spacing:0.10em;background:" + bg + ";color:" + fg + ";";
@@ -1256,8 +1415,9 @@ window.plethoraBit = {
       "-webkit-user-select:none;user-select:none;";
     root.innerHTML =
       /* --- chrome, faded out while a round is live so a corner slap still counts --- */
-      '<div data-el="chrome" style="position:absolute;right:10px;top:' + (safeT + 6) + 'px;' +
-        'display:flex;gap:7px;z-index:40;pointer-events:none;transition:opacity .25s;">' +
+      '<div data-el="chrome" style="position:absolute;right:8px;top:' + (safeT + 4) + 'px;' +
+        'display:flex;flex-direction:column;gap:6px;z-index:40;pointer-events:none;' +
+        'transition:opacity .25s;">' +
         '<button data-el="mute" aria-label="Sound" style="' + btn + '">' + (settings.mute ? "&#128263;" : "&#128266;") + "</button>" +
         '<button data-el="cog" aria-label="Settings" style="' + btn + '">&#9881;</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btn + '">?</button>' +
@@ -1266,8 +1426,8 @@ window.plethoraBit = {
       /* --- title --- */
       '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
         'align-items:center;justify-content:center;gap:0;z-index:50;padding:26px;text-align:center;' +
-        'pointer-events:auto;background:radial-gradient(circle at 50% 50%,rgba(4,7,13,0.55) 0%,' +
-        'rgba(4,7,13,0.90) 42%,rgba(3,5,10,0.97) 100%);">' +
+        'pointer-events:auto;background:radial-gradient(circle at 50% 50%,rgba(4,7,13,0.28) 0%,' +
+        'rgba(4,7,13,0.80) 40%,rgba(3,5,10,0.95) 100%);">' +
         '<div style="font-size:10px;letter-spacing:0.52em;text-transform:uppercase;opacity:0.45;">Reaction Duel</div>' +
         '<div style="font-size:47px;font-weight:800;letter-spacing:-0.025em;line-height:1.02;margin-top:10px;' +
           'background:linear-gradient(102deg,' + STATIONS[0].ink + ',' + STATIONS[2].ink + ' 38%,' +
@@ -1296,12 +1456,15 @@ window.plethoraBit = {
         'rgba(4,7,13,0.93) 45%,rgba(3,5,10,0.98) 100%);">' +
         '<div data-el="over-echo" style="position:absolute;top:' + (safeT + 22) + 'px;left:0;right:0;' +
           'transform:rotate(180deg);font-size:12px;font-weight:800;letter-spacing:0.30em;opacity:0.85;"></div>' +
-        '<div style="font-size:10px;letter-spacing:0.44em;text-transform:uppercase;opacity:0.45;">Core secured by</div>' +
-        '<div data-el="over-name" style="font-size:44px;font-weight:800;letter-spacing:-0.01em;margin-top:6px;"></div>' +
-        '<div data-el="over-stat" style="font-size:11px;letter-spacing:0.16em;margin-top:10px;"></div>' +
-        '<div data-el="over-rows" style="width:100%;max-width:232px;margin-top:18px;' +
-          'border-top:1px solid rgba(150,190,240,0.14);"></div>' +
-        '<div style="width:100%;max-width:232px;display:flex;flex-direction:column;gap:9px;margin-top:22px;">' +
+        '<div style="width:100%;max-width:272px;background:rgba(9,13,21,0.94);border-radius:22px;' +
+          'border:1px solid rgba(150,190,240,0.16);padding:22px 20px 18px;">' +
+          '<div style="font-size:9.5px;letter-spacing:0.44em;text-transform:uppercase;opacity:0.45;">Core secured by</div>' +
+          '<div data-el="over-name" style="font-size:42px;font-weight:800;letter-spacing:-0.01em;margin-top:4px;line-height:1.05;"></div>' +
+          '<div data-el="over-stat" style="font-size:10.5px;letter-spacing:0.16em;margin-top:8px;"></div>' +
+          '<div data-el="over-rows" style="width:100%;margin-top:16px;' +
+            'border-top:1px solid rgba(150,190,240,0.14);"></div>' +
+        "</div>" +
+        '<div style="width:100%;max-width:272px;display:flex;flex-direction:column;gap:9px;margin-top:16px;">' +
           '<button data-el="again" style="' + bigBtn("linear-gradient(96deg," + STATIONS[0].ink + "," + STATIONS[1].ink + ")", "#050a12") + '">REMATCH</button>' +
           '<button data-el="newcrew" style="' + bigBtn("rgba(150,190,240,0.13)", "#dbe6f5") + '">CHANGE CREW</button>' +
         "</div>" +
@@ -1497,6 +1660,7 @@ window.plethoraBit = {
      * FRAME
      * ============================================================= */
     const tmpCol = new THREE.Color();
+    const driftCol = new THREE.Color();
     const idleCol = new THREE.Color(IDLE.hex);
 
     function updateState(t) {
@@ -1536,8 +1700,9 @@ window.plethoraBit = {
       else if (phase === "charge" || phase === "armed") {
         target = clamp(0.26 + (t - chargeFrom) / 4600, 0, 1);
         if (phase === "armed" && roundKind === "go") target = 1;
-      } else if (phase === "stations") target = 0.10;
-      else target = 0.06;
+      } else if (phase === "stations") target = 0.34;
+      else if (phase === "menu") target = 0.42;
+      else target = 0.10;
       charge += (target - charge) * 0.10;
       sound.heat(phase === "charge" || phase === "armed" ? 0.25 + charge * 0.7 : 0.2);
     }
@@ -1545,7 +1710,15 @@ window.plethoraBit = {
     function updateCore(dt, t) {
       // Colour: the round's own hue, going green only where green means go.
       let want = idleCol;
-      if (phase === "brief") { tmpCol.setHex(TYPE[roundKind].hex); want = tmpCol; }
+      if (phase === "menu" || phase === "stations") {
+        // Drift through the four station colours: the crew picker gets to see
+        // whose colour is whose before anybody sits down.
+        const f = ((t * 0.00013) % 1) * 4;
+        const A = STATIONS[Math.floor(f) % 4], B = STATIONS[(Math.floor(f) + 1) % 4];
+        const k = f - Math.floor(f);
+        tmpCol.setHex(A.hex).lerp(driftCol.setHex(B.hex), k * k * (3 - 2 * k));
+        want = tmpCol;
+      } else if (phase === "brief") { tmpCol.setHex(TYPE[roundKind].hex); want = tmpCol; }
       else if (phase === "charge") { tmpCol.setHex(TYPE[roundKind].hex); want = tmpCol; }
       else if (phase === "armed") { tmpCol.setHex(roundKind === "go" ? GREEN.hex : TYPE[roundKind].hex); want = tmpCol; }
       else if (phase === "resolve" && dischargeCol) { tmpCol.setHex(dischargeCol.hex); want = tmpCol; }
@@ -1557,28 +1730,29 @@ window.plethoraBit = {
       const heat = charge + pulse * 0.13 * charge;
 
       coreMat.emissive.copy(coreCol);
-      coreMat.emissiveIntensity = 0.55 + heat * 3.2;
+      if (plasmaTex) plasmaTex.offset.x = (plasmaTex.offset.x + dt * (0.006 + charge * 0.05)) % 1;
+      coreMat.emissiveIntensity = 0.85 + heat * 2.6;
       core.scale.setScalar(1 + heat * 0.14);
       core.rotation.y += dt * (0.25 + charge * 1.1);
       core.rotation.x += dt * 0.12;
 
       cageMat.color.copy(coreCol);
-      cageMat.opacity = 0.16 + charge * 0.42;
+      cageMat.opacity = 0.10 + charge * 0.26;
       cage.rotation.y -= dt * (0.35 + charge * 2.2);
       cage.rotation.z += dt * (0.2 + charge * 0.9);
       cage.scale.setScalar(1 + heat * 0.10);
 
       for (const h of halos) {
         h.mesh.material.color.copy(coreCol);
-        h.mesh.material.opacity = h.base * (0.30 + heat * 1.25);
+        h.mesh.material.opacity = h.base * (0.35 + heat * 1.00);
         h.mesh.scale.setScalar(1 + heat * 0.10);
       }
       bloomMat.color.copy(coreCol);
-      bloomMat.opacity = 0.16 + heat * 0.62;
-      bloom.scale.setScalar(0.72 + heat * 0.45);
+      bloomMat.opacity = 0.07 + heat * 0.30;
+      bloom.scale.setScalar(0.62 + heat * 0.34);
 
       ringMat.emissive.copy(coreCol);
-      ringMat.emissiveIntensity = 0.25 + charge * 1.5;
+      ringMat.emissiveIntensity = 0.10 + charge * 0.75;
       const spin = 0.3 + charge * 3.6;
       rings[0].mesh.rotation.z += dt * spin * 0.9;
       rings[0].mesh.rotation.x += dt * spin * 0.35;
@@ -1589,7 +1763,7 @@ window.plethoraBit = {
       // Rods pull out as the core heats: the tension made mechanical.
       rodMat.emissive.copy(coreCol);
       rodMat.emissiveIntensity = 0.3 + charge * 1.1;
-      const rr = P(74) + charge * P(30);
+      const rr = P(82) + charge * P(24);
       for (const m of rods) {
         const a = m.userData.a + t * 0.00006 * (1 + charge * 4);
         m.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0);
@@ -1598,7 +1772,7 @@ window.plethoraBit = {
 
       // Motes: drawn inward while charging, thrown outward on discharge.
       moteMat.color.copy(coreCol);
-      moteMat.opacity = 0.35 + charge * 0.6;
+      moteMat.opacity = 0.25 + charge * 0.45;
       const inner = P(46), outer = P(150);
       for (let k = 0; k < MOTES; k++) {
         const m = moteState[k];
@@ -1621,7 +1795,7 @@ window.plethoraBit = {
       moteGeo.attributes.position.needsUpdate = true;
 
       coreLight.color.copy(coreCol);
-      coreLight.intensity = 0.8 + heat * 4.0;
+      coreLight.intensity = 0.7 + heat * 2.6;
 
       if (waveT > 0) {
         waveT -= dt * 1.9;
@@ -1714,7 +1888,7 @@ window.plethoraBit = {
       // transparent, so the additive pass never paints over the port itself.
       const cc = [Math.round(coreCol.r * 255), Math.round(coreCol.g * 255), Math.round(coreCol.b * 255)];
       const pulse = 0.5 + 0.5 * Math.sin(t * 0.001 * (2.4 + charge * 16));
-      const spillA = (0.10 + charge * 0.40) * (0.82 + pulse * 0.18);
+      const spillA = (0.055 + charge * 0.26) * (0.82 + pulse * 0.18);
       fx.save();
       clipOutsidePort(fx);
       fx.globalCompositeOperation = "lighter";

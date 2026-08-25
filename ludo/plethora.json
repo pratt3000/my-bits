@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Ludo",
+  "description": "Ludo for two to four people and one phone. Nothing in Ludo is hidden, so the phone goes flat in the middle and nobody ever picks it up — take the corner nearest your colour and your name plate faces you. A real die tumbles and settles, tokens hop one square at a time, and the full rules are here: entry only on a six, an extra roll for a six or a capture or coming home, three sixes voiding the third, immunity on the eight safe squares, blockades, and an exact count to come home.",
+  "tags": ["ludo", "multiplayer", "local-multiplayer", "board", "dice", "party", "classic", "3d"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "fastest_finish": {
+        "label": "Fastest Finish",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

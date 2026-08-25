@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Duskwing",
+  "description": "Two to four people, one phone, four moths flying the same burning cave. The screen splits into a horizontal band each — hold your band and your creature beats its wings, let go and it falls. Saw blades, crushers, rotors and closing gaps sweep in from the right; drift into the dark wall on the left and you are gone. Everything in the play layer is a pure black silhouette against an amber-to-teal sky with drifting god-rays, and the last wing still flying takes the round. The furthest the flock ever gets goes to the global board.",
+  "tags": ["multiplayer", "local-multiplayer", "arcade", "reflex", "silhouette", "four-player", "party", "endless"],
+  "permissions": ["backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "furthest_flight": {
+        "label": "Furthest Flight",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["following", "global"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
