@@ -411,6 +411,8 @@ window.plethoraBit = {
     let W = 0, H = 0;
     let SAFE_T = 0, SAFE_B = 0;
     let DECK_H = 0, TOP_Y = 0, BOT_Y = 0, BF_TOP = 0, BF_BOT = 0, BF_H = 0;
+    let STATUS_H = 0;
+    const BTN_PX = 36;      // the utility keys in the overlay, so the strip can clear them
     let DL = null, DSC = 1;
 
     function measure() {
@@ -419,11 +421,20 @@ window.plethoraBit = {
       SAFE_T = ctx.safeArea.top || 0;
       SAFE_B = ctx.safeArea.bottom || 0;
       const usable = H - SAFE_T - SAFE_B;
-      DECK_H = Math.round(clamp(Math.min(usable * 0.276, (usable - 250) / 2), 176, 224));
+      /* One deck, not two.
+       *
+       * Both players sit on the same side and take turns, so only the player
+       * who is shooting has any use for a control deck — the second copy was
+       * a full-size, fully dimmed, entirely dead duplicate of it taking a
+       * third of the screen. In its place is a strip that carries the things
+       * both players read: the two armour bars, the volley, and the utility
+       * keys. The battlefield takes everything that frees up. */
+      STATUS_H = Math.round(clamp(usable * 0.085, 46, 62));
+      DECK_H = Math.round(clamp(Math.min(usable * 0.34, usable - STATUS_H - 150), 150, 224));
       DSC = DECK_H / 210;
       TOP_Y = SAFE_T;
       BOT_Y = H - SAFE_B - DECK_H;
-      BF_TOP = TOP_Y + DECK_H;
+      BF_TOP = TOP_Y + STATUS_H;
       BF_BOT = BOT_Y;
       BF_H = BF_BOT - BF_TOP;
 
@@ -477,7 +488,8 @@ window.plethoraBit = {
      * share a viewpoint, and the deck belonging to whoever is shooting is the
      * one at the BOTTOM, under their hands. It swaps ends when the turn does.
      * Every pointer maps back through exactly this inverse and nothing else. */
-    function deckTop(who) { return who === turn ? BOT_Y : TOP_Y; }
+    // Only the shooting player has a deck, and it is always the bottom one.
+    function deckTop(who) { return BOT_Y; }
     function pushDeck(gg, who) {
       gg.save();
       gg.translate(0, deckTop(who));
@@ -1677,6 +1689,53 @@ window.plethoraBit = {
       }
     }
 
+    /**
+     * The strip above the battlefield, where the idle player's dead control
+     * deck used to be. It carries the one thing both players read all the
+     * time — how much armour each of them has left — and nothing else. Both
+     * read it from the same side, so nothing here turns over.
+     *
+     * There is no name plate on the bars: the two tanks on the battlefield are
+     * these two colours and nothing else is, so the colour says who it is more
+     * directly than four letters of pixel type would, and on a narrow screen
+     * the letters are what has to go anyway. Every width below is clamped —
+     * the first version of this went negative on a 306px screen and threw
+     * inside the frame, which took the control deck down with it.
+     */
+    function drawStatus(gg) {
+      if (!players || phase === "title") return;
+      gg.save();
+      gg.fillStyle = "#05060B";
+      gg.fillRect(0, TOP_Y, W, STATUS_H);
+
+      const keys = 10 + 3 * BTN_PX + 2 * 6 + 10;      // the DOM utility keys, plus air
+      const pad = 10;
+      const h = Math.max(10, Math.min(20, STATUS_H - 16));
+      const y = TOP_Y + Math.round((STATUS_H - h) / 2);
+      const room = W - keys - pad;
+      if (room > 40) {
+        const each = (room - 8) / 2;
+        players.forEach((p, i) => {
+          const bx = keys + i * (each + 8);
+          const numW = Math.min(26, each * 0.34);
+          const hbW = Math.max(6, each - numW - 4);
+          inset(gg, bx, y, hbW, h, 4);
+          const frac = clamp(p.hp / p.maxHp, 0, 1);
+          const segs = 10, sp = 1.6;
+          const segW = Math.max(1, (hbW - 6 - (segs - 1) * sp) / segs);
+          const filled = Math.ceil(frac * segs);
+          gg.fillStyle = frac > 0.5 ? p.ink : frac > 0.22 ? "#FFB03B" : "#FF4A4A";
+          for (let k = 0; k < filled; k++) gg.fillRect(bx + 3 + k * (segW + sp), y + 4, segW, h - 8);
+          blockText(gg, String(Math.max(0, Math.round(p.hp))), bx + each, y + (h - 11.9) / 2, 1.7,
+            { align: "right", colour: VALUE });
+        });
+      }
+
+      gg.fillStyle = "rgba(150,175,220,0.16)";
+      gg.fillRect(0, TOP_Y + STATUS_H - 1, W, 1);
+      gg.restore();
+    }
+
     function drawBattlefield(gg, t) {
       gg.save();
       gg.beginPath();
@@ -1695,14 +1754,13 @@ window.plethoraBit = {
         gg.fillStyle = "rgba(255,236,190," + (flash * 0.4).toFixed(3) + ")";
         gg.fillRect(0, BF_TOP, W, BF_H);
       }
-      // Volley counter, centred so it belongs to neither player. Nothing in
-      // this window rotates any more: both players read it from the same side.
+      // Volley counter, tucked into the top corner of the window so it takes
+      // no room of its own. Nothing here rotates: both players read it from
+      // the same side.
       if (phase !== "title") {
-        gg.globalAlpha = 0.5;
-        gg.save();
-        gg.translate(W / 2, BF_TOP + 9 + 7);
-        blockText(gg, "VOLLEY " + volley, 0, -7, 2, { align: "center", colour: "#F0C9B4" });
-        gg.restore();
+        gg.globalAlpha = 0.42;
+        blockText(gg, "VOLLEY " + volley, W - 12, BF_TOP + 10, 1.7,
+          { align: "right", colour: "#F0C9B4" });
         gg.globalAlpha = 1;
       }
       gg.restore();
@@ -1767,7 +1825,10 @@ window.plethoraBit = {
       plate(gg, R.x, R.y, nameW, R.h, 8, { fill: p.dim });
       blockText(gg, p.name, R.x + nameW / 2, R.y + (R.h - 21) / 2, 3,
         { align: "center", colour: "#FFFFFF", shadow: [1.5, 1.5] });
-      inset(gg, R.x + nameW + 8, R.y, R.w - nameW - 8 - 58 - 6, R.h, 7);
+      // No armour recess here any more: both players' armour is in the strip
+      // above the battlefield, where each of them can see the other's. A
+      // second copy of your own is the kind of duplication that makes a
+      // control deck feel busier than it is.
 
       // dome plate and protractor
       const D = DL.dome;
@@ -1869,9 +1930,13 @@ window.plethoraBit = {
     }
 
     function drawDeck(gg, who, t) {
-      const sig = deckSignature(who);
-      if (sig === deckSig[who]) return;
-      deckSig[who] = sig;
+      // The cache used to skip a repaint when nothing on the deck had
+      // changed, which worked while the deck's pixels were the last thing
+      // written to that band of the screen. They are not any more — the
+      // battlefield's seat label and the title scrim both reach into it — so
+      // a skipped frame leaves the deck wiped. One deck instead of two has
+      // already paid for the redraw.
+      deckSig[who] = deckSignature(who);
       const p = players[who];
       const active = phase !== "title" && phase !== "over" && who === turn;
       pushDeck(gg, who);
@@ -1907,21 +1972,6 @@ window.plethoraBit = {
         blockText(gg, "FIRE", DL.fire.x + DL.fire.w / 2, DL.fire.y + (DL.fire.h - 28) / 2, 4,
           { align: "center", colour: "#07131A" });
       }
-
-      // --- armour ---
-      const R = DL.rail;
-      const nameW = Math.round(blockW(p.name, 3) + 16);
-      const hbX = R.x + nameW + 8, hbW = R.w - nameW - 8 - 58 - 6;
-      const segs = 20, pad = 4;
-      const segW = (hbW - pad * 2 - (segs - 1) * 2) / segs;
-      const frac = p.hp / p.maxHp;
-      const filled = Math.ceil(frac * segs);
-      gg.fillStyle = frac > 0.5 ? p.ink : frac > 0.22 ? "#FFB03B" : "#FF4A4A";
-      for (let i = 0; i < filled; i++) gg.fillRect(hbX + pad + i * (segW + 2), R.y + 6, segW, R.h - 12);
-      gg.fillStyle = "rgba(120,140,180,0.09)";
-      for (let i = filled; i < segs; i++) gg.fillRect(hbX + pad + i * (segW + 2), R.y + 6, segW, R.h - 12);
-      blockText(gg, String(p.hp), R.x + R.w, R.y + (R.h - 21) / 2, 3,
-        { align: "right", colour: VALUE, shadow: [1.5, 1.5] });
 
       // --- readouts ---
       // Three digits (power 100, angle 100+) are wider than the value plate on
@@ -2168,13 +2218,11 @@ window.plethoraBit = {
       gg.fillRect(0, y + h - 2, W, 2);
       const label = lastReason && bannerFor === turn && lastReason === "SUDDEN DEATH"
         ? "SUDDEN DEATH" : p.name + " FIRES";
-      // The banner is addressed to one player, so it is drawn in that player's
-      // frame. The battlefield never rotates, but "EMBER FIRES" printed
-      // upside down at the exact moment it is Ember's turn is the one piece of
-      // world-space text nobody can defend.
+      // Both players read this from the same side — the rotation here was the
+      // last of the old two-sided seating, and it printed "EMBER FIRES"
+      // upside down at the exact moment it was Ember's turn.
       gg.save();
       gg.translate(W / 2, y + h / 2);
-      if (p.i === 1) gg.rotate(Math.PI);
       blockText(gg, label, 0, -10.5, 3,
         { align: "center", colour: "#07131A", shadow: [1.5, 1.5], shadowColour: "rgba(255,255,255,0.3)" });
       gg.restore();
@@ -2263,7 +2311,7 @@ window.plethoraBit = {
      * swallow every tap meant for a control deck.
      * ================================================================= */
     const FONTF = "Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-    const CHROME_Y = BF_TOP + 8;
+    const CHROME_Y = TOP_Y + Math.round((STATUS_H - 34) / 2);
     // The footnote hangs 66px below the button and needs another 40 for two
     // lines, so on a short screen the button has to come up rather than push
     // its own caption off the bottom of the phone.
@@ -2575,12 +2623,10 @@ window.plethoraBit = {
 
       if (phase !== "aim" || !players) return;
       if (held.size > 0) return;                 // one live pointer per deck
-      // Both players sit on the same side, so the bottom deck is always the
-      // one belonging to whoever is shooting — see deckTop(). Reading a seat
-      // off the screen half is what the old two-sided seating did, and it
-      // survived the rewrite: it made every one of player two's taps land as
-      // player one's, and player two could never fire at all.
-      const who = py >= BOT_Y ? turn : py <= BF_TOP ? 1 - turn : -1;
+      // There is one deck and it belongs to whoever is shooting. Everything
+      // above it is the battlefield and the status strip, neither of which
+      // takes a game input.
+      const who = py >= BOT_Y ? turn : -1;
       if (who !== turn) {
         if (who >= 0) sound.sting("fail");       // the dimmed deck refuses, audibly
         return;
@@ -2702,8 +2748,8 @@ window.plethoraBit = {
       if (SAFE_B > 0) g.fillRect(0, H - SAFE_B, W, SAFE_B);
 
       drawBattlefield(g, t);
-      drawDeck(g, 1, t);
-      drawDeck(g, 0, t);
+      drawStatus(g);
+      drawDeck(g, turn, t);
       drawBanner(g);
       if (phase === "title") { drawTitle(g, t); deckSig[0] = deckSig[1] = ""; }
       if (arsenalOpen) { drawArsenal(g); deckSig[0] = deckSig[1] = ""; }
@@ -2832,8 +2878,7 @@ window.plethoraBit = {
     g.fillStyle = "#05060B";
     g.fillRect(0, 0, W, H);
     drawBattlefield(g, performance.now());
-    drawDeck(g, 1, performance.now());
-    drawDeck(g, 0, performance.now());
+    drawDeck(g, turn, performance.now());
     drawTitle(g, performance.now());
     ctx.markVisualReady("battlefield drawn");
     ctx.platform.ready();
