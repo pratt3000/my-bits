@@ -17,6 +17,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`ninth-watchfire/`](ninth-watchfire)   | A five-minute animated story in twelve chapters, with one choice that's yours. |
 | [`perfect-drop/`](perfect-drop)         | ASMR timing toy — release a water drop just right for the perfect plink.    |
 | [`cairn/`](cairn)                       | Zen rock balancing — stack stones with real physics, three modes, three boards. |
+| [`deep-pockets/`](deep-pockets)         | Digging game — mine ten strata to the core of the Earth, sell the loot, upgrade the shovel. |
 
 ## Layout convention
 
