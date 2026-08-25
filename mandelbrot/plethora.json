@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Mandelbrot",
+  "description": "Pinch to fall into the Mandelbrot set, and keep falling — 68 levels of zoom, every one of them revealing structure that was not there before. A double-double reference orbit and GPU perturbation carry the picture millions of times past the point where ordinary 64-bit maths dissolves into blocks. Press and hold anywhere and that point sings: its orbit becomes the waveform, so the bulbs ring like bells and the chaotic boundary comes out gritty. Slide your finger to play it.",
+  "tags": [
+    "fractal",
+    "zoom",
+    "math",
+    "generative",
+    "art",
+    "sensory",
+    "relaxing",
+    "sound"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "deepest_level": {
+        "label": "Deepest Level",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

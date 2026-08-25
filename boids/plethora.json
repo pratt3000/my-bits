@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Boids",
+  "description": "A murmuration of thousands, running on nothing but Reynolds' three rules — separation, alignment, cohesion. Your finger is a predator they scatter and split around, or an attractor they wind into a glowing vortex. Fear spreads bird to bird, so one scare travels outward as a visible wave long after you let go. Colour is the flock's own heading, so you can watch alignment happen.",
+  "tags": [
+    "boids",
+    "flocking",
+    "murmuration",
+    "generative",
+    "art",
+    "simulation",
+    "sensory",
+    "relaxing"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": []
+}

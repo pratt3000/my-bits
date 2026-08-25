@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Wave Interference",
+  "description": "Every finger becomes a wave source. Move them and watch the fringes reorganise — and hear the same interference as two tones beating against each other.",
+  "tags": [
+    "art",
+    "fidget",
+    "sensory",
+    "generative",
+    "touch",
+    "physics",
+    "relaxing"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": []
+}
