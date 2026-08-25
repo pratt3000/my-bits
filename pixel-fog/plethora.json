@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Pixel Fog",
+  "description": "Nine places in San Francisco, each buried under a living mosaic of itself. Rub the pixels away with a finger and the picture surfaces — and with it one fact about the place that you almost certainly do not know: who really engineered the Golden Gate, what is still buried under Ocean Beach, why that steel arch at Fort Point exists at all. Clear one, swipe for the next.",
+  "tags": [
+    "art",
+    "history",
+    "facts",
+    "san-francisco",
+    "mosaic",
+    "pixel",
+    "touch",
+    "sensory",
+    "generative",
+    "relaxing",
+    "reveal"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": []
+}
