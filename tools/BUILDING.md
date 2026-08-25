@@ -229,3 +229,58 @@ changed.
 Two things are deliberately left in their own case: `lob` sets its chrome in a
 5x7 pixel face that has no lowercase glyphs (seven rows cannot carry both
 ascenders and descenders), and card ranks stay uppercase everywhere.
+
+## Sizing chrome against the phone
+
+A bit that sizes its board first and gives the chrome whatever is left looks
+right on the one viewport it was built against and falls apart on a short
+screen. Take the chrome's height first — a 44px control is the smallest a
+thumb hits reliably, so that is a floor, not a preference — and let the board
+have the rest. In Othello the board is centred, so a strip floor is just a cap
+on the cell size:
+
+```
+strip = H/2 - unit * (4 + RIM) - 6     =>     unit <= (H/2 - 6 - strip) / (4 + RIM)
+```
+
+The failure is invisible to the obvious check. Flex items default to
+`flex-shrink: 1`, so a column that has run out of height does not overflow —
+it squashes, and `scrollHeight` still reports that everything fits. What
+actually disappears is the space *between* the items, which is why
+`tools/harness/check-fit.mjs` measures gaps rather than heights, across six
+phone sizes, and fails on a gap that is generous on a large screen and gone on
+a small one. Measure those gaps with `offsetTop`/`offsetHeight`: half the
+chrome in a two-sided game sits in a container rotated 180° to face the other
+player, and a screen-space rect there reports every gap as a large negative
+number.
+
+On a two-sided board, clear the deeper of the two safe areas at *both* ends.
+Honouring each edge exactly puts the two halves 13px out of step, and out of
+step is exactly what a player notices on a layout that is supposed to be a
+mirror.
+
+## Seat identity is not a screen half
+
+Lob seated both players on the same side so neither reads their tanks upside
+down — but its touch router still decided *who* had touched from where the
+touch landed (`py >= BOT_Y ? 0 : 1`). The active player's deck is always the
+bottom one, so on player two's turn every tap arrived as player one's, failed
+the `who !== turn` test, and was refused. Player two could not fire at all and
+the match stalled on the first volley.
+
+When a game moves a seat, every place that infers a seat from geometry has to
+move with it. Grep for the screen-half comparisons; a rendering fix that
+leaves the input router on the old assumption produces a game that looks
+correct and cannot be played.
+
+## Two harness lessons
+
+Run play scripts **one at a time**. Six headless Chromium instances on one box
+starve each other, and a script that dispatches three simultaneous touches
+gets them serialised — which reads as a genuine "only one of three slaps
+registered" failure. A ratscrew failure that looked like a clean regression
+under A/B testing passed three times in a row on its own.
+
+`ctx.loadFont` in the mock has to actually load the font. A stub that returns
+`{status:"loaded"}` renders the system fallback, so a typography change looks
+applied when nothing has changed.
