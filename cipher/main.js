@@ -233,15 +233,25 @@ window.plethoraBit = {
      * WebViews have no OffscreenCanvas at all and a blank tile is a
      * broken game.
      * ============================================================= */
-    const dpr = Math.min(ctx.dpr || 1, 2);
+    /* Two different numbers that must not be confused.
+     *
+     * `bake` caps how much resolution the offscreen card art is drawn at — a
+     * memory choice, and 2x is already past what the eye resolves at this
+     * size. `dpr` is the scale the runtime used to size the real canvas
+     * buffer, so any transform written onto that buffer has to match it
+     * exactly. Using the capped one for the transform on a 3x phone draws
+     * every frame at two-thirds scale into the top-left corner and leaves
+     * the rest of the screen empty. */
+    const dpr = ctx.dpr || 1;
+    const bake = Math.min(dpr, 2);
     const HAS_OFFSCREEN = typeof OffscreenCanvas !== "undefined";
     function surface(w, h) {
       if (!HAS_OFFSCREEN) return null;
       try {
-        const s = new OffscreenCanvas(Math.max(1, Math.ceil(w * dpr)), Math.max(1, Math.ceil(h * dpr)));
+        const s = new OffscreenCanvas(Math.max(1, Math.ceil(w * bake)), Math.max(1, Math.ceil(h * bake)));
         const g = s.getContext("2d");
         if (!g) return null;
-        g.scale(dpr, dpr);
+        g.scale(bake, bake);
         return { s, g, w, h };
       } catch (_) { return null; }
     }

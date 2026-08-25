@@ -669,7 +669,17 @@ window.plethoraBit = {
      * ============================================================= */
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
     const g = canvas.getContext("2d");
-    const dpr = Math.min(ctx.dpr || 1, 2);
+    /* Two different numbers that must not be confused.
+     *
+     * `bake` caps how much resolution the offscreen card art is drawn at — a
+     * memory choice, and 2x is already past what the eye resolves at this
+     * size. `dpr` is the scale the runtime used to size the real canvas
+     * buffer, so any transform written onto that buffer has to match it
+     * exactly. Using the capped one for the transform on a 3x phone draws
+     * every frame at two-thirds scale into the top-left corner and leaves
+     * the rest of the screen empty. */
+    const dpr = ctx.dpr || 1;
+    const bake = Math.min(dpr, 2);
     let W = ctx.width, H = ctx.height;
 
     const CARD_W = 100, CARD_H = 140, CARD_R = 9, SHADOW_PAD = 22;
@@ -680,7 +690,7 @@ window.plethoraBit = {
     // for the corner a rotated card throws outward, which a flatter fan on a
     // longer radius does not.
     const FAN_ARC = 0.60, FAN_R = 455, FAN_STEP_MAX = 0.112;
-    const art = makeDeckArt(CARD_W, CARD_H, dpr);
+    const art = makeDeckArt(CARD_W, CARD_H, bake);
 
     /**
      * The card shadow, baked once. Live it is five stacked translucent fills
@@ -690,10 +700,10 @@ window.plethoraBit = {
      */
     const shadowArt = (function () {
       const sw = CARD_W + SHADOW_PAD * 2, sh = CARD_H + SHADOW_PAD * 2;
-      const s = surface(sw * dpr, sh * dpr);
+      const s = surface(sw * bake, sh * bake);
       if (!s) return null;
       const c = surfCtx(s);
-      c.scale(dpr, dpr);
+      c.scale(bake, bake);
       c.fillStyle = "#000";
       for (let i = 16; i >= 1; i--) {
         const k = i / 16;
@@ -875,10 +885,10 @@ window.plethoraBit = {
 
     let table = null;
     function bakeTable() {
-      const s = surface(W * dpr, H * dpr);
+      const s = surface(W * bake, H * bake);
       if (!s) { table = null; return; }
       const c = surfCtx(s);
-      c.scale(dpr, dpr);
+      c.scale(bake, bake);
       paintTable(c, true);
       table = s;
     }

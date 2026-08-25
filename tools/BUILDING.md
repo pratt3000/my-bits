@@ -284,3 +284,25 @@ under A/B testing passed three times in a row on its own.
 `ctx.loadFont` in the mock has to actually load the font. A stub that returns
 `{status:"loaded"}` renders the system fallback, so a typography change looks
 applied when nothing has changed.
+
+## Two different pixel ratios
+
+The runtime sizes the canvas buffer at the device's real pixel ratio and
+installs a matching `setTransform`. A bit that caps the ratio for its own
+texture bakes — sensible, 2x is already past what the eye resolves on a
+playing card — must not reuse that capped number on the real context:
+
+```js
+const dpr  = ctx.dpr || 1;        // the buffer's scale. Transforms must match it.
+const bake = Math.min(dpr, 2);    // offscreen texture resolution. A memory cap.
+```
+
+Getting this wrong draws every frame at two-thirds scale into the top-left
+corner and leaves the rest of the screen empty. It is invisible at 2x, which
+is what a desktop-sized harness run defaults to, and it is what most phones
+actually are not: iPhone 12 and up, and most flagship Android, are 3x.
+`tools/harness/check-dpr.mjs` runs every bit at 3x and compares the three
+other quadrants against the top-left.
+
+WebGL bits are not affected in the same way — they cap the drawing buffer and
+let CSS stretch it, which costs sharpness but still fills the screen.

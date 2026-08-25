@@ -720,11 +720,21 @@ window.plethoraBit = {
      * ============================================================= */
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
     const g = canvas.getContext("2d");
-    const dpr = Math.min(ctx.dpr || 1, 2);
+    /* Two different numbers that must not be confused.
+     *
+     * `bake` caps how much resolution the offscreen card art is drawn at — a
+     * memory choice, and 2x is already past what the eye resolves at this
+     * size. `dpr` is the scale the runtime used to size the real canvas
+     * buffer, so any transform written onto that buffer has to match it
+     * exactly. Using the capped one for the transform on a 3x phone draws
+     * every frame at two-thirds scale into the top-left corner and leaves
+     * the rest of the screen empty. */
+    const dpr = ctx.dpr || 1;
+    const bake = Math.min(dpr, 2);
     let W = ctx.width, H = ctx.height;
 
     const CARD_W = 100, CARD_H = 140, CARD_R = 9, SHADOW_PAD = 22;
-    art = makeDeckArt(CARD_W, CARD_H, dpr);
+    art = makeDeckArt(CARD_W, CARD_H, bake);
 
     /**
      * The card shadow, baked once.
@@ -736,10 +746,10 @@ window.plethoraBit = {
      */
     const shadowArt = (function () {
       const sw = CARD_W + SHADOW_PAD * 2, sh = CARD_H + SHADOW_PAD * 2;
-      const s = surface(sw * dpr, sh * dpr);
+      const s = surface(sw * bake, sh * bake);
       if (!s) return null;
       const c = surfCtx(s);
-      c.scale(dpr, dpr);
+      c.scale(bake, bake);
       c.fillStyle = "#001622";
       for (let i = 20; i >= 1; i--) {
         const k = i / 20;                       // 1 is the outermost ring
@@ -967,10 +977,10 @@ window.plethoraBit = {
     let water = null;
     function bakeWater() {
       bakeMark();
-      const s = surface(W * dpr, H * dpr);
+      const s = surface(W * bake, H * bake);
       if (!s) { water = null; return; }
       const c = surfCtx(s);
-      c.scale(dpr, dpr);
+      c.scale(bake, bake);
       paintWater(c, true);
       water = s;
     }
@@ -1069,10 +1079,10 @@ window.plethoraBit = {
     /** One bubble, baked: forty-four of them live was ninety stroked arcs a frame. */
     const bubbleArt = (function () {
       const R = 16;
-      const s = surface(R * 2 * dpr, R * 2 * dpr);
+      const s = surface(R * 2 * bake, R * 2 * bake);
       if (!s) return null;
       const c = surfCtx(s);
-      c.scale(dpr, dpr);
+      c.scale(bake, bake);
       c.translate(R, R);
       const r = R - 3;
       c.fillStyle = "rgba(242,253,255,0.20)";
@@ -1895,10 +1905,10 @@ window.plethoraBit = {
       const tw = pc.measureText("GO FISH").width;
       markW = Math.ceil(tw + markBig * 0.42);
       markH = Math.ceil(markBig * 1.5);
-      const s = surface(markW * dpr, markH * dpr);
+      const s = surface(markW * bake, markH * bake);
       if (!s) { mark = null; return; }
       const c = surfCtx(s);
-      c.scale(dpr, dpr);
+      c.scale(bake, bake);
       c.textAlign = "center"; c.textBaseline = "middle";
       c.font = "900 " + markBig + "px " + FONT;
       c.lineJoin = "round";
@@ -2985,7 +2995,7 @@ window.plethoraBit = {
       pills(shell.el("paces"), [0, 1, 2], ["Calm", "Brisk", "Snappy"],
         () => settings.pace, (v) => { settings.pace = v; }),
       pills(shell.el("backs"), [0, 1, 2], BACKS.map((b) => b.name),
-        () => settings.back, (v) => { settings.back = v; if (art) art.back = bakeBack(CARD_W, CARD_H, dpr); }),
+        () => settings.back, (v) => { settings.back = v; if (art) art.back = bakeBack(CARD_W, CARD_H, bake); }),
     ].filter(Boolean);
 
     /** One glyph, struck through when muted — an emoji speaker would drag a
