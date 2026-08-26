@@ -866,9 +866,9 @@ window.plethoraBit = {
         'align-items:center;justify-content:center;background:rgba(16,15,13,0.92);z-index:70;padding:24px;">' +
         '<div style="max-width:320px;width:100%;' + PLAQUE + 'padding:22px;">' +
           '<div style="font-size:19px;font-weight:700;margin-bottom:15px;">Settings</div>' +
-          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">Board</div>' +
+          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.7;">Board</div>' +
           '<div data-el="themes" style="display:flex;gap:7px;margin:9px 0 17px;"></div>' +
-          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">Legal move hints</div>' +
+          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.7;">Legal move hints</div>' +
           '<div data-el="hints" style="display:flex;gap:7px;margin:9px 0 4px;"></div>' +
           '<button data-el="cogp-close" style="' + BIG + 'margin-top:20px;">Done</button>' +
         '</div>' +

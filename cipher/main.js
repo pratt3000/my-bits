@@ -2049,11 +2049,11 @@ window.plethoraBit = {
             '<div data-el="mutes" style="display:flex;gap:6px;"></div>' +
             '<div style="' + label + 'margin:16px 0 7px;">Red sits at the</div>' +
             '<div data-el="seats" style="display:flex;gap:6px;"></div>' +
-            '<div style="font-size:11.5px;opacity:0.5;margin-top:7px;line-height:1.5;">' +
+            '<div style="font-size:11.5px;opacity:0.66;margin-top:7px;line-height:1.5;">' +
               'Each team gets the band at its own edge of the phone, turned to face it.</div>' +
             '<div style="' + label + 'margin:16px 0 7px;">Players</div>' +
             '<div data-el="counts2" style="display:flex;gap:6px;flex-wrap:wrap;"></div>' +
-            '<div style="font-size:11.5px;opacity:0.5;margin:7px 0 4px;line-height:1.5;">' +
+            '<div style="font-size:11.5px;opacity:0.66;margin:7px 0 4px;line-height:1.5;">' +
               'Split into two teams with a spymaster each. Applies on the next deal.</div>' +
           '</div>' +
           '<button data-el="cogp-close" style="' + bigBtn("rgba(255,255,255,0.11)", CREAM) + 'margin-top:14px;flex:0 0 auto;">Done</button>' +

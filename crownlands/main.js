@@ -793,7 +793,7 @@ window.plethoraBit = {
       '<div data-el="hand" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'align-items:center;justify-content:center;background:rgba(7,22,31,0.96);z-index:60;">' +
         '<div data-el="hand-inner" style="' + PANEL + 'padding:26px 30px;text-align:center;max-width:280px;">' +
-          '<div style="font-size:11px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.55;">Round ' +
+          '<div style="font-size:11px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.72;">Round ' +
             '<span data-el="hand-round">1</span></div>' +
           '<div data-el="hand-name" style="font-size:34px;font-weight:900;margin:6px 0 2px;"></div>' +
           '<div data-el="hand-what" style="font-size:14px;opacity:0.7;"></div>' +
@@ -804,19 +804,19 @@ window.plethoraBit = {
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:10px;' +
         'background:rgba(7,22,31,0.94);z-index:50;padding:26px;text-align:center;">' +
-        '<div style="font-size:11px;letter-spacing:0.4em;text-transform:lowercase;opacity:0.5;">Lay the phone flat</div>' +
+        '<div style="font-size:11px;letter-spacing:0.4em;text-transform:lowercase;opacity:0.66;">Lay the phone flat</div>' +
         '<div style="font-size:52px;font-weight:900;letter-spacing:-0.02em;line-height:1.05;color:' + GOLD + ';">Crownlands</div>' +
         '<div style="font-size:14.5px;opacity:0.68;max-width:280px;line-height:1.55;">' +
           'Draft land from the shared lane and lay it into your own five-by-five kingdom. ' +
           'Land only scores where crowns stand on it.</div>' +
-        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;margin-top:14px;">Players</div>' +
+        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.66;margin-top:14px;">Players</div>' +
         '<div data-el="pc" style="display:flex;gap:8px;"></div>' +
         '<button data-el="go" style="' + BIG + 'max-width:230px;margin-top:16px;background:' + GOLD + ';color:#3A2314;">Begin</button>' +
       '</div>' +
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'align-items:center;justify-content:center;background:rgba(7,22,31,0.95);z-index:65;padding:22px;">' +
         '<div style="max-width:330px;width:100%;' + PANEL + 'padding:22px;">' +
-          '<div style="font-size:11px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.55;">Final</div>' +
+          '<div style="font-size:11px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.72;">Final</div>' +
           '<div data-el="over-body"></div>' +
           '<button data-el="again" style="' + BIG + 'margin-top:16px;background:#3A2314;color:' + PARCH + ';">Play again</button>' +
         '</div>' +
@@ -966,7 +966,7 @@ window.plethoraBit = {
           'padding:9px 0;border-bottom:1px solid rgba(58,35,20,0.14);">' +
           '<span style="font-size:16px;font-weight:800;color:' + r.p.deep + ';">' +
             (n + 1) + '. ' + esc(r.p.name) + '</span>' +
-          '<span style="font-size:13px;opacity:0.6;">' +
+          '<span style="font-size:13px;opacity:0.74;">' +
             r.s.parts.length + ' crowned ' + (r.s.parts.length === 1 ? "region" : "regions") +
             (r.s.bonus ? ' · +' + r.s.bonus : '') + '</span>' +
           '<span style="font-size:20px;font-weight:900;">' + r.s.total + '</span>' +

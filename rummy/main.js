@@ -706,6 +706,7 @@ window.plethoraBit = {
       // reaches for a dozen times a hand, and a target that slides around as
       // melds form is a target you have to look for every time.
       const F = L.feltH / 575;                    // scales the rhythm on other screens
+      L.F = F;                                    // the tray reads it back at layout time
       L.oppY = L.feltY + 42 * F;
       L.pileY = L.feltY + 140 * F;
       L.meldRow = L.hh + 10;
@@ -1284,15 +1285,22 @@ window.plethoraBit = {
       // thing a thumb keeps coming back to.
       const measured = layGroups(groups, W / 2, L.feltW / 2 - 12, 0, L.hw, L.hh, L.hw * 0.56, 15, 10);
       const rows = Math.max(1, measured.rows);
-      const trayH = rows * L.hh + (rows - 1) * 10 + 26;
+      // The tray's padding and the rule above it scale with the felt like the
+      // rest of the rhythm. Left at their full-height values on the 517px card
+      // the app embeds the bit in, the tray grew up far enough that its rule
+      // landed on the "stock / discard" captions — two tracked labels of the
+      // same size and the same parchment, eight pixels apart, reading as one
+      // jumbled row.
+      const pad = 26 * L.F;
+      const trayH = rows * L.hh + (rows - 1) * 10 + pad;
       const trayTop = L.trayBot - trayH;
       const yTop = trayTop + (trayH - measured.height) / 2;
       const packed = layGroups(groups, W / 2, L.feltW / 2 - 12,
-                               measured.rows ? yTop : trayTop + 13, L.hw, L.hh, L.hw * 0.56, 15, 10);
+                               measured.rows ? yTop : trayTop + pad / 2, L.hw, L.hh, L.hw * 0.56, 15, 10);
       view.bands = packed.bands;
       view.meldRows = packed.rows;
       view.trayTop = trayTop;
-      view.ruleY = trayTop - 13;
+      view.ruleY = trayTop - 13 * L.F;
       // z climbs left to right along the row. Sprites are drawn in z order and
       // ties fall back to the order the Map happens to hold them in — which is
       // deal order, not layout order — so a flat z let a card sit on top of the

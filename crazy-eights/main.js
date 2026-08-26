@@ -2265,7 +2265,7 @@ window.plethoraBit = {
           '<button data-el="cover-btn" style="' + bigBtn("#fff", "#1a0a03") +
             'margin-top:20px;font-size:15px;"></button>' +
         '</div>' +
-        '<div style="font-size:12px;opacity:0.44;line-height:1.5;margin-top:12px;max-width:260px;">' +
+        '<div style="font-size:12px;opacity:0.62;line-height:1.5;margin-top:12px;max-width:260px;">' +
           'Only you should see the next screen.<br>It covers itself again the moment you play.</div>' +
       '</div>' +
 
@@ -2329,7 +2329,7 @@ window.plethoraBit = {
           '<div data-el="rules" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + label + '">Play to</div>' +
           '<div data-el="targs" style="display:flex;gap:7px;margin:9px 0 4px;"></div>' +
-          '<div style="font-size:12px;opacity:0.45;margin-top:10px;line-height:1.45;">' +
+          '<div style="font-size:12px;opacity:0.64;margin-top:10px;line-height:1.45;">' +
             'The target applies straight away. A new player count starts a fresh game.</div>' +
           '<button data-el="cogp-close" style="' + bigBtn(GOLD, "#241704") + 'margin-top:16px;">Done</button>' +
           // Somebody has to be able to walk away from a half-played game
