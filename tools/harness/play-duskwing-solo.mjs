@@ -43,6 +43,17 @@ const state = () => P(() => ({ phase: window.__DUSKWING__.phase, metres: window.
                                birds: window.__DUSKWING__.birds() }));
 check((await state()).birds.length === 1, "one creature in the cave");
 
+/* The dark edge, measured rather than assumed.
+ *
+ * The cave reels a creature back toward the wall, and beating its wings is
+ * the only thing that buys the ground back — so a creature flown neatly down
+ * the middle of the tunnel, which is what this loop does, should lose ground
+ * slowly. Slowly is the whole point: the pull used to be steep enough to
+ * claim a perfectly flown creature in three seconds, with nothing on screen
+ * saying why, and the four-player script asserted that somebody had to be
+ * killed by it — an assertion that was holding that balance in place.
+ */
+const sxTrace = [];
 let held = true;
 for (let step = 0; step < 130; step++) {
   const st = await state();
@@ -53,6 +64,7 @@ for (let step = 0; step < 130; step++) {
   // reeling it back toward the dark edge — so the way this is actually played
   // is to hold almost continuously and stop only under the ceiling. Steering
   // for the middle of the tunnel flies a tidy line straight into the wall.
+  sxTrace.push({ sx: b.sx, t: st.simT });
   const want = b.n + b.vn * 0.30 > b.ceil + 0.14;
   if (want !== held) { held = want; if (want) await bit.fingerDown(1, zone.x, zone.y); else await bit.fingerUp(1); }
   if (step === 20) console.log("fps:", st.fps, "simT:", st.simT.toFixed(1));
@@ -82,6 +94,21 @@ console.log("card:", JSON.stringify(card));
 check(!/FLEW FURTHEST/i.test(card.who || ""), "the result does not name a winner of a one-creature race");
 check(card.listShown === false, "the one-row scoreboard is not shown");
 check(!!card.dist && card.dist !== "0", "the result card carries the distance");
+
+if (sxTrace.length > 8) {
+  const a = sxTrace[0], z = sxTrace[sxTrace.length - 1];
+  // A rate, not a total: the total only says how long the flight was.
+  const rate = (z.sx - a.sx) / Math.max(0.5, z.t - a.t);
+  console.log("ground against the dark edge:", rate.toFixed(1), "px/s over",
+              (z.t - a.t).toFixed(1) + "s");
+  // This loop flies the way the game wants to be flown — beating up to the
+  // ceiling and gliding back down — which is a high fraction of the time on
+  // the pad, and that has to be enough to hold the dark edge off. It used not
+  // to be: at -29px/s in a 206px corridor the pull claimed a perfectly flown
+  // creature in about three seconds, with nothing on screen saying why. That
+  // is the regression this number guards.
+  check(rate > -12, `beating for your ground holds the dark edge off (${rate.toFixed(1)}px/s)`);
+}
 
 const subs = await P(() => window.__BIT_LOG__.filter(e => e.kind === "memory.record.submit").map(e => e.args));
 check(subs.length > 0, "the solo flight still reaches the leaderboard");

@@ -1036,19 +1036,36 @@ window.plethoraBit = {
         // there never will be — this is the whole tension of the game.
         //
         // The numbers are tuned around one number: 0.56, the fraction of the
-        // time on the pad that exactly holds altitude. Holding POSITION costs
-        // more than that — about 0.66 — so simply hovering loses ground, and
-        // the only way to bank distance is to climb hard and then dive back
-        // through the gap you were aiming for anyway. That is the rhythm the
-        // whole game is made of. Even flown well a climb-and-dive cycle bleeds
-        // about 8px a second, so no flight lasts forever — which is what a
-        // distance record wants: everyone is eventually reeled into the dark,
-        // and the only question is how long you held it off.
-        // The pull back is the cave itself advancing, so it scales with the
-        // scroll: the further you get, the harder the dark on the left
-        // reels you in, and the ramp of an endless flight is expressed
-        // through the wall and not only through hazard density.
-        const idle = -scroll * 0.64;
+        // time on the pad that exactly holds altitude. Holding POSITION has to
+        // cost a little more than that, so that banking distance means working
+        // for it — climbing hard and diving back through the gap you were
+        // aiming for anyway. That is the rhythm the whole game is made of.
+        //
+        // It used to cost a lot more: 0.69, against the 0.40 that flying
+        // neatly down the middle of the tunnel actually allows. A player who
+        // threaded the cave perfectly lost 29px a second in a 206px corridor
+        // and was dead in three, with nothing on screen explaining why — the
+        // game punished good flying and rewarded a rhythm it never taught.
+        //
+        // Measured with a pilot holding the middle of the tunnel, the
+        // multiplier below gives:
+        //   0.64  -29px/s   dead against the wall in ~3s
+        //   0.58  -20px/s   dead against the wall in ~7s
+        //   0.52  -10px/s   dead against the wall in ~11s
+        //   0.50   -7px/s   76m, and the cave kills it instead
+        //   0.42  +11px/s   pinned against XMAX, no pressure at all
+        // 0.52 puts holding POSITION at the same 0.56 on the pad as holding
+        // ALTITUDE: hovering exactly breaks even, anything lazier is reeled
+        // in, and the climb-and-dive rhythm — around 0.61 — buys ground. The
+        // wall is a weight on every flight again without being the thing that
+        // ends a good one, and it is three times more forgiving than the
+        // number that made a perfectly flown creature dead in three seconds.
+        //
+        // No flight lasts forever, which is what a distance record wants, but
+        // that now comes from the ramp rather than from the opening seconds:
+        // the pull is the cave advancing, so it scales with the scroll, and by
+        // the time the scroll reaches its cap no duty cycle holds station.
+        const idle = -scroll * 0.52;
         b.vx += (idle - b.vx) * (1 - Math.pow(0.16, dt));
         b.vx = clamp(b.vx, -U * 0.35, U * 0.75);   // same values at four players, in band units
         b.sx += b.vx * dt;
@@ -1396,6 +1413,24 @@ window.plethoraBit = {
       /* --- claim / countdown prompts ---------------------------------- */
       if (phase === "claim") drawClaim(t);
       if (phase === "countdown") drawCount(t);
+
+      /* The one thing a first-time player does not work out on their own:
+       * a wing beat is forward as well as up, and letting the creature glide
+       * a tidy line down the middle of the tunnel hands it to the dark edge.
+       * Shown over the wall itself, for the first few seconds of the first
+       * flight anybody has flown on this phone, and never again. */
+      if (phase === "play" && settings.best < 30 && elapsed < 3.6) {
+        g.save();
+        g.globalAlpha = clamp(Math.min(elapsed / 0.5, (3.6 - elapsed) / 0.8), 0, 1) * 0.92;
+        g.textAlign = "left"; g.textBaseline = "middle";
+        for (const band of bands) {
+          platedLine(g, "KEEP BEATING — THE DARK PULLS YOU BACK",
+                     WALL + 10, band.mid - U * 0.30,
+                     Math.min(11, U * 0.085), 2.2, "#FFE9B8", 1);
+        }
+        g.restore();
+        g.globalAlpha = 1;
+      }
       if (phase === "play" && birds.filter((x) => x.alive).length === 1 && birds.length > 1) {
         const b = birds.find((x) => x.alive);
         g.save();
@@ -2031,7 +2066,7 @@ window.plethoraBit = {
       '<div data-el="title" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         'flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:26px;' +
         'text-align:center;background:' + TITLE_SCRIM + ';">' +
-        '<div style="' + capLine + 'opacity:0.72;">Hold your band · fly or fall</div>' +
+        '<div style="' + capLine + 'opacity:0.72;">Every wing beat is height and ground</div>' +
         '<div data-el="wordmark" style="font-family:' + DISP + ';font-size:46px;line-height:1.0;' +
           'font-weight:700;white-space:nowrap;letter-spacing:0.11em;margin:12px -0.11em 2px 0;' +
           'background:linear-gradient(178deg,#FFF6DE 8%,#FCDC5A 46%,#FA6E1E 92%);' +
@@ -2086,10 +2121,12 @@ window.plethoraBit = {
               'player one has the bottom.</li>' +
             '<li><b>Hold anywhere in your own band</b> and your creature beats its wings. ' +
               'Let go and it falls. That is the only control.</li>' +
+            '<li><b>A wing beat carries you forward as well as up</b>, and the cave is ' +
+              'always reeling you back toward the dark edge on the left. ' +
+              '<b>Touch it and you are gone.</b> Stop beating and it will have you — ' +
+              'flying a tidy line down the middle is not enough.</li>' +
             '<li>Rest your thumb on the glowing edge at the left of your band. ' +
               'Everyone presses at once — there are no turns to wait for.</li>' +
-            '<li>Flapping also carries you forward; falling lets the cave pull you back ' +
-              'toward that dark edge. <b>Touch it and you are gone.</b></li>' +
             '<li>Saw blades, crushers, rotors and spikes kill on contact. So does the rock.</li>' +
             '<li>Every band gets its own tunnel, dealt from the same deck: ' +
               'the same blades at the same odds, in a different order.</li>' +
