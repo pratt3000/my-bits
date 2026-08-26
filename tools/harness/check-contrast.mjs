@@ -215,8 +215,19 @@ export async function scanBit(bit, { drive = true } = {}) {
         await h.tap(p.x, p.y); await h.wait(900);
         add(name, await h.probe(PROBE));
         await h.probe(() => {
-          for (const b of document.querySelectorAll("button"))
-            if (/done|got it|close|back/i.test(b.textContent)) { b.click(); return; }
+          // Only a button a finger could actually reach. Several bits keep a
+          // hidden "Got it" earlier in the DOM than the visible one, and
+          // clicking that returned without dismissing anything — the panel
+          // stayed open and swallowed the next tap, so the state after it was
+          // never reached and its text was never checked at all.
+          for (const b of document.querySelectorAll("button")) {
+            if (!/done|got it|close|back/i.test(b.textContent)) continue;
+            const r = b.getBoundingClientRect();
+            const cs = getComputedStyle(b);
+            if (!r.width || !r.height || cs.visibility === "hidden" || !b.offsetParent) continue;
+            b.click();
+            return;
+          }
         });
         await h.wait(500);
       }

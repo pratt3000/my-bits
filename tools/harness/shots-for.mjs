@@ -58,8 +58,19 @@ for (const [tag, viewport, safeArea] of DEVICES) {
       await h.wait(1000);
       console.log(await shot("4-" + name));
       await P(() => {
-        for (const b of document.querySelectorAll("button"))
-          if (/done|got it|close|back/i.test(b.textContent)) { b.click(); return; }
+        // Only a button a finger could actually reach. Several bits keep a
+        // hidden "Got it" earlier in the DOM than the visible one, and
+        // clicking that returned without dismissing anything — the panel
+        // stayed open and swallowed the next tap, so the state after it was
+        // never reached and never photographed.
+        for (const b of document.querySelectorAll("button")) {
+          if (!/done|got it|close|back/i.test(b.textContent)) continue;
+          const r = b.getBoundingClientRect();
+          const cs = getComputedStyle(b);
+          if (!r.width || !r.height || cs.visibility === "hidden" || !b.offsetParent) continue;
+          b.click();
+          return;
+        }
       });
       await h.wait(500);
     }
