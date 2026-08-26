@@ -790,8 +790,9 @@ window.plethoraBit = {
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
       // The handoff card. It covers the flip, so nobody watches the board spin.
-      '<div data-el="hand" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
-        'align-items:center;justify-content:center;background:rgba(7,22,31,0.96);z-index:60;">' +
+      '<div data-el="hand" style="box-sizing:border-box;position:absolute;inset:0;pointer-events:auto;' +
+        'display:none;align-items:center;align-items:safe center;justify-content:center;' +
+        'overflow-y:auto;padding:16px;background:rgba(7,22,31,0.96);z-index:60;">' +
         '<div data-el="hand-inner" style="' + PANEL + 'padding:26px 30px;text-align:center;max-width:280px;">' +
           '<div style="font-size:11px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.72;">Round ' +
             '<span data-el="hand-round">1</span></div>' +
@@ -801,8 +802,9 @@ window.plethoraBit = {
             PARCH + ';">Ready</button>' +
         '</div>' +
       '</div>' +
-      '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
-        'flex-direction:column;align-items:center;justify-content:center;gap:10px;' +
+      '<div data-el="menu" style="box-sizing:border-box;position:absolute;inset:0;pointer-events:auto;' +
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+        'justify-content:safe center;overflow-y:auto;gap:10px;' +
         'background:rgba(7,22,31,0.94);z-index:50;padding:26px;text-align:center;">' +
         '<div style="font-size:11px;letter-spacing:0.4em;text-transform:lowercase;opacity:0.66;">Lay the phone flat</div>' +
         '<div style="font-size:52px;font-weight:900;letter-spacing:-0.02em;line-height:1.05;color:' + GOLD + ';">Crownlands</div>' +
@@ -813,16 +815,21 @@ window.plethoraBit = {
         '<div data-el="pc" style="display:flex;gap:8px;"></div>' +
         '<button data-el="go" style="' + BIG + 'max-width:230px;margin-top:16px;background:' + GOLD + ';color:#3A2314;">Begin</button>' +
       '</div>' +
-      '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
-        'align-items:center;justify-content:center;background:rgba(7,22,31,0.95);z-index:65;padding:22px;">' +
+      '<div data-el="over" style="box-sizing:border-box;position:absolute;inset:0;pointer-events:auto;' +
+        'display:none;align-items:center;align-items:safe center;justify-content:center;' +
+        'overflow-y:auto;background:rgba(7,22,31,0.95);z-index:65;padding:22px;">' +
         '<div style="max-width:330px;width:100%;' + PANEL + 'padding:22px;">' +
           '<div style="font-size:11px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.72;">Final</div>' +
           '<div data-el="over-body"></div>' +
           '<button data-el="again" style="' + BIG + 'margin-top:16px;background:#3A2314;color:' + PARCH + ';">Play again</button>' +
         '</div>' +
       '</div>' +
-      '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
-        'align-items:center;justify-content:center;background:rgba(7,22,31,0.95);z-index:70;padding:22px;">' +
+      /* A centred flex box with no scroll clips at BOTH ends on a short screen,
+       * so the rules list lost its first line and its own dismiss button.
+       * "safe center" falls back to flex-start once the item overflows. */
+      '<div data-el="helpp" style="box-sizing:border-box;position:absolute;inset:0;' +
+        'pointer-events:auto;display:none;align-items:center;align-items:safe center;' +
+        'justify-content:center;overflow-y:auto;background:rgba(7,22,31,0.95);z-index:70;padding:22px;">' +
         '<div style="max-width:330px;width:100%;' + PANEL + 'padding:22px;">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:10px;">How to play</div>' +
           '<ul style="font-size:14px;line-height:1.7;padding-left:18px;margin:0;">' +
