@@ -144,11 +144,20 @@ window.plethoraBit = {
     function measure() {
       SW = ctx.width; SH = ctx.height;
       W = SH; H = SW;
-      L.padH = 168;
+      // The pads were a fixed 168px of the landscape height. On a phone that
+      // is a third of it; inside the app's card, where the landscape height is
+      // the card's WIDTH, it was more than half, and the arena was squeezed
+      // into a strip the cars barely fitted in.
+      L.padH = Math.round(clamp(H * 0.34, 112, 168));
       // Turned sideways, the notch and home bar are on the LEFT and RIGHT of
       // the landscape view, so they no longer eat the top and bottom.
       L.padY = H - 8 - L.padH;
-      L.top = 8;
+      // The score sits across the top of the arena, and the upper platform of
+      // The Plank sits 96 units under the ceiling — on a squeezed layout the
+      // two landed on each other and the score was printed on the platform.
+      // The header is the score's, and the arena starts under it.
+      L.headerH = 30;
+      L.top = 8 + L.headerH;
       L.insetL = ctx.safeArea.bottom;           // was the home bar
       L.insetR = ctx.safeArea.top;              // was the notch
       L.floor = L.padY - 26;
@@ -500,6 +509,26 @@ window.plethoraBit = {
       g.fillRect(0, 0, W, H);
 
       if (phase !== "menu") {
+        /* The two end walls.
+         *
+         * The arena has always been enclosed — a car that reaches either end
+         * bounces off it — but nothing was ever drawn there, so the ground
+         * simply stopped in mid-air and the car appeared to bounce off
+         * nothing. It read as a drop-off you were somehow not falling down.
+         * They are posts in the same material as the slabs, so the enclosure
+         * is visible and the bounce has something to bounce off.
+         */
+        const post = Math.max(5, 7 * L.scale);
+        for (const wx of [L.wallL - post, L.wallR]) {
+          g.fillStyle = "#2a1a2e";
+          roundRect(g, wx, L.top - 4, post, L.floor - L.top + 44, 3);
+          g.fill();
+          g.fillStyle = "#c9743f";
+          roundRect(g, wx, L.top - 4, post, 7, 3);
+          g.fill();
+          g.fillStyle = "rgba(255,220,180,0.14)";
+          g.fillRect(wx, L.top - 4, 2, L.floor - L.top + 44);
+        }
         for (const s of slabs) {
           g.fillStyle = "#2a1a2e";
           roundRect(g, s.x, s.y, s.w, s.h, 4);
@@ -591,8 +620,11 @@ window.plethoraBit = {
       padMarkup(0) + padMarkup(1) +
       '<div data-el="score" style="position:absolute;left:0;right:0;top:' + (ST + 8) + 'px;' +
         'text-align:center;pointer-events:none;font-size:26px;font-weight:900;"></div>' +
-      '<div style="position:absolute;left:0;right:0;bottom:' + (SB + 104) + 'px;display:flex;' +
-        'gap:8px;justify-content:center;z-index:40;pointer-events:none;">' +
+      // Centred in the pad strip, between the two players' buttons. This was a
+      // fixed 104px off the bottom, which sat in the strip while the strip was
+      // a fixed 168 tall and landed on the arena floor the moment it was not.
+      '<div style="position:absolute;left:0;right:0;bottom:' + (SB + Math.round(L.padH / 2) - 22) +
+        'px;display:flex;gap:8px;justify-content:center;z-index:40;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + BTN + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
