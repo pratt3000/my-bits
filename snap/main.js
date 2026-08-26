@@ -1719,7 +1719,10 @@ window.plethoraBit = {
     const QUIET_EDGE = "rgba(216,169,74,0.42)";
     const panel = "max-width:322px;width:100%;background:linear-gradient(180deg,#14311f,#0b2015);" +
       "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(216,169,74,0.28),0 20px 60px rgba(0,0,0,0.55);";
-    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.52;";
+    /* 0.58, not 0.52. These eyebrows are 11px and heavily tracked, and at the
+     * old dim they measured 4.36:1 on the settings plate — just under the 4.5
+     * a label that small has to clear. */
+    const label ="font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.58;";
     // overflow-y:auto so a long panel on a short phone scrolls rather than
     // centring itself off both ends, which puts its close button out of reach.
     const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
@@ -1816,7 +1819,9 @@ window.plethoraBit = {
           '<div data-el="rules" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + label + '">Players</div>' +
           '<div data-el="counts" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
-          '<div style="font-size:12px;opacity:0.45;margin-top:8px;">Changes apply on the next deal.</div>' +
+          // 0.56: the same 4.5:1 floor. This one is the only sentence on the
+          // panel and it was the dimmest thing on it.
+          '<div style="font-size:12px;opacity:0.56;margin-top:8px;">Changes apply on the next deal.</div>' +
           '<button data-el="cogp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Done</button>' +
         '</div>' +
       '</div>' +
