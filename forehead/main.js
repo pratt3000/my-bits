@@ -206,6 +206,10 @@ window.plethoraBit = {
       // for, under the message "unsupported remote resources" — which names the
       // loader APIs and has nothing to do with the actual cause. A unique name
       // would do; binding nothing is simply harder to get wrong later.
+      // One deliberate change of behaviour came with the rewrite: the old
+      // `accelerationIncludingGravity || accelerometer` short-circuited, so a
+      // gravity object that existed but carried no numeric x meant no reading
+      // at all. Each source is now tried on its own merits.
       function vec() {
         if (!ctx.sensors) return null;
         if (ctx.sensors.accelerationIncludingGravity &&
