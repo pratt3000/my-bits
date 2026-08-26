@@ -1392,7 +1392,9 @@ window.plethoraBit = {
     function label(text, x, y, o) {
       o = o || {};
       g.save();
-      g.fillStyle = o.col || "rgba(242,253,255,0.55)";
+      // 0.55 is 3:1 against the lit water on the title screen; every caller
+      // that wants a quieter caption passes its own colour.
+      g.fillStyle = o.col || "rgba(242,253,255,0.80)";
       g.textAlign = "center"; g.textBaseline = "middle";
       let size = o.size || 11;
       let track = o.track === undefined ? 2.6 : o.track;
@@ -1936,10 +1938,21 @@ window.plethoraBit = {
       const band = L.bot - L.top;
       const at = (k) => L.top + band * k;
 
+      // Anchors. The fan and the wordmark hang from fractions of the band; the
+      // deal button stands on the bottom edge. On a phone the two halves never
+      // meet, and on the much shorter card the app embeds this in they did:
+      // the player row and its "seven cards each" ended up under the button.
+      // Take the bottom stack's height first and give the top what is left.
+      const big = markBig || 60;
+      const dealH = Math.min(68, Math.max(50, band * 0.089));
+      const dealTop = L.bot - Math.min(40, Math.max(14, band * 0.052)) - dealH;
+      const py = Math.min(at(0.72), dealTop - 32 - 56);
+      const ty = Math.min(at(0.455), py - 109 - big * 0.60);
+      const fy = Math.max(L.top + 54, at(0.195) - (at(0.455) - ty) * 0.62);
+
       // A fan of four sevens: the book you are trying to land, held up. Only
       // the outermost card carries a shadow — four overlapping shadows stack
       // into one black cloud behind the fan, which is what it looked like.
-      const fy = at(0.195);
       const rock = Math.sin(t * 0.7) * 0.035;
       for (let i = 0; i < FAN.length; i++) {
         const k = i - (FAN.length - 1) / 2;
@@ -1953,8 +1966,6 @@ window.plethoraBit = {
       // "GO FISH" ran off both edges of a 390px phone — and blitted rather
       // than restroked, because two outline passes of 78px text with round
       // joins is one of the most expensive things a rasteriser can be handed.
-      const ty = at(0.455);
-      const big = markBig || 60;
       if (mark) {
         g.drawImage(mark, cx - markW / 2, ty - markH / 2, markW, markH);
       } else {
@@ -1971,15 +1982,16 @@ window.plethoraBit = {
 
       g.save();
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = "rgba(242,253,255,0.62)";
+      // Foam at 0.62 on the lit part of the sea is 3.8:1 — this is the only
+      // place the rule of the game is written on the title screen.
+      g.fillStyle = "rgba(242,253,255,0.88)";
       g.font = "500 14px " + FONT;
       g.fillText("Ask one player for a rank you are holding.", cx, ty + big * 0.60 + 34);
       g.fillText("Four of a kind is a book. Most books wins.", cx, ty + big * 0.60 + 56);
       g.restore();
 
       // Player count.
-      const py = at(0.72);
-      label("HOW MANY PLAYERS", cx, py - 26, { size: 11, col: "rgba(242,253,255,0.5)" });
+      label("HOW MANY PLAYERS", cx, py - 26, { size: 11, col: "rgba(242,253,255,0.82)" });
       const bw = 74, gap = 12;
       const totalW = bw * 3 + gap * 2;
       for (let i = 0; i < 3; i++) {
@@ -1995,14 +2007,14 @@ window.plethoraBit = {
         });
       }
       g.save();
-      g.fillStyle = "rgba(242,253,255,0.5)";
+      g.fillStyle = "rgba(242,253,255,0.82)";
       g.font = "600 12.5px " + FONT;
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillText(settings.players === 2 ? "seven cards each" : "five cards each", cx, py + 76);
+      g.fillText(settings.players === 2 ? "seven cards each" : "five cards each", cx, py + 70);
       g.restore();
 
       // Deal.
-      button("deal", L.pad + 20, L.bot - 108, L.innerW - 40, 68, "DEAL", {
+      button("deal", L.pad + 20, dealTop, L.innerW - 40, dealH, "DEAL", {
         top: "#8df0c8", bottom: "#20b98a", ink: "#02261c",
         rim: "rgba(2,60,44,0.6)", edge: "rgba(255,255,255,0.7)", size: 23, track: 4,
       });
@@ -2879,7 +2891,9 @@ window.plethoraBit = {
     const QUIET_EDGE = "rgba(242,253,255,0.35)";
     const sheetPanel = "max-width:326px;width:100%;background:linear-gradient(180deg,#0b4c72,#052236);" +
       "border-radius:24px;padding:22px;box-shadow:inset 0 0 0 1px rgba(242,253,255,0.20),0 20px 60px rgba(0,10,20,0.6);";
-    const lbl = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.55;";
+    // 0.55 of foam on the sheet's own blue is 3.9:1. These captions name what
+    // each row of pills does and were the greyest thing in the panel.
+    const lbl = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.78;";
     // overflow-y:auto so a long sheet on a short phone scrolls rather than
     // centring itself off both ends, which puts its close button out of reach.
     const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
@@ -2920,7 +2934,7 @@ window.plethoraBit = {
           '<div data-el="paces" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + lbl + '">Card backs</div>' +
           '<div data-el="backs" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
-          '<div style="font-size:12px;opacity:0.5;margin-top:10px;line-height:1.5;">' +
+          '<div style="font-size:12px;opacity:0.75;margin-top:10px;line-height:1.5;">' +
             'Player count applies on the next deal. Pace sets how long each public ' +
             'announcement holds — you can always tap to move it along.</div>' +
           '<button data-el="cogp-close" style="' + bigBtn(QUIET, FOAM, QUIET_EDGE) + 'margin-top:16px;">Done</button>' +
@@ -2967,10 +2981,13 @@ window.plethoraBit = {
           b.style.background = on
             ? "linear-gradient(180deg,#ffe089,#f0a93a)"
             : "linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.05))";
-          b.style.color = on ? "#08202e" : "rgba(242,253,255,0.62)";
+          // Foam at 0.62 on the sheet's blue is 4.5:1 at best and lower once
+          // the pill's own white wash is counted — the unpicked options read
+          // as disabled rather than as choices.
+          b.style.color = on ? "#08202e" : "rgba(242,253,255,0.82)";
           b.style.boxShadow = on
             ? "inset 0 1px 0 rgba(255,255,255,0.6),0 2px 8px rgba(0,10,20,0.4)"
-            : "inset 0 0 0 1px rgba(242,253,255,0.16)";
+            : "inset 0 0 0 1px rgba(242,253,255,0.28)";
         }
       };
       for (const b of host.querySelectorAll("button")) {

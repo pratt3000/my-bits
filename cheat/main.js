@@ -1919,8 +1919,15 @@ window.plethoraBit = {
       gfx.setLineDash([]);
       gfx.restore();
 
-      drawPile(now, cx, cy - 4, 0.58);
-      plate(cx, cy + 52, pile.length === 0 ? "pile empty" : pile.length + " on the pile");
+      // On a shallow band there is no room between the two end seats for a
+      // pile graphic as well, and drawing it anyway put a card through both
+      // plates. The line under it carries the same fact on its own.
+      if (areaH > 200) {
+        drawPile(now, cx, cy - 4, 0.58);
+        plate(cx, cy + 52, pile.length === 0 ? "pile empty" : pile.length + " on the pile");
+      } else {
+        plate(cx, cy, pile.length === 0 ? "pile empty" : pile.length + " on the pile");
+      }
 
       for (let i = 0; i < players.length; i++) {
         const q = players[i];
@@ -2110,7 +2117,12 @@ window.plethoraBit = {
 
     const FAN = ["7S", "7H", "KD", "7C", "2S"];
     function drawTitleFan(now) {
-      const cx = W / 2, cy = H * 0.395, R = 300;
+      // Sized to the screen it is actually on. At a fixed poster scale the fan
+      // fills the short card the app embeds a bit in from edge to edge, and
+      // the title stack below has nowhere left to sit.
+      const short = H < 640;
+      const scale = short ? 0.6 : 0.92;
+      const cx = W / 2, cy = H * (short ? 0.29 : 0.395), R = 300;
       const rock = Math.sin(now * 0.00065) * 0.028;
       for (let i = 0; i < FAN.length; i++) {
         const k = i - (FAN.length - 1) / 2;
@@ -2120,8 +2132,8 @@ window.plethoraBit = {
         // Two of them are face down, because the whole game is that you do not
         // know which of the sevens is a two.
         const up = i === 1 || i === 3;
-        drawCardAt(cx + Math.sin(a) * R, cy - Math.cos(a) * R + R - (up ? 12 : 0),
-          a, 0.92, card, up, up ? 0.22 : 0.08);
+        drawCardAt(cx + Math.sin(a) * R * scale, cy - (Math.cos(a) * R - R) * scale - (up ? 12 : 0) * scale,
+          a, scale, card, up, up ? 0.22 : 0.08);
       }
     }
 
@@ -2309,6 +2321,18 @@ window.plethoraBit = {
      * the table underneath; only chrome and full-screen sheets take input.
      * ============================================================= */
     const SAFE_T = ctx.safeArea.top, SAFE_B = ctx.safeArea.bottom;
+    /* The poster is a fixed stack of type anchored to the bottom of the
+     * screen, and the app also runs a bit inside a 306x517 card — two thirds
+     * the height this was drawn against. There the stack reaches up into the
+     * fan of cards and the words end up printed across the pips. Short screens
+     * get a smaller headline and a scrim that goes solid where the block
+     * actually starts, rather than at a fraction of the screen that was only
+     * ever right on a phone. */
+    const SHORT = H < 640;
+    const TITLE_PX = SHORT ? 46 : 70;
+    const SCRIM = SHORT
+      ? "rgba(6,3,2,0) 6%,rgba(6,3,2,0.34) 18%,rgba(6,3,2,0.93) 31%,rgba(6,3,2,0.99) 100%"
+      : "rgba(6,3,2,0) 26%,rgba(6,3,2,0.30) 42%,rgba(6,3,2,0.90) 58%,rgba(6,3,2,0.98) 100%";
     const btn = "pointer-events:auto;width:36px;height:36px;border-radius:12px;border:none;" +
       "background:rgba(12,6,4,0.74);color:" + CREAM + ";font-size:15px;line-height:1;" +
       "font-family:inherit;padding:0;box-shadow:inset 0 0 0 1px rgba(227,182,87,0.30);";
@@ -2353,17 +2377,17 @@ window.plethoraBit = {
       /* ---- title ---- */
       '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
         'justify-content:flex-end;align-items:center;z-index:50;pointer-events:auto;box-sizing:border-box;' +
-        'padding:0 26px ' + (SAFE_B + 22) + 'px;text-align:center;background:linear-gradient(180deg,' +
-        'rgba(6,3,2,0) 26%,rgba(6,3,2,0.30) 42%,rgba(6,3,2,0.90) 58%,rgba(6,3,2,0.98) 100%);">' +
+        'padding:0 26px ' + (SAFE_B + (SHORT ? 16 : 22)) + 'px;text-align:center;' +
+        'background:linear-gradient(180deg,' + SCRIM + ');">' +
         '<div style="' + label + 'margin-bottom:5px;">Say it like you mean it</div>' +
-        '<div style="font-size:70px;font-weight:900;letter-spacing:-0.04em;line-height:0.92;' +
+        '<div style="font-size:' + TITLE_PX + 'px;font-weight:900;letter-spacing:-0.04em;line-height:0.92;' +
           'background:linear-gradient(178deg,#fff3d8 6%,#e8b957 52%,#9d6a18);-webkit-background-clip:text;' +
           'background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' +
           'text-shadow:0 8px 34px rgba(0,0,0,0.55);">Cheat</div>' +
         '<div style="font-size:14.5px;line-height:1.55;opacity:0.8;max-width:272px;margin-top:9px;">' +
           'Play your cards face down and name them. You may be telling the truth. ' +
           'Anyone can call it.</div>' +
-        '<div style="' + label + 'margin:20px 0 9px;">Players</div>' +
+        '<div style="' + label + 'margin:' + (SHORT ? 12 : 20) + 'px 0 ' + (SHORT ? 7 : 9) + 'px;">Players</div>' +
         '<div data-el="seats" style="display:flex;gap:9px;width:210px;"></div>' +
         '<div style="width:100%;max-width:252px;">' +
           '<button data-el="names" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'font-size:14px;">Add names</button>' +

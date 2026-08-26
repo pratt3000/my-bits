@@ -347,6 +347,7 @@ window.plethoraBit = {
       el("over-line").textContent =
         "wave " + wave + " · " + missed + " missed · " + secs.toFixed(0) + "s";
       el("over").style.display = "flex";
+      el("chrome").style.display = "none";
       sound.duck(0.55, 500);
       sound.sting("lose");
       sound.haptic("error");
@@ -408,7 +409,16 @@ window.plethoraBit = {
       g.fillText(words[0], c.w / 2, 12);
       g.fillText(words[1], c.w / 2, 24);
 
-      const cx = c.w / 2, cy = c.h * 0.66, s = Math.min(c.w, c.h) * 0.34;
+      // The name always takes two fixed lines at the top, so the widget gets
+      // what is left underneath rather than a fraction of the whole console.
+      // Anchored at 0.66 of the height it fits a phone and, on the much
+      // shorter card the app embeds a bit in, drives a dial's arc straight
+      // through the second line of the name. 0.9 is the tallest half-extent
+      // any of the widgets below draws.
+      const NAME_B = 36;
+      const cx = c.w / 2;
+      const cy = NAME_B + (c.h - NAME_B) / 2;
+      const s = Math.min(Math.min(c.w, c.h) * 0.34, (c.h - NAME_B) / 2 / 0.9);
       if (c.kind === "switch") {
         roundRect(g, cx - s * 0.42, cy - s * 0.9, s * 0.84, s * 1.8, s * 0.42);
         g.fillStyle = "rgba(0,0,0,0.45)"; g.fill();
@@ -522,7 +532,7 @@ window.plethoraBit = {
         g.fillText(owner.name.toLowerCase(), 13 + GUTTER + w - 12, y + rowH / 2);
       }
       if (orders.length > n) {
-        g.fillStyle = "rgba(238,244,255,0.45)";
+        g.fillStyle = "rgba(238,244,255,0.72)";
         g.font = "700 11px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
         g.textAlign = "right"; g.textBaseline = "middle";
         g.fillText("+" + (orders.length - n), W - 15, L.orderY + L.orderH - 22);
@@ -545,14 +555,24 @@ window.plethoraBit = {
     /** The wave call-out. Drawn after the orders, over its own plate: painted
      *  under them it showed through the gaps as a ghost, and painted without
      *  a plate it landed straight across a live order and the two read as one
-     *  garbled line. */
+     *  garbled line.
+     *
+     *  The plate and the word fade on separate clocks, and that is the whole
+     *  point. Fading them together — one globalAlpha over both — turned the
+     *  plate translucent while the word was still at full size, so for most of
+     *  the call-out's life "WAVE 3" sat directly on top of a legible order and
+     *  the two read as one garbled line again. The plate stays opaque until
+     *  the word is nearly gone. */
     function drawBanner() {
       if (!banner || banner.t <= 0) return;
+      const ink = clamp(banner.t, 0, 1);
+      const plate = clamp(banner.t * 4, 0, 1);
       g.save();
-      g.globalAlpha = clamp(banner.t, 0, 1);
+      g.globalAlpha = plate;
       roundRect(g, 13 + GUTTER, L.orderY + 4, W - 26 - GUTTER, L.orderH - 20, 12);
-      g.fillStyle = "rgba(9,13,24,0.94)"; g.fill();
-      g.strokeStyle = "rgba(238,244,255,0.14)"; g.lineWidth = 1.4; g.stroke();
+      g.fillStyle = "rgba(9,13,24,0.985)"; g.fill();
+      g.strokeStyle = "rgba(238,244,255,0.16)"; g.lineWidth = 1.4; g.stroke();
+      g.globalAlpha = ink;
       g.fillStyle = "#eef4ff";
       g.font = "900 " + Math.round(Math.min(30, (L.orderH - 20) * 0.42)) +
                "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
@@ -656,7 +676,11 @@ window.plethoraBit = {
     lowercaseControls();
     new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
-      '<div style="position:absolute;left:9px;top:50%;transform:translateY(-50%);display:flex;' +
+      // The chrome sits under the full-screen panels rather than over them, so
+      // while one is up it is two unreachable grey ghosts showing through the
+      // scrim — and on the short card they land in the middle of the title
+      // blurb. It only exists during play, so it is only shown during play.
+      '<div data-el="chrome" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);display:none;' +
         'flex-direction:column;gap:6px;z-index:40;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
@@ -664,14 +688,14 @@ window.plethoraBit = {
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:10px;' +
         'background:rgba(8,14,28,0.94);z-index:50;padding:26px;text-align:center;">' +
-        '<div style="font-size:11px;letter-spacing:0.4em;text-transform:lowercase;opacity:0.5;">All hands</div>' +
+        '<div style="font-size:11px;letter-spacing:0.4em;text-transform:lowercase;opacity:0.66;">All hands</div>' +
         '<div style="font-size:50px;font-weight:900;letter-spacing:-0.02em;line-height:1.05;' +
           'background:linear-gradient(96deg,#ff4d6d,#ffd166,#4cc9f0);-webkit-background-clip:text;' +
           'background-clip:text;-webkit-text-fill-color:transparent;">Bridge Crew</div>' +
-        '<div style="font-size:14.5px;opacity:0.68;max-width:285px;line-height:1.55;">' +
+        '<div style="font-size:14.5px;opacity:0.8;max-width:285px;line-height:1.55;">' +
           'Everyone can read every order. Nobody can reach anybody else\'s controls. ' +
           'You are going to have to shout.</div>' +
-        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;margin-top:14px;">Crew</div>' +
+        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.66;margin-top:14px;">Crew</div>' +
         '<div data-el="pc" style="display:flex;gap:8px;"></div>' +
         '<button data-el="go" style="' + BIG + 'max-width:230px;margin-top:16px;' +
           'background:linear-gradient(96deg,#ff4d6d,#ffd166);color:#12101c;">Take stations</button>' +
@@ -679,10 +703,10 @@ window.plethoraBit = {
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:5px;' +
         'background:rgba(8,14,28,0.95);z-index:55;padding:26px;text-align:center;">' +
-        '<div style="font-size:12px;letter-spacing:0.32em;text-transform:lowercase;opacity:0.5;">Hull breached</div>' +
+        '<div style="font-size:12px;letter-spacing:0.32em;text-transform:lowercase;opacity:0.66;">Hull breached</div>' +
         '<div data-el="over-served" style="font-size:74px;font-weight:900;line-height:1;color:#ffd166;">0</div>' +
-        '<div style="font-size:13px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">orders served</div>' +
-        '<div data-el="over-line" style="font-size:13.5px;opacity:0.6;margin-top:6px;"></div>' +
+        '<div style="font-size:13px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.7;">orders served</div>' +
+        '<div data-el="over-line" style="font-size:13.5px;opacity:0.74;margin-top:6px;"></div>' +
         '<button data-el="again" style="' + BIG + 'max-width:230px;margin-top:22px;' +
           'background:rgba(255,255,255,0.16);color:#eef4ff;">Again</button>' +
       '</div>' +
@@ -691,7 +715,7 @@ window.plethoraBit = {
         '<div style="max-width:330px;width:100%;background:rgba(18,26,46,0.98);border-radius:20px;' +
           'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:11px;">How to play</div>' +
-          '<ul style="font-size:14px;line-height:1.7;opacity:0.86;padding-left:18px;margin:0;">' +
+          '<ul style="font-size:14px;line-height:1.7;opacity:0.92;padding-left:18px;margin:0;">' +
             '<li>Phone flat. Everyone takes a console — the coloured tab on each control says whose it is.</li>' +
             '<li>Orders appear in the middle. <b>Everyone can read all of them.</b></li>' +
             '<li>Each order is stamped with the colour of the crew member whose controls it needs. ' +
@@ -725,7 +749,7 @@ window.plethoraBit = {
         for (const b of host.querySelectorAll("button")) {
           const on = String(settings.players) === b.dataset.v;
           b.style.background = on ? "rgba(255,255,255,0.26)" : "rgba(255,255,255,0.08)";
-          b.style.color = on ? "#fff" : "rgba(238,244,255,0.55)";
+          b.style.color = on ? "#fff" : "rgba(238,244,255,0.74)";
         }
       };
       for (const b of host.querySelectorAll("button")) {
@@ -739,6 +763,7 @@ window.plethoraBit = {
       await sound.unlock();
       el("menu").style.display = "none";
       el("over").style.display = "none";
+      el("chrome").style.display = "flex";
       startGame(settings.players);
       sound.sting("powerup");
     };

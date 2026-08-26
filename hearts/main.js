@@ -656,10 +656,18 @@ window.plethoraBit = {
       L.top = ST + 8;
       L.bot = L.handY - L.ch / 2 - 16;
       L.cy = L.top + (L.bot - L.top) * 0.565;
-      L.R = Math.min(150, (L.bot - L.top) / 2 - 26);
+      // The header stack — hand and pass direction, the brass rule, the seat
+      // counter — stands between the top edge and the north seat's plate, and
+      // the plate hangs 19px above the ring. Both were fixed, so on the much
+      // shorter card the app embeds this in, the plate came down on top of
+      // "hand 1 · pass left". Compress the stack first, then bound the ring
+      // by whatever is left above it.
+      L.hdrGap = Math.max(20, Math.min(62, (L.bot - L.top) * 0.098));
+      const hdrH = L.hdrGap + 58;                    // rule at +32, counter at +26
+      L.R = Math.min(150, (L.bot - L.top) / 2 - 26, L.cy - L.top - hdrH - 32);
       L.throwY = L.th * 0.8;
       L.throwX = L.tw * 0.97 + L.th * 0.06;
-      L.promptY = L.cy + L.R + 44;
+      L.promptY = L.cy + L.R + Math.min(44, Math.max(26, (L.bot - L.top) * 0.058));
       L.panelTop = L.promptY + 8;
       L.panelBot = H - SB - 14;
     }
@@ -1207,7 +1215,7 @@ window.plethoraBit = {
         x += g.measureText("+" + hp).width + 7;
       } else if (st && phase !== "menu") {
         g.font = "600 10px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-        g.fillStyle = "rgba(242,233,210,0.34)";
+        g.fillStyle = "rgba(242,233,210,0.66)";
         g.fillText("clean", x, ph / 2 - 11);
         x += g.measureText("clean").width + 7;
       }
@@ -1282,9 +1290,9 @@ window.plethoraBit = {
     }
 
     function drawHeader(t) {
-      const y0 = L.top + 62;
+      const y0 = L.top + L.hdrGap;
       smallCaps("Hand " + handNo + "   ·   " + (passDir === "hold" ? "no pass" : "pass " + passDir),
-                L.cx, y0, 10, "rgba(240,218,150,0.62)");
+                L.cx, y0, 10, "rgba(240,218,150,0.85)");
       // A brass rule with a heart medallion: filled once hearts are broken.
       const y1 = y0 + 32;
       const half = 86;
@@ -1315,13 +1323,13 @@ window.plethoraBit = {
       const y2 = y1 + 26;
       if (phase === "passGate" || phase === "passing" || (anim && anim.kind === "passStep")) {
         smallCaps("Player " + Math.min(passSeat + 1, 4) + " of 4", L.cx, y2, 9.5,
-                  "rgba(242,233,210,0.34)");
+                  "rgba(242,233,210,0.66)");
       } else if (st) {
         const showing = phase === "trickEnd" || (anim && anim.kind === "gather")
           ? st.trickNo                                   // the one on the felt
           : Math.min(st.trickNo + 1, 13);                // the one being played
         smallCaps("Trick " + showing + " of 13", L.cx, y2, 9.5,
-                  broken ? "rgba(194,38,59,0.85)" : "rgba(242,233,210,0.34)");
+                  broken ? "rgba(194,38,59,0.85)" : "rgba(242,233,210,0.66)");
       }
     }
 
@@ -1439,18 +1447,29 @@ window.plethoraBit = {
       const p = players[seat];
       const x0 = 26, x1 = W - 26, y0 = L.panelTop + 6, y1 = L.panelBot;
       panelFrame(x0, y0, x1, y1);
-      const mid = (y0 + y1) / 2;
+      // Four lines pinned to the panel's two edges with fixed offsets. That
+      // reads on the 188px this panel gets on a phone and collapses into one
+      // pile of overlapping type on the 135px it gets on the app's card —
+      // the name, the instruction and the footer all landed on each other.
+      // Everything below is a fraction of the height it actually has.
+      const ph = y1 - y0;
+      const foot = Math.min(24, ph * 0.20);
+      const ruleY = y1 - foot * 1.85;
+      const capY = y0 + Math.min(32, ph * 0.16);
+      const lineY = ruleY - Math.min(18, ph * 0.13);
+      const nameY = (capY + lineY) / 2 - 2;
+      const nameSize = Math.max(20, Math.min(36, ph * 0.20));
       const bar = g.createLinearGradient(x0, 0, x1, 0);
       bar.addColorStop(0, "rgba(0,0,0,0)");
       bar.addColorStop(0.5, p.colour);
       bar.addColorStop(1, "rgba(0,0,0,0)");
       g.fillStyle = bar;
       g.fillRect(x0 + 40, y0 + 11, x1 - x0 - 80, 2);
-      smallCaps("Pass the phone to", L.cx, y0 + 32, 10, "rgba(201,162,39,0.72)");
+      smallCaps("Pass the phone to", L.cx, capY, 10, BRASS);
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.font = "900 36px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
+      g.font = "900 " + nameSize.toFixed(1) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       g.fillStyle = p.colour;
-      g.fillText(p.name, L.cx, mid - 12);
+      g.fillText(p.name, L.cx, nameY);
 
       // NOTHING on this panel may be derived from the hand it is handing over.
       // This is the screen the phone travels on, in full view of all four
@@ -1468,18 +1487,18 @@ window.plethoraBit = {
         line = "the lead is";
         suit = st.trick[0].card.suit;
       }
-      if (suit) textWithSuit(line, suit, L.cx, mid + 16, 14, "rgba(242,233,210,0.66)");
+      if (suit) textWithSuit(line, suit, L.cx, lineY, 14, "rgba(242,233,210,0.82)");
       else {
         g.font = "600 14px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
-        g.fillStyle = "rgba(242,233,210,0.66)";
-        g.fillText(line, L.cx, mid + 16);
+        g.fillStyle = "rgba(242,233,210,0.82)";
+        g.fillText(line, L.cx, lineY);
       }
 
       g.strokeStyle = "rgba(201,162,39,0.22)"; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(x0 + 34, y1 - 44); g.lineTo(x1 - 34, y1 - 44); g.stroke();
+      g.beginPath(); g.moveTo(x0 + 34, ruleY); g.lineTo(x1 - 34, ruleY); g.stroke();
       const pulse = 0.55 + 0.45 * Math.sin(t / 460);
-      smallCaps("Tap anywhere to look", L.cx, y1 - 24, 10,
-                "rgba(240,218,150," + (0.45 + 0.4 * pulse).toFixed(2) + ")");
+      smallCaps("Tap anywhere to look", L.cx, y1 - foot, 10,
+                "rgba(240,218,150," + (0.6 + 0.35 * pulse).toFixed(2) + ")");
     }
 
     function drawPrompt() {
@@ -1693,7 +1712,10 @@ window.plethoraBit = {
     const SHEET = "box-sizing:border-box;background:linear-gradient(180deg,#0B3A29,#06231A);" +
       "border:1px solid rgba(201,162,39,0.42);" +
       "border-radius:20px;box-shadow:0 14px 44px rgba(0,0,0,0.55);";
-    const LABEL = "font-size:10px;letter-spacing:0.3em;text-transform:lowercase;color:rgba(201,162,39,0.7);";
+    // Brass at 0.7 is 3.3:1 on the settings sheet and 4.4:1 on the title —
+    // under the line in both places, and these captions are the only thing
+    // naming what each row of controls does. Full strength, same hue.
+    const LABEL = "font-size:10px;letter-spacing:0.3em;text-transform:lowercase;color:" + BRASS + ";";
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + FONT + ";color:" + IVORY + ";pointer-events:none;text-transform:lowercase;";
@@ -1738,7 +1760,17 @@ window.plethoraBit = {
             'Every heart is a point, the queen of spades is thirteen, and points are the ' +
             'last thing you want — unless you take all of them.</div>' +
         '</div>' +
-        '<div>' +
+        // The menu's own scrim opens a window over the middle of the screen so
+        // the fan of cards shows through. That window is a fraction of the
+        // height, and this block is pinned to the bottom edge — so on a
+        // screen much shorter than a phone the block rises into the window
+        // and "play to" and the targets ended up printed over the queen of
+        // spades. The block carries its own scrim, wherever it lands.
+        // The fade is a fixed 30px band, not a percentage: as a percentage of
+        // the block it lands mid-label on a short screen and the caption is
+        // still printed over the queen of spades.
+        '<div style="margin:0 -26px;padding:30px 26px 0;background:linear-gradient(180deg,' +
+          'rgba(3,18,12,0) 0,rgba(3,18,12,0.93) 30px,rgba(3,18,12,0.97) 100%);">' +
           '<div style="' + LABEL + 'margin-bottom:8px;">Play to</div>' +
           '<div data-el="tc" style="display:flex;gap:8px;justify-content:center;"></div>' +
           '<button data-el="menu-set" style="' + BIG + 'max-width:250px;margin:10px auto 0;display:block;' +
@@ -1878,7 +1910,9 @@ window.plethoraBit = {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
           b.style.background = on ? "linear-gradient(180deg,#F0DA96,#C9A227)" : "rgba(201,162,39,0.13)";
-          b.style.color = on ? "#2A1D05" : "rgba(242,233,210,0.6)";
+          // Ivory at 0.6 over a brass wash on baize is 4.2:1 and reads as a
+          // muddy grey-green — the unpicked targets looked disabled.
+          b.style.color = on ? "#2A1D05" : "rgba(242,233,210,0.82)";
         }
       };
       for (const b of host.querySelectorAll("button")) {

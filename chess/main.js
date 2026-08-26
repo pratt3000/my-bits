@@ -545,11 +545,18 @@ window.plethoraBit = {
     measure();
 
     const THEMES = {
-      green: { light: "#EEEED2", dark: "#769656", edge: "#5C7A44", name: "Green" },
-      wood:  { light: "#E9D9B4", dark: "#A9744C", edge: "#7A4A2B", name: "Walnut" },
-      slate: { light: "#D6DBE4", dark: "#6E7A90", edge: "#4A5262", name: "Slate" },
+      // onDark / onLight are the coordinate inks: the same hue as the opposite
+      // square, pushed far enough to stay legible at eleven pixels.
+      green: { light: "#EEEED2", dark: "#769656", edge: "#5C7A44", name: "Green",
+               onDark: "#F5F5E7", onLight: "#4C6836", mark: "rgba(246,201,74,0.62)" },
+      wood:  { light: "#E9D9B4", dark: "#A9744C", edge: "#7A4A2B", name: "Walnut",
+               onDark: "#F8EFDA", onLight: "#6B3F1D", mark: "rgba(246,201,74,0.62)" },
+      // The amber that reads as lamplight on the two warm boards turns a slate
+      // square khaki, which is the one colour nothing else on that board is.
+      // Slate marks its own squares in its own hue.
+      slate: { light: "#D6DBE4", dark: "#6E7A90", edge: "#4A5262", name: "Slate",
+               onDark: "#EFF3F9", onLight: "#3D4658", mark: "rgba(120,176,242,0.58)" },
     };
-    const MARK = "rgba(246,201,74,0.62)";      // selection / last move
     const HINT = "rgba(30,26,20,0.26)";        // legal-move dot
     const DANGER = "#C4432E";
 
@@ -662,14 +669,14 @@ window.plethoraBit = {
 
       // Last move and selection, under the pieces.
       if (lastMove) {
-        g.fillStyle = MARK;
+        g.fillStyle = th.mark;
         g.globalAlpha = 0.55;
         g.fillRect(sqX(lastMove.from), sqY(lastMove.from), L.sq, L.sq);
         g.fillRect(sqX(lastMove.to), sqY(lastMove.to), L.sq, L.sq);
         g.globalAlpha = 1;
       }
       if (selected >= 0) {
-        g.fillStyle = MARK;
+        g.fillStyle = th.mark;
         g.fillRect(sqX(selected), sqY(selected), L.sq, L.sq);
       }
 
@@ -686,22 +693,26 @@ window.plethoraBit = {
         }
       }
 
-      // Coordinates, in-square in the opposite square's colour.
+      // Coordinates, in-square in the opposite square's ink. The board's own
+      // two colours are only about 2.7:1 apart, and printing the label in the
+      // other one at 0.7 alpha halved even that — eleven-pixel letters at 2:1,
+      // which is a smudge in the corner of a square rather than a coordinate.
+      // Each theme therefore carries a pushed pair, opaque: the light ink
+      // taken up toward white for dark squares, the dark ink taken down past
+      // the frame colour for light ones.
       g.font = "700 " + (L.sq * 0.21) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
       for (let f = 0; f < 8; f++) {
         const i = sq(f, 0);
-        g.fillStyle = (f % 2 === 0) ? th.light : th.dark;
-        g.globalAlpha = 0.7;
+        g.fillStyle = (f % 2 === 0) ? th.onDark : th.onLight;
         g.textAlign = "right"; g.textBaseline = "bottom";
         g.fillText(NAMES[f], sqX(i) + L.sq - L.sq * 0.08, sqY(i) + L.sq - L.sq * 0.05);
       }
       for (let r = 0; r < 8; r++) {
         const i = sq(7, r);
-        g.fillStyle = ((7 + r) % 2 === 0) ? th.light : th.dark;
+        g.fillStyle = ((7 + r) % 2 === 0) ? th.onDark : th.onLight;
         g.textAlign = "left"; g.textBaseline = "top";
         g.fillText(String(r + 1), sqX(i) + L.sq * 0.07, sqY(i) + L.sq * 0.05);
       }
-      g.globalAlpha = 1;
 
       // Pieces, skipping whichever one is currently in flight.
       for (let i = 0; i < 64; i++) {
@@ -790,14 +801,18 @@ window.plethoraBit = {
         'display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none;">' +
         '<div data-el="cap-' + who + '" style="height:19px;font-size:15px;letter-spacing:1px;opacity:0.8;"></div>' +
         '<div style="' + PLAQUE + 'padding:7px 17px;display:flex;align-items:center;gap:9px;">' +
+          // Black's token is the piece ink on a plaque barely lighter than it,
+          // so the rim is the whole token. It has to be a real rim, not a
+          // 45%-alpha suggestion of one.
           '<span style="width:13px;height:13px;border-radius:50%;background:' +
-            (who === "w" ? "#F7F4EC" : "#2B2724") + ';border:1px solid rgba(230,225,210,0.45);"></span>' +
+            (who === "w" ? "#F7F4EC" : "#2B2724") + ';border:1.5px solid ' +
+            (who === "w" ? "rgba(24,22,20,0.5)" : "rgba(239,234,224,0.88)") + ';"></span>' +
           '<span style="font-size:15px;font-weight:700;letter-spacing:0.10em;' +
             'text-transform:lowercase;color:#EFEAE0;">' + (who === "w" ? "White" : "Black") + '</span>' +
           '<span data-el="turn-' + who + '" style="font-size:11px;letter-spacing:0.16em;' +
             'text-transform:lowercase;color:#F6C94A;opacity:0;">to move</span>' +
         '</div>' +
-        '<button data-el="act-' + who + '" style="' + PILL("#6E6A62") + 'pointer-events:auto;opacity:0.35;">Resign</button>' +
+        '<button data-el="act-' + who + '" style="' + PILL("#6E6A62") + 'pointer-events:auto;opacity:0.55;">Resign</button>' +
       '</div>';
     }
 
@@ -887,7 +902,9 @@ window.plethoraBit = {
         const mine = state.turn === who && !over;
         el("turn-" + who).style.opacity = mine ? "1" : "0";
         const act = el("act-" + who);
-        act.style.opacity = mine ? "1" : "0.35";
+        // Off-turn this button is unreachable, not invisible: 0.35 put its
+        // label at 2.9:1 on the table black.
+        act.style.opacity = mine ? "1" : "0.55";
         act.style.pointerEvents = mine ? "auto" : "none";
         const taken = [];
         const full = { p: 8, n: 2, b: 2, r: 2, q: 1 };
@@ -1027,8 +1044,12 @@ window.plethoraBit = {
       const paint2 = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
-          b.style.background = on ? "#5A5348" : "#211F1C";
-          b.style.color = on ? "#F6C94A" : "rgba(239,234,224,0.55)";
+          // Amber on the old #5A5348 chip was a warm grey under a warm yellow
+          // and came out olive. A dark chip with an amber hairline says
+          // "chosen" without either colour muddying the other.
+          b.style.background = on ? "#332E24" : "#211F1C";
+          b.style.color = on ? "#F6C94A" : "rgba(239,234,224,0.72)";
+          b.style.borderColor = on ? "#F6C94A" : "rgba(230,225,210,0.2)";
         }
       };
       for (const b of host.querySelectorAll("button")) {

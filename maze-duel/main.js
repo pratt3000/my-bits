@@ -1234,14 +1234,19 @@ window.plethoraBit = {
     // Countdown numerals: two of them plus the gap between must clear the
     // heart, so they are smaller than a single centred numeral would be.
     const COUNT_SIZE = 58, COUNT_GAP = 54;
+    // The numerals land on the maze floor, which is pale sand — cream on sand is
+    // the same non-colour twice. The gold bloom sells the beat but does nothing
+    // for the edges, so a tight dark halo goes underneath it to cut the glyphs
+    // out of whatever hedge or floor happens to be behind them.
     const countNum = "font-family:" + FONT_D + ";font-size:" + COUNT_SIZE + "px;font-style:italic;" +
-      "font-weight:600;color:#ffe9a8;text-shadow:0 6px 34px rgba(255,193,0,0.55);line-height:1;";
+      "font-weight:600;color:#ffe9a8;line-height:1;text-shadow:0 0 7px rgba(9,17,5,0.95)," +
+      "0 0 18px rgba(9,17,5,0.85),0 2px 3px rgba(9,17,5,0.9),0 6px 34px rgba(255,193,0,0.55);";
     const rule = (margin) => '<div style="height:1px;margin:' + margin + ';background:linear-gradient(90deg,' +
       'rgba(255,193,0,0),rgba(255,193,0,0.34),rgba(255,193,0,0));"></div>';
     /** One face of the winner card. `sfx` is "r" for the copy the far seats read. */
     const overFace = (sfx) =>
       '<div style="' + (sfx ? "transform:rotate(180deg);" : "") + '">' +
-        '<div style="font-size:9.5px;letter-spacing:0.32em;text-transform:lowercase;opacity:0.5;">The heart is taken by</div>' +
+        '<div style="font-size:9.5px;letter-spacing:0.32em;text-transform:lowercase;opacity:0.62;">The heart is taken by</div>' +
         '<div data-el="over-name' + sfx + '" style="font-family:' + FONT_D + ';font-style:italic;font-weight:600;' +
           'font-size:42px;line-height:1.08;margin-top:3px;white-space:nowrap;"></div>' +
         '<div data-el="over-stats' + sfx + '" style="display:flex;margin-top:13px;"></div>' +
@@ -1251,7 +1256,7 @@ window.plethoraBit = {
     const statCell = (v, l, edge) =>
       '<div style="flex:1;min-width:0;' + (edge ? "border-left:1px solid rgba(255,193,0,0.18);" : "") + '">' +
         '<div style="font-size:15px;font-weight:700;color:#ffe9a8;">' + esc(v) + '</div>' +
-        '<div style="font-size:8px;letter-spacing:0.18em;text-transform:lowercase;opacity:0.46;margin-top:3px;">' +
+        '<div style="font-size:8px;letter-spacing:0.18em;text-transform:lowercase;opacity:0.6;margin-top:3px;">' +
           esc(l) + '</div>' +
       '</div>';
 
@@ -1319,15 +1324,15 @@ window.plethoraBit = {
           'background:linear-gradient(180deg,rgba(26,45,74,0.93),rgba(16,28,47,0.95));' +
           'border:1.5px solid rgba(255,193,0,0.45);border-radius:22px;padding:24px 20px;' +
           'box-shadow:0 26px 70px rgba(0,0,0,0.68);">' +
-          '<div style="font-size:10px;letter-spacing:0.38em;text-transform:lowercase;opacity:0.5;">A garden race for 2-4</div>' +
+          '<div style="font-size:10px;letter-spacing:0.38em;text-transform:lowercase;opacity:0.6;">A garden race for 2-4</div>' +
           '<div style="font-family:' + FONT_D + ';font-style:italic;font-weight:600;font-size:45px;line-height:1.02;' +
             'margin-top:6px;background:linear-gradient(96deg,#91cd53,#ffc100 60%,#f2a50c);' +
             '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Maze&nbsp;Duel</div>' +
           '<div style="font-size:13px;opacity:0.68;line-height:1.6;margin-top:10px;">' +
             'Lay the phone flat. Take a corner each. Everybody runs at once — first peg into the heart takes it.</div>' +
-          '<div style="font-size:10px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.45;margin-top:20px;">How many walk the maze?</div>' +
+          '<div style="font-size:10px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.6;margin-top:20px;">How many walk the maze?</div>' +
           '<div data-el="counts" style="display:flex;gap:11px;margin-top:11px;justify-content:center;"></div>' +
-          '<button data-el="go" style="' + bigBtn("linear-gradient(96deg,#41761a,#7cb93a)", "#081a00") +
+          '<button data-el="go" style="' + bigBtn("linear-gradient(96deg,#5a9a28,#8fcc46)", "#081a00") +
             'margin-top:20px;">Enter the garden</button>' +
         '</div>' +
       '</div>' +
@@ -1349,7 +1354,7 @@ window.plethoraBit = {
           'box-shadow:0 26px 70px rgba(0,0,0,0.7);">' +
           overFace("r") +
           rule("16px 2px") +
-          '<button data-el="again" style="' + bigBtn("linear-gradient(96deg,#41761a,#7cb93a)", "#081a00") + '">New garden</button>' +
+          '<button data-el="again" style="' + bigBtn("linear-gradient(96deg,#5a9a28,#8fcc46)", "#081a00") + '">New garden</button>' +
           '<button data-el="back" style="' + quietBtn + '">Change setup</button>' +
           rule("14px 16px") +
           overFace("") +
@@ -1362,11 +1367,11 @@ window.plethoraBit = {
           'border-radius:18px;padding:22px;box-sizing:border-box;' +
           'border:1.5px solid rgba(255,193,0,0.35);box-shadow:0 22px 60px rgba(0,0,0,0.6);">' +
           '<div style="font-size:15px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;margin-bottom:18px;">Settings</div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Garden size</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.6;">Garden size</div>' +
           '<div data-el="sizes" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Briars</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.6;">Briars</div>' +
           '<div data-el="briarset" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">Sound</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.6;">Sound</div>' +
           '<div data-el="muteset" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
           '<button data-el="cogp-close" style="' + quietBtn + 'margin-top:20px;">Done</button>' +
         '</div>' +
@@ -1454,7 +1459,10 @@ window.plethoraBit = {
         const hint = shell.el("hint-" + i);
         hint.style.width = "172px";
         hint.style.textAlign = "center";
-        hint.style.color = hexStr(shade(s.hex, 0.5)) + "b0";
+        // 8.5px of tracked caps on bare table wood: at 0.69 the crimson seat
+        // came out at 4.1:1, so the tint is held nearly opaque and the seat
+        // colour does the identifying instead of the transparency.
+        hint.style.color = hexStr(shade(s.hex, 0.5)) + "d8";
         const ring = shell.el("ring-" + i);
         ring.style.width = ring.style.height = (R * 2) + "px";
         const knob = shell.el("knob-" + i);
@@ -1526,7 +1534,10 @@ window.plethoraBit = {
       const paint = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
-          b.style.background = on ? "rgba(255,193,0,0.85)" : "rgba(243,237,224,0.09)";
+          // Solid, not an alpha over the panel: the navy beneath drags the
+          // amber towards olive, and the dark ink sitting on it is the one
+          // combination here that fails a contrast check outright.
+          b.style.background = on ? "#ffc100" : "rgba(243,237,224,0.09)";
           b.style.color = on ? "#1a1712" : "rgba(243,237,224,0.6)";
         }
       };
@@ -1557,7 +1568,7 @@ window.plethoraBit = {
       const paint = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = Number(b.dataset.n) === playerCount;
-          b.style.background = on ? "rgba(255,193,0,0.9)" : "rgba(36,64,110,0.6)";
+          b.style.background = on ? "#ffc100" : "rgba(36,64,110,0.6)";
           b.style.color = on ? "#1a1712" : "rgba(243,237,224,0.72)";
           b.style.borderColor = on ? "#ffc100" : "rgba(255,193,0,0.28)";
         }

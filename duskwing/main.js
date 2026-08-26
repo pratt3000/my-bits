@@ -1423,10 +1423,17 @@ window.plethoraBit = {
         g.save();
         g.globalAlpha = clamp(Math.min(elapsed / 0.5, (3.6 - elapsed) / 0.8), 0, 1) * 0.92;
         g.textAlign = "left"; g.textBaseline = "middle";
+        // Fitted to the tunnel rather than set at a fixed size: at 11px with
+        // 2.2 of tracking this line is 350px wide, which runs off the right
+        // edge of the 306px card the app embeds the bit in and loses the two
+        // words that carry the whole point.
+        const HINT = "KEEP BEATING — THE DARK PULLS YOU BACK";
+        let hs = Math.min(11, U * 0.085), ht = 2.2;
+        const room = W - WALL - 20;
+        const want = trackW(g, HINT, hs, ht);
+        if (want > room) { const k = room / want; hs *= k; ht *= k; }
         for (const band of bands) {
-          platedLine(g, "KEEP BEATING — THE DARK PULLS YOU BACK",
-                     WALL + 10, band.mid - U * 0.30,
-                     Math.min(11, U * 0.085), 2.2, "#FFE9B8", 1);
+          platedLine(g, HINT, WALL + 10, band.mid - U * 0.30, hs, ht, "#FFE9B8", 1);
         }
         g.restore();
         g.globalAlpha = 1;
@@ -1528,7 +1535,7 @@ window.plethoraBit = {
     // Set lowercase like the rest of the game. This helper draws one
     // character at a time for its own tracking, and single characters slip
     // past the case fold that every other canvas string goes through.
-    function tracked(t, text, x, y, size, track) {
+    function tracked(t, text, x, y, size, track, halo) {
       text = typeof text === "string" ? text.toLowerCase() : text;
       t.font = "700 " + size + "px " + DISP;
       const chars = String(text).split("");
@@ -1538,6 +1545,20 @@ window.plethoraBit = {
       let cx = t.textAlign === "center" ? x - total / 2 : t.textAlign === "right" ? x - total : x;
       const al = t.textAlign;
       t.textAlign = "left";
+      // A halo before the fill. The plate under a label is an ellipse, so a
+      // line long enough to reach its ends sits in the feathered part, and
+      // one bloom in the cave mouth is enough to swallow the last two words —
+      // which is exactly where "the dark pulls you back" ended up.
+      if (halo) {
+        t.save();
+        t.strokeStyle = "rgba(0,0,0,0.82)";
+        t.lineWidth = halo;
+        t.lineJoin = "round";
+        t.miterLimit = 2;
+        let hx = cx;
+        for (const c of chars) { t.strokeText(c, hx, y); hx += t.measureText(c).width + track; }
+        t.restore();
+      }
       for (const c of chars) { t.fillText(c, cx, y); cx += t.measureText(c).width + track; }
       t.textAlign = al;
       return total;
@@ -1566,8 +1587,12 @@ window.plethoraBit = {
       t.scale(1, ry / rx);
       const gd = t.createRadialGradient(0, 0, rx * 0.2, 0, 0, rx);
       gd.addColorStop(0, "rgba(0,0,0," + a + ")");
-      gd.addColorStop(0.5, "rgba(0,0,0," + (a * 0.8).toFixed(3) + ")");
-      gd.addColorStop(0.78, "rgba(0,0,0," + (a * 0.34).toFixed(3) + ")");
+      // The old falloff started at half the radius, which is fine under a
+      // three-character label and useless under a sentence: the glyphs at
+      // both ends of a long line sit past 0.8 of the radius and got almost
+      // no plate at all. Hold it flat across the type, feather only the rim.
+      gd.addColorStop(0.62, "rgba(0,0,0," + (a * 0.92).toFixed(3) + ")");
+      gd.addColorStop(0.86, "rgba(0,0,0," + (a * 0.46).toFixed(3) + ")");
       gd.addColorStop(1, "rgba(0,0,0,0)");
       t.fillStyle = gd;
       t.fillRect(-rx, -rx, rx * 2, rx * 2);
@@ -1580,9 +1605,9 @@ window.plethoraBit = {
       const cx = t.textAlign === "right" ? x - w / 2 : x;
       t.save();
       t.globalAlpha = Math.min(1, alpha);
-      inkPlate(t, cx, y, w / 2 + size * 2.4, size * 1.7, 0.8);
+      inkPlate(t, cx, y, w / 2 + size * 2.4, size * 1.7, 0.86);
       t.fillStyle = colour;
-      tracked(t, text, x, y, size, track);
+      tracked(t, text, x, y, size, track, Math.max(2, size * 0.38));
       t.restore();
       return w;
     }
@@ -1982,7 +2007,11 @@ window.plethoraBit = {
         // numeral landing on the moth hides the one thing its owner is
         // looking for in the three seconds before the cave starts moving.
         const nx = clamp(HOME + size * 0.95, W * 0.5, W - size * 0.7);
-        inkPlate(g, nx, band.mid, size * 1.5, size * 0.95, 0.7);
+        // The plate scales with the numeral. It did not, and the easeOutBack
+        // overshoots to 1.6x — so for the first third of every second the
+        // digit was drawn outside its own plate, straight onto whatever the
+        // sky happened to be doing.
+        inkPlate(g, nx, band.mid, size * 1.5 * sc, size * 0.95 * sc, 0.7);
         g.translate(nx, band.mid);
         g.scale(sc, sc);
         g.fillStyle = crew.ink;
@@ -2008,7 +2037,10 @@ window.plethoraBit = {
     const bigBtn = (bg, fg) => "pointer-events:auto;width:100%;max-width:250px;padding:15px;border:none;" +
       "border-radius:15px;font-family:" + DISP + ";font-size:19px;font-weight:700;letter-spacing:0.16em;" +
       "background:" + bg + ";color:" + fg + ";margin-top:10px;-webkit-tap-highlight-color:transparent;";
-    const capLine = "font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.45;";
+    // 0.45 of #FFEFCD on the settings card is 4.1:1 — under the line, and it
+    // reads as grey rather than as quiet cream. These captions are the only
+    // thing naming what each row of buttons does.
+    const capLine = "font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.62;";
     /*
      * The plate the title copy is read against.
      *
@@ -2052,7 +2084,7 @@ window.plethoraBit = {
         '<div style="display:flex;align-items:baseline;gap:6px;">' +
           '<div data-el="dist" style="font-family:' + DISP + ';font-size:29px;font-weight:700;' +
             'letter-spacing:0.05em;line-height:1;text-shadow:0 0 18px rgba(252,220,120,0.35);">0</div>' +
-          '<div style="' + capLine + 'opacity:0.5;">m</div>' +
+          '<div style="' + capLine + 'opacity:0.6;">m</div>' +
           '<div data-el="hour" style="' + capLine + 'margin-left:7px;">dawn</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;">' +
@@ -2067,18 +2099,21 @@ window.plethoraBit = {
         'flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:26px;' +
         'text-align:center;background:' + TITLE_SCRIM + ';">' +
         '<div style="' + capLine + 'opacity:0.72;">Every wing beat is height and ground</div>' +
-        '<div data-el="wordmark" style="font-family:' + DISP + ';font-size:46px;line-height:1.0;' +
-          'font-weight:700;white-space:nowrap;letter-spacing:0.11em;margin:12px -0.11em 2px 0;' +
+        // line-height has to clear the descender: the fill is clipped to the
+        // text's own box, so at 1.0 the tail of the g was simply cut off and
+        // the wordmark read as a typo rather than as a layout bug.
+        '<div data-el="wordmark" style="font-family:' + DISP + ';font-size:46px;line-height:1.18;' +
+          'font-weight:700;white-space:nowrap;letter-spacing:0.11em;margin:8px -0.11em 0 0;' +
           'background:linear-gradient(178deg,#FFF6DE 8%,#FCDC5A 46%,#FA6E1E 92%);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
           'color:#FCDC5A;">DUSKWING</div>' +
         '<div style="font-size:13.5px;line-height:1.6;opacity:0.8;max-width:264px;margin-top:8px;">' +
           'The cave never stops. Hold your band to beat your wings, let go to fall, ' +
           'and stay off the dark edge on your left.</div>' +
-        '<div style="' + capLine + 'opacity:0.6;margin-top:20px;">How many of you?</div>' +
+        '<div style="' + capLine + 'opacity:0.75;margin-top:20px;">How many of you?</div>' +
         '<div data-el="crew" style="display:flex;gap:9px;margin-top:9px;"></div>' +
         '<button data-el="fly" style="' + bigBtn("linear-gradient(96deg,#FCDC5A,#FA6E1E)", "#180800") + '">TAKE FLIGHT</button>' +
-        '<div data-el="best" style="' + capLine + 'opacity:0.6;margin-top:14px;"></div>' +
+        '<div data-el="best" style="' + capLine + 'opacity:0.75;margin-top:14px;"></div>' +
       '</div>' +
 
       /* --- round over -------------------------------------------------- */

@@ -1240,7 +1240,7 @@ window.plethoraBit = {
       shell.el("over-rows").innerHTML = rows.map((p) => {
         const pct = Math.round(p.deck.length / deckN * 100);
         return '<div style="display:flex;align-items:center;gap:10px;margin:9px 0;' +
-          (p.out ? "opacity:0.45;" : "") + '">' +
+          (p.out ? "opacity:0.6;" : "") + '">' +
           '<div style="width:9px;height:9px;border-radius:3px;background:' + p.ink + ';flex:none;"></div>' +
           '<div style="width:56px;font-size:13px;opacity:0.85;flex:none;">' + esc(p.name) + '</div>' +
           '<div style="flex:1;height:8px;border-radius:5px;background:rgba(255,255,255,0.09);overflow:hidden;">' +
@@ -1251,13 +1251,13 @@ window.plethoraBit = {
           '</div>' +
         '</div>';
       }).join("") +
-      '<div style="font-size:11.5px;opacity:0.45;margin-top:13px;letter-spacing:0.04em;">' +
+      '<div style="font-size:11.5px;opacity:0.6;margin-top:13px;letter-spacing:0.04em;">' +
         slaps + (slaps === 1 ? " slap" : " slaps") + " · " + burns + (burns === 1 ? " burn" : " burns") +
         " · " + deckN + " cards in play</div>";
 
       shell.el("over-mirror-rows").innerHTML = players.map((p) =>
         '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;' +
-          (p.out ? "opacity:0.45;" : "") + '">' +
+          (p.out ? "opacity:0.6;" : "") + '">' +
           '<span style="width:8px;height:8px;border-radius:3px;background:' + p.ink + ';"></span>' +
           '<span style="opacity:0.72;">' + esc(p.name) + '</span>' +
           '<b style="font-weight:700;">' + (p.out ? "out" : p.deck.length) + '</b>' +
@@ -2104,7 +2104,10 @@ window.plethoraBit = {
     const fade = "linear-gradient(180deg,#000 calc(100% - 18px),transparent)";
     const scrollBody = "flex:1 1 auto;min-height:0;overflow-y:auto;margin:0 -4px;padding:0 4px;" +
       "-webkit-mask-image:" + fade + ";mask-image:" + fade + ";";
-    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.52;";
+    // 0.62, not 0.52: 11px of lowercase at 0.24em tracking was landing at
+    // 4.5:1 on the felt panel, and tracked small caps are the first thing to
+    // dissolve when the ink is thin.
+    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.62;";
     const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
       "justify-content:center;" +
       "background:rgba(3,12,8,0.90);z-index:70;padding:" + (SAFE_T + 14) + "px 24px " +
@@ -2155,7 +2158,14 @@ window.plethoraBit = {
             'margin-top:0;flex:1 1 auto;padding:11px 0;font-size:14.5px;letter-spacing:0.06em;">Deal</button>' +
         '</div>' +
         '<div style="display:flex;flex-direction:column;align-items:center;width:100%;">' +
-        '<div style="' + label + 'margin-bottom:8px;font-size:10.5px;">Egyptian</div>' +
+        // The heap is sized to the gap between the two ends of the menu, but on
+        // the 306x517 card the gap is smaller than the heap's own floor, so the
+        // pile spills across this line and it is read against the face of a
+        // playing card rather than against felt. It carries its own felt.
+        // (opacity is reset because the plate would fade with the ink.)
+        '<div style="' + label + 'opacity:1;color:rgba(245,237,218,0.72);margin-bottom:8px;' +
+          'font-size:10.5px;padding:3px 13px 4px;border-radius:999px;background:rgba(3,14,9,0.78);' +
+          'box-shadow:inset 0 0 0 1px rgba(217,154,82,0.20);">Egyptian</div>' +
         '<div style="font-size:47px;font-weight:800;letter-spacing:0.02em;line-height:0.95;' +
           'background:linear-gradient(178deg,#fff6df 6%,#f0c25c 48%,#a3691a);-webkit-background-clip:text;' +
           'background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' +
@@ -2229,10 +2239,10 @@ window.plethoraBit = {
           '<div data-el="counts" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + label + '">Length</div>' +
           '<div data-el="deals" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
-          '<div data-el="deal-note" style="font-size:12px;opacity:0.45;margin:-9px 0 18px;line-height:1.5;"></div>' +
+          '<div data-el="deal-note" style="font-size:12px;opacity:0.6;margin:-9px 0 18px;line-height:1.5;"></div>' +
           '<div style="' + label + '">Tens slap</div>' +
           '<div data-el="tenses" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
-          '<div style="font-size:12px;opacity:0.45;margin-top:8px;line-height:1.5;">' +
+          '<div style="font-size:12px;opacity:0.6;margin-top:8px;line-height:1.5;">' +
             'Tens: two number cards in a row adding to ten. Off in some houses — ' +
             'it is worth about half again as many live tables.</div>' +
           '</div>' +
@@ -2251,7 +2261,7 @@ window.plethoraBit = {
         '<div style="' + panelFlex + '">' +
           '<div style="flex:none;">' +
             '<div style="font-size:19px;font-weight:700;margin-bottom:3px;">How to play</div>' +
-            '<div style="font-size:12.5px;opacity:0.5;margin-bottom:15px;line-height:1.5;">' +
+            '<div style="font-size:12.5px;opacity:0.62;margin-bottom:15px;line-height:1.5;">' +
               'Phone flat on the table. Everyone takes the pad on their own edge — ' +
               'that pad is your face-down stack.</div>' +
           '</div>' +
@@ -2287,7 +2297,7 @@ window.plethoraBit = {
                 'letter-spacing:0.12em;">' + r[0] + '</div>' +
               '<div style="font-size:12.5px;opacity:0.78;line-height:1.4;">' + r[1] + '</div>' +
             '</div>').join("") +
-          '<div style="font-size:12px;opacity:0.45;margin:9px 0 17px;line-height:1.5;">' +
+          '<div style="font-size:12px;opacity:0.6;margin:9px 0 17px;line-height:1.5;">' +
             'Tens is a settings toggle. The cards that made it are ringed in gold.</div>' +
 
           '<div style="' + label + 'margin-bottom:9px;">Winning and losing it</div>' +

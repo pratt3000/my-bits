@@ -716,6 +716,9 @@ window.plethoraBit = {
     })();
 
     const L = {};
+    // y of the first line of the title's type. The fan lives above it; see
+    // fitSheet(), which is what measures it.
+    let menuInk = ctx.height;
     function layout() {
       W = ctx.width; H = ctx.height;
       const st = ctx.safeArea.top, sb = ctx.safeArea.bottom;
@@ -1017,6 +1020,7 @@ window.plethoraBit = {
             (isRed(named) ? "#ff8b92" : CREAM) + ';">' + SUIT_GLYPH[named] + "</span>" : "")
         : "";
       shell.el("cover").style.display = "flex";
+      fitCover();
     }
 
     function reveal() {
@@ -1957,7 +1961,16 @@ window.plethoraBit = {
       trackedL(g, "ROUND " + roundNo, 15, y - 3, 2.2);
       g.fillStyle = INK_SOFT;
       g.font = "600 10px " + FONT;
-      g.fillText("first past " + settings.target + " ends it · lowest wins", 15, y + 12);
+      // The three chrome buttons are pinned to the right edge, and on a narrow
+      // screen this line ran straight under them. Same trick as the prompt
+      // plaque: say it shorter rather than say it underneath.
+      const room = W - 10 - (3 * 36 + 2 * 7) - 15 - 10;
+      const lines = ["first past " + settings.target + " ends it · lowest wins",
+                     "first past " + settings.target + " · lowest wins",
+                     "to " + settings.target + " · lowest wins"];
+      let sub = lines[lines.length - 1];
+      for (const c of lines) { if (g.measureText(c).width <= room) { sub = c; break; } }
+      g.fillText(sub, 15, y + 12);
       g.restore();
       g.textAlign = "center";
       g.textBaseline = "middle";
@@ -2034,16 +2047,22 @@ window.plethoraBit = {
     /* ---- the title fan --------------------------------------------- */
     const FAN = ["8S", "QH", "8D", "KC", "8H"];
     function drawTitleFan(now) {
-      const cx = W / 2, cy = H * 0.295, R = 320;
+      // The fan is about 300px tall at full size and used to be pinned to
+      // 29.5% of the screen, which on the short card put five white card faces
+      // exactly where the gold title is set. It gets the band above the type
+      // and is drawn at whatever scale that band can hold.
+      const band = Math.max(96, menuInk - 12);
+      const s = Math.min(1, band / 300);
+      const cx = W / 2, cy = Math.min(H * 0.295, band - CARD_H * s * 0.52), R = 320 * s;
       const rock = Math.sin(now * 0.00065) * 0.028;
       for (let i = 0; i < FAN.length; i++) {
         const k = i - (FAN.length - 1) / 2;
         const a = k * 0.190 + rock;
         const wild = FAN[i][0] === "8";
         const card = { id: FAN[i], rank: FAN[i].slice(0, -1), suit: FAN[i].slice(-1) };
-        const fx = cx + Math.sin(a) * R, fy = cy - Math.cos(a) * R + R - (wild ? 15 : 0);
-        cardShadow(fx, fy, a, 1, wild ? 0.22 : 0.07, 0.5);
-        drawCardAt(fx, fy, a, 1, card, true, 0, false);
+        const fx = cx + Math.sin(a) * R, fy = cy - Math.cos(a) * R + R - (wild ? 15 : 0) * s;
+        cardShadow(fx, fy, a, s, wild ? 0.22 : 0.07, 0.5);
+        drawCardAt(fx, fy, a, s, card, true, 0, false);
       }
     }
 
@@ -2158,7 +2177,17 @@ window.plethoraBit = {
     const panel = "box-sizing:border-box;max-width:326px;width:100%;" +
       "background:linear-gradient(180deg,#4a2513,#261006);" +
       "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(232,185,95,0.30),0 20px 60px rgba(0,0,0,0.6);";
-    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.52;";
+    // 0.52 on eleven tracked pixels is about 4.5:1 on the table black — the
+    // floor, for the smallest type on screen. Small caps need a little more.
+    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.62;";
+
+    /* The title stack is a fixed number of pixels tall. That is most of a
+     * phone and more than all of the 306x517 card the app embeds a bit in,
+     * where the type climbed straight off its own scrim and set itself across
+     * the card fan — gold letters on the white faces of five playing cards.
+     * Scale the block with the height it actually has; TS is 1 on any phone. */
+    const TS = Math.max(0.72, Math.min(1, ctx.height / 800));
+    const ts = (n) => +(n * TS).toFixed(1);
     const sheetCss = "box-sizing:border-box;position:absolute;inset:0;display:none;align-items:center;" +
       "align-items:safe center;justify-content:center;" +
       "background:rgba(12,5,2,0.90);z-index:80;padding:" + (SAFE_T + 14) + "px 24px " +
@@ -2194,23 +2223,23 @@ window.plethoraBit = {
       /* ---- title ---- */
       '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
         'justify-content:flex-end;align-items:center;z-index:50;pointer-events:auto;' +
-        'padding:0 26px ' + (SAFE_B + 24) + 'px;text-align:center;background:linear-gradient(180deg,' +
-        'rgba(14,5,2,0) 18%,rgba(14,5,2,0.24) 38%,rgba(14,5,2,0.88) 56%,rgba(12,4,1,0.98) 100%);">' +
+        'padding:0 26px ' + (SAFE_B + ts(24)) + 'px;text-align:center;">' +
         '<div style="' + label + 'margin-bottom:4px;">Wild cards, one phone</div>' +
-        '<div style="font-size:52px;font-weight:800;letter-spacing:-0.035em;line-height:0.92;' +
+        '<div style="font-size:' + ts(52) + 'px;font-weight:800;letter-spacing:-0.035em;line-height:0.92;' +
           'background:linear-gradient(178deg,#fff6e3 2%,#f2ca79 44%,#c48f31 100%);-webkit-background-clip:text;' +
           'background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' +
           'text-shadow:0 8px 30px rgba(0,0,0,0.55);">Crazy Eights</div>' +
-        '<div style="font-size:14px;line-height:1.55;opacity:0.66;max-width:272px;margin-top:9px;">' +
+        '<div style="font-size:' + Math.max(12.5, ts(14)) + 'px;line-height:1.5;opacity:0.78;' +
+          'max-width:272px;margin-top:' + ts(9) + 'px;">' +
           'Match the pile by rank or suit. Play an eight and name any suit you like. ' +
           'The phone goes round — your hand is yours alone.</div>' +
-        '<div style="' + label + 'margin:18px 0 8px;">Players</div>' +
+        '<div style="' + label + 'margin:' + ts(18) + 'px 0 ' + ts(8) + 'px;">Players</div>' +
         '<div data-el="seats" style="display:flex;gap:9px;width:210px;"></div>' +
-        '<div style="' + label + 'margin:14px 0 8px;">Play to</div>' +
+        '<div style="' + label + 'margin:' + ts(14) + 'px 0 ' + ts(8) + 'px;">Play to</div>' +
         '<div data-el="targets" style="display:flex;gap:7px;width:250px;"></div>' +
         '<div style="width:100%;max-width:250px;">' +
           '<button data-el="deal" style="' + bigBtn(GOLD, "#241704") +
-            'margin-top:18px;letter-spacing:0.06em;">Deal</button>' +
+            'margin-top:' + ts(18) + 'px;letter-spacing:0.06em;">Deal</button>' +
         '</div>' +
       '</div>' +
 
@@ -2222,9 +2251,7 @@ window.plethoraBit = {
        * down until the cover lifts. ---- */
       '<div data-el="cover" style="box-sizing:border-box;position:absolute;inset:0;display:none;' +
         'flex-direction:column;justify-content:flex-end;align-items:center;z-index:55;pointer-events:auto;' +
-        'padding:0 24px ' + (SAFE_B + 22) + 'px;text-align:center;background:linear-gradient(180deg,' +
-        'rgba(16,6,2,0) 0%,rgba(16,6,2,0.05) 40%,rgba(15,5,2,0.55) 52%,rgba(11,4,1,0.965) 64%,' +
-        'rgba(9,3,1,0.99) 100%);">' +
+        'padding:0 24px ' + (SAFE_B + 22) + 'px;text-align:center;">' +
         '<div data-el="cover-need" style="font-size:12.5px;opacity:0.62;margin-bottom:18px;"></div>' +
         '<div style="' + label + '">Pass the phone to</div>' +
         '<div data-el="cover-name" style="font-size:44px;font-weight:800;line-height:1.06;' +
@@ -2344,6 +2371,31 @@ window.plethoraBit = {
       },
     };
 
+    /**
+     * Both bottom sheets — the title and the handover cover — were darkened by
+     * a gradient pinned in PERCENTAGES, which quietly assumes the type stack
+     * is a fixed share of the screen. It is not: it is a fixed number of
+     * pixels, so on a short screen the stack rises out of the opaque band and
+     * prints over whatever the canvas is drawing. That is how "on the pile:
+     * 4♠" ended up sharing a line with the deck's own count plate.
+     *
+     * Anchor the gradient to the stack instead. offsetTop of the first child
+     * against a positioned parent is the top of the type, needs no rect, and
+     * costs one read per state change.
+     */
+    function fitSheet(node, rgb, keep) {
+      if (!node || !node.firstElementChild) return;
+      const top = node.firstElementChild.offsetTop;
+      const solid = Math.max(0, ctx.height - top + 10);
+      node.style.background =
+        "linear-gradient(0deg," + rgb(0.985) + " 0px," + rgb(0.96) + " " + solid + "px," +
+        rgb(0.5) + " " + (solid + 44) + "px," + rgb(0) + " " + (solid + 104) + "px)";
+      if (keep) menuInk = top;
+    }
+    const COVER_INK = (a) => "rgba(13,5,2," + a + ")";
+    const fitMenu = () => fitSheet(shell.el("menu"), COVER_INK, true);
+    const fitCover = () => fitSheet(shell.el("cover"), COVER_INK, false);
+
     /** A row of segmented pills, the only control this bit needs. */
     function pills(host, values, labels, get, set) {
       if (!host) return null;
@@ -2434,6 +2486,7 @@ window.plethoraBit = {
     function toMenu() {
       for (const n of ["match", "round", "cover", "suitp"]) shell.el(n).style.display = "none";
       shell.el("menu").style.display = "flex";
+      fitMenu();
       phase = "menu";
       players = [];
       flyer = null; drawQueue = 0; waitT = 0; waitFn = null; banner = null;
@@ -2524,6 +2577,8 @@ window.plethoraBit = {
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       layout();
       bakeTable();
+      fitMenu();
+      if (shell.el("cover").style.display === "flex") fitCover();
     });
 
     /* ===============================================================
@@ -2576,6 +2631,7 @@ window.plethoraBit = {
     // The table and the title fan are on screen before ready() is called, so
     // the host never shows a blank bit for a single frame.
     render(performance.now());
+    fitMenu();
     ctx.markVisualReady("table drawn");
     ctx.platform.ready();
   },

@@ -107,13 +107,13 @@ window.plethoraBit = {
      * `yard` is where its idle tokens sit.
      */
     const SEATS = [
-      { id: "red",    hex: 0xEB1C24, css: "#EB1C24", name: "Red",    start: 0,
+      { id: "red",    hex: 0xEB1C24, css: "#EB1C24", ink: "#FF6B6B", name: "Red",    start: 0,
         home: [[7,1],[7,2],[7,3],[7,4],[7,5]],       yard: [0, 0], corner: [-1, -1] },
-      { id: "green",  hex: 0x039F4B, css: "#039F4B", name: "Green",  start: 13,
+      { id: "green",  hex: 0x039F4B, css: "#039F4B", ink: "#35D07F", name: "Green",  start: 13,
         home: [[1,7],[2,7],[3,7],[4,7],[5,7]],       yard: [0, 9], corner: [ 1, -1] },
-      { id: "yellow", hex: 0xF7C600, css: "#F7C600", name: "Yellow", start: 26,
+      { id: "yellow", hex: 0xF7C600, css: "#F7C600", ink: "#FFD429", name: "Yellow", start: 26,
         home: [[7,13],[7,12],[7,11],[7,10],[7,9]],   yard: [9, 9], corner: [ 1,  1] },
-      { id: "blue",   hex: 0x24A5F6, css: "#24A5F6", name: "Blue",   start: 39,
+      { id: "blue",   hex: 0x24A5F6, css: "#24A5F6", ink: "#4FC3F7", name: "Blue",   start: 39,
         home: [[13,7],[12,7],[11,7],[10,7],[9,7]],   yard: [9, 0], corner: [-1,  1] },
     ];
     // Two players sit across the table, so they take diagonally opposite yards.
@@ -900,7 +900,7 @@ window.plethoraBit = {
       // Whose turn it is, on the centre line where it belongs to nobody.
       '<div data-el="turnbar" style="position:absolute;left:0;right:0;top:' + (ST + 8) + 'px;' +
         'text-align:center;pointer-events:none;font-size:12px;letter-spacing:0.24em;' +
-        'text-transform:lowercase;opacity:0.85;"></div>' +
+        'text-transform:lowercase;"></div>' +
       '<div data-el="toast" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);' +
         'text-align:center;pointer-events:none;font-size:19px;font-weight:800;opacity:0;' +
         'text-shadow:0 2px 14px rgba(0,0,0,0.6);"></div>' +
@@ -913,22 +913,27 @@ window.plethoraBit = {
       // Setup.
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:9px;' +
-        'background:rgba(8,22,48,0.93);z-index:50;padding:26px;text-align:center;">' +
-        '<div style="font-size:12px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;">Pass and play</div>' +
+        // Opaque. At 0.93 the board's white squares still came through at 16/255
+        // behind every line of copy, and the chrome keys under it read as three
+        // grey smudges rather than as buttons.
+        'background:#081630;z-index:50;padding:26px;text-align:center;">' +
+        '<div style="font-size:12px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.66;">Pass and play</div>' +
         '<div style="font-size:56px;font-weight:900;letter-spacing:-0.02em;' +
           'background:linear-gradient(96deg,#EB1C24,#F7C600,#039F4B,#24A5F6);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Ludo</div>' +
         '<div style="font-size:15px;opacity:0.66;max-width:260px;line-height:1.55;margin-top:2px;">' +
           'Put the phone down in the middle. Nothing is hidden, so you never have to pick it up.</div>' +
-        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;margin-top:16px;">Players</div>' +
+        '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.66;margin-top:16px;">Players</div>' +
         '<div data-el="pc" style="display:flex;gap:10px;margin-top:2px;"></div>' +
         '<button data-el="play" style="' + BIG + 'max-width:230px;margin-top:20px;' +
-          'background:linear-gradient(96deg,#EB1C24,#24A5F6);color:#fff;">Start</button>' +
+          // Deeper than the board's own red and blue: white on #24A5F6 is
+          // 2.7:1, and this is the one button on the screen.
+          'background:linear-gradient(96deg,#C8151C,#1565C0);color:#fff;">Start</button>' +
       '</div>' +
       // Winner.
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:6px;' +
-        'background:rgba(8,22,48,0.93);z-index:55;padding:26px;text-align:center;">' +
+        'background:#081630;z-index:55;padding:26px;text-align:center;">' +
         '<div data-el="over-title" style="font-size:42px;font-weight:900;"></div>' +
         '<div data-el="over-line" style="font-size:14px;opacity:0.6;">All four tokens home</div>' +
         '<button data-el="again" style="' + BIG + 'max-width:230px;margin-top:22px;' +
@@ -940,9 +945,9 @@ window.plethoraBit = {
         '<div style="max-width:320px;width:100%;background:rgba(14,40,84,0.98);border-radius:22px;' +
           'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:15px;">Settings</div>' +
-          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">Blockades</div>' +
+          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.72;">Blockades</div>' +
           '<div data-el="blocks" style="display:flex;gap:8px;margin:9px 0 6px;"></div>' +
-          '<div style="font-size:12.5px;opacity:0.6;line-height:1.5;">Strict blocks stop an opponent passing ' +
+          '<div style="font-size:12.5px;opacity:0.75;line-height:1.5;">Strict blocks stop an opponent passing ' +
             'through a pair of your tokens. Soft blocks only stop them landing on it.</div>' +
           '<button data-el="cogp-close" style="' + BIG + 'margin-top:20px;' +
             'background:rgba(255,255,255,0.14);color:#eaf2ff;">Done</button>' +
@@ -1001,8 +1006,10 @@ window.plethoraBit = {
       if (!game) return;
       const seat = activeSeat();
       el("turnbar").innerHTML = phase === "over" ? "" :
-        '<span style="color:' + seat.css + ';font-weight:800;">' + seat.name + '</span>' +
-        '<span style="opacity:0.6;"> &nbsp;' +
+        // `ink`, not `css`: board red on the near-black table is 3.4:1, and
+        // the one line that says whose turn it is cannot be the dim one.
+        '<span style="color:' + seat.ink + ';font-weight:800;">' + seat.name + '</span>' +
+        '<span style="opacity:0.72;"> &nbsp;' +
           (phase === "roll" ? "tap the die"
             : phase === "choose" ? "pick a token"
             : phase === "stuck" ? "no move — tap to pass"
@@ -1094,8 +1101,12 @@ window.plethoraBit = {
       const paint = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
-          b.style.background = on ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.10)";
-          b.style.color = on ? "#fff" : "rgba(234,242,255,0.55)";
+          // Two whites a shade apart is not a selected state. The chosen pill
+          // takes the board's blue and a ring; the quiet one gets an ink that
+          // clears the floor instead of the 4.1:1 it sat at.
+          b.style.background = on ? "rgba(36,165,246,0.32)" : "rgba(255,255,255,0.10)";
+          b.style.color = on ? "#EAF6FF" : "rgba(234,242,255,0.78)";
+          b.style.boxShadow = on ? "inset 0 0 0 1.6px rgba(36,165,246,0.85)" : "none";
         }
       };
       for (const b of host.querySelectorAll("button")) {

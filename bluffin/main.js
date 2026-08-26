@@ -310,7 +310,7 @@ window.plethoraBit = {
         'align-items:center;justify-content:center;background:rgba(7,8,20,0.94);z-index:80;padding:24px;">' +
         '<div style="max-width:330px;width:100%;' + CARD + 'padding:24px;">' +
           '<div style="font-size:20px;font-weight:800;margin-bottom:12px;">How to play</div>' +
-          '<ul style="font-size:14.5px;line-height:1.75;opacity:0.86;padding-left:18px;margin:0;">' +
+          '<ul style="font-size:14.5px;line-height:1.75;opacity:0.92;padding-left:18px;margin:0;">' +
             '<li>Everyone sees a fact with a hole in it. One of you is holding the phone.</li>' +
             '<li>The phone goes round once. Each of you secretly types a <b>lie</b> to fill the hole.</li>' +
             '<li>Then it goes round again showing every lie mixed in with the truth. Pick the one you think is real.</li>' +
@@ -319,8 +319,11 @@ window.plethoraBit = {
             '<li>Type the actual truth by accident and you get <b>+1500</b> and everyone is told.</li>' +
             '<li>The cover names whoever should be holding the phone. It closes again the moment they commit, so it is never left sitting on somebody\'s secret.</li>' +
           '</ul>' +
+          // A 14% white slab under near-white text is the same grey twice over.
+          // The panel's only way out gets the same warm CTA as every other
+          // commit in the bit.
           '<button data-el="helpp-close" style="' + BIG + 'margin-top:18px;' +
-            'background:rgba(255,255,255,0.14);color:#eef1ff;">Got it</button>' +
+            'background:linear-gradient(96deg,#ff5470,#ffd166);color:#180c14;">Got it</button>' +
         '</div>' +
       '</div>';
 
@@ -347,18 +350,18 @@ window.plethoraBit = {
       phase = "setup";
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:12px;">' +
-          '<div style="font-size:11px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.66;' +
             'text-align:center;">Pass and lie</div>' +
           '<div style="font-size:58px;font-weight:900;letter-spacing:-0.03em;text-align:center;' +
             'background:linear-gradient(96deg,#ff5470,#ffd166,#2ec4b6);-webkit-background-clip:text;' +
             'background-clip:text;-webkit-text-fill-color:transparent;line-height:1;">Bluffin</div>' +
-          '<div style="font-size:14.5px;opacity:0.62;text-align:center;line-height:1.5;' +
+          '<div style="font-size:14.5px;opacity:0.76;text-align:center;line-height:1.5;' +
             'max-width:270px;margin:0 auto;">Fill the blank with a lie. Score for fooling people, ' +
             'and for spotting the truth.</div>' +
-          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.66;' +
             'margin-top:14px;">Players</div>' +
           '<div data-el="pc" style="display:flex;gap:7px;flex-wrap:wrap;"></div>' +
-          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;' +
+          '<div style="font-size:11px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.66;' +
             'margin-top:6px;">Rounds</div>' +
           '<div data-el="rc" style="display:flex;gap:7px;"></div>' +
           '<button data-el="names" style="' + BIG + 'margin-top:14px;' +
@@ -383,13 +386,17 @@ window.plethoraBit = {
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;gap:9px;overflow-y:auto;">' +
           '<div style="font-size:20px;font-weight:800;margin-bottom:2px;">Who is playing?</div>' +
-          '<div style="font-size:13px;opacity:0.55;margin-bottom:8px;">Leave any blank and it fills itself in.</div>' +
+          '<div style="font-size:13px;opacity:0.7;margin-bottom:8px;">Leave any blank and it fills itself in.</div>' +
           Array.from({ length: settings.players }, (_, i) =>
             '<div style="display:flex;align-items:center;gap:10px;">' +
               '<span style="width:11px;height:11px;border-radius:50%;flex:none;' +
                 'background:' + COLOURS[i % COLOURS.length] + ';"></span>' +
+              // min-width:0 or the flex item refuses to go below an input's
+              // default 20-character width: on the 306px card the app embeds a
+              // bit in, the field runs 15px off the right edge and takes the
+              // name being typed with it.
               '<input data-el="name-' + i + '" maxlength="14" placeholder="Player ' + (i + 1) + '" ' +
-                'style="flex:1;padding:13px 15px;border-radius:14px;border:1px solid rgba(255,255,255,0.12);' +
+                'style="flex:1;min-width:0;padding:13px 15px;border-radius:14px;border:1px solid rgba(255,255,255,0.12);' +
                 'background:rgba(255,255,255,0.06);color:#eef1ff;font-family:inherit;font-size:16px;">' +
             '</div>').join("") +
           '<button data-el="go2" style="' + BIG + 'margin-top:14px;flex:none;' +
@@ -412,7 +419,9 @@ window.plethoraBit = {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
           b.style.background = on ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.08)";
-          b.style.color = on ? "#fff" : "rgba(238,241,255,0.55)";
+          // The off state has to stay quieter than the on one and still be a
+          // number you can read at a glance; 0.55 on an 8% plate was neither.
+          b.style.color = on ? "#fff" : "rgba(238,241,255,0.74)";
         }
       };
       for (const b of host.querySelectorAll("button")) {
@@ -435,15 +444,15 @@ window.plethoraBit = {
       const what = phase === "write" ? "type a lie" : "pick the truth";
       stage.innerHTML = wrap(
         '<div style="text-align:center;font-size:11px;letter-spacing:0.28em;text-transform:lowercase;' +
-          'opacity:0.5;">Round ' + round + ' of ' + settings.rounds + '</div>' +
+          'opacity:0.66;">Round ' + round + ' of ' + settings.rounds + '</div>' +
         '<div style="text-align:center;font-size:13px;letter-spacing:0.2em;text-transform:lowercase;' +
-          'opacity:0.5;margin-top:14px;">Pass the phone to</div>' +
+          'opacity:0.66;margin-top:14px;">Pass the phone to</div>' +
         '<div style="text-align:center;font-size:40px;font-weight:900;color:' + p.colour + ';' +
           'line-height:1.1;">' + esc(p.name) + '</div>' +
-        '<div style="text-align:center;font-size:14px;opacity:0.55;">…then ' + what + '</div>' +
+        '<div style="text-align:center;font-size:14px;opacity:0.7;">…then ' + what + '</div>' +
         '<button data-el="hold" style="' + BIG + 'margin-top:26px;background:' + p.colour + ';' +
           'color:#12101c;">I\'m ' + esc(p.name) + ' — show me</button>' +
-        '<div style="text-align:center;font-size:12.5px;opacity:0.42;line-height:1.5;">' +
+        '<div style="text-align:center;font-size:12.5px;opacity:0.64;line-height:1.5;">' +
           'Only you should see the next screen.<br>It closes the moment you commit.</div>');
 
       // Tap, not press-and-hold.
@@ -521,7 +530,7 @@ window.plethoraBit = {
           '<div style="text-align:center;font-size:12px;letter-spacing:0.2em;text-transform:lowercase;' +
             'color:' + p.colour + ';">' + esc(p.name) + '</div>' +
           promptCard() +
-          '<div style="font-size:12px;letter-spacing:0.18em;text-transform:lowercase;opacity:0.5;' +
+          '<div style="font-size:12px;letter-spacing:0.18em;text-transform:lowercase;opacity:0.66;' +
             'margin-top:2px;">Which one is true?</div>' +
           board.map((b, i) =>
             // Your own lie is shown but not tappable, so nobody can vote for
@@ -530,7 +539,7 @@ window.plethoraBit = {
             ' style="text-align:left;padding:15px 16px;border-radius:16px;font-family:inherit;' +
             'font-size:16px;font-weight:600;border:1px solid rgba(255,255,255,0.11);' +
             (b.by === cursor
-              ? 'background:rgba(255,255,255,0.03);color:rgba(238,241,255,0.32);'
+              ? 'background:rgba(255,255,255,0.03);color:rgba(238,241,255,0.52);'
               : 'background:rgba(255,255,255,0.075);color:#eef1ff;') + '">' +
             esc(b.text) + (b.by === cursor
               ? '<span style="font-size:12px;opacity:0.7;"> — yours</span>' : '') +
@@ -588,7 +597,7 @@ window.plethoraBit = {
       stage.innerHTML =
         '<div style="flex:1;display:flex;flex-direction:column;gap:9px;overflow-y:auto;">' +
           '<div style="text-align:center;font-size:11px;letter-spacing:0.28em;text-transform:lowercase;' +
-            'opacity:0.5;">Round ' + round + '</div>' +
+            'opacity:0.66;">Round ' + round + '</div>' +
           promptCard() +
           board.map((b, i) => {
             const truth = b.by === -1;
@@ -599,7 +608,7 @@ window.plethoraBit = {
               '<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;">' +
                 '<span style="font-size:16px;font-weight:700;">' + esc(b.text) + '</span>' +
                 '<span style="font-size:11px;letter-spacing:0.14em;text-transform:lowercase;flex:none;' +
-                  'color:' + (truth ? '#2ec4b6' : 'rgba(238,241,255,0.42)') + ';">' +
+                  'color:' + (truth ? '#2ec4b6' : 'rgba(238,241,255,0.68)') + ';">' +
                   (truth ? 'the truth' : esc(players[b.by].name)) + '</span>' +
               '</div>' +
               (voters.length
@@ -643,13 +652,13 @@ window.plethoraBit = {
       const top = ranked[0].p;
       stage.innerHTML = wrap(
         '<div style="text-align:center;font-size:11px;letter-spacing:0.32em;text-transform:lowercase;' +
-          'opacity:0.5;">Best liar</div>' +
+          'opacity:0.66;">Best liar</div>' +
         '<div style="text-align:center;font-size:44px;font-weight:900;color:' + top.colour + ';' +
           'line-height:1.1;">' + esc(top.name) + '</div>' +
         '<div style="' + CARD + 'padding:16px;margin-top:12px;">' +
           ranked.map((r, n) =>
             '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:16px;">' +
-              '<span><span style="opacity:0.4;">' + (n + 1) + '.</span> ' +
+              '<span><span style="opacity:0.6;">' + (n + 1) + '.</span> ' +
                 '<span style="color:' + r.p.colour + ';font-weight:700;">' + esc(r.p.name) + '</span></span>' +
               '<span style="opacity:0.85;">' + r.p.score.toLocaleString() + '</span></div>').join("") +
         '</div>' +

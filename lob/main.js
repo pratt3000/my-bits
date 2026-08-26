@@ -1758,7 +1758,8 @@ window.plethoraBit = {
       // no room of its own. Nothing here rotates: both players read it from
       // the same side.
       if (phase !== "title") {
-        gg.globalAlpha = 0.42;
+        // 0.42 of this warm grey over the dusk sky composites to 3.2:1.
+        gg.globalAlpha = 0.66;
         blockText(gg, "VOLLEY " + volley, W - 12, BF_TOP + 10, 1.7,
           { align: "right", colour: "#F0C9B4" });
         gg.globalAlpha = 1;
@@ -2231,19 +2232,30 @@ window.plethoraBit = {
     }
 
     function drawTitle(gg, t) {
+      // The logo used to start inside the status strip, which put the left
+      // edge of the L on top of the how-to-play key. Start it under the strip
+      // instead; on the phone that costs the 36px of slack the stack had.
+      const logoY = Math.max(TOP_Y + Math.round(DECK_H * 0.09), CHROME_Y + 42);
+      const s = Math.min(10, Math.floor(W / 26));
+      const ic = 30, gapI = 6;                       // weapon strip cell, gap
+      const iy = logoY + s * 7 + 32;
+      const capY = iy + ic + 16;                     // caption baseline
+
       // Scrim that leaves the live battlefield showing through its middle.
+      // The clear window opens below the title copy rather than at the top of
+      // the battlefield: the stack is the same height on both devices and on
+      // the card it reaches 145px into the window, which printed the weapons
+      // caption over lit terrain.
+      const clearTop = Math.max(BF_TOP, capY + 8) / H;
       const gr = gg.createLinearGradient(0, 0, 0, H);
       gr.addColorStop(0, "rgba(3,4,10,0.97)");
-      gr.addColorStop(BF_TOP / H - 0.02, "rgba(3,4,10,0.94)");
-      gr.addColorStop(BF_TOP / H + 0.03, "rgba(3,4,10,0.10)");
+      gr.addColorStop(clearTop - 0.02, "rgba(3,4,10,0.94)");
+      gr.addColorStop(clearTop + 0.03, "rgba(3,4,10,0.10)");
       gr.addColorStop(BF_BOT / H - 0.03, "rgba(3,4,10,0.20)");
       gr.addColorStop(BF_BOT / H + 0.02, "rgba(3,4,10,0.94)");
       gr.addColorStop(1, "rgba(3,4,10,0.97)");
       gg.fillStyle = gr;
       gg.fillRect(0, 0, W, H);
-
-      const logoY = TOP_Y + Math.round(DECK_H * 0.09);
-      const s = Math.min(10, Math.floor(W / 26));
       // Layered extrude: the drop is the depth, the fills are the face.
       for (let d = 7; d >= 1; d--) {
         blockText(gg, "LOB", W / 2 + d * 1.1, logoY + d * 1.1, s,
@@ -2263,10 +2275,8 @@ window.plethoraBit = {
       gg.fillText("A R T I L L E R Y   F O R   T W O", W / 2, logoY + s * 7 + 22);
 
       // Weapon strip: eight of the twelve go into every match, so show them.
-      const ic = 30, gapI = 6;
       const total = 8 * ic + 7 * gapI;
       let ix = W / 2 - total / 2;
-      const iy = logoY + s * 7 + 32;
       for (let i = 0; i < 8; i++) {
         const w = WEAPONS[i];
         inset(gg, ix, iy, ic, ic, 7, "rgba(255,255,255,0.035)");
@@ -2278,28 +2288,44 @@ window.plethoraBit = {
       gg.fillStyle = "#7E86A0";
       gg.font = "600 10px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
       gg.textAlign = "center";
-      gg.fillText("TWELVE WEAPONS  \u00b7  EIGHT EACH  \u00b7  ONE SHOT EACH", W / 2, iy + ic + 16);
+      gg.fillText("TWELVE WEAPONS  \u00b7  EIGHT EACH  \u00b7  ONE SHOT EACH", W / 2, capY);
 
       // Seat map, so the layout is obvious before the first shot.
       const seat = (label, def, y, flip) => {
-        const tw = blockW(label, 2);
+        // Two pixels a cell overruns a 306px card by 28px and loses the last
+        // word off the right edge; take whatever cell size actually fits.
+        const bs = Math.min(2, (W - 58) / (label.length * 6));
+        const tw = blockW(label, bs);
         const x0 = -(tw + 24) / 2;
         gg.save();
         gg.translate(W / 2, y);
         if (flip) gg.rotate(Math.PI);
+        // Plate. On the phone these sit on the scrim; on the card the same
+        // banners land on the lit terrain, and a two-pixel coloured face on
+        // orange ground is not there at all.
+        gg.fillStyle = "rgba(4,5,12,0.80)";
+        rr(gg, x0 - 9, -16, tw + 42, 26, 8); gg.fill();
         gg.fillStyle = def.ink;
         rr(gg, x0, -3, 17, 5, 2); gg.fill();
         gg.beginPath(); gg.arc(x0 + 8.5, -3, 4.4, Math.PI, TAU); gg.fill();
         gg.strokeStyle = def.ink;
         gg.lineWidth = 2;
         gg.beginPath(); gg.moveTo(x0 + 8.5, -7); gg.lineTo(x0 + 17, -13); gg.stroke();
-        blockText(gg, label, x0 + 24, -7, 2, { align: "left", colour: def.ink });
+        blockText(gg, label, x0 + 24, -bs * 3.5, bs, { align: "left", colour: def.ink });
         gg.restore();
       };
       // Both labels upright: the two players share a side, and the controls
       // come to whoever is shooting rather than each having a fixed end.
-      seat("EMBER SHOOTS RIGHT TO LEFT", PLAYERS_DEF[1], TOP_Y + DECK_H - 20, false);
-      seat("AZURE SHOOTS LEFT TO RIGHT", PLAYERS_DEF[0], BOT_Y + 24, false);
+      //
+      // Their old fixed offsets held on the phone and collided on the card,
+      // where the screen is 327px shorter but the stack above and the start
+      // button below are not: the top banner was printed through the weapons
+      // caption and the bottom one through the START MATCH button. Hang each
+      // one off the thing it must clear instead.
+      seat("EMBER SHOOTS RIGHT TO LEFT", PLAYERS_DEF[1],
+           Math.max(TOP_Y + DECK_H - 20, capY + 20), false);
+      seat("AZURE SHOOTS LEFT TO RIGHT", PLAYERS_DEF[0],
+           Math.min(BOT_Y + 24, START_Y - 18), false);
     }
 
     /* =================================================================
@@ -2372,7 +2398,7 @@ window.plethoraBit = {
           'position:absolute;left:50%;transform:translateX(-50%);top:' + START_Y + 'px;' +
           'width:214px;height:56px;font-size:17px;">START MATCH</button>' +
         '<div style="position:absolute;left:0;right:0;top:' + (START_Y + 66) + 'px;text-align:center;' +
-          'font-size:12px;opacity:0.5;line-height:1.6;padding:0 34px;">' +
+          'font-size:12px;opacity:0.64;line-height:1.6;padding:0 34px;">' +
           'Sit side by side. The controls come to whoever is shooting.</div>' +
       '</div>' +
 
@@ -2386,12 +2412,12 @@ window.plethoraBit = {
           'text-align:center;transform:rotate(180deg);">' +
           '<div data-el="over-mini" style="font-size:22px;font-weight:800;' +
             'letter-spacing:0.14em;"></div>' +
-          '<div data-el="over-mini-sub" style="font-size:12px;opacity:0.6;' +
+          '<div data-el="over-mini-sub" style="font-size:12px;opacity:0.72;' +
             'letter-spacing:0.07em;margin-top:6px;"></div>' +
         '</div>' +
         '<div style="' + cardCss(OVER_TOP, OVER_H) + 'text-align:center;">' +
           '<div data-el="over-name" style="font-size:32px;font-weight:800;letter-spacing:0.12em;"></div>' +
-          '<div data-el="over-line" style="font-size:12.5px;opacity:0.55;margin-top:6px;"></div>' +
+          '<div data-el="over-line" style="font-size:12.5px;opacity:0.7;margin-top:6px;"></div>' +
           '<div style="display:flex;gap:8px;margin-top:12px;">' +
             '<div style="flex:1;padding:8px 0;border-radius:12px;background:rgba(41,211,240,0.10);' +
               'box-shadow:inset 0 0 0 1px rgba(41,211,240,0.30);">' +
@@ -2403,11 +2429,11 @@ window.plethoraBit = {
               '<div data-el="over-hp1" style="font-size:19px;font-weight:800;color:#FF6A3C;">0</div></div>' +
           '</div>' +
           '<div style="margin-top:10px;padding:10px;border-radius:14px;background:rgba(255,255,255,0.045);">' +
-            '<div style="font-size:10px;letter-spacing:0.24em;opacity:0.5;">BIGGEST SHOT</div>' +
+            '<div style="font-size:10px;letter-spacing:0.24em;opacity:0.7;">BIGGEST SHOT</div>' +
             '<div data-el="over-stat" style="font-size:34px;font-weight:800;line-height:1.15;' +
               'background:linear-gradient(96deg,#FFE066,#FF6A3C);-webkit-background-clip:text;' +
               'background-clip:text;-webkit-text-fill-color:transparent;">0</div>' +
-            '<div data-el="over-sub" style="font-size:11px;opacity:0.45;"></div>' +
+            '<div data-el="over-sub" style="font-size:11px;opacity:0.66;"></div>' +
           '</div>' +
         '</div>' +
         '<button data-el="again" style="' + bigBtn("linear-gradient(96deg,#29D3F0,#FF6A3C)", "#06121A") +
@@ -2450,19 +2476,19 @@ window.plethoraBit = {
         'background:rgba(3,4,10,0.93);">' +
         '<div style="' + cardCss(SET_TOP, SET_H) + '">' +
           '<div style="font-size:19px;font-weight:800;letter-spacing:0.1em;">SETTINGS</div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.45;margin:15px 0 7px;">ARSENALS</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.68;margin:15px 0 7px;">ARSENALS</div>' +
           '<div data-el="arsrow" style="display:flex;gap:8px;"></div>' +
-          '<div style="font-size:11px;opacity:0.4;margin-top:6px;">' +
+          '<div style="font-size:11px;opacity:0.62;margin-top:6px;">' +
             'Mirrored deals you both the same eight shells. Wild draws each hand separately.</div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.45;margin:14px 0 7px;">WIND</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.68;margin:14px 0 7px;">WIND</div>' +
           '<div data-el="windrow" style="display:flex;gap:8px;"></div>' +
-          '<div style="font-size:11px;opacity:0.4;margin-top:6px;">' +
+          '<div style="font-size:11px;opacity:0.62;margin-top:6px;">' +
             'A crosswind bends every shell. Calm turns it off entirely.</div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.45;margin:14px 0 7px;">ARMOUR</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.68;margin:14px 0 7px;">ARMOUR</div>' +
           '<div data-el="hprow" style="display:flex;gap:8px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.45;margin:14px 0 7px;">SOUND</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;opacity:0.68;margin:14px 0 7px;">SOUND</div>' +
           '<div data-el="sndrow" style="display:flex;gap:8px;"></div>' +
-          '<div data-el="setnote" style="font-size:11px;opacity:0.4;line-height:1.5;margin-top:13px;">' +
+          '<div data-el="setnote" style="font-size:11px;opacity:0.62;line-height:1.5;margin-top:13px;">' +
             'Arsenal and armour apply to the next match.</div>' +
         '</div>' +
         '<button data-el="setp-close" style="' + bigBtn("rgba(160,190,240,0.16)", "#E8EEFB") +
@@ -2492,8 +2518,11 @@ window.plethoraBit = {
           // only surface in the bit that had no colour on it at all.
           b.style.background = on
             ? "linear-gradient(180deg,rgba(41,211,240,0.26),rgba(41,211,240,0.11))"
-            : "rgba(160,190,240,0.07)";
-          b.style.color = on ? "#BFF3FF" : "rgba(220,232,255,0.5)";
+            : "rgba(160,190,240,0.10)";
+          // A half-alpha ink on a #171B27 plate composites to 4.2:1, which is
+          // under the floor and reads as mush. The cyan ring and fill are what
+          // carry "selected" here, so the quiet pill can afford real contrast.
+          b.style.color = on ? "#BFF3FF" : "rgba(222,234,255,0.78)";
           b.style.boxShadow = on ? "inset 0 0 0 1.5px rgba(41,211,240,0.72)" : "none";
         }
       };

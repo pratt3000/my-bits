@@ -294,6 +294,11 @@ window.plethoraBit = {
     })();
 
     const COLOURS = ["#D2412F", "#1D93D2", "#F2C438", "#2E9E5B"];
+    // The same four inks lifted for type. Crimson and Verdant at board
+    // saturation sit at about 4:1 on the felt, which is under the line for
+    // 14px text and reads as a bruise rather than a name; the frame and the
+    // claim dot are shapes and keep the saturated version.
+    const INKS = ["#F58974", "#5FB9EF", "#F7CF57", "#5AD494"];
     const NAMES = ["Crimson", "Cobalt", "Amber", "Verdant"];
 
     /* ---------------------------------------------------------------
@@ -303,7 +308,15 @@ window.plethoraBit = {
     const L = {};
     function measure() {
       W = ctx.width; H = ctx.height;
-      L.grid = Math.min(W - 44, 312);
+      // Width was the only thing the board was sized against, which is right
+      // on a phone and wrong on the short card the app embeds a bit in: the
+      // lane and its numbers then ran down into the action row and the score
+      // line, and "tap a tile to claim it" printed across the tiles it was
+      // talking about. Take the bottom chrome first and give the board what is
+      // left. Everything under the grid is a fixed multiple of the cell, so
+      // the whole stack ends at H/2 + 0.858*grid and the cap falls out of it.
+      const bandH = ctx.safeArea.bottom + 76;   // score line + action row + a gap
+      L.grid = Math.min(W - 44, 312, (H / 2 - bandH) / 0.858);
       L.cell = L.grid / 5;
       L.gx = (W - L.grid) / 2;
       // Biased upward. The stack below the kingdom is taller than the one
@@ -315,7 +328,10 @@ window.plethoraBit = {
       L.laneW = Math.min(W - 34, 340);
       L.laneX = (W - L.laneW) / 2;
       L.tileW = L.cell * 0.86;
+      placeChrome();
     }
+    // Filled in once the overlay exists; measure() runs before that.
+    let placeChrome = () => {};
     measure();
 
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
@@ -437,7 +453,7 @@ window.plethoraBit = {
       players = [];
       for (let i = 0; i < n; i++) {
         players.push({
-          name: NAMES[i], colour: COLOURS[i],
+          name: NAMES[i], colour: COLOURS[i], ink: INKS[i],
           side: i % 2,                       // alternate the two long edges
           kingdom: newKingdom(), score: 0,
         });
@@ -820,10 +836,34 @@ window.plethoraBit = {
       ctx.listen(node, "pointerdown", (e) => e.stopPropagation());
       ctx.listen(node, "click", (e) => { e.stopPropagation(); e.preventDefault(); fn(e); });
     };
+    /* The chrome sits in the band between the far player's controls and the
+     * top of the kingdom. That band exists on a phone and not on the short
+     * card, where the fixed 96px offset put both buttons inside the board.
+     * Park them just above whatever the grid turned out to be. */
+    placeChrome = () => {
+      const c = el("chrome");
+      if (c) c.style.top = Math.min(ST + 96, Math.max(ST + 8, L.gy - 42)) + "px";
+    };
+    placeChrome();
+
+    /* Every full-screen sheet is painted over the chrome, so the buttons
+     * showed through the title's 94% scrim as two grey ghosts and the word
+     * "crownlands" was set straight across them. Nothing under a sheet is
+     * reachable anyway — take them out of the picture while one is up. */
+    const sheets = ["menu", "hand", "over", "helpp"];
+    const syncChrome = () => {
+      const covered = sheets.some((n) => {
+        const s = el(n);
+        return s && s.style.display !== "none";
+      });
+      el("chrome").style.visibility = covered ? "hidden" : "visible";
+    };
+    syncChrome();
+
     tap(el("mute"), (e) => { e.target.innerHTML = SPK(!sound.toggle()); });
     if (settings.mute) el("mute").innerHTML = SPK(false);
-    tap(el("help"), () => { el("helpp").style.display = "flex"; });
-    tap(el("helpp-close"), () => { el("helpp").style.display = "none"; });
+    tap(el("help"), () => { el("helpp").style.display = "flex"; syncChrome(); });
+    tap(el("helpp-close"), () => { el("helpp").style.display = "none"; syncChrome(); });
 
     function pills(host, values, labels, get, set) {
       host.innerHTML = values.map((v, i) =>
@@ -851,11 +891,13 @@ window.plethoraBit = {
       el("hand-what").textContent = phase === "place" ? "lay your tile, then claim" : "claim a tile";
       el("hand-inner").style.transform = p.side === 1 ? "rotate(180deg)" : "none";
       el("hand").style.display = "flex";
+      syncChrome();
       // The flip happens while the card covers the screen.
       if (flipping) ctx.timeout(() => { flip = pendingFlip; pendingFlip = null; }, 120);
     }
     tap(el("hand-go"), () => {
       el("hand").style.display = "none";
+      syncChrome();
       if (pendingFlip !== null) { flip = pendingFlip; pendingFlip = null; }
       paintHud();
     });
@@ -869,7 +911,7 @@ window.plethoraBit = {
           const s = scoreKingdom(p.kingdom);
           const live = p === currentPlayer() && phase !== "over";
           return '<span style="display:inline-block;margin:0 7px;font-size:14px;font-weight:800;' +
-            'color:' + p.colour + ';opacity:' + (live ? 1 : 0.62) + ';">' +
+            'color:' + p.ink + ';opacity:' + (live ? 1 : 0.8) + ';">' +
             esc(p.name) + ' <span style="color:' + PARCH + ';">' + s.total + '</span></span>';
         }).join("");
         el("act-" + side).innerHTML = "";
@@ -922,6 +964,7 @@ window.plethoraBit = {
           '<span style="font-size:20px;font-weight:900;">' + r.s.total + '</span>' +
         '</div>').join("");
       el("over").style.display = "flex";
+      syncChrome();
     }
 
     const begin = async () => {
@@ -929,6 +972,7 @@ window.plethoraBit = {
       await sound.unlock();
       el("menu").style.display = "none";
       el("over").style.display = "none";
+      syncChrome();
       startGame(settings.players);
       paintHud();
       sound.sting("coin");

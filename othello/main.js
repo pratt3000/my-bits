@@ -1093,13 +1093,13 @@ window.plethoraBit = {
           '<div style="font-family:' + DISP + ';font-size:25px;font-weight:700;letter-spacing:0.07em;' +
             'text-transform:lowercase;">Settings</div>' +
           '<div style="width:44px;height:2px;background:' + BRASS + ';opacity:0.8;margin:11px 0 15px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Sound</div>' +
+          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.62;">Sound</div>' +
           '<div data-el="set-mute" style="display:flex;gap:7px;margin:9px 0 17px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Placing a disc</div>' +
+          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.62;">Placing a disc</div>' +
           '<div data-el="set-confirm" style="display:flex;gap:7px;margin:9px 0 5px;"></div>' +
-          '<div style="font-size:10.5px;line-height:1.5;opacity:0.45;margin-bottom:15px;">' +
+          '<div style="font-size:10.5px;line-height:1.5;opacity:0.6;margin-bottom:15px;">' +
             'Confirm arms a ghost disc first and shows what would flip. Either end&rsquo;s button commits it.</div>' +
-          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.5;">Legal move rings</div>' +
+          '<div style="font-size:10px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.62;">Legal move rings</div>' +
           '<div data-el="set-hints" style="display:flex;gap:7px;margin:9px 0 5px;"></div>' +
           '<button data-el="to-help" style="' + bigBtn("#1B2123", "#CFE0D4") + 'width:100%;margin-top:18px;">How to play</button>' +
           '<button data-el="cogp-close" style="' + bigBtn("#232A2C", "#E4EDE6") + 'width:100%;margin-top:9px;">Done</button>' +
@@ -1578,7 +1578,10 @@ window.plethoraBit = {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
           b.style.background = on ? "#2B3330" : "#171C1E";
-          b.style.color = on ? BRASS : "rgba(207,224,212,0.5)";
+          // 0.5 put the off state at 4.1:1 on its own dark pill. The selected
+          // half is brass, so the unselected one can be read without ever
+          // being mistaken for the live choice.
+          b.style.color = on ? BRASS : "rgba(207,224,212,0.62)";
           b.style.borderColor = on ? "rgba(227,178,60,0.45)" : "rgba(233,240,234,0.09)";
         }
       };
