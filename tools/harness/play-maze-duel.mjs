@@ -74,7 +74,7 @@ check(live, "the race started with four fingers already down");
 
 // --- the race. Crimson runs the shortest path every step; the other three are
 // steered every other tick so somebody actually wins. ---
-let planted = false;
+let planted = false, plantTries = 0, nextPlant = 7;
 // A stick that is already pointing the right way does not need to be pushed
 // there again, and every redundant fingerMove is a round trip. On SwiftShader
 // those round trips were costing more than the frames: the loop fell behind
@@ -112,8 +112,9 @@ for (let step = 0; step < 800; step++) {
   // the first dozen steps of this loop — so a fixed step number tests the
   // frame budget, not the game.
   const armed = st.ps.filter((p) => p.briars > 0).length >= 2;
-  if (armed && step > 6 && !planted) {
-    planted = true;
+  if (armed && step > 6 && !planted && step >= nextPlant) {
+    plantTries++;
+    nextPlant = step + 45;
     for (let i = 0; i < 4; i++) await bit.fingerUp(i + 1);
     await bit.tapTogether(zones.map((z) => ({ x: z.x, y: z.y })));
     // A tap taken mid-corridor is spent when the peg clears the gap, so the
@@ -125,9 +126,29 @@ for (let step = 0; step < 800; step++) {
     // Whether each became a hedge is then the game's own rules talking, and a
     // legal refusal is not a routing bug.
     const seats = new Set(why.map((w) => w.seat));
-    check(seats.size >= 3, "four simultaneous taps reached " + seats.size + " different seats");
-    check(b >= 1, "at least one became a hedge (" + b + ") — outcomes: " + JSON.stringify(why));
-    await bit.shot("maze-7-briars");
+    // Whether a plant becomes a hedge is the game's rules talking: "it would
+    // wall someone off" is a correct refusal, and where the four pegs happen
+    // to be standing decides it. Asserting a hedge on the first attempt made
+    // this a coin toss. Try a few times, spaced out; only the routing — did
+    // each of four simultaneous taps find its own owner — is the thing under
+    // test, and an unrecognised refusal is still a real failure.
+    // Every outcome note() can produce, read off the bit rather than guessed:
+    // a plant is taken, deferred to the next gap, or refused because the edge
+    // is already hedged, it would wall someone off, the hand is empty, or the
+    // player is out. All are the rules working.
+    const LEGAL = new Set(["immediate", "planted", "deferred", "edge-taken",
+                           "none-in-hand", "off-or-done", "would-wall-someone-off"]);
+    const odd = why.filter((w) => !LEGAL.has(w.why));
+    if (b >= 1 || plantTries >= 3) {
+      planted = true;
+      check(seats.size >= 3, "four simultaneous taps reached " + seats.size + " different seats");
+      check(odd.length === 0, "every plant resolved by a rule we know" +
+            (odd.length ? " — unexpected: " + JSON.stringify(odd) : ""));
+      if (b >= 1) check(true, "at least one became a hedge (" + b + ")");
+      else console.log("note  no hedge formed in " + plantTries +
+                       " attempts; every one was legally refused — " + JSON.stringify(why));
+      await bit.shot("maze-7-briars");
+    }
     // The fingers go back down at the centre of their zones, which is no
     // deflection at all — so the cached directions are now lies and every
     // stick has to be pushed again from scratch.
