@@ -1284,7 +1284,7 @@ window.plethoraBit = {
           '<div style="width:9px;height:9px;border-radius:3px;background:' + p.ink + ';flex:none;"></div>' +
           '<div style="width:60px;font-size:13px;opacity:0.86;flex:none;">' + esc(p.name) + '</div>' +
           '<div style="width:40px;text-align:right;font-size:12.5px;flex:none;color:' +
-            (p.roundPts ? "#ffb3a0" : "rgba(248,239,219,0.40)") + ';">' +
+            (p.roundPts ? "#ffb3a0" : "rgba(248,239,219,0.55)") + ';">' +
             (p.roundPts ? "+" + p.roundPts : "—") + '</div>' +
           '<div style="flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,0.09);overflow:hidden;">' +
             '<div style="width:' + Math.round(clamp(p.score / settings.target, 0, 1) * 100) +
@@ -1292,7 +1292,7 @@ window.plethoraBit = {
           '</div>' +
           '<div style="width:32px;text-align:right;font-size:15px;font-weight:700;flex:none;">' + p.score + '</div>' +
         '</div>').join("") +
-        '<div style="font-size:11px;opacity:0.44;margin-top:12px;letter-spacing:0.06em;">' +
+        '<div style="font-size:11px;opacity:0.6;margin-top:12px;letter-spacing:0.06em;">' +
           'First past ' + settings.target + ' ends it · lowest score wins</div>';
     }
 
@@ -1861,8 +1861,11 @@ window.plethoraBit = {
       g.save();
       roundRect(g, x - w / 2, y - h / 2, w, h, 15);
       const body = g.createLinearGradient(x, y - h / 2, x, y + h / 2);
-      body.addColorStop(0, "rgba(38,20,12,0.86)");
-      body.addColorStop(1, "rgba(16,7,3,0.90)");
+      // Nearly opaque, for the same reason the banner is: on a short screen
+      // this plaque lands on the deck's brass count plate, and at 0.86 "37"
+      // printed straight through the player's own name.
+      body.addColorStop(0, "rgba(38,20,12,0.965)");
+      body.addColorStop(1, "rgba(16,7,3,0.975)");
       g.fillStyle = body; g.fill();
       g.strokeStyle = hexA(p.ink, revealed ? 0.55 : 0.22);
       g.lineWidth = 1.2; g.stroke();

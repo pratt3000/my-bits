@@ -2194,6 +2194,18 @@ window.plethoraBit = {
       const p = players[turn];
       computeHand();
 
+      // A scrim under the top strip. The seat colours are the identity of the
+      // four players and cannot be recoloured, and coral on the lit part of the
+      // sea is 1.2:1 — the name of whoever is holding the phone was the palest
+      // thing on the screen. Fades out well before the hand, so the water is
+      // still water.
+      const hs = g.createLinearGradient(0, 0, 0, L.headY + L.headH + 14);
+      hs.addColorStop(0, "rgba(2,22,40,0.72)");
+      hs.addColorStop(0.62, "rgba(2,22,40,0.60)");
+      hs.addColorStop(1, "rgba(2,22,40,0)");
+      g.fillStyle = hs;
+      g.fillRect(0, 0, W, L.headY + L.headH + 14);
+
       // Header: who is holding the phone, what the ocean has left. The chrome
       // buttons live in the top-right corner, so the header stops short of it.
       g.save();
@@ -2608,7 +2620,10 @@ window.plethoraBit = {
       // already belongs to something.
       if (beatT > 0.5 * pace()) {
         g.save();
-        g.globalAlpha = 0.34 + 0.24 * Math.sin(now * 0.005);
+        // The pulse used to bottom out at 0.10, which on the table panel is
+        // invisible — a prompt that says how to move the game on has to be
+        // readable at the dim end of its own breath, not just the bright end.
+        g.globalAlpha = 0.58 + 0.24 * Math.sin(now * 0.005);
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillStyle = FOAM;
         g.font = "700 9.5px " + FONT;

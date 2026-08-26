@@ -1443,19 +1443,12 @@ window.plethoraBit = {
 
         miniStack(-lw * 0.16, lh * 0.03, p.cards, clamp(lh / 140 * 0.52, 0.20, 0.38));
 
-        // Both readouts have to leave the seat's colour as the wash arrives.
-        // At the peak of a win the pad is flooded with this player's own ink,
-        // and the name was set in that same ink — it disappeared into its own
-        // background at exactly the moment it most wants to be read. Cream on
-        // a lit amber pad was barely better. So the ink darkens as the ground
-        // lights, on the same curve as the bloom.
-        const lit = easeOut(p.flashT);
         const tx = lw * 0.07;
-        g.fillStyle = mixHex(p.ink, "#150f06", lit * 0.92, 0.92);
+        g.fillStyle = hexA(p.ink, 0.92);
         g.font = "700 " + Math.round(Math.min(lh * 0.13, 12)) + "px " + FONT;
         tracked(g, p.name.toLowerCase(), 0, -lh * 0.27, 3);
 
-        g.fillStyle = mixHex(armed ? "#fffdf4" : CREAM, "#150f06", lit * 0.86);
+        g.fillStyle = armed ? "#fffdf4" : CREAM;
         g.font = "800 " + Math.round(Math.min(lh * 0.40, 46)) + "px " + FONT;
         g.fillText(String(p.cards), tx, lh * 0.10);
 
@@ -1497,14 +1490,6 @@ window.plethoraBit = {
     function hexA(hex, a) {
       const n = parseInt(hex.slice(1), 16);
       return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a.toFixed(3) + ")";
-    }
-
-    /** Two of those blended, for text sitting on a surface that changes colour
-     *  under it — the ink has to travel the opposite way to the ground. */
-    function mixHex(h1, h2, t, a) {
-      const x = parseInt(h1.slice(1), 16), y = parseInt(h2.slice(1), 16), k = clamp(t, 0, 1);
-      const c = (sh) => Math.round(((x >> sh) & 255) * (1 - k) + ((y >> sh) & 255) * k);
-      return "rgba(" + c(16) + "," + c(8) + "," + c(0) + "," + (a === undefined ? 1 : a) + ")";
     }
 
     /* --- the shout ------------------------------------------------ */

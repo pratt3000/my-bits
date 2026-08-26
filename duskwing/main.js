@@ -2075,7 +2075,7 @@ window.plethoraBit = {
     // reachable once the list is taller than the screen; plain `center`
     // overflows equally in both directions and the heading goes out of reach.
     const panel = "position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;" +
-      "align-items:safe center;justify-content:center;background:rgba(4,7,10,0.985);z-index:90;" +
+      "align-items:safe center;justify-content:center;background:#04070A;z-index:90;" +
       "padding:" + (SAFE_T + 14) + "px 22px 20px;";
     const card = "box-sizing:border-box;max-width:330px;width:100%;max-height:100%;" +
       "display:flex;flex-direction:column;background:#0E1214;border-radius:20px;" +

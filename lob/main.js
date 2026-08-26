@@ -2350,8 +2350,12 @@ window.plethoraBit = {
     // actually there; the copy was trimmed to match.
     const HELP_TOP = Math.max(SAFE_T + 12, Math.round(H * 0.075));
     const HELP_H = Math.min(H - HELP_TOP - SAFE_B - 20, 740);
-    const SET_TOP = Math.max(SAFE_T + 24, Math.round(H * 0.17));
+    // Unlike the help card this one has a fixed height, so its top has to give
+    // way on a short screen: at 17% of a 517px card it started at 88 and put
+    // DONE one pixel past the bottom edge, which leaves no way out of the panel.
     const SET_H = 496;
+    const SET_TOP = Math.min(Math.max(SAFE_T + 24, Math.round(H * 0.17)),
+                             Math.max(SAFE_T + 8, H - SAFE_B - SET_H - 12));
     const OVER_TOP = Math.round(H * 0.30);
     const OVER_H = 250;
 
