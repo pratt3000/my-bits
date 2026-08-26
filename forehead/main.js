@@ -323,9 +323,13 @@ window.plethoraBit = {
       // middle of the bullets. A rule panel has to be a wall, not a filter.
       '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'align-items:center;justify-content:center;background:#0A0B14;z-index:80;padding:24px;">' +
-        '<div style="max-width:330px;width:100%;max-height:100%;overflow-y:auto;' +
+        // The list scrolls; the way out does not scroll with it. On a short
+        // screen five rules are taller than the panel, and a dismiss button
+        // that starts below the fold is a panel with no visible exit.
+        '<div style="max-width:330px;width:100%;max-height:100%;display:flex;flex-direction:column;' +
           'box-sizing:border-box;background:#1C1E2E;border-radius:22px;' +
           'padding:24px;border:1px solid rgba(255,255,255,0.14);">' +
+          '<div style="overflow-y:auto;min-height:0;">' +
           '<div style="font-size:20px;font-weight:800;margin-bottom:12px;">How to play</div>' +
           '<ul style="font-size:14.5px;line-height:1.75;opacity:0.88;padding-left:18px;margin:0;">' +
             '<li>One person holds the phone <b>sideways against their forehead</b>, screen facing everyone else.</li>' +
@@ -334,7 +338,8 @@ window.plethoraBit = {
             '<li>No tilt? Tap the screen instead: <b>right half</b> is got it, <b>left half</b> skips.</li>' +
             '<li>Keep going until the clock runs out, then pass the phone to the next person.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + BIG + 'margin-top:18px;' +
+          '</div>' +
+          '<button data-el="helpp-close" style="' + BIG + 'margin-top:18px;flex:none;' +
             'background:#2E3145;color:#fff;">Got it</button>' +
         '</div>' +
       '</div>';
@@ -370,7 +375,12 @@ window.plethoraBit = {
       setSheet("#12131f");
       const d = deckOf();
       stage.innerHTML =
-        '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:11px;">' +
+        // Six decks, three lengths and a start button are taller than a short
+        // screen, and a column that centres what does not fit hides the start
+        // button off the bottom edge. `safe center` degrades to flex-start
+        // once it overflows, and the column scrolls to the button instead.
+        '<div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;' +
+          'justify-content:center;justify-content:safe center;gap:11px;">' +
           '<div style="font-size:11px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;' +
             'text-align:center;">On your head</div>' +
           '<div style="font-size:56px;font-weight:900;letter-spacing:-0.03em;text-align:center;' +

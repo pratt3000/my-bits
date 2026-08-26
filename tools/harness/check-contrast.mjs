@@ -57,7 +57,14 @@ const PROBE = () => {
    * walk sails past it to the near-black page behind and calls dark ink on a
    * bright button a 1.03 contrast failure. Both ends of a gradient are real
    * backgrounds for the text sitting on it, so both are returned and the
-   * worst one decides. */
+   * worst one decides.
+   *
+   * Anything half-transparent picked up on the way has to be carried down onto
+   * whatever is finally found. A chip painted rgba(255,193,0,0.9) sitting on a
+   * gradient panel used to be discarded the moment the gradient was reached,
+   * so the checker measured the chip's dark ink against the panel's navy and
+   * reported 1.05 for a chip that reads perfectly well on screen. False
+   * findings that loud drown the true ones. */
   const behind = (el) => {
     const stops = [];
     let node = el, acc = null;
@@ -69,16 +76,34 @@ const PROBE = () => {
           const c = parse(m[0]);
           if (c && c.a > 0.5) stops.push(c);
         }
-        if (stops.length) return { colours: stops, gradient: true };
+        if (stops.length)
+          return { colours: acc ? stops.map((b) => over(acc, b)) : stops,
+                   gradient: true, stop: node };
       }
       const c = parse(cs.backgroundColor);
       if (c && c.a > 0.02) {
         acc = acc ? over(acc, c) : c;
-        if (acc.a > 0.98 || c.a > 0.98) return { colours: [acc], gradient: false };
+        if (acc.a > 0.98 || c.a > 0.98) return { colours: [acc], gradient: false, stop: node };
       }
       node = node.parentElement;
     }
-    return { colours: acc ? [acc] : [], gradient: false };
+    return { colours: acc ? [acc] : [], gradient: false, stop: null };
+  };
+
+  /** Ancestor `opacity` between the text and the background it sits on.
+   *
+   * getComputedStyle().color says nothing about it: an element inside a
+   * container at opacity 0.45 reports its ink at full strength while the
+   * player sees it at just under half. Opacity on the element that *owns* the
+   * background is not counted — that composites text and background together
+   * as one group, which leaves the ratio between them alone. */
+  const dimming = (el, stop) => {
+    let op = 1;
+    for (let n = el; n && n !== stop; n = n.parentElement) {
+      const v = parseFloat(getComputedStyle(n).opacity);
+      if (!Number.isNaN(v)) op *= v;
+    }
+    return op;
   };
 
   /* Only text that is actually on top at its own centre.
@@ -110,10 +135,11 @@ const PROBE = () => {
     if (parse(cs.webkitTextFillColor || "")?.a === 0) continue;
     const bg = behind(el);
     if (!bg.colours.length) continue;
+    const ink = { ...fg, a: fg.a * dimming(el, bg.stop) };
     let worst = Infinity, worstBg = null;
     for (const b of bg.colours) {
       if (b.a < 0.5) continue;
-      const cr = ratio(fg.a < 1 ? over(fg, b) : fg, b);
+      const cr = ratio(ink.a < 1 ? over(ink, b) : ink, b);
       if (cr < worst) { worst = cr; worstBg = b; }
     }
     if (!worstBg) continue;
@@ -124,7 +150,8 @@ const PROBE = () => {
     if (worst < need) {
       out.contrast.push({
         text: el.textContent.trim().slice(0, 30), ratio: +worst.toFixed(2), need,
-        fg: cs.color, bg: `rgb(${worstBg.r|0},${worstBg.g|0},${worstBg.b|0})`,
+        fg: cs.color, dimmed: +dimming(el, bg.stop).toFixed(2),
+        bg: `rgb(${worstBg.r|0},${worstBg.g|0},${worstBg.b|0})`,
         size: cs.fontSize, gradient: bg.gradient,
       });
     }

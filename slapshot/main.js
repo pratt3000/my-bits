@@ -723,11 +723,18 @@ window.plethoraBit = {
     new MutationObserver(lowercaseControls).observe(root, { childList: true, subtree: true });
     root.innerHTML =
       // --- top player's score, upside down for their seat ---
-      '<div data-el="s2" style="position:absolute;right:20px;top:' + (SAFE_T + 30) + 'px;' +
+      //
+      // Clear of the chrome row, which ends SAFE_T+46 down and reaches 139 in
+      // from the right — further in than this digit sits. At 30 the magenta
+      // score ran under the help chip: the chip's panel cut the top off the
+      // number and the "?" landed inside its counter, two pieces of text in
+      // one place. Both ends carry the same offset, because out of step is
+      // exactly what gets noticed on a layout that is meant to be a mirror.
+      '<div data-el="s2" style="position:absolute;right:20px;top:' + (SAFE_T + 54) + 'px;' +
         'transform:rotate(180deg);pointer-events:none;font-size:46px;line-height:1;' +
         'font-weight:800;color:' + P2.ink + ';text-shadow:0 0 26px ' + P2.ink + '99;">0</div>' +
       // --- bottom player's score, in the mirrored corner ---
-      '<div data-el="s1" style="position:absolute;left:20px;bottom:' + (SAFE_B + 30) + 'px;' +
+      '<div data-el="s1" style="position:absolute;left:20px;bottom:' + (SAFE_B + 54) + 'px;' +
         'pointer-events:none;font-size:46px;line-height:1;font-weight:800;color:' + P1.ink + ';' +
         'text-shadow:0 0 26px ' + P1.ink + '99;">0</div>' +
       // --- rally counter, on the centre line where it belongs to neither ---
@@ -735,8 +742,14 @@ window.plethoraBit = {
         'text-align:center;pointer-events:none;font-size:12px;letter-spacing:0.3em;' +
         'text-transform:lowercase;opacity:0;color:#9fd0ff;"></div>' +
       // --- chrome ---
+      // Above the title and result screens rather than under them. At 40 the
+      // three chips sat behind the menu's 0.82 scrim, showing through it as
+      // ghosts nobody could press — and the menu takes every pointer on the
+      // screen, so the rules and the mute were unreachable until a match had
+      // started. The panels they open are higher again, so those still cover
+      // them.
       '<div style="position:absolute;right:11px;top:' + (SAFE_T + 8) + 'px;display:flex;gap:7px;' +
-        'z-index:40;pointer-events:none;">' +
+        'z-index:58;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="' + btnCss + '">' + SPK(true) + '</button>' +
         '<button data-el="cog" aria-label="Settings" style="' + btnCss + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + btnCss + '">?</button>' +

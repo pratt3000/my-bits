@@ -386,6 +386,9 @@ window.plethoraBit = {
      * which is the only horizontal strip that belongs to nobody.
      * ============================================================= */
     let W = 0, H = 0, SAFE_T = 0, SAFE_B = 0, L = null;
+    // y of the first line of the title's type. The cover art lives above it;
+    // fitMenu() is what measures it.
+    let menuInk = ctx.height;
     function layout() {
       W = ctx.width; H = ctx.height;
       SAFE_T = ctx.safeArea.top || 0; SAFE_B = ctx.safeArea.bottom || 0;
@@ -938,7 +941,10 @@ window.plethoraBit = {
         const in6 = 6;
         roundRect(g, t.x + in6, t.y + in6, t.w - in6 * 2, t.h - in6 * 2 - 2, 5);
         g.fillStyle = k === "red" ? RED : k === "blue" ? BLUE : k === "neutral" ? TAN : "#111114";
-        g.globalAlpha = alpha * 0.9; g.fill();
+        // 0.9 let the cream card stock underneath lift the red and the blue by
+        // enough to put the white codeword on them at 3.8:1. At 0.97 the stock
+        // is still a whisper and the swatch is its own colour again.
+        g.globalAlpha = alpha * 0.97; g.fill();
         g.globalAlpha = alpha;
         const cx = t.x + t.w / 2, cy = t.y + t.h / 2 - 1, r = t.w * 0.16;
         // The glyph per colour is a real colour-blind affordance: diamond for
@@ -979,9 +985,9 @@ window.plethoraBit = {
         const sz = fitSize(g, cw, t.w - 22 - tk * (cw.length - 1),
                            Math.min(t.h * 0.235, 20), DISPLAY, "700");
         g.font = "700 " + sz.toFixed(1) + "px " + DISPLAY;
-        g.fillStyle = k === "neutral" ? "rgba(40,34,20,0.90)"
-                    : k === "assassin" ? "rgba(255,214,206,0.92)"
-                    : "rgba(255,250,240,0.96)";
+        g.fillStyle = k === "neutral" ? "rgba(40,34,20,0.95)"
+                    : k === "assassin" ? "rgba(255,222,214,0.96)"
+                    : "#FFFAF0";
         g.textAlign = "center"; g.textBaseline = "middle";
         const my = (t.h - 2) / 2, wx = t.x + t.w / 2, wy = t.y + my;
         tracked(g, cw, wx, wy + (t.h - 2) * 0.235, tk, "center");
@@ -1099,14 +1105,17 @@ window.plethoraBit = {
                              R2.confirm.y + R2.confirm.h + 12);
       g.beginPath(); g.moveTo(12, nearY); g.lineTo(W - 12, nearY); g.stroke();
 
-      g.globalAlpha = active ? 1 : 0.58;
+      // The idle band is quiet, not illegible: 0.58 multiplied into inks
+      // that were already alpha'd put "red is guessing" — the one line
+      // saying whose turn it is — at about 2.3:1.
+      g.globalAlpha = active ? 1 : 0.74;
 
       // header: team, agents left, the stack of agent cards
       g.fillStyle = TEAM[team].ink;
       g.font = "700 20px " + DISPLAY; g.textAlign = "left"; g.textBaseline = "middle";
       const nm = TEAM[team].name;
       const nw = tracked(g, nm, R.hdr.x, R.hdr.y + R.hdr.h / 2, 3, "left");
-      g.font = "400 9px " + MONO; g.fillStyle = "rgba(241,231,210,0.55)";
+      g.font = "400 9px " + MONO; g.fillStyle = "rgba(241,231,210,0.72)";
       tracked(g, remaining(team) + " LEFT", R.hdr.x + nw + 10, R.hdr.y + R.hdr.h / 2 + 1, 1, "left");
       drawStack(g, W - 12 - (TEAM[team].agents * 10.2), R.hdr.y + 2, team, 7);
 
@@ -1118,7 +1127,7 @@ window.plethoraBit = {
       // sentence twice in one band is how it read before.
       if (active) {
         const b = R.balloon;
-        g.fillStyle = clue ? "rgba(241,231,210,0.72)" : "rgba(241,231,210,0.34)";
+        g.fillStyle = clue ? "rgba(241,231,210,0.82)" : "rgba(241,231,210,0.6)";
         g.font = "400 10px " + MONO;
         g.textAlign = "center"; g.textBaseline = "middle";
         tracked(g, clue ? "GUESS, THEN END THE TURN" : "AWAITING THE BRIEFING",
@@ -1131,7 +1140,7 @@ window.plethoraBit = {
         decoButton(g, R.confirm, canConfirm ? "CONFIRM CONTACT" : "TAP A CODEWORD", {
           fill: canConfirm ? GOLD : "rgba(255,255,255,0.03)",
           stroke: canConfirm ? GOLD : "rgba(255,255,255,0.18)",
-          ink: canConfirm ? NOIR : "rgba(241,231,210,0.45)",
+          ink: canConfirm ? NOIR : "rgba(241,231,210,0.66)",
           glow: canConfirm ? GOLD : null,
           sub: canConfirm ? words[armed] : "",
           size: 16,
@@ -1139,7 +1148,7 @@ window.plethoraBit = {
         const canPass = guessedThisTurn > 0;
         decoButton(g, R.pass, "END TURN", {
           stroke: canPass ? TEAM[team].ink : "rgba(255,255,255,0.14)",
-          ink: canPass ? CREAM : "rgba(241,231,210,0.35)",
+          ink: canPass ? CREAM : "rgba(241,231,210,0.56)",
           size: 15, track: 1.2,
         });
       } else if (phase === "board") {
@@ -1156,7 +1165,8 @@ window.plethoraBit = {
         const lw = trackWidth(g, line, 2) + 20;
         g.fillStyle = "rgba(20,18,16,0.98)";
         g.fillRect(W / 2 - lw / 2, y - 7, lw, 14);
-        g.fillStyle = "rgba(241,231,210,0.5)";
+        // It has its own plate behind it, so it can be printed properly.
+        g.fillStyle = "rgba(241,231,210,0.9)";
         g.textAlign = "center"; g.textBaseline = "middle";
         tracked(g, line, W / 2, y, 2, "center");
       }
@@ -1179,9 +1189,17 @@ window.plethoraBit = {
       g.beginPath(); g.moveTo(0, y + L.spine - 0.5); g.lineTo(W, y + L.spine - 0.5); g.stroke();
       g.fillStyle = "rgba(241,231,210,0.62)";
       g.font = "400 9px " + MONO; g.textAlign = "left"; g.textBaseline = "middle";
-      const line = phase === "board"
-        ? "TRANSMISSION " + turnNo + "  •  " + TEAM[turn].name + " OPERATIVES"
-        : "DOSSIER 25  •  CLASSIFIED";
+      // The chrome buttons are pinned to the right of this same spine, so the
+      // long form ran straight under them on a narrow screen. Say it shorter
+      // rather than say it underneath.
+      const room = W - 8 - (3 * 36 + 2 * 6) - 12 - 10;
+      const lines = phase === "board"
+        ? ["TRANSMISSION " + turnNo + "  •  " + TEAM[turn].name + " OPERATIVES",
+           "TRANSMISSION " + turnNo + "  •  " + TEAM[turn].name,
+           TEAM[turn].name + " OPERATIVES"]
+        : ["DOSSIER 25  •  CLASSIFIED", "DOSSIER 25"];
+      let line = lines[lines.length - 1];
+      for (const c of lines) { if (trackWidth(g, c, 1.3) <= room) { line = c; break; } }
       tracked(g, line, 12, y + L.spine / 2, 1.3, "left");
       g.restore();
     }
@@ -1264,7 +1282,7 @@ window.plethoraBit = {
 
       g.strokeStyle = "rgba(255,194,28,0.35)"; g.lineWidth = 1;
       g.beginPath(); g.moveTo(-58, 42); g.lineTo(58, 42); g.stroke();
-      g.fillStyle = "rgba(241,231,210,0.55)"; g.font = "400 9.5px " + MONO;
+      g.fillStyle = "rgba(241,231,210,0.72)"; g.font = "400 9.5px " + MONO;
       tracked(g, done ? "EVERYONE ELSE: EYES UP" : "", 0, 60, 1.6, "center");
       g.restore();
 
@@ -1362,7 +1380,8 @@ window.plethoraBit = {
       g.fillStyle = peek ? GOLD : "rgba(241,231,210,0.8)";
       g.font = "700 15px " + DISPLAY;
       tracked(g, peek ? "KEY EXPOSED" : "HOLD TO READ THE KEY", x + h * 1.25, y + h * 0.40, 2.2, "left");
-      g.fillStyle = "rgba(241,231,210,0.45)"; g.font = "400 8px " + MONO;
+      // Eight pixels of tracked mono at 0.45 was 3.7:1 on the lacquer.
+      g.fillStyle = "rgba(241,231,210,0.7)"; g.font = "400 8px " + MONO;
       tracked(g, peek ? "LET GO AND IT HIDES" : "AND KEEP HOLDING", x + h * 1.25, y + h * 0.70, 1, "left");
     }
 
@@ -1416,10 +1435,23 @@ window.plethoraBit = {
       // Two controls and one line of rules. There is nothing to type and
       // nothing to set: the clue is said out loud, and the only thing the
       // phone needs to know is when the briefing is over.
-      g.fillStyle = "rgba(241,231,210,0.34)";
+      // 0.34 alpha is 2.8:1 on this slab — the rule was a smudge. It also has
+      // to share its row with the three chrome buttons on a short screen,
+      // where it used to print straight under them: left-align out of their
+      // way and say less when there is less room, rather than say it
+      // underneath.
+      g.fillStyle = "rgba(241,231,210,0.62)";
       g.font = "400 9px " + MONO;
-      g.textAlign = "center"; g.textBaseline = "middle";
-      tracked(g, "ONE WORD · ONE NUMBER · SAY IT OUT LOUD", W / 2, L.sm.ruleY, 1.6, "center");
+      g.textBaseline = "middle";
+      const chromeLeft = W - 8 - (3 * 36 + 2 * 6);
+      const shared = L.sm.ruleY < L.spineY + 42;
+      const room = (shared ? chromeLeft - 10 : W) - 28;
+      const rules = ["ONE WORD · ONE NUMBER · SAY IT OUT LOUD",
+                     "ONE WORD · ONE NUMBER", "SAY IT OUT LOUD"];
+      let rule = rules[rules.length - 1];
+      for (const r of rules) { if (trackWidth(g, r, 1.6) <= room) { rule = r; break; } }
+      g.textAlign = shared ? "left" : "center";
+      tracked(g, rule, shared ? 14 : W / 2, L.sm.ruleY, 1.6, shared ? "left" : "center");
 
       decoButton(g, L.sm.trans, "BRIEFING DONE", {
         fill: GOLD, ink: NOIR, glow: GOLD, size: 17, track: 2,
@@ -1446,12 +1478,21 @@ window.plethoraBit = {
                 peek ? "rgba(214,52,42,0.95)" : "rgba(255,194,28,0.75)",
                 top + room * 0.14, 12);
 
+      // 32px was a fixed size inside a band that is not: on the short card the
+      // band is 110px, and a 32px line at 40% of it ran straight through the
+      // caption pinned at 55%. Size the name to the band, then hang the
+      // caption off its actual baseline rather than off another fraction.
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = TEAM[turn].ink; g.font = "700 32px " + DISPLAY;
-      tracked(g, TEAM[turn].name + " SPYMASTER",
-              W / 2, top + room * 0.40, 4, "center");
-      g.fillStyle = "rgba(241,231,210,0.5)"; g.font = "400 9px " + MONO;
-      tracked(g, "ANGLE THE SCREEN AWAY FROM THE TABLE", W / 2, top + room * 0.55, 1.4, "center");
+      const nameY = top + room * 0.40;
+      const name = TEAM[turn].name + " SPYMASTER";
+      const nameSize = Math.min(32, room * 0.27,
+                                fitTracked(g, name, W - 36, 32, DISPLAY, "700", 4));
+      g.fillStyle = TEAM[turn].ink;
+      g.font = "700 " + nameSize.toFixed(1) + "px " + DISPLAY;
+      tracked(g, name, W / 2, nameY, 4, "center");
+      g.fillStyle = "rgba(241,231,210,0.68)"; g.font = "400 9px " + MONO;
+      tracked(g, "ANGLE THE SCREEN AWAY FROM THE TABLE",
+              W / 2, nameY + nameSize * 0.5 + 9, 1.4, "center");
 
       // Both agent stacks, so the spymaster can read the state of the board
       // without leaving this screen.
@@ -1574,7 +1615,13 @@ window.plethoraBit = {
      * a speech balloon, drawn straight rather than modelled.
      * ============================================================= */
     function drawMenuArt() {
-      const baseY = H * 0.485;
+      // The cover is composed against the band the title type leaves, not
+      // against a fixed share of the screen: on a short card 48.5% of the
+      // height put the figures' heads inside the word CIPHER. AS is 1 on a
+      // phone, where the band is already deeper than the art needs.
+      const band = Math.max(120, menuInk - 10);
+      const AS = Math.min(1, band / 400);
+      const baseY = Math.min(H * 0.485, band);
 
       /**
        * Three flat figures on a deco rule. Each is a handful of separate
@@ -1654,19 +1701,24 @@ window.plethoraBit = {
       };
       // The lapel triangle sits inside the coat, so the middle figure keeps
       // its notch even though every part shares one ink.
-      fig(W * 0.18, 0.92, 0);
-      fig(W * 0.50, 1.12, 2);
-      fig(W * 0.82, 0.90, 1);
+      fig(W * 0.18, 0.92 * AS, 0);
+      fig(W * 0.50, 1.12 * AS, 2);
+      fig(W * 0.82, 0.90 * AS, 1);
 
-      // a white balloon with red caps, straight off the cover
-      const bw = Math.min(232, W - 72), bh = 52, bx = (W - bw) / 2, by = H * 0.17;
+      // a white balloon with red caps, straight off the cover. It sits above
+      // the tallest figure — 130 units at its own scale — rather than at a
+      // fixed fraction, or on a short screen it lands on the fedora.
+      const bw = Math.min(232, W - 72) * (0.55 + 0.45 * AS), bh = 52 * AS;
+      const bx = (W - bw) / 2;
+      const by = Math.max(6, Math.min(H * 0.17, baseY - 130 * 1.12 * AS - bh - 10));
       g.save();
       g.fillStyle = PLAQUE;
-      drawBalloon(g, bx, by, bw, bh, 14);
+      drawBalloon(g, bx, by, bw, bh, 14 * AS);
       g.fillStyle = RED;
-      g.font = "700 21px " + DISPLAY; g.textAlign = "center"; g.textBaseline = "middle";
-      tracked(g, "ONE WORD.", bx + bw / 2, by + 17, 2.4, "center");
-      tracked(g, "ONE NUMBER.", bx + bw / 2, by + 38, 2.4, "center");
+      g.font = "700 " + (21 * AS).toFixed(1) + "px " + DISPLAY;
+      g.textAlign = "center"; g.textBaseline = "middle";
+      tracked(g, "ONE WORD.", bx + bw / 2, by + 17 * AS, 2.4 * AS, "center");
+      tracked(g, "ONE NUMBER.", bx + bw / 2, by + 38 * AS, 2.4 * AS, "center");
       g.restore();
 
       g.fillStyle = "rgba(11,11,13,0.85)";
@@ -1899,7 +1951,17 @@ window.plethoraBit = {
     const scroller = "flex:1 1 auto;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch;";
     const sheet = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
       "background:rgba(6,4,3,0.90);z-index:70;padding:22px;pointer-events:auto;";
-    const label = "font-size:10px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.5;font-family:" + MONO + ";";
+    // Ten tracked pixels at 0.5 alpha is 4.3:1 on the dossier black — under
+    // the line, and this is the smallest type in the bit.
+    const label = "font-size:10px;letter-spacing:0.28em;text-transform:lowercase;opacity:0.66;font-family:" + MONO + ";";
+
+    /* The title stack is a fixed number of pixels tall, which is most of a
+     * phone and more than all of the 306x517 card the app embeds a bit in:
+     * the type climbed off its own scrim and set itself across the three
+     * silhouettes and the speech balloon. Scale the block with the height it
+     * actually has. TS is 1 on any phone. */
+    const TS = Math.max(0.72, Math.min(1, ctx.height / 820));
+    const ts = (n) => +(n * TS).toFixed(1);
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + BODY + ";color:" + CREAM + ";pointer-events:none;text-transform:lowercase;";
@@ -1927,25 +1989,26 @@ window.plethoraBit = {
       /* ---- title ---- */
       '<div data-el="menu" style="position:absolute;inset:0;display:flex;flex-direction:column;' +
         'justify-content:flex-end;align-items:center;z-index:50;pointer-events:auto;text-align:center;' +
-        'padding:0 24px ' + (ctx.safeArea.bottom + 18) + 'px;background:linear-gradient(180deg,' +
-        'rgba(9,6,10,0) 40%,rgba(9,6,10,0.55) 52%,rgba(9,6,10,0.94) 64%,rgba(9,6,10,0.99) 100%);">' +
+        'padding:0 24px ' + (ctx.safeArea.bottom + ts(18)) + 'px;">' +
         '<div style="' + label + 'margin-bottom:4px;">Dossier 25 · Classified</div>' +
-        '<div style="font-family:' + DISPLAY + ';font-size:64px;font-weight:700;letter-spacing:0.09em;' +
+        '<div style="font-family:' + DISPLAY + ';font-size:' + ts(64) + 'px;font-weight:700;' +
+          'letter-spacing:0.09em;' +
           'line-height:0.94;background:linear-gradient(178deg,#FFF0C2 8%,#FFC21C 48%,#D9482E);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
           'color:transparent;text-shadow:0 10px 34px rgba(0,0,0,0.55);">CIPHER</div>' +
-        '<div style="font-size:13.5px;line-height:1.55;opacity:0.72;max-width:262px;margin-top:6px;">' +
+        '<div style="font-size:' + Math.max(12.5, ts(13.5)) + 'px;line-height:1.5;opacity:0.82;' +
+          'max-width:262px;margin-top:' + ts(6) + 'px;">' +
           'Two spymasters know which of the twenty-five words are theirs. ' +
           'Everyone else has one word and one number — and one assassin to avoid.</div>' +
-        '<div style="' + label + 'margin:18px 0 8px;">How many players?</div>' +
+        '<div style="' + label + 'margin:' + ts(18) + 'px 0 ' + ts(8) + 'px;">How many players?</div>' +
         '<div data-el="counts" style="display:flex;gap:6px;"></div>' +
-        '<div data-el="modenote" style="font-size:11.5px;opacity:0.6;margin-top:9px;min-height:16px;' +
-          'font-family:' + MONO + ';letter-spacing:0.04em;"></div>' +
+        '<div data-el="modenote" style="font-size:11.5px;opacity:0.78;margin-top:' + ts(9) + 'px;' +
+          'min-height:16px;font-family:' + MONO + ';letter-spacing:0.04em;"></div>' +
         '<div style="width:100%;max-width:280px;">' +
           '<button data-el="begin" style="' + bigBtn("linear-gradient(180deg,#FFD75A,#E09A16)", "#1A1105") +
-            'margin-top:14px;font-size:16px;">Deal the board</button>' +
+            'margin-top:' + ts(14) + 'px;font-size:16px;">Deal the board</button>' +
         '</div>' +
-        '<div style="display:flex;gap:8px;margin-top:10px;">' +
+        '<div style="display:flex;gap:8px;margin-top:' + ts(10) + 'px;">' +
           '<button data-el="mhelp" style="pointer-events:auto;padding:9px 14px;border:none;border-radius:4px;' +
             'background:rgba(255,255,255,0.08);color:' + CREAM + ';font-family:inherit;font-size:12px;' +
             'letter-spacing:0.12em;text-transform:lowercase;">How to play</button>' +
@@ -2020,6 +2083,32 @@ window.plethoraBit = {
       '</div>';
 
     const el = (n) => root.querySelector('[data-el="' + n + '"]');
+
+    /**
+     * The title's scrim was pinned in PERCENTAGES, which quietly assumes the
+     * type stack is a fixed share of the screen. It is not — it is a fixed
+     * number of pixels, so on a short screen the stack rose out of the opaque
+     * band and set "CIPHER" straight across the three silhouettes.
+     *
+     * Anchor the gradient to the stack instead. offsetTop of the first child
+     * against a positioned parent is the top of the type, needs no rect, and
+     * costs one read per state change. drawMenuArt() reads the same number so
+     * the cover art is composed against whatever room is left above it.
+     */
+    function fitMenu() {
+      const m = el("menu");
+      if (!m || !m.firstElementChild) return;
+      menuInk = m.firstElementChild.offsetTop;
+      const solid = Math.max(0, ctx.height - menuInk + 12);
+      // The fade is a share of the room above the type rather than a fixed
+      // hundred pixels: on the card that hundred was the whole cover, and the
+      // speech balloon came out grey instead of white.
+      const fade = Math.max(30, Math.min(120, menuInk * 0.28));
+      m.style.background =
+        "linear-gradient(0deg,rgba(9,6,10,0.99) 0px,rgba(9,6,10,0.955) " + solid + "px," +
+        "rgba(9,6,10,0.5) " + (solid + fade * 0.5) + "px,rgba(9,6,10,0) " + (solid + fade) + "px)";
+    }
+
     const tap = (node, fn) => {
       if (!node) return;
       ctx.listen(node, "pointerdown", (e) => e.stopPropagation());
@@ -2037,7 +2126,7 @@ window.plethoraBit = {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
           b.style.background = on ? "rgba(255,194,28,0.26)" : "rgba(255,255,255,0.06)";
-          b.style.color = on ? "#FFE9AE" : "rgba(241,231,210,0.55)";
+          b.style.color = on ? "#FFE9AE" : "rgba(241,231,210,0.75)";
           b.style.boxShadow = on ? "inset 0 0 0 1px rgba(255,194,28,0.6)" : "none";
         }
       };
@@ -2111,6 +2200,7 @@ window.plethoraBit = {
     tap(el("quit"), () => {
       el("over").style.display = "none";
       el("menu").style.display = "flex";
+      fitMenu();
       phase = "menu";
       shutter = 0; shutterTo = 0; peek = false; holdOn = false; holdSeq++; endFx = null;
       paintChrome(); paintAll();
@@ -2190,6 +2280,7 @@ window.plethoraBit = {
       bakeSunburst();
       if (words.length) bakeTiles();
       paintChrome();
+      fitMenu();
     });
 
     /* ===============================================================
@@ -2236,6 +2327,7 @@ window.plethoraBit = {
     paintAll();
     paintChrome();
     render();
+    fitMenu();
     ctx.markVisualReady("dossier open");
     ctx.platform.ready();
 

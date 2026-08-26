@@ -2386,9 +2386,12 @@ window.plethoraBit = {
     function fitSheet(node, rgb, keep) {
       if (!node || !node.firstElementChild) return;
       const top = node.firstElementChild.offsetTop;
-      const solid = Math.max(0, ctx.height - top + 10);
+      // 22px of headroom, and effectively opaque all the way to it: at 0.96 the
+      // deck's brass count plate still printed a ghost through the first line
+      // of the cover.
+      const solid = Math.max(0, ctx.height - top + 22);
       node.style.background =
-        "linear-gradient(0deg," + rgb(0.985) + " 0px," + rgb(0.96) + " " + solid + "px," +
+        "linear-gradient(0deg," + rgb(0.995) + " 0px," + rgb(0.985) + " " + solid + "px," +
         rgb(0.5) + " " + (solid + 44) + "px," + rgb(0) + " " + (solid + 104) + "px)";
       if (keep) menuInk = top;
     }

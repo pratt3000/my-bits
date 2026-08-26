@@ -2331,7 +2331,7 @@ window.plethoraBit = {
     const SHORT = H < 640;
     const TITLE_PX = SHORT ? 46 : 70;
     const SCRIM = SHORT
-      ? "rgba(6,3,2,0) 6%,rgba(6,3,2,0.34) 18%,rgba(6,3,2,0.93) 31%,rgba(6,3,2,0.99) 100%"
+      ? "rgba(6,3,2,0) 15%,rgba(6,3,2,0.34) 23%,rgba(6,3,2,0.95) 32%,rgba(6,3,2,0.99) 100%"
       : "rgba(6,3,2,0) 26%,rgba(6,3,2,0.30) 42%,rgba(6,3,2,0.90) 58%,rgba(6,3,2,0.98) 100%";
     const btn = "pointer-events:auto;width:36px;height:36px;border-radius:12px;border:none;" +
       "background:rgba(12,6,4,0.74);color:" + CREAM + ";font-size:15px;line-height:1;" +

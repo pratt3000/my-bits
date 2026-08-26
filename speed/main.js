@@ -802,8 +802,14 @@ window.plethoraBit = {
       // Chrome belongs to neither player, so it goes in the dead band between
       // the top hand and the middle — not on the centre line itself, where the
       // two side stacks already live and would sit underneath it.
+      // Above the title and the result screens, not under them. At z-index 40
+      // the two chips sat behind the menu's 0.9 scrim: they showed through it
+      // as unreadable ghosts, and — since the menu takes every pointer across
+      // the whole screen — the "?" was the only route to the rules and could
+      // not be pressed. The help sheet itself is higher still, so it covers
+      // them the way it should.
       '<div style="position:absolute;left:9px;top:' + Math.round(H / 2 - L.ch * 1.7) + 'px;' +
-        'display:flex;flex-direction:column;gap:6px;z-index:40;pointer-events:none;">' +
+        'display:flex;flex-direction:column;gap:6px;z-index:58;pointer-events:none;">' +
         '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +

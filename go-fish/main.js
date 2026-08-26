@@ -1352,7 +1352,8 @@ window.plethoraBit = {
         g.fill();
         g.restore();
       }
-      g.fillStyle = on ? (o.ink || NIGHT) : "rgba(242,253,255,0.42)";
+      // The disabled label still has to say what the button is waiting for.
+      g.fillStyle = on ? (o.ink || NIGHT) : "rgba(242,253,255,0.66)";
       g.textAlign = "center"; g.textBaseline = "middle";
       const size = o.size || Math.min(19, h * 0.36);
       fitFont(g, label, w - 26, size, "800");
@@ -1370,8 +1371,11 @@ window.plethoraBit = {
       g.save();
       roundRect(g, x, y, w, h, o.radius || 24);
       const grad = g.createLinearGradient(0, y, 0, y + h);
-      grad.addColorStop(0, o.top || "rgba(6,54,84,0.72)");
-      grad.addColorStop(1, o.bottom || "rgba(3,30,52,0.80)");
+      // A real plate, not a tint. At 0.72 the dealing animation and the
+      // seabed came straight through the table strip, and a face-down card
+      // parked itself behind a player's name and card count.
+      grad.addColorStop(0, o.top || "rgba(6,50,78,0.93)");
+      grad.addColorStop(1, o.bottom || "rgba(3,26,46,0.96)");
       g.fillStyle = grad;
       g.fill();
       g.strokeStyle = o.edge || "rgba(242,253,255,0.18)";
@@ -2070,7 +2074,7 @@ window.plethoraBit = {
 
       g.save();
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = "rgba(242,253,255,0.62)";
+      g.fillStyle = "rgba(242,253,255,0.84)";
       g.font = "600 15px " + FONT;
       g.fillText(p.hand.length + (p.hand.length === 1 ? " card in hand" : " cards in hand") +
         "  ·  " + p.books.length + (p.books.length === 1 ? " book" : " books"), cx, L.top + 332);
@@ -2087,12 +2091,12 @@ window.plethoraBit = {
       const ty = L.top + 366;
       const rowsH = 34 + 3 * 30;
       panel(L.pad, ty, L.innerW, rowsH, { radius: 20 });
-      label("WHAT THE TABLE HEARD", W / 2, ty + 20, { size: 10, track: 2.8, col: "rgba(242,253,255,0.42)" });
+      label("WHAT THE TABLE HEARD", W / 2, ty + 20, { size: 10, track: 2.8, col: "rgba(242,253,255,0.66)" });
       g.save();
       g.textAlign = "left"; g.textBaseline = "middle";
       if (!rows.length) {
         g.textAlign = "center";
-        g.fillStyle = "rgba(242,253,255,0.38)";
+        g.fillStyle = "rgba(242,253,255,0.72)";
         g.font = "500 13.5px " + FONT;
         g.fillText("Nothing asked yet — you are first.", W / 2, ty + rowsH / 2 + 8);
       }
@@ -2109,9 +2113,9 @@ window.plethoraBit = {
         const fp = players.find((q) => q.name === r.asker);
         const tp = players.find((q) => q.name === r.target);
         put(r.asker, fp ? fp.ink : FOAM, "700");
-        put(" asked ", "rgba(242,253,255,0.55)", "500");
+        put(" asked ", "rgba(242,253,255,0.78)", "500");
         put(r.target, tp ? tp.ink : FOAM, "700");
-        put(" for " + RANK_WORD[r.rank].toLowerCase(), "rgba(242,253,255,0.55)", "500");
+        put(" for " + RANK_WORD[r.rank].toLowerCase(), "rgba(242,253,255,0.78)", "500");
         put(r.got ? "  got " + r.got : r.caught ? "  fished it out" : "  went fishing",
           r.got || r.caught ? "#7ff0c0" : CORAL, "700");
       }
@@ -2133,7 +2137,7 @@ window.plethoraBit = {
 
       g.save();
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = "rgba(242,253,255,0.42)";
+      g.fillStyle = "rgba(242,253,255,0.8)";
       g.font = "500 13px " + FONT;
       g.fillText("Only you should see the next screen.", W / 2, L.bot - 54);
       g.fillText("It closes itself the moment you ask.", W / 2, L.bot - 34);
@@ -2199,7 +2203,7 @@ window.plethoraBit = {
       g.fillStyle = p.ink;
       g.font = "800 20px " + FONT;
       g.fillText(p.name, L.pad + 36, hy - 8);
-      g.fillStyle = "rgba(242,253,255,0.55)";
+      g.fillStyle = "rgba(242,253,255,0.82)";
       g.font = "600 12px " + FONT;
       g.fillText(p.books.length + (p.books.length === 1 ? " book" : " books") +
         "  ·  ocean " + ocean.length, L.pad + 36, hy + 12);
@@ -2303,7 +2307,7 @@ window.plethoraBit = {
         g.fillStyle = sel ? "#0a1620" : q.ink;
         fitFont(g, q.name, cwC - 14, 16, "800");
         g.fillText(q.name, ccx, yy + 47);
-        g.fillStyle = sel ? "rgba(10,22,32,0.72)" : "rgba(242,253,255,0.58)";
+        g.fillStyle = sel ? "rgba(10,22,32,0.78)" : "rgba(242,253,255,0.82)";
         const sub = q.hand.length + (q.hand.length === 1 ? " card" : " cards") +
           (q.books.length ? "  ·  " + q.books.length + (q.books.length === 1 ? " book" : " books") : "");
         fitFont(g, sub, cwC - 12, 11.5, "600");
@@ -2415,7 +2419,7 @@ window.plethoraBit = {
     function drawPublicStrip(now) {
       const t = now / 1000;
       panel(L.pad - 6, L.stripTop, L.innerW + 12, L.stripBot - L.stripTop, { radius: 22 });
-      label("AT THE TABLE", W / 2, L.stripTop + 12, { size: 9.5, track: 2.6, col: "rgba(242,253,255,0.38)" });
+      label("AT THE TABLE", W / 2, L.stripTop + 12, { size: 9.5, track: 2.6, col: "rgba(242,253,255,0.62)" });
       const rh = Math.min(40, L.stripRowH - 6);
       for (let i = 0; i < players.length; i++) {
         const p = players[i];
@@ -2446,7 +2450,7 @@ window.plethoraBit = {
         g.fillStyle = p.ink;
         g.font = "800 14px " + FONT;
         g.fillText(p.name, L.pad + 38, y);
-        g.fillStyle = "rgba(242,253,255,0.5)";
+        g.fillStyle = "rgba(242,253,255,0.75)";
         g.font = "600 11.5px " + FONT;
         g.fillText(p.hand.length + (p.hand.length === 1 ? " card" : " cards"), L.pad + 38, y + 14);
         g.restore();
@@ -2467,7 +2471,9 @@ window.plethoraBit = {
       zone("skip", 0, 0, W, H);
 
       // A scrim under the board so a plaque never has to compete with a fish.
-      g.fillStyle = "rgba(2,20,36,0.52)";
+      // At 0.52 the fish won: the lit part of the sea came through bright enough
+      // to sit inside the letters of the announcement.
+      g.fillStyle = "rgba(2,20,36,0.68)";
       g.fillRect(0, 0, W, H);
 
       // The upside-down repeat, for whoever is sitting opposite. A phone flat
@@ -2478,12 +2484,12 @@ window.plethoraBit = {
         g.save();
         g.translate(cx, L.mirrorY);
         g.rotate(Math.PI);
-        panel(-L.innerW / 2, -26, L.innerW, 52, { radius: 18, top: "rgba(4,44,70,0.7)", bottom: "rgba(2,26,44,0.78)" });
+        panel(-L.innerW / 2, -26, L.innerW, 52, { radius: 18, top: "rgba(4,42,66,0.93)", bottom: "rgba(2,24,40,0.96)" });
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillStyle = "rgba(242,253,255,0.88)";
         const s = fitFont(g, head, L.innerW - 26, 15, "800");
         g.fillText(head, 0, 1);
-        g.fillStyle = "rgba(242,253,255,0.34)";
+        g.fillStyle = "rgba(242,253,255,0.66)";
         g.font = "700 8.5px " + FONT;
         tracked(g, "FOR THE FAR SIDE", 0, -18, 2);
         g.restore();
@@ -2589,7 +2595,7 @@ window.plethoraBit = {
       g.fillStyle = FOAM;
       g.font = "800 26px " + FONT;
       g.fillText(String(ocean.length), op.x + 34, op.y - 7);
-      g.fillStyle = "rgba(242,253,255,0.40)";
+      g.fillStyle = "rgba(242,253,255,0.76)";
       g.font = "700 9.5px " + FONT;
       const plan = trackPlan(g, "IN THE OCEAN", 2.2);
       tracked(g, "IN THE OCEAN", op.x + 34 + plan.total / 2, op.y + 14, 2.2);
@@ -2743,7 +2749,7 @@ window.plethoraBit = {
         g.fillStyle = p.ink;
         g.font = "800 16px " + FONT;
         g.fillText(p.name, L.pad + 38, y + h / 2 - 9);
-        g.fillStyle = "rgba(242,253,255,0.52)";
+        g.fillStyle = "rgba(242,253,255,0.78)";
         g.font = "600 11.5px " + FONT;
         g.fillText(p.books.length + (p.books.length === 1 ? " book" : " books"), L.pad + 38, y + h / 2 + 10);
         g.restore();
@@ -2882,7 +2888,9 @@ window.plethoraBit = {
      * ============================================================= */
     const SAFE_T = ctx.safeArea.top, SAFE_B = ctx.safeArea.bottom;
     const btn = "pointer-events:auto;width:38px;height:38px;border-radius:13px;border:none;" +
-      "background:rgba(3,38,60,0.72);color:" + FOAM + ";font-size:16px;line-height:1;" +
+      // Near-solid: at 0.72 the fan of cards on the title screen showed
+      // through the chrome and the icons had a seven of clubs behind them.
+      "background:rgba(3,30,50,0.93);color:" + FOAM + ";font-size:16px;line-height:1;" +
       "font-family:inherit;padding:0;box-shadow:inset 0 0 0 1px rgba(242,253,255,0.22);";
     const bigBtn = (bg, fg, edge) => "width:100%;padding:15px;border:none;border-radius:16px;font-family:inherit;" +
       "font-size:16px;font-weight:800;background:" + bg + ";color:" + fg + ";margin-top:12px;" +

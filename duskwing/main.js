@@ -1204,7 +1204,7 @@ window.plethoraBit = {
               'color:' + CREW[i].ink + ';">' + esc(CREW[i].name) + '</span>' +
             // nowrap: LEFT BEHIND is two words, and left to wrap it makes one
             // row twice the height of the others and knocks the column out.
-            '<span style="font-size:10.5px;letter-spacing:0.18em;opacity:0.5;flex:none;' +
+            '<span style="font-size:10.5px;letter-spacing:0.18em;opacity:0.64;flex:none;' +
               'white-space:nowrap;">' + esc(b.cause || "OUT") + '</span>' +
             '<span style="font-family:' + DISP + ';font-size:19px;letter-spacing:0.06em;width:62px;' +
               'text-align:right;">' + fmt(Math.round(b.best)) + '</span>' +
@@ -2000,7 +2000,9 @@ window.plethoraBit = {
       for (const band of bands) {
         const crew = CREW[band.i];
         g.save();
-        g.globalAlpha = clamp(1 - f * 0.75, 0, 1);
+        // The fade floor used to be 0.25, which is invisible over the bloom in
+        // a lit band — a countdown nobody can read is not a countdown.
+        g.globalAlpha = clamp(1 - f * 0.42, 0, 1);
         g.textAlign = "center";
         g.textBaseline = "middle";
         // Right of the creature, which hovers over the pad on the left: a
@@ -2011,11 +2013,17 @@ window.plethoraBit = {
         // overshoots to 1.6x — so for the first third of every second the
         // digit was drawn outside its own plate, straight onto whatever the
         // sky happened to be doing.
-        inkPlate(g, nx, band.mid, size * 1.5 * sc, size * 0.95 * sc, 0.7);
+        inkPlate(g, nx, band.mid, size * 1.5 * sc, size * 0.95 * sc, 0.82);
         g.translate(nx, band.mid);
         g.scale(sc, sc);
-        g.fillStyle = crew.ink;
         g.font = "700 " + Math.round(size) + "px " + DISP;
+        // Outlined as well as plated: a cyan numeral over the sunrise band is
+        // two bright colours on top of each other whatever the plate does.
+        g.strokeStyle = "rgba(0,0,0,0.6)";
+        g.lineWidth = size * 0.1;
+        g.lineJoin = "round";
+        g.strokeText(String(n), 0, 0);
+        g.fillStyle = crew.ink;
         g.fillText(String(n), 0, 0);
         g.restore();
       }
@@ -2056,10 +2064,26 @@ window.plethoraBit = {
       "linear-gradient(180deg,rgba(4,7,10,0.80) 0%,rgba(4,7,10,0.34) 15%," +
       "rgba(4,7,10,0.93) 27%,rgba(4,7,10,0.95) 52%,rgba(4,7,10,0.92) 72%," +
       "rgba(4,7,10,0.36) 87%,rgba(4,7,10,0.86) 100%)";
+    // A modal, above the chrome strip rather than under it. At z-index 70 the
+    // metre counter and the three chrome buttons were painted straight across
+    // the first two lines of the rules on any screen short enough for the card
+    // to reach the top of the viewport — which is every one the app embeds.
+    //
+    // box-sizing matters: a div defaults to content-box, so max-height:100% on
+    // a padded card caps the CONTENT at the full height and the padding then
+    // pushes the card past it. `align-items:safe center` keeps the top edge
+    // reachable once the list is taller than the screen; plain `center`
+    // overflows equally in both directions and the heading goes out of reach.
     const panel = "position:absolute;inset:0;pointer-events:auto;display:none;align-items:center;" +
-      "justify-content:center;background:rgba(4,7,10,0.92);z-index:70;padding:22px;";
-    const card = "max-width:330px;width:100%;background:rgba(14,18,20,0.98);border-radius:20px;" +
-      "padding:22px;border:1px solid rgba(255,240,214,0.10);";
+      "align-items:safe center;justify-content:center;background:rgba(4,7,10,0.985);z-index:90;" +
+      "padding:" + (SAFE_T + 14) + "px 22px 20px;";
+    const card = "box-sizing:border-box;max-width:330px;width:100%;max-height:100%;" +
+      "display:flex;flex-direction:column;background:#0E1214;border-radius:20px;" +
+      "padding:22px;border:1px solid rgba(255,240,214,0.14);";
+    // The body scrolls; the way out does not scroll with it. Seven rules are
+    // taller than a short screen, and a dismiss button that starts below the
+    // fold is a panel with no visible exit.
+    const cardBody = "overflow-y:auto;min-height:0;";
 
     const root = ctx.createRoot({ touchAction: "none" });
     root.style.cssText += ";font-family:" + BODY + ";color:#FFEFCD;pointer-events:none;" +
@@ -2117,8 +2141,13 @@ window.plethoraBit = {
       '</div>' +
 
       /* --- round over -------------------------------------------------- */
+      // Clears the chrome strip rather than sliding under it: the result card
+      // is centred, and on a short screen its first caption came up level with
+      // the metre counter and the three buttons, which sit above it.
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
-        'flex-direction:column;align-items:center;justify-content:center;z-index:55;padding:26px;' +
+        'box-sizing:border-box;overflow-y:auto;' +
+        'flex-direction:column;align-items:center;justify-content:center;z-index:55;' +
+        'padding:' + (SAFE_T + CHROME_H + 10) + 'px 26px 26px;' +
         'text-align:center;background:linear-gradient(180deg,rgba(4,7,10,0.985) 0%,rgba(4,7,10,0.94) 22%,' +
         'rgba(4,7,10,0.90) 78%,rgba(4,7,10,0.97) 100%);">' +
         '<div style="' + capLine + '">Flight ends</div>' +
@@ -2136,6 +2165,7 @@ window.plethoraBit = {
       /* --- settings ---------------------------------------------------- */
       '<div data-el="cogp" style="' + panel + '">' +
         '<div style="' + card + '">' +
+          '<div style="' + cardBody + '">' +
           '<div style="font-family:' + DISP + ';font-size:24px;letter-spacing:0.16em;margin-bottom:16px;">SETTINGS</div>' +
           '<div style="' + capLine + '">Players</div>' +
           '<div data-el="setcrew" style="display:flex;gap:7px;margin:8px 0 16px;"></div>' +
@@ -2143,13 +2173,15 @@ window.plethoraBit = {
           '<div data-el="setdiff" style="display:flex;gap:7px;margin:8px 0 16px;"></div>' +
           '<div style="' + capLine + '">Sound</div>' +
           '<div data-el="setmute" style="display:flex;gap:7px;margin:8px 0 4px;"></div>' +
-          '<button data-el="cogp-close" style="' + bigBtn("rgba(255,240,214,0.12)", "#FFEFCD") + 'max-width:none;">DONE</button>' +
+          '</div>' +
+          '<button data-el="cogp-close" style="' + bigBtn("rgba(255,240,214,0.12)", "#FFEFCD") + 'max-width:none;flex:none;">DONE</button>' +
         '</div>' +
       '</div>' +
 
       /* --- how to play -------------------------------------------------- */
       '<div data-el="helpp" style="' + panel + '">' +
         '<div style="' + card + '">' +
+          '<div style="' + cardBody + '">' +
           '<div style="font-family:' + DISP + ';font-size:24px;letter-spacing:0.16em;margin-bottom:10px;">HOW TO FLY</div>' +
           '<ul style="font-size:13.5px;line-height:1.7;opacity:0.86;padding-left:17px;margin:0;">' +
             '<li>Lay the phone flat. Each of you takes one horizontal band — ' +
@@ -2168,7 +2200,8 @@ window.plethoraBit = {
             '<li>Whoever flies furthest takes the round. The flight itself — the furthest ' +
               'any of you got — goes to the global board.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + bigBtn("rgba(255,240,214,0.12)", "#FFEFCD") + 'max-width:none;">GOT IT</button>' +
+          '</div>' +
+          '<button data-el="helpp-close" style="' + bigBtn("rgba(255,240,214,0.12)", "#FFEFCD") + 'max-width:none;flex:none;">GOT IT</button>' +
         '</div>' +
       '</div>';
 

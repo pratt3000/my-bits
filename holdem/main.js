@@ -923,7 +923,11 @@ function payout(S, res) {
       feltHi: "#1a5c42", feltMid: "#0e3b2c", feltLow: "#05180f",
       railHi: "#7a4a2c", railMid: "#48281a", railLow: "#24120c",
       brass: "#c9a24a", gold: "#e8bd6a",
-      parch: "#f3e7cf", dim: "rgba(243,231,207,0.52)",
+      parch: "#f3e7cf", dim: "rgba(243,231,207,0.68)",
+      // The same quiet parchment has to work on two very different grounds.
+      // 0.52 over the near-black panels was 4.8:1; over the lit felt it was
+      // 2.8:1, which is what made every small label on the table mush.
+      dimFelt: "rgba(243,231,207,0.88)",
       panelHi: "#1d1510", panelLow: "#0a0705",
       seat: ["#f0b429", "#e0644a", "#54bdd8", "#9b83f0", "#5fc188", "#ef7ab8"],
     };
@@ -1348,9 +1352,22 @@ function payout(S, res) {
       const p = potPos();
       if (mid > 0) drawChipPile(p.x, p.y, mid, 11);
       const on = total > 0;
-      label("POT", p.x, p.y + 24, 9.5, on ? C.dim : "rgba(243,231,207,0.26)", "center", 2.2);
-      label(on ? total.toLocaleString() : "0", p.x, p.y + 42, 19,
-            on ? C.gold : "rgba(243,231,207,0.28)");
+      // The readout hangs under the pile on a phone. On a 517px card the felt
+      // is only 228px tall, which puts the pile — and both of these lines —
+      // inside the near seat's plaque: the plaque is a translucent slab, so
+      // the pot was printed straight through "ada 990" and neither number
+      // could be read. Lift the type into the band between the board and that
+      // plaque when it does not fit below; the pile stays put and is simply
+      // covered, which it already is.
+      const plaqueTop = L.cy + L.ry - 24 - L.plaqueH / 2;
+      // It stays centred: the near seat's dealer button is 39px to its left and
+      // its bet badge 30px to its right, so there is nowhere on this felt to
+      // step sideways to — the badge grazes the last digit of a big pot and
+      // that is the least bad of the three.
+      const ty = Math.min(p.y, plaqueTop - 52);
+      label("POT", p.x, ty + 24, 9.5, C.dimFelt, "center", 2.2);
+      label(on ? total.toLocaleString() : "0", p.x, ty + 42, 19,
+            on ? C.gold : "rgba(243,231,207,0.62)");
     }
 
     function drawFlyers() {
@@ -1564,7 +1581,7 @@ function payout(S, res) {
       }
       if (!S.board.length) {
         drawChipPile(L.cx, bcy - 12, r.total || 0, 13);
-        label("no flop — the hand ended before the board", L.cx, bcy + 32, 12, C.dim);
+        label("no flop — the hand ended before the board", L.cx, bcy + 32, 12, C.dimFelt);
       }
 
       const plTop = topY2 + bandH + 10;
@@ -1703,7 +1720,7 @@ function payout(S, res) {
           'font-size:22px;">−</button>' +
         '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;' +
           'background:rgba(243,231,207,0.06);border-radius:14px;">' +
-          '<div style="font-size:8.5px;letter-spacing:0.24em;opacity:0.5;">RAISE TO</div>' +
+          '<div style="font-size:8.5px;letter-spacing:0.24em;opacity:0.72;">RAISE TO</div>' +
           '<div data-el="rAmt" style="font-size:21px;font-weight:900;color:#e8bd6a;line-height:1.15;">0</div>' +
         '</div>' +
         '<button data-el="rPlus" style="' + ACT + 'flex:0 0 54px;background:rgba(243,231,207,0.10);' +
@@ -1727,33 +1744,38 @@ function payout(S, res) {
         'Next hand</button>' +
 
       // Menu
+      // Cleared past the chrome keys, which sit at z-index 60 above this: on a
+      // 517px card the stack no longer has slack to centre in, so the eyebrow
+      // rode up under the three buttons and was printed through them. `safe
+      // center` keeps the top of an overflowing column reachable instead of
+      // centring it out of the scroll range.
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
-        'flex-direction:column;align-items:center;justify-content:center;gap:9px;z-index:50;' +
+        'flex-direction:column;align-items:center;justify-content:safe center;gap:9px;z-index:50;' +
         'overflow-y:auto;background:rgba(6,11,8,0.88);' +
-        'padding:' + (ST + 16) + 'px 22px ' + (SB + 16) + 'px;">' +
-        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;">One phone, pass and play</div>' +
+        'padding:' + (ST + 54) + 'px 22px ' + (SB + 16) + 'px;">' +
+        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.68;">One phone, pass and play</div>' +
         '<div style="font-size:56px;font-weight:900;letter-spacing:-0.035em;line-height:1;' +
           'background:linear-gradient(100deg,#f3e7cf,#e8bd6a 55%,#b3803a);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Hold’em</div>' +
         '<div style="font-size:13.5px;opacity:0.6;line-height:1.5;max-width:270px;text-align:center;">' +
           'Everyone starts on 1,000. Your two cards live behind a cover with your name on it — ' +
           'the board, the pot and every bet stay on the table.</div>' +
-        '<div style="font-size:10px;letter-spacing:0.3em;text-transform:lowercase;opacity:0.5;margin-top:12px;">Players</div>' +
+        '<div style="font-size:10px;letter-spacing:0.3em;text-transform:lowercase;opacity:0.68;margin-top:12px;">Players</div>' +
         '<div data-el="pc" style="display:flex;gap:6px;width:100%;max-width:300px;"></div>' +
         '<div data-el="names" style="display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%;' +
           'max-width:300px;margin-top:6px;"></div>' +
         '<button data-el="go" style="' + BIG + 'max-width:300px;margin-top:12px;background:#e8bd6a;' +
           'color:#241a08;">Deal me in</button>' +
-        '<div style="font-size:11.5px;opacity:0.42;line-height:1.5;max-width:290px;' +
+        '<div style="font-size:11.5px;opacity:0.62;line-height:1.5;max-width:290px;' +
           'text-align:center;margin-top:10px;">The chips are just numbers. There is no money in ' +
           'this, nothing to buy, and nothing to win but the table.</div>' +
       '</div>' +
 
       // Match over
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
-        'flex-direction:column;align-items:center;justify-content:center;z-index:58;' +
-        'overflow-y:auto;background:rgba(6,11,8,0.94);padding:' + (ST + 16) + 'px 22px ' + (SB + 16) + 'px;">' +
-        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.5;">Last one with chips</div>' +
+        'flex-direction:column;align-items:center;justify-content:safe center;z-index:58;' +
+        'overflow-y:auto;background:rgba(6,11,8,0.94);padding:' + (ST + 54) + 'px 22px ' + (SB + 16) + 'px;">' +
+        '<div style="font-size:10px;letter-spacing:0.42em;text-transform:lowercase;opacity:0.68;">Last one with chips</div>' +
         '<div data-el="over-name" style="font-size:46px;font-weight:900;line-height:1.1;margin:6px 0 2px;"></div>' +
         '<div data-el="over-sub" style="font-size:14px;opacity:0.62;"></div>' +
         '<div data-el="over-body" style="' + CARD + 'padding:16px 18px;margin-top:18px;width:100%;max-width:300px;"></div>' +
@@ -1767,11 +1789,11 @@ function payout(S, res) {
         'padding:' + (ST + 20) + 'px 22px ' + (SB + 20) + 'px;">' +
         '<div style="max-width:330px;width:100%;margin:auto;' + CARD + 'padding:22px;">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:14px;">Settings</div>' +
-          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.5;">Blinds up every</div>' +
+          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.68;">Blinds up every</div>' +
           '<div data-el="be" style="display:flex;gap:6px;margin:9px 0 18px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.5;">Sound</div>' +
+          '<div style="font-size:10px;letter-spacing:0.26em;text-transform:lowercase;opacity:0.68;">Sound</div>' +
           '<div data-el="sn" style="display:flex;gap:6px;margin:9px 0 6px;"></div>' +
-          '<div style="font-size:12.5px;opacity:0.5;line-height:1.5;margin-bottom:16px;">' +
+          '<div style="font-size:12.5px;opacity:0.7;line-height:1.5;margin-bottom:16px;">' +
             'Blinds climb through 10/20, 15/30, 25/50, 50/100 and on up, so a big ' +
             'stack cannot simply wait everyone else out.</div>' +
           '<button data-el="endm" style="' + BIG + 'background:rgba(224,100,74,0.22);' +

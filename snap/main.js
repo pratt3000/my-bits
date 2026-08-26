@@ -1443,12 +1443,19 @@ window.plethoraBit = {
 
         miniStack(-lw * 0.16, lh * 0.03, p.cards, clamp(lh / 140 * 0.52, 0.20, 0.38));
 
+        // Both readouts have to leave the seat's colour as the wash arrives.
+        // At the peak of a win the pad is flooded with this player's own ink,
+        // and the name was set in that same ink — it disappeared into its own
+        // background at exactly the moment it most wants to be read. Cream on
+        // a lit amber pad was barely better. So the ink darkens as the ground
+        // lights, on the same curve as the bloom.
+        const lit = easeOut(p.flashT);
         const tx = lw * 0.07;
-        g.fillStyle = hexA(p.ink, 0.92);
+        g.fillStyle = mixHex(p.ink, "#150f06", lit * 0.92, 0.92);
         g.font = "700 " + Math.round(Math.min(lh * 0.13, 12)) + "px " + FONT;
         tracked(g, p.name.toLowerCase(), 0, -lh * 0.27, 3);
 
-        g.fillStyle = armed ? "#fffdf4" : CREAM;
+        g.fillStyle = mixHex(armed ? "#fffdf4" : CREAM, "#150f06", lit * 0.86);
         g.font = "800 " + Math.round(Math.min(lh * 0.40, 46)) + "px " + FONT;
         g.fillText(String(p.cards), tx, lh * 0.10);
 
@@ -1490,6 +1497,14 @@ window.plethoraBit = {
     function hexA(hex, a) {
       const n = parseInt(hex.slice(1), 16);
       return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a.toFixed(3) + ")";
+    }
+
+    /** Two of those blended, for text sitting on a surface that changes colour
+     *  under it — the ink has to travel the opposite way to the ground. */
+    function mixHex(h1, h2, t, a) {
+      const x = parseInt(h1.slice(1), 16), y = parseInt(h2.slice(1), 16), k = clamp(t, 0, 1);
+      const c = (sh) => Math.round(((x >> sh) & 255) * (1 - k) + ((y >> sh) & 255) * k);
+      return "rgba(" + c(16) + "," + c(8) + "," + c(0) + "," + (a === undefined ? 1 : a) + ")";
     }
 
     /* --- the shout ------------------------------------------------ */
@@ -1577,15 +1592,25 @@ window.plethoraBit = {
       // Swung about a pivot well below the cards, which is what makes a fan
       // look held rather than stacked. The two sevens in the middle sit a
       // little proud of the rest — the whole game in one still.
-      const cx = W / 2, cy = H * 0.295, R = 280;
+      // The fan is decoration and the title copy is not, so it is fitted into
+      // the band above the copy rather than pinned to a fraction of the
+      // height. The copy is a fixed 314px stack sitting on the menu's bottom
+      // padding, so where it starts is known without measuring the overlay.
+      // Pinned, the fan ran straight through the wordmark on the 517px card
+      // the app embeds the bit in — cream text on white card faces, which is
+      // the one combination that reads as nothing at all.
+      const copyTop = H - (SAFE_B + 26) - 314;
+      const UP = 83, DOWN = 96.3;           // the fan's reach either side of cy, at scale 1
+      const s = Math.min(1, (copyTop - 14 - 8) / (UP + DOWN));
+      const cx = W / 2, cy = Math.min(H * 0.295, copyTop - 14 - DOWN * s), R = 280 * s;
       const rock = Math.sin(now * 0.0007) * 0.03;
       for (let i = 0; i < FAN.length; i++) {
         const k = i - (FAN.length - 1) / 2;
         const a = k * 0.160 + rock;
         const pair = i === 2 || i === 3;
         const card = { id: FAN[i], rank: FAN[i].slice(0, -1), suit: FAN[i].slice(-1) };
-        drawCardAt(cx + Math.sin(a) * R, cy - Math.cos(a) * R + R - (pair ? 13 : 0),
-          a, 1, card, true, pair ? 0.20 : 0.07);
+        drawCardAt(cx + Math.sin(a) * R, cy - Math.cos(a) * R + R - (pair ? 13 * s : 0),
+          a, s, card, true, pair ? 0.20 : 0.07);
       }
     }
 
@@ -1694,7 +1719,10 @@ window.plethoraBit = {
      * ============================================================= */
     const SAFE_T = ctx.safeArea.top, SAFE_B = ctx.safeArea.bottom;
     const btn = "pointer-events:auto;width:38px;height:38px;border-radius:12px;border:none;" +
-      "background:rgba(6,22,15,0.72);color:" + CREAM + ";font-size:15px;line-height:1;" +
+      // Nearly opaque, not merely tinted: these three sit in the corner the
+      // title fan reaches into, and at 0.72 a white card face came through
+      // them and took the cream glyphs most of the way with it.
+      "background:rgba(6,22,15,0.90);color:" + CREAM + ";font-size:15px;line-height:1;" +
       "font-family:inherit;padding:0;box-shadow:inset 0 0 0 1px rgba(216,169,74,0.30);";
     const bigBtn = (bg, fg, edge) => "width:100%;padding:15px;border:none;border-radius:15px;font-family:inherit;" +
       "font-size:16px;font-weight:700;background:" + bg + ";color:" + fg + ";margin-top:11px;" +

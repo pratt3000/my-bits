@@ -664,7 +664,9 @@ window.plethoraBit = {
       // by whatever is left above it.
       L.hdrGap = Math.max(20, Math.min(62, (L.bot - L.top) * 0.098));
       const hdrH = L.hdrGap + 58;                    // rule at +32, counter at +26
-      L.R = Math.min(150, (L.bot - L.top) / 2 - 26, L.cy - L.top - hdrH - 32);
+      // Floored: a radius that goes negative on an absurdly short viewport
+      // throws out of arc() and takes the whole frame with it.
+      L.R = Math.max(48, Math.min(150, (L.bot - L.top) / 2 - 26, L.cy - L.top - hdrH - 32));
       L.throwY = L.th * 0.8;
       L.throwX = L.tw * 0.97 + L.th * 0.06;
       L.promptY = L.cy + L.R + Math.min(44, Math.max(26, (L.bot - L.top) * 0.058));
@@ -1524,7 +1526,7 @@ window.plethoraBit = {
         g.fillText(line, L.cx, L.promptY);
       }
       if (legal.length === 1 && st.hands[seat].length > 1) {
-        smallCaps("only one legal card", L.cx, L.promptY + 20, 9, "rgba(240,218,150,0.55)");
+        smallCaps("only one legal card", L.cx, L.promptY + 20, 9, "rgba(240,218,150,0.82)");
       }
     }
 
@@ -1571,13 +1573,13 @@ window.plethoraBit = {
         smallCaps(lt.points + (lt.points === 1 ? " point" : " points"), L.cx, mid + 36, 12,
                   heavy ? CRIMSON_HI : "rgba(224,80,100,0.9)");
       } else {
-        smallCaps("no points", L.cx, mid + 36, 11, "rgba(242,233,210,0.36)");
+        smallCaps("no points", L.cx, mid + 36, 11, "rgba(242,233,210,0.68)");
       }
       g.strokeStyle = "rgba(201,162,39,0.22)"; g.lineWidth = 1;
       g.beginPath(); g.moveTo(x0 + 34, y1 - 44); g.lineTo(x1 - 34, y1 - 44); g.stroke();
       const pulse = 0.55 + 0.45 * Math.sin(t / 460);
       smallCaps("Tap to carry on", L.cx, y1 - 24, 10,
-                "rgba(240,218,150," + (0.45 + 0.4 * pulse).toFixed(2) + ")");
+                "rgba(240,218,150," + (0.6 + 0.35 * pulse).toFixed(2) + ")");
     }
 
     /** The title spread — a real hand of cards, with her in the middle. */
@@ -1770,7 +1772,7 @@ window.plethoraBit = {
         // the block it lands mid-label on a short screen and the caption is
         // still printed over the queen of spades.
         '<div style="margin:0 -26px;padding:30px 26px 0;background:linear-gradient(180deg,' +
-          'rgba(3,18,12,0) 0,rgba(3,18,12,0.93) 30px,rgba(3,18,12,0.97) 100%);">' +
+          'rgba(3,18,12,0) 0,rgba(3,18,12,0.985) 30px,rgba(3,18,12,0.995) 100%);">' +
           '<div style="' + LABEL + 'margin-bottom:8px;">Play to</div>' +
           '<div data-el="tc" style="display:flex;gap:8px;justify-content:center;"></div>' +
           '<button data-el="menu-set" style="' + BIG + 'max-width:250px;margin:10px auto 0;display:block;' +
@@ -1778,7 +1780,7 @@ window.plethoraBit = {
             'font-size:14px;padding:11px;">Names &amp; settings</button>' +
           '<button data-el="go" style="' + BIG + 'max-width:250px;margin:10px auto 0;display:block;' +
             'background:linear-gradient(180deg,#F0DA96,#C9A227);color:#2A1D05;">Deal</button>' +
-          '<div style="font-size:11.5px;opacity:0.42;margin-top:10px;line-height:1.5;">' +
+          '<div style="font-size:11.5px;opacity:0.62;margin-top:10px;line-height:1.5;">' +
             'The table stays on screen. Your hand only appears when you tap.</div>' +
         '</div>' +
       '</div>' +
@@ -1968,7 +1970,8 @@ window.plethoraBit = {
           ? "Pass three " + passDir
           : "Choose " + (3 - selected.length) + " more";
         b.style.background = ready ? "linear-gradient(180deg,#F0DA96,#C9A227)" : "rgba(201,162,39,0.05)";
-        b.style.color = ready ? "#2A1D05" : "rgba(242,233,210,0.5)";
+        // "Choose two more" is a live instruction, not a disabled label.
+        b.style.color = ready ? "#2A1D05" : "rgba(242,233,210,0.8)";
         b.style.boxShadow = ready ? "0 5px 18px rgba(0,0,0,0.4)" : "inset 0 0 0 1px rgba(201,162,39,0.34)";
       }
     }
@@ -2025,7 +2028,7 @@ window.plethoraBit = {
             ' scores nothing and everybody else takes <b>26</b>.</div>'
           : '') +
         scoreRows(s.pts) +
-        '<div style="font-size:11.5px;opacity:0.45;margin-top:10px;">First to ' + settings.target +
+        '<div style="font-size:11.5px;opacity:0.72;margin-top:10px;">First to ' + settings.target +
           ' ends it. Lowest score wins.</div>';
       el("he-next").textContent = result ? "See the result" : "Next hand";
       el("hand-end").style.display = "flex";
@@ -2049,7 +2052,7 @@ window.plethoraBit = {
           return '<div style="display:flex;justify-content:space-between;align-items:baseline;' +
             'padding:8px 10px;margin:0 -10px;border-top:1px solid rgba(201,162,39,0.16);' +
             'font-size:15.5px;' + (won ? 'background:rgba(201,162,39,0.10);' : '') + '">' +
-            '<span><span style="opacity:0.35;">' + (n + 1) + '.</span> ' +
+            '<span><span style="opacity:0.6;">' + (n + 1) + '.</span> ' +
               '<span style="color:' + r.p.colour + ';font-weight:800;">' + esc(r.p.name) + '</span>' +
               (won ? '<span style="' + LABEL + 'margin-left:8px;">wins</span>' : '') + '</span>' +
             '<span style="font-family:' + SERIF + ';font-weight:800;' +

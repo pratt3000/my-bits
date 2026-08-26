@@ -552,6 +552,13 @@ window.plethoraBit = {
           g.fillStyle = "#fff4e0";
           g.font = "900 " + (34 * L.scale) + "px Inter,-apple-system,system-ui,'Segoe UI',Roboto,sans-serif";
           g.textAlign = "center"; g.textBaseline = "middle";
+          // Cream on the lit plank is 2.6:1, and on a short card the count-in
+          // lands squarely on one. Carry its own ground rather than a plate,
+          // which would sit over the arena for the whole second it is up.
+          g.lineJoin = "round";
+          g.lineWidth = 6 * L.scale;
+          g.strokeStyle = "rgba(10,6,16,0.86)";
+          g.strokeText(msg.text, W / 2, L.top + 70 * L.scale);
           g.fillText(msg.text, W / 2, L.top + 70 * L.scale);
           g.globalAlpha = 1;
         }
@@ -629,8 +636,11 @@ window.plethoraBit = {
         '<button data-el="cog" aria-label="Settings" style="' + BTN + '">⚙</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
+      // Opaque, not 0.93: the drive pads, the three chrome keys and the 0-0
+      // score all sit under this and came through as coloured smudges that read
+      // as a broken screen rather than as a dimmed one.
       '<div data-el="menu" style="position:absolute;inset:0;pointer-events:auto;display:flex;' +
-        'align-items:center;justify-content:center;gap:30px;background:rgba(14,8,22,0.93);' +
+        'align-items:center;justify-content:center;gap:30px;background:#0E0816;' +
         'z-index:50;padding:18px 26px;">' +
         // Two columns. A landscape view is 390px tall, and the portrait stack
         // ran off the bottom and took the start button with it.
@@ -654,15 +664,15 @@ window.plethoraBit = {
             'margin:4px 0 6px;background:linear-gradient(96deg,#ff5a45,#4cc9f0);' +
             '-webkit-background-clip:text;background-clip:text;' +
             '-webkit-text-fill-color:transparent;">Helmet Derby</div>' +
-          '<div style="font-size:13px;opacity:0.66;line-height:1.5;">' +
+          '<div style="font-size:13px;opacity:0.8;line-height:1.5;">' +
             'Sit side by side, two buttons each in your own corner. Touch the other ' +
             'car\'s helmet with any part of yours and the point is yours.</div>' +
         '</div>' +
         '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:7px;align-items:stretch;' +
           'min-width:196px;">' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;">First to</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.72;">First to</div>' +
           '<div data-el="tc" style="display:flex;gap:7px;"></div>' +
-          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.5;margin-top:5px;">Arena</div>' +
+          '<div style="font-size:10px;letter-spacing:0.22em;text-transform:lowercase;opacity:0.72;margin-top:5px;">Arena</div>' +
           '<div data-el="ac" style="display:flex;gap:7px;"></div>' +
           '<button data-el="go" style="' + BIG + 'margin-top:11px;' +
             'background:linear-gradient(96deg,#ff5a45,#4cc9f0);color:#140d1c;">Start</button>' +
@@ -670,31 +680,40 @@ window.plethoraBit = {
       '</div>' +
       '<div data-el="over" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'flex-direction:column;align-items:center;justify-content:center;gap:5px;' +
-        'background:rgba(14,8,22,0.94);z-index:55;padding:26px;text-align:center;">' +
+        'background:#0E0816;z-index:55;padding:26px;text-align:center;">' +
         '<div data-el="over-title" style="font-size:42px;font-weight:900;"></div>' +
-        '<div data-el="over-line" style="font-size:16px;opacity:0.6;"></div>' +
+        '<div data-el="over-line" style="font-size:16px;opacity:0.75;"></div>' +
         '<button data-el="again" style="' + BIG + 'max-width:230px;margin-top:22px;' +
           'background:rgba(255,255,255,0.16);color:#fff4e0;">Rematch</button>' +
       '</div>' +
       '<div data-el="cogp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'align-items:center;justify-content:center;background:rgba(14,8,22,0.94);z-index:70;padding:22px;">' +
         '<div style="max-width:320px;width:100%;background:rgba(30,18,42,0.98);border-radius:20px;' +
-          'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
-          '<div style="font-size:19px;font-weight:800;margin-bottom:14px;">Settings</div>' +
-          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">First to</div>' +
-          '<div data-el="tc2" style="display:flex;gap:8px;margin:9px 0 16px;"></div>' +
-          '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.55;">Arena</div>' +
-          '<div data-el="ac2" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
-          '<button data-el="cogp-close" style="' + BIG + 'margin-top:18px;' +
-            'background:rgba(255,255,255,0.14);color:#fff4e0;">Done</button>' +
+          'padding:22px;border:1px solid rgba(255,255,255,0.10);box-sizing:border-box;' +
+          'max-height:100%;display:flex;flex-direction:column;">' +
+          '<div style="font-size:19px;font-weight:800;margin-bottom:14px;flex:none;">Settings</div>' +
+          // The options scroll; the heading and Done do not. A landscape card
+          // is 306px tall and this panel wants 327, so a plain overflow on the
+          // whole card put Done below the fold — the one control that has to
+          // be on screen.
+          '<div style="overflow-y:auto;min-height:0;flex:1 1 auto;">' +
+            '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.72;">First to</div>' +
+            '<div data-el="tc2" style="display:flex;gap:8px;margin:9px 0 16px;"></div>' +
+            '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.72;">Arena</div>' +
+            '<div data-el="ac2" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
+          '</div>' +
+          '<button data-el="cogp-close" style="' + BIG + 'margin-top:18px;flex:none;' +
+            'background:rgba(255,255,255,0.18);color:#fff4e0;">Done</button>' +
         '</div>' +
       '</div>' +
       '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'align-items:center;justify-content:center;background:rgba(14,8,22,0.94);z-index:70;padding:22px;">' +
         '<div style="max-width:330px;width:100%;background:rgba(30,18,42,0.98);border-radius:20px;' +
-          'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
-          '<div style="font-size:19px;font-weight:800;margin-bottom:11px;">How to play</div>' +
-          '<ul style="font-size:14px;line-height:1.7;opacity:0.86;padding-left:18px;margin:0;">' +
+          'padding:22px;border:1px solid rgba(255,255,255,0.10);box-sizing:border-box;' +
+          'max-height:100%;display:flex;flex-direction:column;">' +
+          '<div style="font-size:19px;font-weight:800;margin-bottom:11px;flex:none;">How to play</div>' +
+          '<ul style="font-size:14px;line-height:1.7;opacity:0.9;padding-left:18px;margin:0;' +
+            'overflow-y:auto;min-height:0;flex:1 1 auto;">' +
             '<li><b>Turn the phone sideways.</b> It gives the two of you twice the edge to hold.</li>' +
             '<li>Sit <b>side by side</b>, each holding your own end.</li>' +
             '<li>Your two buttons are in your own bottom corner. Nothing is mirrored — ' +
@@ -703,8 +722,8 @@ window.plethoraBit = {
             '<li>Touch the other car\'s <b>helmet</b> with any part of your car to take the point.</li>' +
             '<li>Both of you at once is a double knockout and scores for nobody.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + BIG + 'margin-top:16px;' +
-            'background:rgba(255,255,255,0.14);color:#fff4e0;">Got it</button>' +
+          '<button data-el="helpp-close" style="' + BIG + 'margin-top:16px;flex:none;' +
+            'background:rgba(255,255,255,0.18);color:#fff4e0;">Got it</button>' +
         '</div>' +
       '</div>';
 
@@ -755,8 +774,10 @@ window.plethoraBit = {
       const paint2 = () => {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
-          b.style.background = on ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.08)";
-          b.style.color = on ? "#fff" : "rgba(255,244,224,0.55)";
+          b.style.background = on ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.10)";
+          // The unchosen options were 0.55 cream on an 0.08 white plate: two
+          // greys a shade apart, on a panel that has no other colour on it.
+          b.style.color = on ? "#fff" : "rgba(255,244,224,0.82)";
         }
       };
       for (const b of host.querySelectorAll("button")) {
@@ -776,7 +797,7 @@ window.plethoraBit = {
     function paintScore() {
       el("score").innerHTML =
         '<span style="color:' + P[0].css + ';">' + score[0] + '</span>' +
-        '<span style="opacity:0.35;font-size:18px;"> — </span>' +
+        '<span style="opacity:0.55;font-size:18px;"> — </span>' +
         '<span style="color:' + P[1].css + ';">' + score[1] + '</span>';
     }
 

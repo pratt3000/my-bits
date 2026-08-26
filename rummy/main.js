@@ -400,6 +400,10 @@ window.plethoraBit = {
     const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
     const esc = (s) => String(s).replace(/[&<>"']/g,
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    /* A number that follows a name. The default names end in a digit, so a
+     * word space is not enough separation: "player 1" and a score of 0 set as
+     * "player 1 0" reads as "player 10". */
+    const num = (v) => '<span style="margin-left:7px;">' + v + '</span>';
 
 /* ===== RULES START ===== */
     /**
@@ -848,9 +852,11 @@ window.plethoraBit = {
       el("cover-sub").textContent = stock.length <= 2
         ? "last cards — the stock is nearly out"
         : "hand " + handNo + " · first to " + settings.target;
+      // The score gets a real gap, not a word space. The default names end in a
+      // digit — "player 1" followed by a score of 0 reads as "player 10".
       el("cover-scores").innerHTML = players.map((q) =>
         '<span style="color:' + q.css + ';opacity:' + (q === p ? 1 : 0.55) + ';">' +
-        esc(q.name) + ' <span style="color:' + PARCH + ';">' + q.score + '</span></span>').join("");
+        esc(q.name) + '<span style="color:' + PARCH + ';margin-left:7px;">' + q.score + '</span></span>').join("");
       el("cover").style.display = "flex";
       paintHud();
     }
@@ -1189,12 +1195,23 @@ window.plethoraBit = {
           id, rank: id.slice(0, id.length - 1), suit: id.slice(-1),
           red: id.slice(-1) === "H" || id.slice(-1) === "D",
         }));
-        const cw = Math.min(76, W * 0.196);
+        // The fan is decoration; the title copy is not. So the fan takes the
+        // band the copy leaves rather than a fixed fraction of the felt. Both
+        // stacks are fixed-height — 216px of copy under the top safe area, 163
+        // of controls above the bottom one — so the band is known without
+        // measuring the overlay. Pinned to the felt, the fan landed across the
+        // tagline on the 517px card the app embeds the bit in: parchment text
+        // on white card faces, which reads as nothing at all.
+        const bandT = L.ST + 252, bandB = H - L.SB - 197;
+        const cw = Math.min(76, W * 0.196, (bandB - bandT) / 2.02);
+        const sag = cw * 0.40;                  // how far the outer cards hang
+        const rise = cw * 0.81;                 // half-height of a card at full tilt
+        const fanY = Math.max(L.feltY + L.feltH * 0.435, bandT + rise);
         const n = demo.length;
         demo.forEach((c, i) => {
           const t = (i - (n - 1) / 2) / ((n - 1) / 2);
           const at = {
-            x: W / 2 + t * (W * 0.315), y: L.feltY + L.feltH * 0.435 + t * t * 30,
+            x: W / 2 + t * (W * 0.315), y: fanY + t * t * sag,
             rot: t * 0.28, sc: cw / L.hw, face: true,
           };
           // Spawned already settled: the first frame has to be right, and a
@@ -2191,13 +2208,15 @@ window.plethoraBit = {
           '</div>' +
           '<div style="font-size:27px;font-weight:900;margin-top:6px;color:' + p.css + ';line-height:1.15;">' +
             esc(p.name) + ' +' + result.points + '</div>' +
+          // Same reason as the handover strip: a name ending in a digit runs
+          // straight into the number after it unless the gap is a real one.
           '<div style="font-size:13px;opacity:0.66;margin-top:4px;line-height:1.5;">' +
-            esc(players[result.knocker].name) + ' ' + result.kDeadwood + ' deadwood · ' +
-            esc(players[1 - result.knocker].name) + ' ' + result.dDeadwood +
+            esc(players[result.knocker].name) + num(result.kDeadwood) + ' deadwood · ' +
+            esc(players[1 - result.knocker].name) + num(result.dDeadwood) +
             (result.gin ? ' · no lay-offs' : '') + '</div>' +
           '<div style="display:flex;gap:14px;margin-top:11px;font-size:14px;font-weight:800;">' +
-            '<span style="color:' + players[0].css + ';">' + esc(players[0].name) + ' ' + players[0].score + '</span>' +
-            '<span style="color:' + players[1].css + ';">' + esc(players[1].name) + ' ' + players[1].score + '</span>' +
+            '<span style="color:' + players[0].css + ';">' + esc(players[0].name) + num(players[0].score) + '</span>' +
+            '<span style="color:' + players[1].css + ';">' + esc(players[1].name) + num(players[1].score) + '</span>' +
           '</div>';
       }
       const done = players && (players[0].score >= settings.target || players[1].score >= settings.target);

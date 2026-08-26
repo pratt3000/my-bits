@@ -943,7 +943,8 @@ window.plethoraBit = {
       '<div data-el="cogp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'align-items:center;justify-content:center;background:rgba(8,22,48,0.94);z-index:70;padding:24px;">' +
         '<div style="max-width:320px;width:100%;background:rgba(14,40,84,0.98);border-radius:22px;' +
-          'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
+          'padding:22px;border:1px solid rgba(255,255,255,0.10);box-sizing:border-box;' +
+          'max-height:100%;overflow-y:auto;">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:15px;">Settings</div>' +
           '<div style="font-size:11px;letter-spacing:0.2em;text-transform:lowercase;opacity:0.72;">Blockades</div>' +
           '<div data-el="blocks" style="display:flex;gap:8px;margin:9px 0 6px;"></div>' +
@@ -956,10 +957,15 @@ window.plethoraBit = {
       // Instructions.
       '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
         'align-items:center;justify-content:center;background:rgba(8,22,48,0.94);z-index:70;padding:24px;">' +
+        // The card the app embeds this in is 517px tall and these ten rules
+        // want 690. Centred and clipped, that lost the heading off the top and
+        // Got it — the only way out — off the bottom. Pin both, scroll between.
         '<div style="max-width:330px;width:100%;background:rgba(14,40,84,0.98);border-radius:22px;' +
-          'padding:22px;border:1px solid rgba(255,255,255,0.10);">' +
-          '<div style="font-size:19px;font-weight:800;margin-bottom:11px;">How to play</div>' +
-          '<ul style="font-size:14px;line-height:1.7;opacity:0.86;padding-left:18px;margin:0;">' +
+          'padding:22px;border:1px solid rgba(255,255,255,0.10);box-sizing:border-box;' +
+          'max-height:100%;display:flex;flex-direction:column;">' +
+          '<div style="font-size:19px;font-weight:800;margin-bottom:11px;flex:none;">How to play</div>' +
+          '<ul style="font-size:14px;line-height:1.7;opacity:0.9;padding-left:18px;margin:0;' +
+            'overflow-y:auto;min-height:0;flex:1 1 auto;">' +
             '<li>Phone flat in the middle. Nothing is hidden — nobody picks it up.</li>' +
             '<li>Take the corner nearest your colour. Your name plate faces you.</li>' +
             '<li>Tap the die on your turn, then tap a lit token to move it.</li>' +
@@ -970,8 +976,8 @@ window.plethoraBit = {
               'coloured squares are safe: nobody can be taken there.</li>' +
             '<li>Coming home needs the exact count. All four home wins.</li>' +
           '</ul>' +
-          '<button data-el="helpp-close" style="' + BIG + 'margin-top:17px;' +
-            'background:rgba(255,255,255,0.14);color:#eaf2ff;">Got it</button>' +
+          '<button data-el="helpp-close" style="' + BIG + 'margin-top:17px;flex:none;' +
+            'background:rgba(255,255,255,0.18);color:#eaf2ff;">Got it</button>' +
         '</div>' +
       '</div>';
 

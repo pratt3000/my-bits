@@ -294,11 +294,19 @@ window.plethoraBit = {
     })();
 
     const COLOURS = ["#D2412F", "#1D93D2", "#F2C438", "#2E9E5B"];
-    // The same four inks lifted for type. Crimson and Verdant at board
-    // saturation sit at about 4:1 on the felt, which is under the line for
+    // The same four inks lifted for type on the dark felt. Crimson and Verdant
+    // at board saturation sit at about 4:1 there, which is under the line for
     // 14px text and reads as a bruise rather than a name; the frame and the
     // claim dot are shapes and keep the saturated version.
     const INKS = ["#F58974", "#5FB9EF", "#F7CF57", "#5AD494"];
+    // And taken the other way for the parchment panels — the handoff card and
+    // the final table. Amber at board saturation on parchment is 1.3:1: the
+    // name of whoever the phone is being passed to was invisible on their own
+    // handoff card, and Cobalt and Verdant were not much better at 2.7.
+    const DEEPS = ["#B32E1F", "#135C8E", "#7A5504", "#1B6B3A"];
+    // The ink to print ON a player's own colour, which is a button fill. White
+    // on Amber is 1.6:1 — "lay it" was a blank yellow lozenge.
+    const ONS = ["#FFF7F2", "#04202F", "#2A1E03", "#03210E"];
     const NAMES = ["Crimson", "Cobalt", "Amber", "Verdant"];
 
     /* ---------------------------------------------------------------
@@ -453,7 +461,7 @@ window.plethoraBit = {
       players = [];
       for (let i = 0; i < n; i++) {
         players.push({
-          name: NAMES[i], colour: COLOURS[i], ink: INKS[i],
+          name: NAMES[i], colour: COLOURS[i], ink: INKS[i], deep: DEEPS[i], on: ONS[i],
           side: i % 2,                       // alternate the two long edges
           kingdom: newKingdom(), score: 0,
         });
@@ -887,7 +895,7 @@ window.plethoraBit = {
     function showHandoff(p, flipping) {
       el("hand-round").textContent = round + " of " + totalRounds;
       el("hand-name").textContent = p.name;
-      el("hand-name").style.color = p.colour;
+      el("hand-name").style.color = p.deep;
       el("hand-what").textContent = phase === "place" ? "lay your tile, then claim" : "claim a tile";
       el("hand-inner").style.transform = p.side === 1 ? "rotate(180deg)" : "none";
       el("hand").style.display = "flex";
@@ -926,7 +934,7 @@ window.plethoraBit = {
             'border-radius:12px;background:rgba(243,228,192,0.16);color:' + PARCH + ';' +
             'font-family:inherit;font-size:14px;font-weight:700;">Turn</button>' +
           '<button data-el="ok" style="pointer-events:auto;padding:11px 22px;border:none;' +
-            'border-radius:12px;background:' + p.colour + ';color:#fff;font-family:inherit;' +
+            'border-radius:12px;background:' + p.colour + ';color:' + p.on + ';font-family:inherit;' +
             'font-size:14px;font-weight:800;">Lay it</button>';
         tap(host.querySelector('[data-el="rot"]'), rotatePick);
         tap(host.querySelector('[data-el="ok"]'), commitPlace);
@@ -956,7 +964,7 @@ window.plethoraBit = {
       el("over-body").innerHTML = results.map((r, n) =>
         '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;' +
           'padding:9px 0;border-bottom:1px solid rgba(58,35,20,0.14);">' +
-          '<span style="font-size:16px;font-weight:800;color:' + r.p.colour + ';">' +
+          '<span style="font-size:16px;font-weight:800;color:' + r.p.deep + ';">' +
             (n + 1) + '. ' + esc(r.p.name) + '</span>' +
           '<span style="font-size:13px;opacity:0.6;">' +
             r.s.parts.length + ' crowned ' + (r.s.parts.length === 1 ? "region" : "regions") +

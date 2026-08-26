@@ -1109,7 +1109,7 @@ window.plethoraBit = {
               p.ink + ';text-shadow:0 2px 0 rgba(0,0,0,0.5);">' + esc(p.name) + '</div>' +
             '<div data-el="pips' + i + '" style="display:flex;gap:4px;"></div>' +
             '<div data-el="st' + i + '" style="font-size:' + (small ? 9 : 10.5) + 'px;font-weight:700;' +
-              'letter-spacing:0.16em;text-transform:lowercase;color:rgba(234,243,230,0.5);' +
+              'letter-spacing:0.16em;text-transform:lowercase;color:rgba(234,243,230,0.72);' +
               'white-space:nowrap;">hold to arm</div>' +
           '</div>' +
         '</div>';
@@ -1123,6 +1123,13 @@ window.plethoraBit = {
       "font-family:inherit;font-size:16px;font-weight:800;letter-spacing:0.01em;background:" + bg +
       ";color:" + fg + ";box-shadow:0 5px 0 rgba(0,0,0,0.42);";
     const CTA = bigBtn(EMBER_BTN, EMBER_INK);
+
+    /* The title screen is laid out against the phone; the app also embeds a
+     * bit in a 306x517 card, two thirds that height. TY picks the anchor for
+     * whichever one this is, so the short screen gets its own composition
+     * instead of the tall one folded in on itself. */
+    const SHORT = H < 700;
+    const TY = (tall, short) => Math.round(H * (SHORT ? short : tall));
 
     const CARD_W = 306, CARD_H = 386, HELP_H = 600;
     const cardX = () => Math.round((W - CARD_W) / 2);
@@ -1167,11 +1174,16 @@ window.plethoraBit = {
         '<button data-el="help" aria-label="How to play" style="' + btnIcon + '">?</button>' +
       '</div>' +
 
-      // --- round pill, top-right of the free rectangle ---
+      // --- round pill, top-right of the free rectangle; applyLayout owns
+      //     where it actually lands ---
+      // A plate, because on a narrow layout this drops below the chrome and
+      // onto the lit wood of the yard, where pale letters on mid-oak are the
+      // one unreadable pairing in the whole palette.
       '<div data-el="roundpill" style="position:absolute;right:' + (W - L.arena.x - L.arena.w + 6) + 'px;top:' +
-        (L.arena.y + 4) + 'px;z-index:45;pointer-events:none;display:none;text-align:right;">' +
+        (L.arena.y + 4) + 'px;z-index:45;pointer-events:none;display:none;text-align:right;' +
+        'padding:3px 9px 4px;border-radius:12px;background:rgba(10,7,5,0.55);">' +
         '<div data-el="roundno" style="font-size:12px;font-weight:800;letter-spacing:0.18em;' +
-          'text-transform:lowercase;color:rgba(234,243,230,0.62);">Round 1</div>' +
+          'text-transform:lowercase;color:rgba(234,243,230,0.78);">Round 1</div>' +
         '<div data-el="warn" style="font-size:11px;font-weight:800;letter-spacing:0.14em;' +
           'text-transform:lowercase;color:#FF7A3C;opacity:0;font-family:' + MONO + ';">rim falling</div>' +
       '</div>' +
@@ -1189,45 +1201,54 @@ window.plethoraBit = {
       '</div>' +
 
       // --- title ---
+      //
+      // Every row here is anchored to a fraction of H but set in fixed type,
+      // which fits the phone it was drawn against and falls apart on the
+      // 306x517 card the app also embeds a bit in: the blurb grows down
+      // through "how many players?" and the count buttons, and the seat hint
+      // grows up into them from below. Short screens get their own anchors and
+      // a step down in type, rather than the same ones squashed.
       '<div data-el="title" style="position:absolute;inset:0;z-index:60;pointer-events:auto;' +
         'background:radial-gradient(ellipse at 50% 34%,#241A12 0%,#0C0906 70%);">' +
-        '<div style="position:absolute;left:0;right:0;top:' + Math.round(H * 0.165) + 'px;text-align:center;">' +
-          '<div style="font-size:12px;font-weight:800;letter-spacing:0.44em;text-transform:lowercase;' +
-            'color:rgba(234,243,230,0.42);">Blow up your friends</div>' +
-          '<div style="margin-top:8px;font-size:58px;line-height:1.02;font-weight:800;letter-spacing:-0.025em;' +
-            'color:' + OFFWHITE + ';text-shadow:0 5px 0 #8A5C26,0 9px 0 rgba(0,0,0,0.5),0 0 46px rgba(255,196,77,0.35);">' +
-            'Blast<br>Yard</div>' +
-          '<div style="margin:16px auto 0;max-width:262px;font-size:14.5px;line-height:1.6;' +
-            'color:rgba(234,243,230,0.68);">Phone flat on the table. Take an edge each. Everyone plays at once — ' +
+        '<div style="position:absolute;left:0;right:0;top:' + TY(0.165, 0.108) + 'px;text-align:center;">' +
+          '<div style="font-size:' + (SHORT ? 11 : 12) + 'px;font-weight:800;letter-spacing:0.44em;' +
+            'text-transform:lowercase;color:rgba(234,243,230,0.58);">Blow up your friends</div>' +
+          '<div style="margin-top:8px;font-size:' + (SHORT ? 40 : 58) + 'px;line-height:1.02;font-weight:800;' +
+            'letter-spacing:-0.025em;color:' + OFFWHITE + ';text-shadow:0 5px 0 #8A5C26,0 9px 0 rgba(0,0,0,0.5),' +
+            '0 0 46px rgba(255,196,77,0.35);">Blast<br>Yard</div>' +
+          '<div style="margin:' + (SHORT ? 12 : 16) + 'px auto 0;max-width:262px;font-size:' +
+            (SHORT ? 13 : 14.5) + 'px;line-height:1.6;' +
+            'color:rgba(234,243,230,0.78);">Phone flat on the table. Take an edge each. Everyone plays at once — ' +
             'the last one still on the wood takes the round.</div>' +
         '</div>' +
-        '<div style="position:absolute;left:0;right:0;top:' + Math.round(H * 0.515) + 'px;text-align:center;' +
+        '<div style="position:absolute;left:0;right:0;top:' + TY(0.515, 0.500) + 'px;text-align:center;' +
           'font-size:11.5px;font-weight:800;letter-spacing:0.30em;text-transform:lowercase;' +
-          'color:rgba(234,243,230,0.42);">How many players?</div>' +
+          'color:rgba(234,243,230,0.58);">How many players?</div>' +
         [2, 3, 4].map((n, k) =>
           '<button data-el="count' + n + '" data-n="' + n + '" style="pointer-events:auto;position:absolute;' +
-          'left:' + Math.round(W / 2 + (k - 1) * 88 - 34) + 'px;top:' + Math.round(H * 0.552) + 'px;' +
-          'width:68px;height:68px;border-radius:24px;border:2px solid rgba(255,198,120,0.42);' +
+          'left:' + Math.round(W / 2 + (k - 1) * (SHORT ? 76 : 88) - (SHORT ? 30 : 34)) + 'px;top:' +
+          TY(0.552, 0.535) + 'px;width:' + (SHORT ? 60 : 68) + 'px;height:' + (SHORT ? 60 : 68) + 'px;' +
+          'border-radius:24px;border:2px solid rgba(255,198,120,0.42);' +
           'background:linear-gradient(180deg,#805D3D,#3E2B1B);color:#FFE6B4;font-family:inherit;' +
-          'font-size:26px;font-weight:800;text-shadow:0 2px 0 rgba(0,0,0,0.45);' +
+          'font-size:' + (SHORT ? 23 : 26) + 'px;font-weight:800;text-shadow:0 2px 0 rgba(0,0,0,0.45);' +
           'box-shadow:0 5px 0 rgba(0,0,0,0.5),inset 0 2px 0 rgba(255,224,180,0.26);">' +
           n + '</button>').join("") +
-        '<div style="position:absolute;left:0;right:0;top:' + Math.round(H * 0.672) + 'px;text-align:center;' +
-          'font-size:12px;line-height:1.65;color:rgba(234,243,230,0.36);">Two &rarr; the short edges' +
+        '<div style="position:absolute;left:0;right:0;top:' + TY(0.672, 0.672) + 'px;text-align:center;' +
+          'font-size:12px;line-height:1.65;color:rgba(234,243,230,0.62);">Two &rarr; the short edges' +
           '<br>Three &rarr; add the left side &nbsp;·&nbsp; Four &rarr; one per edge</div>' +
-        '<div style="position:absolute;left:0;right:0;top:' + Math.round(H * 0.772) + 'px;' +
+        '<div style="position:absolute;left:0;right:0;top:' + TY(0.772, 0.772) + 'px;' +
           'display:flex;gap:10px;justify-content:center;">' +
           PL.map((q) =>
             '<div style="width:62px;text-align:center;">' +
               '<div style="height:34px;border-radius:14px;background:linear-gradient(180deg,' + q.lit + ',' +
                 q.ink + ');box-shadow:0 3px 0 rgba(0,0,0,0.45);"></div>' +
               '<div style="margin-top:6px;font-size:10px;font-weight:800;letter-spacing:0.12em;' +
-                'text-transform:lowercase;color:rgba(234,243,230,0.5);">' + esc(q.name) + '</div>' +
+                'text-transform:lowercase;color:rgba(234,243,230,0.7);">' + esc(q.name) + '</div>' +
             '</div>').join("") +
         '</div>' +
         '<div style="position:absolute;left:34px;right:34px;bottom:' + (ctx.safeArea.bottom + 16) + 'px;' +
           'text-align:center;font-size:10.5px;line-height:1.5;letter-spacing:0.06em;' +
-          'color:rgba(234,243,230,0.26);">' +
+          'color:rgba(234,243,230,0.58);">' +
           'Longest run of rounds won back-to-back<br>goes to the global board</div>' +
       '</div>' +
 
@@ -1250,7 +1271,7 @@ window.plethoraBit = {
           'box-shadow:inset 0 2px 0 rgba(255,255,255,0.10),0 8px 24px rgba(0,0,0,0.6);' +
           'border:1.5px solid rgba(234,243,230,0.12);">' +
           '<div style="font-size:11px;font-weight:800;letter-spacing:0.26em;text-transform:lowercase;' +
-            'color:rgba(234,243,230,0.45);">Take your seat</div>' +
+            'color:rgba(234,243,230,0.64);">Take your seat</div>' +
           '<div style="margin-top:8px;font-size:19px;line-height:1.25;font-weight:800;">Everyone press<br>your bomb button</div>' +
           '<div data-el="seatcount" style="margin-top:10px;font-size:13px;font-weight:800;letter-spacing:0.18em;' +
             'color:' + HOT + ';font-family:' + MONO + ';">0 / 4 ready</div>' +
@@ -1269,13 +1290,13 @@ window.plethoraBit = {
         '<div style="position:absolute;left:0;right:0;top:20%;text-align:center;' +
           'transform:rotate(180deg);">' +
           '<div style="font-size:10.5px;font-weight:800;letter-spacing:0.32em;text-transform:lowercase;' +
-            'color:rgba(234,243,230,0.36);">Match over</div>' +
+            'color:rgba(234,243,230,0.58);">Match over</div>' +
           '<div data-el="over-title2" style="margin-top:4px;font-size:26px;font-weight:800;' +
             'letter-spacing:-0.01em;opacity:0.85;text-shadow:0 3px 0 rgba(0,0,0,0.55);"></div>' +
         '</div>' +
         '<div style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;padding:0 26px;">' +
           '<div style="font-size:12px;font-weight:800;letter-spacing:0.36em;text-transform:lowercase;' +
-            'color:rgba(234,243,230,0.42);">Match over</div>' +
+            'color:rgba(234,243,230,0.6);">Match over</div>' +
           '<div data-el="over-title" style="margin-top:6px;font-size:46px;font-weight:800;letter-spacing:-0.02em;' +
             'text-shadow:0 4px 0 rgba(0,0,0,0.55);"></div>' +
           '<div data-el="over-line" style="margin:22px auto 0;display:flex;gap:9px;justify-content:center;"></div>' +
@@ -1299,15 +1320,15 @@ window.plethoraBit = {
           '0 9px 0 rgba(0,0,0,0.45),0 18px 40px rgba(0,0,0,0.55);border:2px solid ' + RIM + ';">' +
           '<div style="position:absolute;left:0;right:0;top:18px;text-align:center;font-size:19px;font-weight:800;">Settings</div>' +
           '<div style="position:absolute;left:16px;top:62px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
-            'text-transform:lowercase;opacity:0.5;">Rounds to win</div>' +
+            'text-transform:lowercase;opacity:0.64;">Rounds to win</div>' +
           pillRow("rounds", ["2", "3", "5"], 84) +
           '<div style="position:absolute;left:16px;top:146px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
-            'text-transform:lowercase;opacity:0.5;">Pace</div>' +
-          '<div style="position:absolute;left:16px;top:163px;font-size:10.5px;opacity:0.36;">' +
+            'text-transform:lowercase;opacity:0.64;">Pace</div>' +
+          '<div style="position:absolute;left:16px;top:163px;font-size:10.5px;opacity:0.58;">' +
             'how soon the rim starts falling away</div>' +
           pillRow("pace", ["Chill", "Normal", "Frantic"], 182) +
           '<div style="position:absolute;left:16px;top:244px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
-            'text-transform:lowercase;opacity:0.5;">Sound</div>' +
+            'text-transform:lowercase;opacity:0.64;">Sound</div>' +
           '<button data-el="mute2" style="pointer-events:auto;position:absolute;left:14px;top:262px;width:' +
             (CARD_W - 28) + 'px;height:44px;border:1.5px solid ' + RIM + ';border-radius:14px;' +
             'font-family:inherit;font-size:14.5px;font-weight:800;background:rgba(255,224,180,0.07);' +
@@ -1385,7 +1406,12 @@ window.plethoraBit = {
       placeChrome();
       const rp = el("roundpill");
       rp.style.right = (W - L.arena.x - L.arena.w + 6) + "px";
-      rp.style.top = (L.arena.y + 4) + "px";
+      // The chrome takes 116px off the left end of the free rectangle and the
+      // pill about 92 off the right. On the 306px card the app embeds a bit in,
+      // the side pads leave only 150 between them and "round 1" lands on top of
+      // the help button; there it goes under the chrome instead, which is empty
+      // either way.
+      rp.style.top = (L.arena.y + (L.arena.w < 240 ? 42 : 4)) + "px";
       const bn = el("banner");
       bn.style.top = (L.arena.y + L.arena.h / 2) + "px";
     }
@@ -1404,6 +1430,11 @@ window.plethoraBit = {
       c.style.left = chromeBox.x + "px";
       c.style.top = chromeBox.y + "px";
       c.style.zIndex = titled ? "66" : "45";
+      // On a narrow free rectangle the seat check's mirrored plate lands in
+      // exactly this band, and the three buttons print straight through
+      // "everyone press your bomb button". The lobby lasts seconds and none of
+      // this is needed during it.
+      c.style.display = (phase === "seat" && L.arena.w < 240) ? "none" : "flex";
     }
 
     function paintPips() {
@@ -1429,7 +1460,7 @@ window.plethoraBit = {
 
     function setStat(i, text, colour) {
       statEl[i].textContent = text;
-      statEl[i].style.color = colour || "rgba(234,243,230,0.5)";
+      statEl[i].style.color = colour || "rgba(234,243,230,0.72)";
     }
 
     function banner(big, sub, colour, ms) {
@@ -1457,7 +1488,7 @@ window.plethoraBit = {
         const b = el(name + k);
         const on = get() === k;
         b.style.background = on ? EMBER_BTN : "rgba(255,224,180,0.09)";
-        b.style.color = on ? EMBER_INK : "rgba(234,243,230,0.62)";
+        b.style.color = on ? EMBER_INK : "rgba(234,243,230,0.8)";
         b.style.boxShadow = on ? "0 4px 0 rgba(0,0,0,0.4)" : "none";
       }
     }
@@ -1466,7 +1497,7 @@ window.plethoraBit = {
       paintPills("rounds", 3, () => ROUND_VALUES.indexOf(settings.target));
       paintPills("pace", 3, () => settings.pace);
       el("mute2v").textContent = sound.muted ? "Off" : "On";
-      el("mute2v").style.color = sound.muted ? "rgba(234,243,230,0.4)" : HOT;
+      el("mute2v").style.color = sound.muted ? "rgba(234,243,230,0.62)" : HOT;
       el("mute").style.opacity = sound.muted ? "0.45" : "1";
       paintPips();
     }
@@ -1534,12 +1565,13 @@ window.plethoraBit = {
       paintSettings();
       phase = "seat";
       el("seatp").style.display = "block";
-      el("roundpill").style.display = "block";
+      el("roundpill").style.display = L.arena.w < 240 ? "none" : "block";
+      placeChrome();
       setSeatCount(0);
       for (let i = 0; i < 4; i++) {
         padEl[i].style.display = i < nPlayers ? "block" : "none";
         padEl[i].style.opacity = "1";
-        setStat(i, "press to ready", "rgba(234,243,230,0.5)");
+        setStat(i, "press to ready", "rgba(234,243,230,0.72)");
       }
       // Nobody should sit staring at a lobby: if a pad is unclaimed after a
       // few seconds the round starts regardless.
@@ -1549,6 +1581,8 @@ window.plethoraBit = {
 
     function beginRound() {
       el("seatp").style.display = "none";
+      el("roundpill").style.display = "block";
+      placeChrome();                     // the seat check has given the band back
       round++;
       roundT = 0; crumbleT = 0;
       crumbleLeft = [];
@@ -1612,7 +1646,7 @@ window.plethoraBit = {
         sound.sting("coin");
         sound.haptic("medium");
         phase = "play";
-        for (const p of P) if (p.playing) setStat(p.i, "hold to arm", "rgba(234,243,230,0.5)");
+        for (const p of P) if (p.playing) setStat(p.i, "hold to arm", "rgba(234,243,230,0.72)");
       }
     }
 
@@ -1682,7 +1716,7 @@ window.plethoraBit = {
             ',' + PL[q.i].ink + ');box-shadow:0 3px 0 rgba(0,0,0,0.5);display:flex;align-items:center;' +
             'justify-content:center;font-size:19px;font-weight:800;color:rgba(24,13,4,0.92);">' + q.wins + '</div>' +
           '<div style="margin-top:5px;font-size:10px;font-weight:800;letter-spacing:0.1em;' +
-            'text-transform:lowercase;color:rgba(234,243,230,0.55);">' + esc(PL[q.i].name) + '</div>' +
+            'text-transform:lowercase;color:rgba(234,243,230,0.72);">' + esc(PL[q.i].name) + '</div>' +
         '</div>').join("");
       el("over-streak").textContent = "Longest streak · " + bestStreak +
         (bestStreak === 1 ? " round" : " rounds");
@@ -2231,8 +2265,8 @@ window.plethoraBit = {
           if (wickEl[i].style.opacity !== "0.35") wickEl[i].style.opacity = "0.35";
           statEl[i].style.fontFamily = "inherit";
           if (phase === "play" && p.alive && !p.falling) {
-            if (!p.hasBomb) setStat(i, "reloading", "rgba(234,243,230,0.35)");
-            else setStat(i, "hold to arm", "rgba(234,243,230,0.5)");
+            if (!p.hasBomb) setStat(i, "reloading", "rgba(234,243,230,0.6)");
+            else setStat(i, "hold to arm", "rgba(234,243,230,0.72)");
           }
         }
         bombEl[i].style.filter = "";
