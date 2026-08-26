@@ -2255,7 +2255,10 @@ window.plethoraBit = {
       '<div data-el="cover" style="box-sizing:border-box;position:absolute;inset:0;display:none;' +
         'flex-direction:column;justify-content:flex-end;align-items:center;z-index:55;pointer-events:auto;' +
         'padding:0 24px ' + (SAFE_B + 22) + 'px;text-align:center;">' +
-        '<div data-el="cover-need" style="font-size:12.5px;opacity:0.62;margin-bottom:18px;"></div>' +
+        /* This line carries the pile's suit glyph in the red ink, and the
+         * parent opacity multiplies into it: at 0.62 the heart came out at
+         * 3.95:1 while the words beside it were fine. */
+        '<div data-el="cover-need" style="font-size:12.5px;opacity:0.8;margin-bottom:18px;"></div>' +
         '<div style="' + label + '">Pass the phone to</div>' +
         '<div data-el="cover-name" style="font-size:44px;font-weight:800;line-height:1.06;' +
           'letter-spacing:-0.02em;margin-top:2px;"></div>' +
