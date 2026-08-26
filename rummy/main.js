@@ -853,11 +853,17 @@ window.plethoraBit = {
       el("cover-sub").textContent = stock.length <= 2
         ? "last cards — the stock is nearly out"
         : "hand " + handNo + " · first to " + settings.target;
-      // The score gets a real gap, not a word space. The default names end in a
-      // digit — "player 1" followed by a score of 0 reads as "player 10".
+      // The score gets a real gap on top of the word space. The default names
+      // end in a digit — "player 1" followed by a score of 0 read as
+      // "player 10". The space stays so the run of text is still separated for
+      // anything reading it rather than looking at it.
+      //
+      // 0.72 for whoever is not holding the phone, not 0.55: the green seat
+      // sits at 3.59:1 over the cover's dark vignette at the old dim, and the
+      // colour on its own still says which of the two is up.
       el("cover-scores").innerHTML = players.map((q) =>
-        '<span style="color:' + q.css + ';opacity:' + (q === p ? 1 : 0.55) + ';">' +
-        esc(q.name) + '<span style="color:' + PARCH + ';margin-left:7px;">' + q.score + '</span></span>').join("");
+        '<span style="color:' + q.css + ';opacity:' + (q === p ? 1 : 0.72) + ';">' +
+        esc(q.name) + ' <span style="color:' + PARCH + ';margin-left:4px;">' + q.score + '</span></span>').join("");
       el("cover").style.display = "flex";
       paintHud();
     }
