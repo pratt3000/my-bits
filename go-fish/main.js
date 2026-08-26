@@ -864,17 +864,17 @@ window.plethoraBit = {
         c.globalCompositeOperation = "lighter";
         for (let i = 0; i < 5; i++) {
           const x = (i + 0.5) / 5 * W + ((i * 37) % 23) - 11;
-          const w = W * (0.11 + ((i * 29) % 11) / 100);
+          const shaftW = W * (0.11 + ((i * 29) % 11) / 100);
           const rg = c.createLinearGradient(0, 0, 0, H * 0.86);
           rg.addColorStop(0, "rgba(198,252,255,0.085)");
           rg.addColorStop(0.55, "rgba(140,232,255,0.038)");
           rg.addColorStop(1, "rgba(120,220,255,0)");
           c.fillStyle = rg;
           c.beginPath();
-          c.moveTo(x - w * 0.22, 0);
-          c.lineTo(x + w * 0.22, 0);
-          c.lineTo(x + w * 0.85, H * 0.86);
-          c.lineTo(x - w * 0.62, H * 0.86);
+          c.moveTo(x - shaftW * 0.22, 0);
+          c.lineTo(x + shaftW * 0.22, 0);
+          c.lineTo(x + shaftW * 0.85, H * 0.86);
+          c.lineTo(x - shaftW * 0.62, H * 0.86);
           c.closePath();
           c.fill();
         }

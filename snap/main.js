@@ -1216,8 +1216,8 @@ window.plethoraBit = {
         g.translate(0, L.ringR);
         g.font = "700 11px " + FONT;
         g.textAlign = "center"; g.textBaseline = "middle";
-        const w = g.measureText(txt).width + 22;
-        roundRect(g, -w / 2, -9, w, 18, 9);
+        const plateW = g.measureText(txt).width + 22;
+        roundRect(g, -plateW / 2, -9, plateW, 18, 9);
         g.fillStyle = "rgba(8,22,15,0.72)"; g.fill();
         g.strokeStyle = BRASS_DIM; g.lineWidth = 1; g.stroke();
         g.fillStyle = BRASS;

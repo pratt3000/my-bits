@@ -1525,7 +1525,7 @@ window.plethoraBit = {
       '<div style="height:1px;background:linear-gradient(90deg,' + STATIONS[0].ink +
       '55,rgba(150,190,240,0.05));margin:9px 0 15px;"></div>';
     const sectionLabel = (t) => '<div style="font-size:9.5px;letter-spacing:0.26em;font-family:' + MONO +
-      ';opacity:0.5;">' + esc(t) + "</div>";
+      ';opacity:0.62;">' + esc(t) + "</div>";
     const modal = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;" +
       "background:rgba(3,5,10,0.92);z-index:70;pointer-events:auto;padding:" +
       (safeT + 12) + "px 20px " + (safeB + 12) + "px;";
@@ -1575,23 +1575,31 @@ window.plethoraBit = {
         'background:linear-gradient(180deg,rgba(3,5,10,0.96) 0%,rgba(3,5,10,0.90) 22%,' +
         'rgba(4,7,13,0.20) 38%,rgba(4,7,13,0.16) 60%,rgba(3,5,10,0.90) 76%,rgba(3,5,10,0.97) 100%);">' +
         "<div>" +
-          '<div style="font-size:9.5px;letter-spacing:0.52em;text-transform:lowercase;opacity:0.42;' +
+          '<div style="font-size:9.5px;letter-spacing:0.52em;text-transform:lowercase;opacity:0.56;' +
             'font-family:' + MONO + ';">Reaction Duel</div>' +
           '<div style="font-size:52px;font-weight:800;letter-spacing:-0.03em;line-height:0.95;margin-top:12px;' +
             'background:linear-gradient(102deg,' + STATIONS[0].ink + ',' + STATIONS[2].ink + ' 38%,' +
             STATIONS[3].ink + ' 66%,' + STATIONS[1].ink + ');-webkit-background-clip:text;background-clip:text;' +
             '-webkit-text-fill-color:transparent;">REACTOR<br>FOUR</div>' +
-          '<div style="font-size:13px;opacity:0.62;max-width:264px;line-height:1.6;margin-top:16px;">' +
+          // The scrim above deliberately clears the core's band, which is right
+          // on a phone and wrong on the 306x517 card, where the reactor sits
+          // directly behind this paragraph and pale blue lands on pale lilac.
+          // The copy carries its own plate; on a tall screen it is the same
+          // near-black as the scrim and disappears. Colour alpha rather than
+          // element opacity, or the plate would fade along with the ink.
+          '<div style="font-size:13px;color:rgba(219,230,245,0.72);max-width:288px;' +
+            'box-sizing:border-box;line-height:1.6;margin-top:16px;padding:10px 12px;' +
+            'border-radius:14px;background:rgba(4,7,13,0.72);">' +
             "Phone flat. Claim an edge. Slap your own wedge the instant the signal is true &mdash; " +
             "and not one beat before.</div>" +
         "</div>" +
         "<div>" +
-          '<div style="font-size:9.5px;letter-spacing:0.36em;text-transform:lowercase;opacity:0.45;' +
+          '<div style="font-size:9.5px;letter-spacing:0.36em;text-transform:lowercase;opacity:0.56;' +
             'font-family:' + MONO + ';">Crew</div>' +
           '<div style="display:flex;gap:9px;margin-top:12px;width:100%;max-width:300px;">' +
             crewBtn(2, "TOP&middot;BOT") + crewBtn(3, "+LEFT") + crewBtn(4, "ALL EDGES") +
           "</div>" +
-          '<div style="font-size:10px;letter-spacing:0.14em;opacity:0.32;margin-top:14px;' +
+          '<div style="font-size:10px;letter-spacing:0.14em;opacity:0.56;margin-top:14px;' +
             'font-family:' + MONO + ';">EACH STATION ARMS ITS OWN WEDGE</div>' +
         "</div>" +
       "</div>" +
@@ -1620,7 +1628,7 @@ window.plethoraBit = {
         '<div style="width:100%;max-width:252px;box-sizing:border-box;' +
           'background:rgba(9,13,21,0.975);border-radius:22px;' +
           'border:1px solid rgba(150,190,240,0.16);padding:22px 20px 18px;">' +
-          '<div style="font-size:9.5px;letter-spacing:0.44em;text-transform:lowercase;opacity:0.45;">Core secured by</div>' +
+          '<div style="font-size:9.5px;letter-spacing:0.44em;text-transform:lowercase;opacity:0.6;">Core secured by</div>' +
           '<div data-el="over-name" style="font-size:42px;font-weight:800;letter-spacing:-0.01em;margin-top:4px;line-height:1.05;"></div>' +
           '<div data-el="over-stat" style="font-size:10.5px;letter-spacing:0.16em;margin-top:8px;"></div>' +
           '<div data-el="over-rows" style="width:100%;margin-top:16px;' +
@@ -1657,7 +1665,7 @@ window.plethoraBit = {
           "<li>Slap on a <b>false</b> one and you scram: <b>&minus;1</b>, locked out for the round.</li>" +
         "</ul>" +
         sectionLabel("THE FOUR ROUNDS") +
-        '<div style="font-size:12.5px;line-height:1.5;opacity:0.86;margin:9px 0 12px;">' +
+        '<div style="font-size:12.5px;line-height:1.5;color:rgba(219,230,245,0.88);margin:9px 0 12px;">' +
           ROUND_HELP.map((r) =>
             '<div style="display:flex;gap:8px;margin-bottom:5px;">' +
             '<b style="color:' + r[1] + ';min-width:52px;font-family:' + MONO +
@@ -1701,7 +1709,9 @@ window.plethoraBit = {
         for (const b of host.querySelectorAll("button")) {
           const on = String(get()) === b.dataset.v;
           b.style.background = on ? "rgba(34,220,255,0.20)" : "rgba(150,190,240,0.07)";
-          b.style.color = on ? STATIONS[0].ink : "rgba(219,230,245,0.50)";
+          // 0.50 landed the off state at 4.3:1 on its own panel. The live pill
+          // is cyan and boxed, so the quiet one can afford to be readable.
+          b.style.color = on ? STATIONS[0].ink : "rgba(219,230,245,0.62)";
           b.style.boxShadow = on ? "inset 0 0 0 1px rgba(34,220,255,0.55)" : "none";
         }
       };
@@ -1999,8 +2009,8 @@ window.plethoraBit = {
 
     /* --- 2D paint ------------------------------------------------------ */
     function paint2D(t, dt) {
-      const s = fxc.width / W || ctx.dpr;
-      fx.setTransform(s, 0, 0, s, 0, 0);
+      const pixScale = fxc.width / W || ctx.dpr;
+      fx.setTransform(pixScale, 0, 0, pixScale, 0, 0);
       fx.clearRect(0, 0, W, H);
 
       if (frameArt) fx.drawImage(frameArt, 0, 0, W, H);

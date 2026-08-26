@@ -198,19 +198,35 @@ window.plethoraBit = {
       const TRIGGER = 0.62;                 // ~38 degrees off neutral
       const REARM = 0.34;                   // must come back near level first
 
-      // ctx.sensors is read through in full every time rather than aliased
-      // into a local. The upload validator statically tracks calls made
-      // through ctx, and binding one of its namespace objects to a variable
-      // defeats that: the draft comes back 400 "unsupported remote resources",
-      // a message that names the loader APIs and has nothing to do with the
-      // actual cause. Aliasing scalars like ctx.width is fine; aliasing a
-      // namespace — sensors, music, audio, storage, memory — is not.
+      // ctx.sensors is read through in full every time rather than bound to a
+      // local. The upload validator statically tracks every value derived from
+      // ctx, and a binding claims that name for the rest of the file; this one
+      // used to be `const a = ...`, and `a` is an ordinary local in seventy-odd
+      // other places here. That collision is what the draft was being refused
+      // for, under the message "unsupported remote resources" — which names the
+      // loader APIs and has nothing to do with the actual cause. A unique name
+      // would do; binding nothing is simply harder to get wrong later.
       function vec() {
-        const a = ctx.sensors &&
-          (ctx.sensors.accelerationIncludingGravity || ctx.sensors.accelerometer);
-        if (a && typeof a.x === "number") return { x: a.x, y: a.y, z: a.z };
-        const t = ctx.sensors && ctx.sensors.tilt;
-        if (t && typeof t.x === "number") return { x: t.x, y: t.y, z: 1 };
+        if (!ctx.sensors) return null;
+        if (ctx.sensors.accelerationIncludingGravity &&
+            typeof ctx.sensors.accelerationIncludingGravity.x === "number") {
+          return {
+            x: ctx.sensors.accelerationIncludingGravity.x,
+            y: ctx.sensors.accelerationIncludingGravity.y,
+            z: ctx.sensors.accelerationIncludingGravity.z,
+          };
+        }
+        if (ctx.sensors.accelerometer &&
+            typeof ctx.sensors.accelerometer.x === "number") {
+          return {
+            x: ctx.sensors.accelerometer.x,
+            y: ctx.sensors.accelerometer.y,
+            z: ctx.sensors.accelerometer.z,
+          };
+        }
+        if (ctx.sensors.tilt && typeof ctx.sensors.tilt.x === "number") {
+          return { x: ctx.sensors.tilt.x, y: ctx.sensors.tilt.y, z: 1 };
+        }
         return null;
       }
       const norm = (v) => {
@@ -297,10 +313,15 @@ window.plethoraBit = {
         '<button data-el="mute" aria-label="Sound" style="' + BTN + '">' + SPK(true) + '</button>' +
         '<button data-el="help" aria-label="How to play" style="' + BTN + '">?</button>' +
       '</div>' +
+      // The scrim is opaque, and so is the card on it. At 0.95 the ready
+      // screen behind still came through: a 150px pink wordmark and a 90px
+      // emoji at five percent are perfectly legible, and they landed in the
+      // middle of the bullets. A rule panel has to be a wall, not a filter.
       '<div data-el="helpp" style="position:absolute;inset:0;pointer-events:auto;display:none;' +
-        'align-items:center;justify-content:center;background:rgba(8,9,18,0.95);z-index:80;padding:24px;">' +
-        '<div style="max-width:330px;width:100%;background:rgba(255,255,255,0.06);border-radius:22px;' +
-          'padding:24px;border:1px solid rgba(255,255,255,0.10);">' +
+        'align-items:center;justify-content:center;background:#0A0B14;z-index:80;padding:24px;">' +
+        '<div style="max-width:330px;width:100%;max-height:100%;overflow-y:auto;' +
+          'box-sizing:border-box;background:#1C1E2E;border-radius:22px;' +
+          'padding:24px;border:1px solid rgba(255,255,255,0.14);">' +
           '<div style="font-size:20px;font-weight:800;margin-bottom:12px;">How to play</div>' +
           '<ul style="font-size:14.5px;line-height:1.75;opacity:0.88;padding-left:18px;margin:0;">' +
             '<li>One person holds the phone <b>sideways against their forehead</b>, screen facing everyone else.</li>' +
@@ -310,7 +331,7 @@ window.plethoraBit = {
             '<li>Keep going until the clock runs out, then pass the phone to the next person.</li>' +
           '</ul>' +
           '<button data-el="helpp-close" style="' + BIG + 'margin-top:18px;' +
-            'background:rgba(255,255,255,0.16);color:#fff;">Got it</button>' +
+            'background:#2E3145;color:#fff;">Got it</button>' +
         '</div>' +
       '</div>';
 
@@ -505,10 +526,10 @@ window.plethoraBit = {
         // The clock reads right-way-up for the room, who are the ones watching it.
         '<div data-el="clock" style="position:absolute;left:14px;top:50%;pointer-events:none;' +
           'transform:translateY(-50%) rotate(-90deg);' +
-          'font-size:20px;font-weight:800;color:rgba(18,16,28,0.55);"></div>' +
+          'font-size:20px;font-weight:800;color:rgba(18,16,28,0.72);"></div>' +
         '<div style="position:absolute;right:14px;top:50%;pointer-events:none;' +
           'transform:translateY(-50%) rotate(-90deg);' +
-          'font-size:20px;font-weight:800;color:rgba(18,16,28,0.55);">' +
+          'font-size:20px;font-weight:800;color:rgba(18,16,28,0.72);">' +
           results.filter((r) => r.hit).length + '</div>';
       setSheet(d.hue);
       paintClock();
@@ -561,7 +582,7 @@ window.plethoraBit = {
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;' +
                 'padding:11px 14px;border-radius:13px;background:rgba(255,255,255,0.06);">' +
                 '<span style="font-size:15.5px;font-weight:600;' +
-                  (r.hit ? '' : 'opacity:0.5;text-decoration:line-through;') + '">' + esc(r.word) + '</span>' +
+                  (r.hit ? '' : 'opacity:0.62;text-decoration:line-through;') + '">' + esc(r.word) + '</span>' +
                 '<span style="font-size:15px;flex:none;">' + (r.hit ? "✅" : "⏭️") + '</span>' +
               '</div>').join("")
             : '<div style="text-align:center;opacity:0.5;font-size:14px;">No cards played.</div>') +

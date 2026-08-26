@@ -130,46 +130,66 @@ For a couch game the honest record is a property of the *match* — longest
 rally, fastest win, best combined score — not of one of the people sharing the
 phone.
 
-## An unresolved upload rejection
+## The upload rejection, solved
 
-Five bits (`forehead`, `snap`, `reactor-four`, `go-fish`, `cheat`) are refused
-with `400 bad_request` and the *"unsupported remote resources"* message, and the
-cause is **not** characterised. What is established:
+Five bits (`forehead`, `snap`, `reactor-four`, `go-fish`, `cheat`) were refused
+for weeks with `400 bad_request` and
 
-- It is not the manifest. The same manifest with a trivial source is accepted.
-- It is not size (the smallest rejected bit is 30KB; a 123KB bit is accepted),
-  nor comments, nor emoji, nor the count of `ctx.` references, nor any single
-  construct found by feature-correlating the five against the nineteen accepted.
-- **It is cumulative within a file.** Split `forehead`'s body in half and each
-  half uploads cleanly on its own; concatenated, they are rejected. So it is a
-  threshold or an interaction, not one bad line — which is why bisecting to a
-  single trigger does not converge.
-- It is not a `data:` literal. `go-fish` is the only one of the five that
-  contains the substring `data:` at all (ten object keys, `data: { ... }`);
-  spacing them to `data : {` changes nothing.
-- The five failing and nineteen accepted bits share every token. A scan for
-  identifiers and syntax features present in **all five** rejected bits and in
-  **none** of the nineteen accepted ones returns the empty set, so there is no
-  construct to remove.
-- The rejection survived a rewrite of all 24 bits (every font stack, a case
-  fold, an SVG icon swap): exactly the same five failed before and after, and
-  no accepted bit regressed. Whatever it is, it is stable and it is not
-  something the source was edited into.
+> This bit uses unsupported remote resources. Use ctx.loadScript(),
+> ctx.importModule(), or ctx.loadFont() with declared Plethora registry
+> dependencies. Loader args may be direct literals or simple const aliases only.
 
-- It is not comments. Stripping every comment from `forehead` with a
-  string-aware stripper — 33KB down to 30KB, parses, identical behaviour —
-  changes nothing. (This was listed as ruled out before; it is now verified
-  directly rather than taken on trust.)
-- It is not the `ctx.loadFont` calls. Removing all three still fails.
-- A **6.5KB prefix** of `forehead` is accepted. So a valid, working bit built
-  from the same source, same manifest and same APIs uploads fine — whatever
-  the trigger is, it is somewhere in the rest of the file, and it is not any
-  single line, because both halves pass alone.
+None of them contains a URL. The message names the loader APIs because that is
+the check it belongs to, not because a loader is involved.
 
-This is worth reporting to Plethora with the reproduction rather than guessing
-at further: the message names no offending resource, and the five bits contain
-no remote URL of any kind. Two things would settle it in minutes on their side
-and cannot be settled from out here — which rule fired, and on what line.
+**The rule.** The validator statically tracks `ctx` and every value derived
+from it, so it can prove the loaders are only ever called with declared
+registry arguments. A binding like
+
+```js
+const w = g.measureText(txt).width + 22;   // g came from ctx
+```
+
+registers `w` as another name for a ctx-derived value, for the whole file. If
+that same name is *also* bound elsewhere in the file to something ordinary — a
+width, a loop variable, a function parameter — the tracker loses the thread and
+rejects the draft. The fix is always the same and always small: **give the
+ctx-derived binding a name nothing else in the file uses.**
+
+This is why the earlier investigation kept failing. It looked cumulative —
+split `forehead` in half and each half uploaded cleanly, concatenated they were
+refused — because a collision needs *both* ends present, and the halves
+separated them.
+
+**The five causes, each confirmed against the live API with a control:**
+
+| bit | binding | fix |
+|---|---|---|
+| `cheat` | `const g = canvas.getContext("2d")` — `g` is a parameter in 8 helpers | rename to `gfx` |
+| `forehead` | `const a = ctx.sensors && …` — `a` used 79 times elsewhere | read `ctx.sensors` through in full, bind nothing |
+| `go-fish` | `const w = W * (…)` | rename to `shaftW` |
+| `reactor-four` | `const s = fxc.width / W \|\| ctx.dpr` | rename to `pixScale` |
+| `snap` | `const w = g.measureText(txt).width + 22` | rename to `plateW` |
+
+`forehead` is the sharpest demonstration: with everything else identical,
+`const a = ctx.dpr` is rejected and `const t = ctx.dpr` is accepted.
+
+**How to find it in a new bit.** Do not bisect by truncating the source. The
+validator is a static analyser, not a parser — a syntactically broken prefix
+uploads fine — but cutting a file mid-expression turns
+`const s = fxc.width / W || ctx.dpr;` into `const s = fx`, which reads as a
+plain alias and fails for a reason the real line does not have. Failure is
+therefore not monotonic in prefix length and binary search converges on a
+fiction. Instead stub whole function bodies to `{}` and delta-debug over that
+set: every probe then asks a question the file actually contains. Narrow to a
+function, then to a statement, then vary the one line with a control.
+
+One caution learned the hard way: rename with a scope-aware tool, not a textual
+replace. These files pass the same short name as a parameter dozens of times
+and those are different variables. A first attempt at the rename silently
+merged a `for (const s of stops)` loop variable into the target binding and
+manufactured a brand-new collision, which looked exactly like the fix not
+working.
 
 `504 deadline_exceeded` is different and is genuinely just a slow server: the
 draft is usually created anyway, and a retry reports `updated`. `tools/upload.mjs`

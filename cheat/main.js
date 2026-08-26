@@ -648,7 +648,7 @@ window.plethoraBit = {
      * CANVAS + LAYOUT
      * ============================================================= */
     const canvas = ctx.createCanvas2D({ touchAction: "none" });
-    const g = canvas.getContext("2d");
+    const gfx = canvas.getContext("2d");
     /* Two different numbers that must not be confused.
      *
      * `bake` caps how much resolution the offscreen card art is drawn at — a
@@ -875,16 +875,16 @@ window.plethoraBit = {
      * marking on a table nobody is looking down at.
      */
     function drawLayoutRing() {
-      g.save();
-      g.translate(L.cx, L.cy);
-      g.strokeStyle = "rgba(255,232,196,0.055)";
-      g.lineWidth = 2;
-      g.beginPath(); g.arc(0, 0, L.ringR, 0, TAU); g.stroke();
-      g.lineWidth = 1;
-      g.beginPath(); g.arc(0, 0, L.ringR + 6, 0, TAU); g.stroke();
-      g.strokeStyle = "rgba(0,0,0,0.14)";
-      g.beginPath(); g.arc(0, 0, L.ringR + 2.5, 0, TAU); g.stroke();
-      g.restore();
+      gfx.save();
+      gfx.translate(L.cx, L.cy);
+      gfx.strokeStyle = "rgba(255,232,196,0.055)";
+      gfx.lineWidth = 2;
+      gfx.beginPath(); gfx.arc(0, 0, L.ringR, 0, TAU); gfx.stroke();
+      gfx.lineWidth = 1;
+      gfx.beginPath(); gfx.arc(0, 0, L.ringR + 6, 0, TAU); gfx.stroke();
+      gfx.strokeStyle = "rgba(0,0,0,0.14)";
+      gfx.beginPath(); gfx.arc(0, 0, L.ringR + 2.5, 0, TAU); gfx.stroke();
+      gfx.restore();
     }
 
     let room = null, roomKey = "";
@@ -1120,7 +1120,17 @@ window.plethoraBit = {
      * empty cloth. The scale follows the row count instead, so the hand
      * always fills the band it is given.
      */
-    function handScale() { return handRows.length >= 3 ? 0.63 : 0.76; }
+    function handScale() {
+      const rows = handRows.length || 1;
+      const base = rows >= 3 ? 0.63 : 0.76;
+      // The diagram above needs a band deep enough for the far seat and the
+      // near one to sit inside it. Without this cap a thirteen-card hand takes
+      // the whole middle of the short card the app embeds a bit in: the far
+      // seat ends up printed across the header and the near one under the
+      // player's own cards.
+      const room = (L.handBot - L.handTop) - 132;
+      return clamp((room / rows - 14) / CARD_H, 0.4, base);
+    }
 
     /** The top of the hand block, which is also the floor of the diagram. */
     function handTopY() {
@@ -1377,7 +1387,7 @@ window.plethoraBit = {
         '<div style="flex:1;min-width:82px;text-align:center;padding:11px 6px;border-radius:14px;' +
           'background:rgba(255,255,255,0.05);box-shadow:inset 0 0 0 1px rgba(227,182,87,0.18);">' +
           '<div style="font-size:23px;font-weight:800;line-height:1;color:' + ink + ';">' + value + '</div>' +
-          '<div style="font-size:9.5px;letter-spacing:0.14em;text-transform:lowercase;opacity:0.55;' +
+          '<div style="font-size:9.5px;letter-spacing:0.14em;text-transform:lowercase;opacity:0.7;' +
             'margin-top:6px;">' + label + '</div>' +
         '</div>';
       shell.el("over-stats").innerHTML =
@@ -1432,63 +1442,63 @@ window.plethoraBit = {
      * the pile arrives wearing a black hole instead.
      */
     function cardShadow(x, y, rot, scale, lift, alpha) {
-      g.save();
-      g.translate(x, y);
-      g.rotate(rot);
+      gfx.save();
+      gfx.translate(x, y);
+      gfx.rotate(rot);
       if (shadowArt) {
         const spread = 1 + lift * 1.7;
         const sw = (CARD_W + SHADOW_PAD * 2) * scale * spread;
         const sh = (CARD_H + SHADOW_PAD * 2) * scale * spread;
-        g.globalAlpha = clamp(1 - lift * 0.9, 0.25, 1) * (alpha === undefined ? 1 : alpha);
-        g.drawImage(shadowArt, -sw / 2, -sh / 2 + (3 + lift * 12) * scale, sw, sh);
-        g.globalAlpha = 1;
+        gfx.globalAlpha = clamp(1 - lift * 0.9, 0.25, 1) * (alpha === undefined ? 1 : alpha);
+        gfx.drawImage(shadowArt, -sw / 2, -sh / 2 + (3 + lift * 12) * scale, sw, sh);
+        gfx.globalAlpha = 1;
       } else {
-        dropShadow(g, CARD_W * scale, CARD_H * scale, CARD_R * scale, lift);
+        dropShadow(gfx, CARD_W * scale, CARD_H * scale, CARD_R * scale, lift);
       }
-      g.restore();
+      gfx.restore();
     }
 
     function drawCardAt(x, y, rot, scale, card, faceUp, lift, shadow, alpha) {
       const w = CARD_W * scale, h = CARD_H * scale;
       if (shadow !== false) cardShadow(x, y, rot, scale, lift, alpha);
-      g.save();
-      if (alpha !== undefined) g.globalAlpha = alpha;
-      g.translate(x, y);
-      g.rotate(rot);
+      gfx.save();
+      if (alpha !== undefined) gfx.globalAlpha = alpha;
+      gfx.translate(x, y);
+      gfx.rotate(rot);
       const src = faceUp ? (art && card && art.faces[card.id]) : (art && art.back);
       if (src) {
-        g.drawImage(src, -w / 2, -h / 2, w, h);
+        gfx.drawImage(src, -w / 2, -h / 2, w, h);
       } else {
         // No OffscreenCanvas on this WebView: paint live. Plainer to run,
         // identical to look at, never a blank rectangle.
-        g.save();
-        g.translate(-w / 2, -h / 2);
-        g.scale(scale, scale);
-        if (faceUp && card) paintCardFace(g, card.rank, card.suit, CARD_W, CARD_H);
-        else paintCardBack(g, CARD_W, CARD_H);
-        g.restore();
+        gfx.save();
+        gfx.translate(-w / 2, -h / 2);
+        gfx.scale(scale, scale);
+        if (faceUp && card) paintCardFace(gfx, card.rank, card.suit, CARD_W, CARD_H);
+        else paintCardBack(gfx, CARD_W, CARD_H);
+        gfx.restore();
       }
-      g.restore();
+      gfx.restore();
     }
 
     function rimCard(x, y, rot, scale, col, width, alpha) {
-      g.save();
-      g.globalAlpha = alpha === undefined ? 1 : alpha;
-      g.translate(x, y);
-      g.rotate(rot);
-      roundRect(g, -CARD_W * scale / 2, -CARD_H * scale / 2, CARD_W * scale, CARD_H * scale, CARD_R * scale);
-      g.strokeStyle = col; g.lineWidth = width;
-      g.stroke();
-      g.restore();
+      gfx.save();
+      gfx.globalAlpha = alpha === undefined ? 1 : alpha;
+      gfx.translate(x, y);
+      gfx.rotate(rot);
+      roundRect(gfx, -CARD_W * scale / 2, -CARD_H * scale / 2, CARD_W * scale, CARD_H * scale, CARD_R * scale);
+      gfx.strokeStyle = col; gfx.lineWidth = width;
+      gfx.stroke();
+      gfx.restore();
     }
     function dimCard(x, y, rot, scale, a) {
-      g.save();
-      g.translate(x, y);
-      g.rotate(rot);
-      roundRect(g, -CARD_W * scale / 2, -CARD_H * scale / 2, CARD_W * scale, CARD_H * scale, CARD_R * scale);
-      g.fillStyle = "rgba(6,3,2," + a + ")";
-      g.fill();
-      g.restore();
+      gfx.save();
+      gfx.translate(x, y);
+      gfx.rotate(rot);
+      roundRect(gfx, -CARD_W * scale / 2, -CARD_H * scale / 2, CARD_W * scale, CARD_H * scale, CARD_R * scale);
+      gfx.fillStyle = "rgba(6,3,2," + a + ")";
+      gfx.fill();
+      gfx.restore();
     }
 
     function drawMotes(now) {
@@ -1499,11 +1509,11 @@ window.plethoraBit = {
         const yy = ((y - (L.cy - r)) % (r * 2) + r * 2) % (r * 2) + (L.cy - r);
         const d = Math.hypot(x - L.cx, yy - L.cy) / r;
         if (d > 1) continue;
-        g.globalAlpha = (1 - d) * 0.30 * (0.5 + 0.5 * Math.sin(now * 0.002 + m.ph));
-        g.fillStyle = LAMP;
-        g.beginPath(); g.arc(x, yy, m.s, 0, TAU); g.fill();
+        gfx.globalAlpha = (1 - d) * 0.30 * (0.5 + 0.5 * Math.sin(now * 0.002 + m.ph));
+        gfx.fillStyle = LAMP;
+        gfx.beginPath(); gfx.arc(x, yy, m.s, 0, TAU); gfx.fill();
       }
-      g.globalAlpha = 1;
+      gfx.globalAlpha = 1;
     }
 
     /**
@@ -1541,14 +1551,14 @@ window.plethoraBit = {
       if (hidden > 0) {
         const layers = Math.min(6, 1 + Math.round(hidden / 6));
         for (let i = layers; i >= 1; i--) {
-          g.save();
-          g.translate(cx - i * 0.7, cy - i * 1.25);
-          g.rotate(-0.03 + i * 0.005);
+          gfx.save();
+          gfx.translate(cx - i * 0.7, cy - i * 1.25);
+          gfx.rotate(-0.03 + i * 0.005);
           const w = CARD_W * scale, h = CARD_H * scale;
-          roundRect(g, -w / 2, -h / 2, w, h, CARD_R * scale);
-          g.fillStyle = CARD_THEME.backDeep; g.fill();
-          g.strokeStyle = "rgba(0,0,0,0.45)"; g.lineWidth = 1; g.stroke();
-          g.restore();
+          roundRect(gfx, -w / 2, -h / 2, w, h, CARD_R * scale);
+          gfx.fillStyle = CARD_THEME.backDeep; gfx.fill();
+          gfx.strokeStyle = "rgba(0,0,0,0.45)"; gfx.lineWidth = 1; gfx.stroke();
+          gfx.restore();
         }
       }
       for (let idx = first; idx < pile.length; idx++) {
@@ -1567,12 +1577,12 @@ window.plethoraBit = {
           // of it. Squashing both turns the shadow into a tall black smear
           // standing behind a card that is only a few pixels wide.
           cardShadow(s.x, s.y, s.rot, s.sc, 0.30, 0.7);
-          g.save();
-          g.translate(s.x, s.y);
-          g.rotate(s.rot);
-          g.scale(sx, 1);
+          gfx.save();
+          gfx.translate(s.x, s.y);
+          gfx.rotate(s.rot);
+          gfx.scale(sx, 1);
           drawCardAt(0, 0, 0, s.sc, e.card, face, 0, false);
-          g.restore();
+          gfx.restore();
         } else {
           drawCardAt(s.x, s.y, s.rot, s.sc, e.card, face, s.lift);
         }
@@ -1584,57 +1594,57 @@ window.plethoraBit = {
         }
       }
       if (!pile.length) {
-        g.save();
-        g.globalAlpha = 0.22;
-        g.translate(cx, cy);
-        roundRect(g, -CARD_W * scale / 2, -CARD_H * scale / 2, CARD_W * scale, CARD_H * scale, CARD_R * scale);
-        g.strokeStyle = CREAM; g.lineWidth = 1.4;
-        g.setLineDash([5, 6]); g.stroke(); g.setLineDash([]);
-        g.restore();
-        g.globalAlpha = 1;
+        gfx.save();
+        gfx.globalAlpha = 0.22;
+        gfx.translate(cx, cy);
+        roundRect(gfx, -CARD_W * scale / 2, -CARD_H * scale / 2, CARD_W * scale, CARD_H * scale, CARD_R * scale);
+        gfx.strokeStyle = CREAM; gfx.lineWidth = 1.4;
+        gfx.setLineDash([5, 6]); gfx.stroke(); gfx.setLineDash([]);
+        gfx.restore();
+        gfx.globalAlpha = 1;
       }
     }
 
     function plate(x, y, txt, rad) {
-      g.save();
-      g.translate(x, y);
-      if (rad) g.rotate(rad);
-      g.font = "700 10.5px " + FONT;
-      g.textAlign = "center"; g.textBaseline = "middle";
-      const tw = g.measureText(txt).width + 24;
-      roundRect(g, -tw / 2, -9, tw, 18, 9);
-      g.fillStyle = "rgba(10,5,3,0.76)"; g.fill();
-      g.strokeStyle = BRASS_DIM; g.lineWidth = 1; g.stroke();
-      g.fillStyle = BRASS;
-      g.fillText(txt, 0, 0.5);
-      g.restore();
+      gfx.save();
+      gfx.translate(x, y);
+      if (rad) gfx.rotate(rad);
+      gfx.font = "700 10.5px " + FONT;
+      gfx.textAlign = "center"; gfx.textBaseline = "middle";
+      const tw = gfx.measureText(txt).width + 24;
+      roundRect(gfx, -tw / 2, -9, tw, 18, 9);
+      gfx.fillStyle = "rgba(10,5,3,0.76)"; gfx.fill();
+      gfx.strokeStyle = BRASS_DIM; gfx.lineWidth = 1; gfx.stroke();
+      gfx.fillStyle = BRASS;
+      gfx.fillText(txt, 0, 0.5);
+      gfx.restore();
     }
 
     /** The countdown ring around the pile while the window is open. */
     function drawWindowRing(now) {
       const k = clamp(challengeT / challengeLen, 0, 1);
-      g.save();
-      g.translate(L.cx, L.cy);
-      g.lineCap = "round";
-      g.strokeStyle = "rgba(255,236,198,0.09)";
-      g.lineWidth = 3;
-      g.beginPath(); g.arc(0, 0, L.ringR, 0, TAU); g.stroke();
+      gfx.save();
+      gfx.translate(L.cx, L.cy);
+      gfx.lineCap = "round";
+      gfx.strokeStyle = "rgba(255,236,198,0.09)";
+      gfx.lineWidth = 3;
+      gfx.beginPath(); gfx.arc(0, 0, L.ringR, 0, TAU); gfx.stroke();
 
       const pulse = 0.5 + 0.5 * Math.sin(now * 0.019);
       for (let i = 4; i >= 1; i--) {
-        g.globalAlpha = 0.10 * (1 - i / 5) * (0.4 + 0.6 * pulse) * (0.35 + 0.65 * (1 - k));
-        g.strokeStyle = INK_RED;
-        g.lineWidth = i * 6;
-        g.beginPath(); g.arc(0, 0, L.ringR + i * 2, 0, TAU); g.stroke();
+        gfx.globalAlpha = 0.10 * (1 - i / 5) * (0.4 + 0.6 * pulse) * (0.35 + 0.65 * (1 - k));
+        gfx.strokeStyle = INK_RED;
+        gfx.lineWidth = i * 6;
+        gfx.beginPath(); gfx.arc(0, 0, L.ringR + i * 2, 0, TAU); gfx.stroke();
       }
-      g.globalAlpha = 1;
+      gfx.globalAlpha = 1;
 
-      g.strokeStyle = k > 0.34 ? BRASS : INK_RED;
-      g.lineWidth = 5;
-      g.beginPath();
-      g.arc(0, 0, L.ringR, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(k, 0.001));
-      g.stroke();
-      g.restore();
+      gfx.strokeStyle = k > 0.34 ? BRASS : INK_RED;
+      gfx.lineWidth = 5;
+      gfx.beginPath();
+      gfx.arc(0, 0, L.ringR, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(k, 0.001));
+      gfx.stroke();
+      gfx.restore();
     }
 
     /**
@@ -1651,24 +1661,24 @@ window.plethoraBit = {
       const words = claimWords(claim.n, claim.ri);
       const w = L.plaqueW, h = 62;
       for (const rad of [0, Math.PI]) {
-        g.save();
-        g.translate(L.cx, L.cy + (rad === 0 ? L.plaqueY : -L.plaqueY));
-        g.rotate(rad);
-        roundRect(g, -w / 2, -h / 2, w, h, 15);
-        const bg = g.createLinearGradient(0, -h / 2, 0, h / 2);
+        gfx.save();
+        gfx.translate(L.cx, L.cy + (rad === 0 ? L.plaqueY : -L.plaqueY));
+        gfx.rotate(rad);
+        roundRect(gfx, -w / 2, -h / 2, w, h, 15);
+        const bg = gfx.createLinearGradient(0, -h / 2, 0, h / 2);
         bg.addColorStop(0, "rgba(24,11,8,0.90)");
         bg.addColorStop(1, "rgba(9,4,3,0.92)");
-        g.fillStyle = bg; g.fill();
-        g.strokeStyle = hexA(p.ink, 0.50); g.lineWidth = 1.4; g.stroke();
+        gfx.fillStyle = bg; gfx.fill();
+        gfx.strokeStyle = hexA(p.ink, 0.50); gfx.lineWidth = 1.4; gfx.stroke();
 
-        g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillStyle = hexA(p.ink, 0.92);
-        g.font = "800 9.5px " + FONT;
-        tracked(g, p.name.toLowerCase() + " SAYS", 0, -17, 2.4);
-        g.fillStyle = CREAM;
-        fitFont(g, words, "800", 25, FONT, w - 24);
-        g.fillText(words, 0, 9);
-        g.restore();
+        gfx.textAlign = "center"; gfx.textBaseline = "middle";
+        gfx.fillStyle = hexA(p.ink, 0.92);
+        gfx.font = "800 9.5px " + FONT;
+        tracked(gfx, p.name.toLowerCase() + " SAYS", 0, -17, 2.4);
+        gfx.fillStyle = CREAM;
+        fitFont(gfx, words, "800", 25, FONT, w - 24);
+        gfx.fillText(words, 0, 9);
+        gfx.restore();
       }
     }
 
@@ -1683,25 +1693,25 @@ window.plethoraBit = {
       const armed = phase === "challenge" && challengeOpen && !isPlacer;
       const side = Math.abs(Math.abs(p.rad) - Math.PI / 2) < 0.1;
 
-      g.save();
-      if (p.callT > 0) g.translate((Math.random() - 0.5) * p.callT * 9, (Math.random() - 0.5) * p.callT * 9);
-      g.translate(cx, cy);
+      gfx.save();
+      if (p.callT > 0) gfx.translate((Math.random() - 0.5) * p.callT * 9, (Math.random() - 0.5) * p.callT * 9);
+      gfx.translate(cx, cy);
       const sc = 1 - p.press * 0.03 + p.flashT * 0.02 + (armed ? 0.008 * Math.sin(now * 0.008) : 0);
-      g.scale(sc, sc);
+      gfx.scale(sc, sc);
 
       const w = R.w, h = R.h, rr = 19;
 
       // Armed glow: concentric strokes standing in for the blur we cannot use.
       if (armed) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 0.018);
-        g.strokeStyle = INK_RED;
+        gfx.strokeStyle = INK_RED;
         for (let k = 3; k >= 1; k--) {
-          g.globalAlpha = 0.15 * (1 - k / 4.2) * (0.45 + 0.55 * pulse);
-          g.lineWidth = k * 8;
-          roundRect(g, -w / 2, -h / 2, w, h, rr);
-          g.stroke();
+          gfx.globalAlpha = 0.15 * (1 - k / 4.2) * (0.45 + 0.55 * pulse);
+          gfx.lineWidth = k * 8;
+          roundRect(gfx, -w / 2, -h / 2, w, h, rr);
+          gfx.stroke();
         }
-        g.globalAlpha = 1;
+        gfx.globalAlpha = 1;
       }
 
       // Body: dark leather lit from the player's own edge. The gradient runs
@@ -1709,83 +1719,83 @@ window.plethoraBit = {
       // is actually sitting on rather than at the top of the screen.
       const nx = -Math.sin(p.rad), ny = Math.cos(p.rad);
       const ext = (Math.abs(nx) * w + Math.abs(ny) * h) / 2;
-      roundRect(g, -w / 2, -h / 2, w, h, rr);
-      const base = g.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
+      roundRect(gfx, -w / 2, -h / 2, w, h, rr);
+      const base = gfx.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
       base.addColorStop(0.00, "rgba(38,22,16,0.95)");
       base.addColorStop(1.00, "rgba(10,5,4,0.97)");
-      g.fillStyle = base; g.fill();
+      gfx.fillStyle = base; gfx.fill();
       // The colour is a second pass on top. Folded into the leather gradient it
       // mixed with the red cloth showing through and every pad came out brown.
-      const wash = g.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
+      const wash = gfx.createLinearGradient(nx * ext, ny * ext, -nx * ext, -ny * ext);
       const tint = armed ? INK_RED : p.ink;
       wash.addColorStop(0.00, hexA(tint, (armed ? 0.36 : isPlacer ? 0.09 : 0.17) + p.flashT * 0.30));
       wash.addColorStop(0.66, hexA(tint, p.flashT * 0.14));
-      g.fillStyle = wash; g.fill();
-      g.strokeStyle = armed ? hexA(INK_RED, 0.95) : hexA(p.ink, Math.max(isPlacer ? 0.26 : 0.44, p.flashT));
-      g.lineWidth = armed ? 2.4 : 1.3 + p.flashT * 1.6;
-      g.stroke();
+      gfx.fillStyle = wash; gfx.fill();
+      gfx.strokeStyle = armed ? hexA(INK_RED, 0.95) : hexA(p.ink, Math.max(isPlacer ? 0.26 : 0.44, p.flashT));
+      gfx.lineWidth = armed ? 2.4 : 1.3 + p.flashT * 1.6;
+      gfx.stroke();
 
-      roundRect(g, -w / 2 + 6, -h / 2 + 6, w - 12, h - 12, rr - 5);
-      g.strokeStyle = "rgba(255,255,255,0.05)";
-      g.lineWidth = 1; g.stroke();
+      roundRect(gfx, -w / 2 + 6, -h / 2 + 6, w - 12, h - 12, rr - 5);
+      gfx.strokeStyle = "rgba(255,255,255,0.05)";
+      gfx.lineWidth = 1; gfx.stroke();
 
-      g.fillStyle = armed ? "#ffb0a8" : "rgba(227,182,87,0.32)";
+      gfx.fillStyle = armed ? "#ffb0a8" : "rgba(227,182,87,0.32)";
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
-        g.beginPath(); g.arc(sx * (w / 2 - 11), sy * (h / 2 - 11), 2.1, 0, TAU); g.fill();
+        gfx.beginPath(); gfx.arc(sx * (w / 2 - 11), sy * (h / 2 - 11), 2.1, 0, TAU); gfx.fill();
       }
 
       if (p.flashT > 0) {
         const f = easeOut(p.flashT);
-        const bloom = g.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) * 0.62);
+        const bloom = gfx.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) * 0.62);
         bloom.addColorStop(0.00, "rgba(255,240,214," + (f * 0.15).toFixed(3) + ")");
         bloom.addColorStop(1.00, "rgba(255,240,214,0)");
-        roundRect(g, -w / 2, -h / 2, w, h, rr);
-        g.fillStyle = bloom; g.fill();
+        roundRect(gfx, -w / 2, -h / 2, w, h, rr);
+        gfx.fillStyle = bloom; gfx.fill();
       }
 
       // Everything below reads right way up from this player's seat.
-      g.rotate(p.rad);
+      gfx.rotate(p.rad);
       const lw = side ? h : w, lh = side ? w : h;
-      g.textAlign = "center"; g.textBaseline = "middle";
+      gfx.textAlign = "center"; gfx.textBaseline = "middle";
 
       if (armed) {
-        g.fillStyle = "#fff0ec";
+        gfx.fillStyle = "#fff0ec";
         const size = Math.round(Math.min(lh * 0.34, 26));
-        g.font = "900 " + size + "px " + FONT;
-        tracked(g, "CHEAT", 0, -lh * 0.10, 2.6);
-        g.fillStyle = hexA(p.ink, 0.86);
-        g.font = "700 " + Math.round(Math.min(lh * 0.13, 10)) + "px " + FONT;
-        tracked(g, p.name.toLowerCase(), 0, lh * 0.19, 2.2);
+        gfx.font = "900 " + size + "px " + FONT;
+        tracked(gfx, "CHEAT", 0, -lh * 0.10, 2.6);
+        gfx.fillStyle = hexA(p.ink, 0.86);
+        gfx.font = "700 " + Math.round(Math.min(lh * 0.13, 10)) + "px " + FONT;
+        tracked(gfx, p.name.toLowerCase(), 0, lh * 0.19, 2.2);
         // A drain bar so the window's length is visible from every seat, not
         // only from the ring in the middle of the table.
         const k = clamp(challengeT / challengeLen, 0, 1);
         const bw = lw * 0.56;
-        roundRect(g, -bw / 2, lh * 0.34 - 2, bw, 4, 2);
-        g.fillStyle = "rgba(255,255,255,0.13)"; g.fill();
-        roundRect(g, -bw / 2, lh * 0.34 - 2, bw * k, 4, 2);
-        g.fillStyle = k > 0.34 ? BRASS : INK_RED; g.fill();
+        roundRect(gfx, -bw / 2, lh * 0.34 - 2, bw, 4, 2);
+        gfx.fillStyle = "rgba(255,255,255,0.13)"; gfx.fill();
+        roundRect(gfx, -bw / 2, lh * 0.34 - 2, bw * k, 4, 2);
+        gfx.fillStyle = k > 0.34 ? BRASS : INK_RED; gfx.fill();
       } else {
-        g.fillStyle = hexA(p.ink, isPlacer ? 0.55 : 0.9);
-        g.font = "700 " + Math.round(Math.min(lh * 0.16, 11)) + "px " + FONT;
-        tracked(g, p.name.toLowerCase(), 0, -lh * 0.22, 2.6);
+        gfx.fillStyle = hexA(p.ink, isPlacer ? 0.75 : 0.9);
+        gfx.font = "700 " + Math.round(Math.min(lh * 0.16, 11)) + "px " + FONT;
+        tracked(gfx, p.name.toLowerCase(), 0, -lh * 0.22, 2.6);
 
         if (isPlacer && claim && phase !== "cover") {
-          g.fillStyle = "rgba(247,237,217,0.62)";
-          g.font = "700 " + Math.round(Math.min(lh * 0.19, 13)) + "px " + FONT;
-          g.fillText("played " + claim.n, 0, lh * 0.10);
-          g.fillStyle = hexA(p.ink, 0.42);
-          g.font = "600 " + Math.round(Math.min(lh * 0.14, 9.5)) + "px " + FONT;
-          tracked(g, p.hand.length + " LEFT", 0, lh * 0.32, 1.8);
+          gfx.fillStyle = "rgba(247,237,217,0.8)";
+          gfx.font = "700 " + Math.round(Math.min(lh * 0.19, 13)) + "px " + FONT;
+          gfx.fillText("played " + claim.n, 0, lh * 0.10);
+          gfx.fillStyle = hexA(p.ink, 0.68);
+          gfx.font = "600 " + Math.round(Math.min(lh * 0.14, 9.5)) + "px " + FONT;
+          tracked(gfx, p.hand.length + " LEFT", 0, lh * 0.32, 1.8);
         } else {
-          g.fillStyle = CREAM;
-          g.font = "800 " + Math.round(Math.min(lh * 0.42, 30)) + "px " + FONT;
-          g.fillText(String(p.hand.length), 0, lh * 0.10);
-          g.fillStyle = hexA(p.ink, 0.45);
-          g.font = "600 " + Math.round(Math.min(lh * 0.13, 9)) + "px " + FONT;
-          tracked(g, p.hand.length === 1 ? "CARD" : "CARDS", 0, lh * 0.33, 1.8);
+          gfx.fillStyle = CREAM;
+          gfx.font = "800 " + Math.round(Math.min(lh * 0.42, 30)) + "px " + FONT;
+          gfx.fillText(String(p.hand.length), 0, lh * 0.10);
+          gfx.fillStyle = hexA(p.ink, 0.7);
+          gfx.font = "600 " + Math.round(Math.min(lh * 0.13, 9)) + "px " + FONT;
+          tracked(gfx, p.hand.length === 1 ? "CARD" : "CARDS", 0, lh * 0.33, 1.8);
         }
       }
-      g.restore();
+      gfx.restore();
     }
 
     /* --- the shout ------------------------------------------------ */
@@ -1810,24 +1820,24 @@ window.plethoraBit = {
       // just turned over.
       const w = L.plaqueW, h = 80;
       for (const rad of [0, Math.PI]) {
-        g.save();
-        g.globalAlpha = out;
-        g.translate(L.cx, L.cy + (rad === 0 ? L.plaqueY : -L.plaqueY));
-        g.rotate(rad);
-        g.scale(pop, pop);
-        roundRect(g, -w / 2, -h / 2, w, h, 17);
-        g.fillStyle = "rgba(8,4,3,0.90)"; g.fill();
-        g.strokeStyle = hexA(banner.ink, 0.8); g.lineWidth = 2; g.stroke();
-        g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillStyle = banner.ink;
-        fitFont(g, banner.big, "900", 21, FONT, w - 26);
-        g.fillText(banner.big, 0, -11);
-        g.fillStyle = "rgba(247,237,217,0.72)";
-        fitFont(g, banner.small, "600", 12, FONT, w - 26);
-        g.fillText(banner.small, 0, 17);
-        g.restore();
+        gfx.save();
+        gfx.globalAlpha = out;
+        gfx.translate(L.cx, L.cy + (rad === 0 ? L.plaqueY : -L.plaqueY));
+        gfx.rotate(rad);
+        gfx.scale(pop, pop);
+        roundRect(gfx, -w / 2, -h / 2, w, h, 17);
+        gfx.fillStyle = "rgba(8,4,3,0.90)"; gfx.fill();
+        gfx.strokeStyle = hexA(banner.ink, 0.8); gfx.lineWidth = 2; gfx.stroke();
+        gfx.textAlign = "center"; gfx.textBaseline = "middle";
+        gfx.fillStyle = banner.ink;
+        fitFont(gfx, banner.big, "900", 21, FONT, w - 26);
+        gfx.fillText(banner.big, 0, -11);
+        gfx.fillStyle = "rgba(247,237,217,0.72)";
+        fitFont(gfx, banner.small, "600", 12, FONT, w - 26);
+        gfx.fillText(banner.small, 0, 17);
+        gfx.restore();
       }
-      g.globalAlpha = 1;
+      gfx.globalAlpha = 1;
     }
 
     /* --- the private, picked-up screen ---------------------------- */
@@ -1835,47 +1845,47 @@ window.plethoraBit = {
       const p = players[turn];
       if (!p) return;
       const x = 20, w = W - 40, y = L.hdrY, h = L.hdrH;
-      roundRect(g, x, y, w, h, 18);
-      const bg = g.createLinearGradient(0, y, 0, y + h);
+      roundRect(gfx, x, y, w, h, 18);
+      const bg = gfx.createLinearGradient(0, y, 0, y + h);
       bg.addColorStop(0, "rgba(30,14,10,0.92)");
       bg.addColorStop(1, "rgba(10,5,4,0.94)");
-      g.fillStyle = bg; g.fill();
-      g.strokeStyle = hexA(p.ink, 0.42); g.lineWidth = 1.4; g.stroke();
+      gfx.fillStyle = bg; gfx.fill();
+      gfx.strokeStyle = hexA(p.ink, 0.42); gfx.lineWidth = 1.4; gfx.stroke();
 
-      g.textAlign = "left"; g.textBaseline = "middle";
-      g.fillStyle = hexA(p.ink, 0.9);
-      g.font = "800 9.5px " + FONT;
-      g.textAlign = "center";
-      tracked(g, p.name.toLowerCase() + " · YOU MUST CLAIM", x + w / 2, y + 22, 2.4);
+      gfx.textAlign = "left"; gfx.textBaseline = "middle";
+      gfx.fillStyle = hexA(p.ink, 0.9);
+      gfx.font = "800 9.5px " + FONT;
+      gfx.textAlign = "center";
+      tracked(gfx, p.name.toLowerCase() + " · YOU MUST CLAIM", x + w / 2, y + 22, 2.4);
 
       // The rank the table is on, as a card index rather than a word: it is
       // the one thing on this screen that must be unmistakable.
-      g.textAlign = "center";
-      g.fillStyle = CREAM;
+      gfx.textAlign = "center";
+      gfx.fillStyle = CREAM;
       const words = RANK_MANY[rankIdx];
-      fitFont(g, words, "900", 34, FONT, w - 110);
-      g.fillText(words, x + w / 2, y + 56);
+      fitFont(gfx, words, "900", 34, FONT, w - 110);
+      gfx.fillText(words, x + w / 2, y + 56);
 
-      g.save();
-      g.translate(x + 34, y + h / 2 + 6);
-      g.fillStyle = hexA(p.ink, 0.16);
-      roundRect(g, -22, -28, 44, 56, 7);
-      g.fill();
-      g.strokeStyle = hexA(p.ink, 0.5); g.lineWidth = 1.2; g.stroke();
-      g.fillStyle = CREAM;
-      g.font = "700 26px " + SERIF;
-      g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillText(RANKS[rankIdx], 0, -6);
-      g.fillStyle = hexA(p.ink, 0.8);
-      suitPath(g, "S", 0, 15, 7);
-      g.restore();
+      gfx.save();
+      gfx.translate(x + 34, y + h / 2 + 6);
+      gfx.fillStyle = hexA(p.ink, 0.16);
+      roundRect(gfx, -22, -28, 44, 56, 7);
+      gfx.fill();
+      gfx.strokeStyle = hexA(p.ink, 0.5); gfx.lineWidth = 1.2; gfx.stroke();
+      gfx.fillStyle = CREAM;
+      gfx.font = "700 26px " + SERIF;
+      gfx.textAlign = "center"; gfx.textBaseline = "middle";
+      gfx.fillText(RANKS[rankIdx], 0, -6);
+      gfx.fillStyle = hexA(p.ink, 0.8);
+      suitPath(gfx, "S", 0, 15, 7);
+      gfx.restore();
     }
 
     /** Shorten a name to fit, with a real ellipsis rather than a guess. */
     function clipText(text, max) {
-      if (g.measureText(text).width <= max) return text;
+      if (gfx.measureText(text).width <= max) return text;
       let t = text;
-      while (t.length > 1 && g.measureText(t + "…").width > max) t = t.slice(0, -1);
+      while (t.length > 1 && gfx.measureText(t + "…").width > max) t = t.slice(0, -1);
       return t + "…";
     }
 
@@ -1892,17 +1902,22 @@ window.plethoraBit = {
       const top = L.handTop, bot = handTopY();
       const cy = (top + bot) / 2, cx = W / 2;
       const areaH = bot - top;
-      const ry = Math.max(56, areaH / 2 - 20);
+      // The seat radius is the band, not a constant. A 56px floor fitted the
+      // phone and, on the short card, threw the far and near seats clean out
+      // of the band they were given — one onto the header, one under the hand.
+      // Half the band less half a seat plate keeps both inside it by
+      // construction, whatever the band turns out to be.
+      const ry = clamp(areaH / 2 - 16, 18, 118);
       const rx = Math.min(118, (W - 28 - 96) / 2);
-      const rr = Math.min(96, ry - 22);
+      const rr = Math.max(12, Math.min(96, ry - 22));
 
-      g.save();
-      g.strokeStyle = "rgba(255,232,196,0.06)";
-      g.lineWidth = 1.4;
-      g.setLineDash([4, 7]);
-      g.beginPath(); g.ellipse(cx, cy, rr + 22, Math.min(rr + 22, ry - 4), 0, 0, TAU); g.stroke();
-      g.setLineDash([]);
-      g.restore();
+      gfx.save();
+      gfx.strokeStyle = "rgba(255,232,196,0.06)";
+      gfx.lineWidth = 1.4;
+      gfx.setLineDash([4, 7]);
+      gfx.beginPath(); gfx.ellipse(cx, cy, rr + 22, Math.min(rr + 22, ry - 4), 0, 0, TAU); gfx.stroke();
+      gfx.setLineDash([]);
+      gfx.restore();
 
       drawPile(now, cx, cy - 4, 0.58);
       plate(cx, cy + 52, pile.length === 0 ? "pile empty" : pile.length + " on the pile");
@@ -1913,21 +1928,21 @@ window.plethoraBit = {
         const me = i === turn;
         const w = 96, h = 30;
         const px = cx + d[0] * rx, py = cy + d[1] * ry;
-        roundRect(g, px - w / 2, py - h / 2, w, h, 10);
-        g.fillStyle = me ? hexA(q.ink, 0.14) : "rgba(255,255,255,0.05)"; g.fill();
-        g.strokeStyle = hexA(q.ink, me ? 0.62 : 0.28); g.lineWidth = 1; g.stroke();
-        g.beginPath(); g.arc(px - w / 2 + 11, py, 3.6, 0, TAU);
-        g.fillStyle = q.ink; g.fill();
-        g.textAlign = "left"; g.textBaseline = "middle";
-        g.font = (me ? "700 " : "600 ") + "11px " + FONT;
-        g.fillStyle = me ? hexA(q.ink, 0.95) : "rgba(247,237,217,0.74)";
-        g.fillText(clipText(me ? "You" : q.name, w - 58), px - w / 2 + 20, py + 0.5);
-        g.textAlign = "right";
-        g.fillStyle = CREAM;
-        g.font = "800 14px " + FONT;
-        g.fillText(String(q.hand.length), px + w / 2 - 10, py + 0.5);
+        roundRect(gfx, px - w / 2, py - h / 2, w, h, 10);
+        gfx.fillStyle = me ? hexA(q.ink, 0.14) : "rgba(255,255,255,0.05)"; gfx.fill();
+        gfx.strokeStyle = hexA(q.ink, me ? 0.62 : 0.28); gfx.lineWidth = 1; gfx.stroke();
+        gfx.beginPath(); gfx.arc(px - w / 2 + 11, py, 3.6, 0, TAU);
+        gfx.fillStyle = q.ink; gfx.fill();
+        gfx.textAlign = "left"; gfx.textBaseline = "middle";
+        gfx.font = (me ? "700 " : "600 ") + "11px " + FONT;
+        gfx.fillStyle = me ? hexA(q.ink, 0.95) : "rgba(247,237,217,0.74)";
+        gfx.fillText(clipText(me ? "You" : q.name, w - 58), px - w / 2 + 20, py + 0.5);
+        gfx.textAlign = "right";
+        gfx.fillStyle = CREAM;
+        gfx.font = "800 14px " + FONT;
+        gfx.fillText(String(q.hand.length), px + w / 2 - 10, py + 0.5);
       }
-      g.textAlign = "center";
+      gfx.textAlign = "center";
     }
 
     function drawHand(now) {
@@ -1951,16 +1966,16 @@ window.plethoraBit = {
             rimCard(s.x, s.y - lift, 0, sc, "#fff4d8", 2.6, 0.95);
             // The order badge: the claim is "three sevens", so which three is
             // the only thing the player has actually decided.
-            g.save();
-            g.translate(s.x + CARD_W * sc / 2 - 9, s.y - lift - CARD_H * sc / 2 + 9);
-            g.beginPath(); g.arc(0, 0, 10, 0, TAU);
-            g.fillStyle = BRASS; g.fill();
-            g.strokeStyle = "rgba(40,20,4,0.5)"; g.lineWidth = 1; g.stroke();
-            g.fillStyle = "#2a1704";
-            g.font = "800 12px " + FONT;
-            g.textAlign = "center"; g.textBaseline = "middle";
-            g.fillText(String(sel + 1), 0, 0.5);
-            g.restore();
+            gfx.save();
+            gfx.translate(s.x + CARD_W * sc / 2 - 9, s.y - lift - CARD_H * sc / 2 + 9);
+            gfx.beginPath(); gfx.arc(0, 0, 10, 0, TAU);
+            gfx.fillStyle = BRASS; gfx.fill();
+            gfx.strokeStyle = "rgba(40,20,4,0.5)"; gfx.lineWidth = 1; gfx.stroke();
+            gfx.fillStyle = "#2a1704";
+            gfx.font = "800 12px " + FONT;
+            gfx.textAlign = "center"; gfx.textBaseline = "middle";
+            gfx.fillText(String(sel + 1), 0, 0.5);
+            gfx.restore();
           } else if (real) {
             rimCard(s.x, s.y, 0, sc, hexA(BRASS, 0.9), 1.8, 0.7);
           }
@@ -1972,56 +1987,59 @@ window.plethoraBit = {
       const R = L.commit;
       const on = picked.length > 0;
       const p = players[turn];
-      g.save();
+      gfx.save();
       if (on) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 0.006);
         for (let i = 3; i >= 1; i--) {
-          g.globalAlpha = 0.12 * (1 - i / 4) * (0.5 + 0.5 * pulse);
-          g.strokeStyle = BRASS; g.lineWidth = i * 7;
-          roundRect(g, R.x, R.y, R.w, R.h, 17);
-          g.stroke();
+          gfx.globalAlpha = 0.12 * (1 - i / 4) * (0.5 + 0.5 * pulse);
+          gfx.strokeStyle = BRASS; gfx.lineWidth = i * 7;
+          roundRect(gfx, R.x, R.y, R.w, R.h, 17);
+          gfx.stroke();
         }
-        g.globalAlpha = 1;
+        gfx.globalAlpha = 1;
       }
-      roundRect(g, R.x, R.y, R.w, R.h, 17);
+      roundRect(gfx, R.x, R.y, R.w, R.h, 17);
       if (on) {
-        const grad = g.createLinearGradient(0, R.y, 0, R.y + R.h);
+        const grad = gfx.createLinearGradient(0, R.y, 0, R.y + R.h);
         grad.addColorStop(0, "#f4d68d");
         grad.addColorStop(1, "#c8942b");
-        g.fillStyle = grad;
+        gfx.fillStyle = grad;
       } else {
-        g.fillStyle = "rgba(255,255,255,0.055)";
+        gfx.fillStyle = "rgba(255,255,255,0.055)";
       }
-      g.fill();
-      g.strokeStyle = on ? "rgba(255,247,224,0.6)" : "rgba(227,182,87,0.26)";
-      g.lineWidth = 1.4;
-      g.stroke();
+      gfx.fill();
+      gfx.strokeStyle = on ? "rgba(255,247,224,0.6)" : "rgba(227,182,87,0.26)";
+      gfx.lineWidth = 1.4;
+      gfx.stroke();
 
-      g.textAlign = "center"; g.textBaseline = "middle";
+      gfx.textAlign = "center"; gfx.textBaseline = "middle";
       if (on) {
-        g.fillStyle = "#2a1704";
+        gfx.fillStyle = "#2a1704";
         const words = "PLAY " + claimWords(picked.length, rankIdx);
-        fitFont(g, words, "900", 19, FONT, R.w - 40);
-        g.fillText(words, R.x + R.w / 2, R.y + R.h / 2 - 7);
-        g.fillStyle = "rgba(42,23,4,0.62)";
-        g.font = "700 9.5px " + FONT;
-        tracked(g, "FACE DOWN · NOBODY SEES THEM", R.x + R.w / 2, R.y + R.h / 2 + 14, 1.8);
+        fitFont(gfx, words, "900", 19, FONT, R.w - 40);
+        gfx.fillText(words, R.x + R.w / 2, R.y + R.h / 2 - 7);
+        gfx.fillStyle = "rgba(42,23,4,0.62)";
+        gfx.font = "700 9.5px " + FONT;
+        tracked(gfx, "FACE DOWN · NOBODY SEES THEM", R.x + R.w / 2, R.y + R.h / 2 + 14, 1.8);
       } else {
-        g.fillStyle = "rgba(247,237,217,0.45)";
-        g.font = "800 13px " + FONT;
-        tracked(g, "TAP 1–4 CARDS", R.x + R.w / 2, R.y + R.h / 2 - 6, 2.4);
-        g.fillStyle = "rgba(247,237,217,0.26)";
-        g.font = "600 10px " + FONT;
-        g.fillText("they do not have to be " + RANK_MANY[rankIdx].toLowerCase(),
+        // 0.45 and 0.26 on a 5% plate over near-black cloth was two shades
+        // of the same grey: the only instruction on the private screen, and the
+        // hardest thing on it to read.
+        gfx.fillStyle = "rgba(247,237,217,0.74)";
+        gfx.font = "800 13px " + FONT;
+        tracked(gfx, "TAP 1–4 CARDS", R.x + R.w / 2, R.y + R.h / 2 - 6, 2.4);
+        gfx.fillStyle = "rgba(247,237,217,0.56)";
+        gfx.font = "600 10px " + FONT;
+        gfx.fillText("they do not have to be " + RANK_MANY[rankIdx].toLowerCase(),
           R.x + R.w / 2, R.y + R.h / 2 + 13);
       }
-      g.restore();
+      gfx.restore();
       if (p && p.press > 0) {
-        g.save();
-        g.globalAlpha = p.press * 0.2;
-        roundRect(g, R.x, R.y, R.w, R.h, 17);
-        g.fillStyle = "#000"; g.fill();
-        g.restore();
+        gfx.save();
+        gfx.globalAlpha = p.press * 0.2;
+        roundRect(gfx, R.x, R.y, R.w, R.h, 17);
+        gfx.fillStyle = "#000"; gfx.fill();
+        gfx.restore();
       }
     }
 
@@ -2036,58 +2054,58 @@ window.plethoraBit = {
     function drawLamp(now) {
       const ly = H * 0.155;
       const swing = Math.sin(now * 0.00055) * 0.016;
-      g.save();
-      g.translate(W / 2, 0);
-      g.rotate(swing);
+      gfx.save();
+      gfx.translate(W / 2, 0);
+      gfx.rotate(swing);
 
       // The beam. A single filled cone has two hard diagonal edges and reads
       // as a folded sheet of paper; three nested ones, widest and faintest
       // outermost, give the falloff a real beam has without touching the blur
       // filter, which is rejected at upload.
-      g.save();
-      g.globalCompositeOperation = "lighter";
+      gfx.save();
+      gfx.globalCompositeOperation = "lighter";
       for (const [lip, base, top, mid] of [[46, 0.86, 0.075, 0.030],
                                            [34, 0.62, 0.185, 0.070]]) {
-        const cone = g.createLinearGradient(0, ly, 0, H * 0.90);
+        const cone = gfx.createLinearGradient(0, ly, 0, H * 0.90);
         cone.addColorStop(0.00, "rgba(255,216,146," + top + ")");
         cone.addColorStop(0.34, "rgba(255,206,136," + mid + ")");
         cone.addColorStop(1.00, "rgba(255,200,130,0)");
-        g.fillStyle = cone;
-        g.beginPath();
-        g.moveTo(-lip, ly); g.lineTo(lip, ly);
-        g.lineTo(W * base, H * 0.95); g.lineTo(-W * base, H * 0.95);
-        g.closePath(); g.fill();
+        gfx.fillStyle = cone;
+        gfx.beginPath();
+        gfx.moveTo(-lip, ly); gfx.lineTo(lip, ly);
+        gfx.lineTo(W * base, H * 0.95); gfx.lineTo(-W * base, H * 0.95);
+        gfx.closePath(); gfx.fill();
       }
-      g.restore();
+      gfx.restore();
 
-      g.strokeStyle = "#241309"; g.lineWidth = 2.6;
-      g.beginPath(); g.moveTo(0, -20); g.lineTo(0, ly - 44); g.stroke();
+      gfx.strokeStyle = "#241309"; gfx.lineWidth = 2.6;
+      gfx.beginPath(); gfx.moveTo(0, -20); gfx.lineTo(0, ly - 44); gfx.stroke();
 
       // Shade: a brass trapezoid with a lit inner lip.
-      g.beginPath();
-      g.moveTo(-13, ly - 46); g.lineTo(13, ly - 46);
-      g.lineTo(38, ly); g.lineTo(-38, ly);
-      g.closePath();
-      const sh = g.createLinearGradient(-38, ly - 46, 38, ly);
+      gfx.beginPath();
+      gfx.moveTo(-13, ly - 46); gfx.lineTo(13, ly - 46);
+      gfx.lineTo(38, ly); gfx.lineTo(-38, ly);
+      gfx.closePath();
+      const sh = gfx.createLinearGradient(-38, ly - 46, 38, ly);
       sh.addColorStop(0, "#4b2c14");
       sh.addColorStop(0.45, "#8a5a24");
       sh.addColorStop(1, "#3a220f");
-      g.fillStyle = sh; g.fill();
-      g.strokeStyle = "rgba(227,182,87,0.55)"; g.lineWidth = 1.2; g.stroke();
+      gfx.fillStyle = sh; gfx.fill();
+      gfx.strokeStyle = "rgba(227,182,87,0.55)"; gfx.lineWidth = 1.2; gfx.stroke();
 
-      g.beginPath(); g.ellipse(0, ly, 38, 8, 0, 0, TAU);
-      g.fillStyle = "#ffe8bb"; g.fill();
+      gfx.beginPath(); gfx.ellipse(0, ly, 38, 8, 0, 0, TAU);
+      gfx.fillStyle = "#ffe8bb"; gfx.fill();
 
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      const bulb = g.createRadialGradient(0, ly + 2, 0, 0, ly + 2, 92);
+      gfx.save();
+      gfx.globalCompositeOperation = "lighter";
+      const bulb = gfx.createRadialGradient(0, ly + 2, 0, 0, ly + 2, 92);
       bulb.addColorStop(0.00, "rgba(255,232,180,0.85)");
       bulb.addColorStop(0.22, "rgba(255,214,140,0.30)");
       bulb.addColorStop(1.00, "rgba(255,206,130,0)");
-      g.fillStyle = bulb;
-      g.beginPath(); g.arc(0, ly + 2, 92, 0, TAU); g.fill();
-      g.restore();
-      g.restore();
+      gfx.fillStyle = bulb;
+      gfx.beginPath(); gfx.arc(0, ly + 2, 92, 0, TAU); gfx.fill();
+      gfx.restore();
+      gfx.restore();
     }
 
     const FAN = ["7S", "7H", "KD", "7C", "2S"];
@@ -2137,21 +2155,21 @@ window.plethoraBit = {
       for (const p of parts) {
         if (p.life <= 0) continue;
         const t = p.life / p.max;
-        g.save();
-        g.globalAlpha = clamp(t * 1.3, 0, 1);
-        g.translate(p.x, p.y);
+        gfx.save();
+        gfx.globalAlpha = clamp(t * 1.3, 0, 1);
+        gfx.translate(p.x, p.y);
         if (p.kind === "shard") {
-          g.rotate(p.rot);
-          g.fillStyle = p.col;
-          roundRect(g, -p.size * 0.35, -p.size * 0.5, p.size * 0.7, p.size, 1.5);
-          g.fill();
+          gfx.rotate(p.rot);
+          gfx.fillStyle = p.col;
+          roundRect(gfx, -p.size * 0.35, -p.size * 0.5, p.size * 0.7, p.size, 1.5);
+          gfx.fill();
         } else {
-          g.fillStyle = p.col;
-          g.beginPath(); g.arc(0, 0, p.size * (0.4 + t * 0.7), 0, TAU); g.fill();
+          gfx.fillStyle = p.col;
+          gfx.beginPath(); gfx.arc(0, 0, p.size * (0.4 + t * 0.7), 0, TAU); gfx.fill();
         }
-        g.restore();
+        gfx.restore();
       }
-      g.globalAlpha = 1;
+      gfx.globalAlpha = 1;
     }
 
     /* ===============================================================
@@ -2160,13 +2178,13 @@ window.plethoraBit = {
     const TABLE_PHASES = { deal: 1, settle: 1, challenge: 1, reveal: 1, verdict: 1, over: 1 };
 
     function render(now) {
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (room) g.drawImage(room, 0, 0, W, H);
-      else paintRoom(g, false);
+      gfx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (room) gfx.drawImage(room, 0, 0, W, H);
+      else paintRoom(gfx, false);
 
-      g.save();
+      gfx.save();
       if (shake > 0.01) {
-        g.translate((Math.random() - 0.5) * shake * 15, (Math.random() - 0.5) * shake * 15);
+        gfx.translate((Math.random() - 0.5) * shake * 15, (Math.random() - 0.5) * shake * 15);
       }
 
       if (phase === "menu") {
@@ -2200,7 +2218,7 @@ window.plethoraBit = {
         drawFlyers(now);
         drawParts();
       }
-      g.restore();
+      gfx.restore();
 
       if (TABLE_PHASES[phase]) {
         for (let i = 0; i < players.length; i++) drawPad(players[i], i, now);
@@ -2210,23 +2228,23 @@ window.plethoraBit = {
           // so the phone can physically reach the middle of the table before
           // anybody is asked to react to what is on it.
           const k = clamp(settleT / 0.4, 0, 1);
-          g.save();
-          g.globalAlpha = k * (0.55 + 0.45 * Math.sin(now * 0.006));
-          g.fillStyle = BRASS;
-          g.font = "800 12px " + FONT;
-          g.textAlign = "center"; g.textBaseline = "middle";
-          tracked(g, "PHONE DOWN", L.cx, L.cy - L.ringR - 26, 4);
-          g.restore();
+          gfx.save();
+          gfx.globalAlpha = k * (0.55 + 0.45 * Math.sin(now * 0.006));
+          gfx.fillStyle = BRASS;
+          gfx.font = "800 12px " + FONT;
+          gfx.textAlign = "center"; gfx.textBaseline = "middle";
+          tracked(gfx, "PHONE DOWN", L.cx, L.cy - L.ringR - 26, 4);
+          gfx.restore();
         }
       }
 
       if (flash.a > 0.004) {
         // A tint over the whole room, not a wash. Flat at full strength it
         // turned the cloth, the cards and four people's pads one colour.
-        g.globalAlpha = flash.a * 0.26;
-        g.fillStyle = flash.ink;
-        g.fillRect(0, 0, W, H);
-        g.globalAlpha = 1;
+        gfx.globalAlpha = flash.a * 0.26;
+        gfx.fillStyle = flash.ink;
+        gfx.fillRect(0, 0, W, H);
+        gfx.globalAlpha = 1;
       }
     }
 
@@ -2301,7 +2319,7 @@ window.plethoraBit = {
     const QUIET_EDGE = "rgba(227,182,87,0.42)";
     const panel = "max-width:326px;width:100%;background:linear-gradient(180deg,#2a130e,#150907);" +
       "border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px rgba(227,182,87,0.26),0 20px 60px rgba(0,0,0,0.6);";
-    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.5;";
+    const label = "font-size:11px;letter-spacing:0.24em;text-transform:lowercase;opacity:0.66;";
     // overflow-y:auto so a long panel on a short phone scrolls rather than
     // centring itself off both ends, which puts its close button out of reach.
     const sheetCss = "position:absolute;inset:0;display:none;align-items:center;" +
@@ -2342,7 +2360,7 @@ window.plethoraBit = {
           'background:linear-gradient(178deg,#fff3d8 6%,#e8b957 52%,#9d6a18);-webkit-background-clip:text;' +
           'background-clip:text;-webkit-text-fill-color:transparent;color:transparent;' +
           'text-shadow:0 8px 34px rgba(0,0,0,0.55);">Cheat</div>' +
-        '<div style="font-size:14.5px;line-height:1.55;opacity:0.66;max-width:272px;margin-top:9px;">' +
+        '<div style="font-size:14.5px;line-height:1.55;opacity:0.8;max-width:272px;margin-top:9px;">' +
           'Play your cards face down and name them. You may be telling the truth. ' +
           'Anyone can call it.</div>' +
         '<div style="' + label + 'margin:20px 0 9px;">Players</div>' +
@@ -2358,7 +2376,7 @@ window.plethoraBit = {
       '<div data-el="namep" style="' + sheetCss + '">' +
         '<div style="' + panel + '">' +
           '<div style="font-size:19px;font-weight:800;">Who is playing?</div>' +
-          '<div style="font-size:12.5px;opacity:0.55;margin:5px 0 14px;">Leave any blank and it fills itself in. ' +
+          '<div style="font-size:12.5px;opacity:0.72;margin:5px 0 14px;">Leave any blank and it fills itself in. ' +
             'Names go on the handover screen, so use the ones people answer to.</div>' +
           '<div data-el="namelist"></div>' +
           '<button data-el="namep-close" style="' + bigBtn("linear-gradient(180deg,#f4d68d,#c8942b)", "#2a1704") + '">Done</button>' +
@@ -2379,7 +2397,7 @@ window.plethoraBit = {
         '<div style="' + label + '">Pass the phone to</div>' +
         '<div data-el="cover-name" style="font-size:46px;font-weight:900;line-height:1.04;' +
           'margin:5px 0 4px;letter-spacing:-0.02em;"></div>' +
-        '<div style="font-size:13px;opacity:0.55;">and nobody else looks</div>' +
+        '<div style="font-size:13px;opacity:0.72;">and nobody else looks</div>' +
         '<div style="height:1px;width:120px;background:rgba(227,182,87,0.28);margin:20px 0;"></div>' +
         '<div style="' + label + 'font-size:10px;">You must claim</div>' +
         '<div data-el="cover-claim" style="font-size:31px;font-weight:900;letter-spacing:0.02em;' +
@@ -2389,12 +2407,12 @@ window.plethoraBit = {
         // how brazen to be. Without them the handover screen is a dead beat.
         '<div data-el="cover-table" style="display:flex;flex-wrap:wrap;gap:7px;' +
           'justify-content:center;margin-top:22px;max-width:300px;"></div>' +
-        '<div data-el="cover-pile" style="font-size:11.5px;opacity:0.48;margin-top:13px;' +
+        '<div data-el="cover-pile" style="font-size:11.5px;opacity:0.66;margin-top:13px;' +
           'letter-spacing:0.10em;"></div>' +
         '<div style="width:100%;max-width:290px;">' +
           '<button data-el="cover-btn" style="' + bigBtn("#fff", "#1a0a03") + 'margin-top:26px;"></button>' +
         '</div>' +
-        '<div style="font-size:12px;opacity:0.40;margin-top:14px;line-height:1.5;">' +
+        '<div style="font-size:12px;opacity:0.62;margin-top:14px;line-height:1.5;">' +
           'Only you should see the next screen.<br>It covers itself again the moment you play.</div>' +
       '</div>' +
 
@@ -2412,15 +2430,15 @@ window.plethoraBit = {
           '<div style="' + label + 'font-size:9.5px;">Hand over</div>' +
           '<div data-el="over-mirror-name" style="font-size:24px;font-weight:900;margin-top:2px;' +
             'letter-spacing:-0.02em;line-height:1.15;"></div>' +
-          '<div data-el="over-mirror-sub" style="font-size:11px;opacity:0.55;margin-top:3px;"></div>' +
+          '<div data-el="over-mirror-sub" style="font-size:11px;opacity:0.72;margin-top:3px;"></div>' +
         '</div>' +
         '<div style="' + panel + 'max-width:300px;padding:20px;">' +
           '<div style="' + label + '">Hand over</div>' +
           '<div data-el="over-name" style="font-size:34px;font-weight:900;margin-top:4px;' +
             'letter-spacing:-0.02em;line-height:1.1;"></div>' +
-          '<div data-el="over-sub" style="font-size:12.5px;opacity:0.56;margin-top:4px;"></div>' +
+          '<div data-el="over-sub" style="font-size:12.5px;opacity:0.72;margin-top:4px;"></div>' +
           '<div data-el="over-stats" style="display:flex;gap:7px;margin:16px 0 8px;"></div>' +
-          '<div style="font-size:10.5px;opacity:0.42;line-height:1.45;">The bluff run is the ' +
+          '<div style="font-size:10.5px;opacity:0.64;line-height:1.45;">The bluff run is the ' +
             'table’s: how many lies got past everybody before one was caught. It goes to the ' +
             'global board, and is never shown mid-game.</div>' +
           '<div style="height:1px;background:rgba(227,182,87,0.20);margin:14px 0 10px;"></div>' +
@@ -2442,11 +2460,11 @@ window.plethoraBit = {
           '<div data-el="wins" style="display:flex;gap:8px;margin:9px 0 18px;"></div>' +
           '<div style="' + label + '">Mark my real cards</div>' +
           '<div data-el="hints" style="display:flex;gap:8px;margin:9px 0 6px;"></div>' +
-          '<div style="font-size:11.5px;opacity:0.42;margin-bottom:16px;">A brass edge on the cards ' +
+          '<div style="font-size:11.5px;opacity:0.64;margin-bottom:16px;">A brass edge on the cards ' +
             'that really are the claimed rank. Only ever on your own screen.</div>' +
           '<div style="' + label + '">Players</div>' +
           '<div data-el="counts" style="display:flex;gap:8px;margin:9px 0 4px;"></div>' +
-          '<div style="font-size:12px;opacity:0.42;margin-top:8px;">Changes apply on the next deal.</div>' +
+          '<div style="font-size:12px;opacity:0.64;margin-top:8px;">Changes apply on the next deal.</div>' +
           '<button data-el="cogp-close" style="' + bigBtn(QUIET, CREAM, QUIET_EDGE) + 'margin-top:16px;">Done</button>' +
           '<button data-el="leave" style="' + bigBtn("rgba(255,90,83,0.16)", "#ff9b95", "rgba(255,90,83,0.42)") +
             'display:none;font-size:14px;">Leave this game</button>' +
@@ -2457,7 +2475,7 @@ window.plethoraBit = {
       '<div data-el="helpp" style="' + sheetCss + '">' +
         '<div style="' + panel + '">' +
           '<div style="font-size:19px;font-weight:800;margin-bottom:12px;">How to play</div>' +
-          '<ul style="font-size:13.5px;line-height:1.6;opacity:0.87;padding-left:18px;margin:0;">' +
+          '<ul style="font-size:13.5px;line-height:1.6;opacity:0.94;padding-left:18px;margin:0;">' +
             '<li style="margin-bottom:6px;">The whole deck is dealt out. Everybody holds their cards secretly.</li>' +
             '<li style="margin-bottom:6px;">The claim marches round in rank order — <b>Aces, Twos, Threes…</b> ' +
               'wrapping after Kings. It never waits for what you are holding.</li>' +
@@ -2718,7 +2736,7 @@ window.plethoraBit = {
       // DPR scale ctx.createCanvas2D() installed at boot is gone and every
       // following frame draws at 1:1 in physical pixels — the whole game
       // shrinks into the top-left corner. It has to be re-applied here.
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      gfx.setTransform(dpr, 0, 0, dpr, 0, 0);
       layout();
       bakeRoom();
       planHand();
