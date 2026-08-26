@@ -75,7 +75,14 @@ check(live, "the race started with four fingers already down");
 // --- the race. Crimson runs the shortest path every step; the other three are
 // steered every other tick so somebody actually wins. ---
 let planted = false;
-for (let step = 0; step < 90; step++) {
+// A stick that is already pointing the right way does not need to be pushed
+// there again, and every redundant fingerMove is a round trip. On SwiftShader
+// those round trips were costing more than the frames: the loop fell behind
+// the pegs, steered them with a stale direction, and jammed them into walls —
+// which read as "the race never finished" when the game was fine. Steered
+// attentively, a peg covers the 16 cells to the heart in about 16 seconds.
+const lastDir = [null, null, null, null];
+for (let step = 0; step < 800; step++) {
   const st = await bit.probe(() => {
     const m = window.__MAZE__;
     return { phase: m.phase, hints: [0, 1, 2, 3].map((i) => m.hint(i)), ps: m.players() };
@@ -87,7 +94,10 @@ for (let step = 0; step < 90; step++) {
 
   for (let i = 0; i < 4; i++) {
     const h = st.hints[i];
-    if (!h || (i > 0 && step % 2 === 1)) continue;   // handicap the field
+    if (!h || (i > 0 && step % 4 !== 0)) continue;   // handicap the field
+    const key = h.x + "," + h.y;
+    if (lastDir[i] === key) continue;
+    lastDir[i] = key;
     const z = zones[i];
     await bit.fingerMove(i + 1, z.x + h.x * z.r * 0.95, z.y + h.y * z.r * 0.95);
   }
@@ -118,10 +128,17 @@ for (let step = 0; step < 90; step++) {
     check(seats.size >= 3, "four simultaneous taps reached " + seats.size + " different seats");
     check(b >= 1, "at least one became a hedge (" + b + ") — outcomes: " + JSON.stringify(why));
     await bit.shot("maze-7-briars");
+    // The fingers go back down at the centre of their zones, which is no
+    // deflection at all — so the cached directions are now lies and every
+    // stick has to be pushed again from scratch.
     for (let i = 0; i < 4; i++) await bit.fingerDown(i + 1, zones[i].x, zones[i].y);
+    lastDir.fill(null);
   }
 
-  await bit.wait(240);
+  // Each steering update costs a round trip per finger, so the wait is kept
+  // short: the pegs move continuously between updates, and a long sleep just
+  // means steering them with a direction they have already outgrown.
+  await bit.wait(100);
 }
 
 // Every finger comes up before the end screen: a tap that reuses a touch id
