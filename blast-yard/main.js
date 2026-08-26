@@ -1324,7 +1324,7 @@ window.plethoraBit = {
           pillRow("rounds", ["2", "3", "5"], 84) +
           '<div style="position:absolute;left:16px;top:146px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
             'text-transform:lowercase;opacity:0.64;">Pace</div>' +
-          '<div style="position:absolute;left:16px;top:163px;font-size:10.5px;opacity:0.58;">' +
+          '<div style="position:absolute;left:16px;top:163px;font-size:10.5px;opacity:0.68;">' +
             'how soon the rim starts falling away</div>' +
           pillRow("pace", ["Chill", "Normal", "Frantic"], 182) +
           '<div style="position:absolute;left:16px;top:244px;font-size:11px;font-weight:800;letter-spacing:0.2em;' +
