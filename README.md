@@ -43,6 +43,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`skip-stop/`](skip-stop)               | Minimalist NYC subway map — race a local against an express and learn why it wins. |
 | [`pixel-fog/`](pixel-fog)               | Rub a living mosaic off nine San Francisco views to find a fact hidden in each. |
 | [`deep-pockets/`](deep-pockets)         | Digging game — mine ten strata to the core of the Earth, sell the loot, upgrade the shovel. |
+| [`galaxian/`](galaxian)                 | Namco's 1979 fixed shooter rebuilt whole — 46 aliens, convoy charges, the 800-point flagship. Ships as *Convoy Charge*. |
 
 ### Generative art set
 

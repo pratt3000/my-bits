@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Convoy Charge",
+  "description": "A faithful rebuild of the 1979 arcade fixed shooter. Forty-six aliens hang above you in a five-row convoy: thirty blue drones, eight purple emissaries, six red hornets and two flagships at the tip. They peel out of the rack and dive in swooping arcs while you slide along the bottom with exactly one missile allowed on screen. An alien is worth double once it leaves formation. A flagship charges with a hornet off each wingtip: shoot it for 300, or take both escorts down first and it is worth 800. Any flagship that reaches the bottom escapes and leads the next rack, up to four. Three galaxips, an extra at 7000, a scrolling colour starfield, and a global leaderboard.",
+  "tags": [
+    "arcade",
+    "game",
+    "shooter",
+    "shmup",
+    "retro",
+    "space",
+    "aliens",
+    "pixel-art",
+    "leaderboard",
+    "one-hand"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
