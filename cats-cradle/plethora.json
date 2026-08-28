@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Cat's Cradle",
+  "description": "The string game that only works if there are two of you — so here you play both parts. One loop of string held between four hands, and a sequence of figures handed back and forth: Opening A, Soldier's Bed, Candles, Manger, Diamonds, Cat's Eye. Pinch the glowing strand, carry it to the ring, and the figure passes to the other pair of hands. Pinch the wrong one and the whole thing falls out of the air, which is what happens in the real game too. The string is a single closed loop, pinned wherever it crosses a finger and simulated everywhere else, so it goes taut when pulled and sags when it is not.",
+  "tags": ["3d", "game", "physics", "skill", "art", "festival", "toy"],
+  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "figures": {
+        "label": "Figures Taken",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
