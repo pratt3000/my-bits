@@ -43,6 +43,19 @@ objects built to the `plethora-bit@2` agent contract.
 | [`skip-stop/`](skip-stop)               | Minimalist NYC subway map — race a local against an express and learn why it wins. |
 | [`pixel-fog/`](pixel-fog)               | Rub a living mosaic off nine San Francisco views to find a fact hidden in each. |
 | [`deep-pockets/`](deep-pockets)         | Digging game — mine ten strata to the core of the Earth, sell the loot, upgrade the shovel. |
+| [`reshmi-dor/`](reshmi-dor)             | Braid a rakhi out of silk — the real three-strand plait, solved in 3D. |
+| [`aarti/`](aarti)                       | Light the diya and circle it. Hurry and it blows out; finish and your trail becomes a mandala. |
+| [`bandhan-tree/`](bandhan-tree)         | A tree at dusk carrying everybody's threads — tie one, read the rest. |
+
+### Rakshabandhan set
+
+`reshmi-dor`, `aarti` and `bandhan-tree` are three takes on one festival, and
+they follow the order of the ritual itself — **make the thread, bless it, tie
+it**. Deliberately drawn from three different families so no two feel alike: a
+craft toy driven by a rubbing gesture, a skill piece driven by a circling one,
+and a shared world driven by placing something and leaving it. Different silk,
+different fire, different wind; plucked strings, temple bells, and a tree full
+of chimes.
 
 ### Generative art set
 
@@ -103,6 +116,30 @@ is still scanned; and constructs that merely *look* exotic are usually fine if
 some already-uploaded bit in this repo uses them. Both
 [`pixel-fog/`](pixel-fog) and [`heartwood/`](heartwood#what-the-upload-validator-rejects)
 record how to bisect a rejection cheaply.
+
+### Rendering and audio gotchas
+
+Not validator rules — these are runtime traps that cost real time in the three
+Rakshabandhan bits, all of which look like art-direction failures until you find
+them:
+
+- **`THREE.Color.setHex()` already converts to the linear working space.** A
+  following `.convertSRGBToLinear()` converts twice and crushes saturated
+  colours to near-black. See [`reshmi-dor/`](reshmi-dor#two-things-that-cost-time-for-the-next-bit).
+- **`CanvasTexture` used as a colour map needs `colorSpace = SRGBColorSpace`.**
+  Left at the default it is treated as linear and every warm texture comes out
+  pale.
+- **`sheen: 1` swamps the base colour.** A bright `sheenColor` over a dark base
+  renders every palette the same warm gold.
+- **Vertex colours are linear**, so an on-screen flame orange is roughly
+  `(1.0, 0.15, 0.02)`, not `(1.0, 0.5, 0.2)`.
+- **A feedback reverb with two cross-fed delays has a loop gain of 2g**, so the
+  feedback gain has to stay under 0.5 or the network diverges — silently for
+  twenty seconds, then as a filter-instability warning. See
+  [`aarti/`](aarti#a-reverb-that-quietly-exploded).
+- **Particles that integrate their drift wander off** — and one that drifts
+  through the near plane fills the screen. See
+  [`bandhan-tree/`](bandhan-tree#one-worth-remembering).
 
 ## Publishing
 

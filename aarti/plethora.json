@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Aarti",
+  "description": "Light the lamp, then circle it. Press and hold to catch the wick, then carry a brass thali — diya, kumkum, rice and a rakhi on it — in slow circles with your finger. The plate has weight: it lags behind you and swings past. The flame leans away from where you are going, stretches when you hurry, and if you hurry too much it turns blue at the base and blows out. Eleven steady turns completes the aarti. All the while the flame lays down a trail of light, and at the end whatever your hand drew is mirrored eight ways into a mandala nobody else will draw. The longest unbroken aarti goes to the leaderboard.",
+  "tags": ["3d", "art", "ritual", "skill", "sensory", "relaxing", "festival", "light"],
+  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "steady": {
+        "label": "Longest Aarti",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

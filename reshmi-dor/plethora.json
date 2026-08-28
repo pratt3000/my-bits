@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Reshmi Dor",
+  "description": "Braid a rakhi out of silk. Rub the screen and three strands plait themselves into a cord — the real three-strand plait, solved in 3D, where the strand travelling inward always passes in front. Your hand sets the rhythm: rub slowly for a tight braid, quickly for a long, loose one. Change the silk mid-cord, thread beads, pearls, mirrors and ghungroo bells onto the crossings, then close the ring and tie it — the flower blooms, the tassels drop, and marigold petals fall. Every crossing plucks a string in Raga Desh, the monsoon raga of Shravan. The rakhis you tie are kept in a box you can come back to.",
+  "tags": ["3d", "art", "craft", "generative", "relaxing", "fidget", "music", "festival"],
+  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
+  "dependencies": ["three@0.164.1"]
+}
