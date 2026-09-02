@@ -2445,7 +2445,7 @@ window.plethoraBit = {
             <div class="ls-btn" data-act="again" style="flex:2;min-height:48px">HUNT AGAIN</div>
             <div class="ls-btn" data-act="title" style="flex:1">MENU</div>
           </div>
-          <div class="ls-dim" style="margin-top:10px;font-size:11px">score sent to the leaderboard</div>
+          ${run.score > 0 ? '<div class="ls-dim" style="margin-top:10px;font-size:11px">score sent to the leaderboard</div>' : ""}
         </div>`;
       bindScreen();
       H.hud.style.display = "none";
@@ -2550,6 +2550,9 @@ window.plethoraBit = {
 
     function endRun() {
       game.screen = "over";
+      player.scoped = false;
+      player.scopeT = 0;
+      player.holdingBreath = false;
       career.runs++;
       career.points += run.score;
       if (run.score > career.best) career.best = run.score;
@@ -2660,9 +2663,11 @@ window.plethoraBit = {
         flashTimer -= dt;
         if (flashTimer <= 0) H.flash.style.opacity = "0";
       }
-      H.scope.style.opacity = player.scopeT.toFixed(3);
-      drawReticle(player.scopeT > 0.5);
-      if (game.screen !== "play") { H.pops.innerHTML = ""; return; }
+      const playing = game.screen === "play";
+      H.scope.style.opacity = playing ? player.scopeT.toFixed(3) : "0";
+      H.ret.style.display = playing ? "" : "none";
+      if (playing) drawReticle(player.scopeT > 0.5);
+      if (!playing) { H.pops.innerHTML = ""; return; }
 
       hudTick -= dt;
       if (hudTick <= 0) {
