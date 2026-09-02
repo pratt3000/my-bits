@@ -149,7 +149,28 @@ Each was found by looking at a screenshot, not by reasoning about the code.
 
 ## Verified
 
-Driven headless in Chromium against a mock `ctx`: boots to a visible title
-before `ready`, the map picker and every HUD button respond to real pointer
-events, a hunt starts and fires, rounds are limited by cycle time, and the run
-plays out to the results screen with the score submitted.
+Driven headless in Chromium against a mock `ctx`. The scratch copy carries a
+read-only test hook; `main.js` never does.
+
+**13 assertions, all passing:**
+
+- boots to a visible title before `ready`; a hunt starts with a full magazine
+  and a 300-second clock
+- scoring is `value × zone × range` through the real hit path — a head shot on a
+  warthog at 300 m pays 25 × 3 × 1.55, and the head-shot and longest-shot
+  counters follow
+- a taken animal leaves the reserve
+- the cycle time genuinely blocks a second round
+- the clock runs out into the results screen, `complete` is reported, and the
+  scope is cleared rather than left drawn over the panel
+- a non-zero score reaches `ctx.memory.record("score").submit()` with the exact
+  value, and the career best and run count update
+- **a zero-score run is not submitted** — the results panel does not claim it was
+
+Separately, a full 300-second run was played end to end through the real
+pointer path: the map picker, START, SCOPE and FIRE all respond to synthetic
+pointer events, rounds are limited by cycle time, and the run reaches
+`complete` with no page errors.
+
+**Not verified:** never opened on a real phone. The touch layer is wired and
+sized for a thumb but has only met an emulated viewport.
