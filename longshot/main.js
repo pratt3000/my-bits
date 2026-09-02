@@ -2134,8 +2134,9 @@ window.plethoraBit = {
         }
       }
       // Scoping pulls the rifle back and centres it; recoil kicks it.
+      const restX = 0.107 * clamp(overlayCamera.aspect || 1, 0.4, 2.2);
       vmGroup.position.set(
-        lerp(vmRest.x, 0.0, p.scopeT),
+        lerp(restX, 0.0, p.scopeT),
         lerp(vmRest.y, -0.0165, p.scopeT) - p.recoil * 0.006,
         lerp(vmRest.z, -0.235, p.scopeT) + p.recoil * 0.016
       );
