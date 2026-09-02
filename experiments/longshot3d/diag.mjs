@@ -1,0 +1,28 @@
+import { chromium } from "/tmp/claude-0/-home-user-my-bits/1b040449-f8b6-5bc0-9de4-2b105cb7a462/scratchpad/node_modules/playwright/index.mjs";
+const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
+const p = await b.newPage({ viewport: { width: 900, height: 520 } });
+const logs = [];
+p.on("console", m => logs.push(m.type()[0] + ": " + m.text().slice(0, 200)));
+p.on("pageerror", e => logs.push("PAGEERROR: " + e.message + " | " + (e.stack||"").split("\n")[1]));
+await p.goto("http://127.0.0.1:5288/index.html?capture=1&lockstep=1&q=high&shot=hero_target");
+await p.waitForFunction(() => window.__READY__ === true || window.__BOOTFAIL__, null, { timeout: 60000 }).catch(()=>{});
+const info = await p.evaluate(() => {
+  const e = window.__ENGINE__;
+  const out = { hasEngine: !!e };
+  if (!e) return out;
+  out.sceneChildren = e.ctx.scene.children.map(c => c.type + (c.name ? "#"+c.name : "") + (c.visible?"":" [hidden]"));
+  out.overlayChildren = e.ctx.overlayScene.children.map(c => c.type);
+  out.cam = e.ctx.camera.position.toArray().map(v=>+v.toFixed(1));
+  out.camFar = e.ctx.camera.far;
+  out.bg = e.ctx.scene.background?.getHexString?.() ?? null;
+  out.fog = e.ctx.scene.fog ? { c: e.ctx.scene.fog.color.getHexString(), d: e.ctx.scene.fog.density } : null;
+  const w = e.registry.peek('world');
+  out.world = w ? { terrain: !!w.terrain, instanced: w.instanced?.length, groundAtCam: +w.heightAt(e.ctx.camera.position.x, e.ctx.camera.position.z).toFixed(1) } : null;
+  const a = e.registry.peek('assets');
+  out.assets = a ? { loaded: Object.keys(a.models).filter(k=>a.models[k]), failed: a.failed } : null;
+  out.boot = e.bootMarks;
+  return out;
+});
+console.log(JSON.stringify(info, null, 1));
+console.log("LOGS:\n" + logs.slice(0, 12).join("\n"));
+await b.close();

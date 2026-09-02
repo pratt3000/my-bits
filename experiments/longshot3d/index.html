@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Longshot</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  /* The four mobile defaults that eat a browser game, from the kit's example:
+     pull-to-refresh reloading mid-drag, text selection on a long press, the
+     grey tap flash, and the iOS callout menu. */
+  html, body {
+    width:100%; height:100%; overflow:hidden; background:#000;
+    overscroll-behavior:none;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+  }
+  /* 100dvh before 100vh: on iOS Safari 100vh is the height WITHOUT the URL
+     bar, so the bottom of the game hides under chrome the player cannot
+     scroll away. */
+  #game { display:block; width:100vw; height:100vh; height:100dvh; touch-action:none; cursor:crosshair; }
+  #ui {
+    position:fixed; inset:0; pointer-events:none;
+    padding: env(safe-area-inset-top,0px) env(safe-area-inset-right,0px)
+             env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);
+    font:13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color:#e6ecf3; text-shadow:0 1px 3px rgba(0,0,0,.85);
+  }
+  #boot {
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:#0b0f14; color:#8fa3b8; font:14px/1.6 ui-monospace,monospace; z-index:50;
+    text-align:center; padding:24px; white-space:pre-line;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<div id="boot">loading the reserve…</div>
+<script type="importmap">{"imports":{
+  "three":"/node_modules/three/build/three.module.js",
+  "three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

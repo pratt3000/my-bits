@@ -1,0 +1,87 @@
+<!doctype html><html><head><meta charset=utf-8><title>asset viewer</title>
+<style>html,body{margin:0;background:#12161c;overflow:hidden}canvas{display:block}
+#label{position:fixed;left:10px;top:8px;color:#c9d5e4;font:12px ui-monospace,monospace;white-space:pre;z-index:5;text-shadow:0 1px 2px #000}</style>
+</head><body><div id="label"></div>
+<script type="importmap">{"imports":{
+ "three":"/node_modules/three/build/three.module.js",
+ "three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const params = new URLSearchParams(location.search);
+const url = params.get("glb");
+const W = +(params.get("w") || 480), H = +(params.get("h") || 480);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W * 2, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b2029);
+// A neutral three-point rig, so what you see is the asset and not my lighting.
+const key = new THREE.DirectionalLight(0xfff2df, 3.0); key.position.set(4, 6, 5);
+key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.left = -3; key.shadow.camera.right = 3;
+key.shadow.camera.top = 3; key.shadow.camera.bottom = -3;
+const fill = new THREE.DirectionalLight(0xbcd4ff, 0.9); fill.position.set(-5, 2, -3);
+const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x3a3228, 0.7);
+scene.add(key, fill, hemi);
+
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(6, 48).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color: 0x2a3038, roughness: 1 }));
+floor.receiveShadow = true;
+scene.add(floor);
+
+const camA = new THREE.PerspectiveCamera(35, W / H, 0.01, 200);
+const camB = new THREE.PerspectiveCamera(35, W / H, 0.01, 200);
+
+const loader = new GLTFLoader();
+loader.load(url, (gltf) => {
+  const root = gltf.scene;
+  let tris = 0, meshes = 0;
+  const names = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++;
+    o.castShadow = true; o.receiveShadow = true;
+    const g = o.geometry;
+    tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    names.push(o.name || "(unnamed)");
+  });
+  // Normalise: Thrixel returns everything in roughly the same bounding box.
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const centre = box.getCenter(new THREE.Vector3());
+  const scale = 2.0 / Math.max(size.x, size.y, size.z);
+  root.scale.setScalar(scale);
+  root.position.sub(centre.multiplyScalar(scale));
+  const box2 = new THREE.Box3().setFromObject(root);
+  root.position.y -= box2.min.y;
+  scene.add(root);
+
+  const r = 4.2;
+  camA.position.set(r * 0.82, 1.5, r * 0.72); camA.lookAt(0, 0.9, 0);
+  camB.position.set(-r * 0.3, 0.75, -r * 0.95); camB.lookAt(0, 0.85, 0);
+
+  document.getElementById("label").textContent =
+    "meshes " + meshes + "   triangles " + Math.round(tris) +
+    "\nsize " + size.x.toFixed(2) + " x " + size.y.toFixed(2) + " x " + size.z.toFixed(2) +
+    "\nparts: " + names.slice(0, 14).join(", ") + (names.length > 14 ? " +" + (names.length - 14) : "");
+  window.__stats = { meshes, triangles: Math.round(tris), names, size: size.toArray() };
+
+  renderer.setScissorTest(true);
+  renderer.setViewport(0, 0, W, H); renderer.setScissor(0, 0, W, H); renderer.render(scene, camA);
+  renderer.setViewport(W, 0, W, H); renderer.setScissor(W, 0, W, H); renderer.render(scene, camB);
+  window.__ready = true;
+}, undefined, (err) => {
+  document.getElementById("label").textContent = "LOAD FAILED: " + err;
+  window.__ready = true; window.__stats = { error: String(err) };
+});
+</script></body></html>

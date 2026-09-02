@@ -1,0 +1,33 @@
+LONGSHOT — ART BIBLE (applies to every asset in this project)
+
+SETTING
+An East African high-veld game reserve at first light. Dry season.
+
+STYLE
+Stylised realism. Simplified planes and clear edges, not photoreal and not
+cartoon. Every asset must read at 400 metres through a rifle scope, so the
+silhouette carries the identity — fine filigree that disappears past 50 m is
+wasted geometry.
+
+PALETTE
+Sun-bleached ochre, dry-grass gold, olive-grey scrub, warm bone white, deep
+umber shadow. Cool teal appears only in sky and shadow. No saturated primaries.
+
+MATERIALS
+Matte and dusty throughout. No chrome, no gloss, no emissive, no glass unless
+the object is glass. A fine grit or dust pass over everything, heavier in
+crevices. Metal is blued or parkerised, never polished.
+
+SCALE
+Honest metric proportion. An adult cheetah is 1.2 m at the shoulder; a rifle is
+1.2 m long.
+
+TRIANGLE BUDGET
+Environment props under 4,000 triangles. Animals under 5,000. The player's
+weapon, which is on screen constantly, may go to 12,000.
+
+CONSTRUCTION
+Repeated surface features (scales, spots, tread, rivets, ribs) must be cut into
+the parent surface as ONE continuous mesh, never as separate blocks.
+Anything that has to move in the engine — a leg, a bolt, a magazine, a scope
+turret — must be its own named part.
