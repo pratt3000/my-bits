@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Longshot",
+  "description": "A first-person marksman hunt across three open 3D reserves. Your round takes time to arrive and falls on the way, so past the 200 m zero you hold over on the mil-dots and lead anything that runs. Animals notice you by how close you are, how fast you are moving and how badly the scrub is hiding you — crouch in a thicket and stop, and a cheetah at 200 m never knows. Four rifles trade magnification against cycle time and sway, from a light .308 to a 20x anti-materiel gun that wobbles like a gate in the wind. Score is species value times hit zone times range, so one head shot at 500 m beats ten easy ones. Nothing is downloaded: the terrain, the scrub, every animal and every sound is generated at boot.",
+  "tags": [
+    "3d",
+    "game",
+    "shooter",
+    "sniper",
+    "fps",
+    "safari",
+    "wildlife",
+    "exploration",
+    "leaderboard",
+    "one-hand"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

@@ -134,17 +134,17 @@ window.plethoraBit = {
     const PRESETS = {
       low: {
         maxPixelRatio: 1.6, renderScale: 0.85, terrainSeg: 128, viewDistance: 620,
-        grass: 1600, bush: 340, tree: 170, rock: 190, cloud: 26, mountainSeg: 40,
+        grass: 3200, bush: 440, tree: 210, rock: 230, cloud: 26, mountainSeg: 40,
         maxTargets: 18, fxParticles: 90, groundShadows: true
       },
       mid: {
         maxPixelRatio: 2, renderScale: 1, terrainSeg: 168, viewDistance: 760,
-        grass: 2600, bush: 460, tree: 240, rock: 260, cloud: 34, mountainSeg: 56,
+        grass: 5200, bush: 620, tree: 300, rock: 320, cloud: 34, mountainSeg: 56,
         maxTargets: 24, fxParticles: 140, groundShadows: true
       },
       high: {
         maxPixelRatio: 2, renderScale: 1, terrainSeg: 208, viewDistance: 900,
-        grass: 4200, bush: 620, tree: 320, rock: 340, cloud: 44, mountainSeg: 72,
+        grass: 7000, bush: 780, tree: 380, rock: 400, cloud: 44, mountainSeg: 72,
         maxTargets: 30, fxParticles: 200, groundShadows: true
       }
     };
@@ -172,7 +172,7 @@ window.plethoraBit = {
         id: "savanna",
         name: "Amber Savanna",
         blurb: "Dawn on the flats. Long sightlines, thin cover.",
-        sun: { az: 118, el: 11, color: 0xffd9a0, intensity: 2.5 },
+        sun: { az: 118, el: 26, color: 0xffdcaa, intensity: 3.3 },
         sky: { zenith: 0x2f6ea8, mid: 0x8fb8d8, horizon: 0xf6c88a, haze: 0xe8bd8c },
         ground: { grass: 0xb59a52, dry: 0xd8bd76, dirt: 0x8f7040, rock: 0x8a8378 },
         foliage: { leafA: 0x6f7f3e, leafB: 0x94a052, bark: 0x584634, scrub: 0x8d8a4b },
@@ -186,7 +186,7 @@ window.plethoraBit = {
         id: "delta",
         name: "Green Delta",
         blurb: "Midday wetland. Thick cover, animals gather at water.",
-        sun: { az: 62, el: 58, color: 0xfff4dc, intensity: 3.1 },
+        sun: { az: 62, el: 55, color: 0xfff4dc, intensity: 3.4 },
         sky: { zenith: 0x2a6fc4, mid: 0x7fb0e2, horizon: 0xcfe4f2, haze: 0xbcd8e8 },
         ground: { grass: 0x5d8a3c, dry: 0x8fa74c, dirt: 0x6b5838, rock: 0x7d8378 },
         foliage: { leafA: 0x3f6f2e, leafB: 0x5c8f3c, bark: 0x4a3d2c, scrub: 0x4f7734 },
@@ -200,7 +200,7 @@ window.plethoraBit = {
         id: "highlands",
         name: "Cold Highlands",
         blurb: "Dusk in the hills. Steep ground, long range, low light.",
-        sun: { az: 250, el: 7, color: 0xd8b0ff, intensity: 1.7 },
+        sun: { az: 250, el: 19, color: 0xd9b8f0, intensity: 2.6 },
         sky: { zenith: 0x1b2a52, mid: 0x4a5b8c, horizon: 0xc98fa0, haze: 0x8f8ab0 },
         ground: { grass: 0x5d6a55, dry: 0x7a7a62, dirt: 0x54503f, rock: 0x77787c },
         foliage: { leafA: 0x3c5142, leafB: 0x4f6650, bark: 0x3d3630, scrub: 0x55604c },
@@ -352,7 +352,7 @@ window.plethoraBit = {
     renderer.setSize(ctx.width, ctx.height, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.15;
     renderer.shadowMap.enabled = false;   // ground decals do the grounding instead
     renderer.autoClear = true;
 
@@ -363,6 +363,8 @@ window.plethoraBit = {
 
     const camera = new THREE.PerspectiveCamera(62, ctx.width / Math.max(1, ctx.height), 0.25, 4000);
     const overlayCamera = new THREE.PerspectiveCamera(52, camera.aspect, 0.01, 12);
+    // The camera must be in the scene graph for its children to be rendered.
+    overlayScene.add(overlayCamera);
 
     S = {
       v1: new THREE.Vector3(), v2: new THREE.Vector3(), v3: new THREE.Vector3(),
@@ -376,7 +378,7 @@ window.plethoraBit = {
     // Fixed light rig: one sun, one sky/ground bounce, one warm rim. Never
     // added to or removed from, only recoloured per map.
     const sun = new THREE.DirectionalLight(0xffffff, 2.4);
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x404030, 0.9);
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x404030, 1.35);
     const rim = new THREE.DirectionalLight(0xffffff, 0.35);
     scene.add(sun, hemi, rim);
     const overlaySun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -474,15 +476,20 @@ window.plethoraBit = {
         pos.setY(i, h);
         // Patchiness first, then slope, then altitude — in that order the
         // rock reads as exposed stone rather than a colour ramp.
-        const patch = noise.fbm(x * 0.021, z * 0.021, 3, 2.1, 0.55) * 0.5 + 0.5;
-        col.copy(cGrass).lerp(cDry, clamp(patch * 1.25, 0, 1));
+        const damp = clamp(1 - (h + 8) / (map.relief.amp * 2.4), 0, 1);
+        const patch = noise.fbm(x * 0.014, z * 0.014, 4, 2.1, 0.55) * 0.5 + 0.5;
+        col.copy(cDry).lerp(cGrass, clamp(damp * 0.85 + patch * 0.5 - 0.18, 0, 1));
+        const bare = noise.fbm(x * 0.031 + 210, z * 0.031 - 88, 3, 2.2, 0.5) * 0.5 + 0.5;
+        col.lerp(cDirt, clamp((bare - 0.62) * 2.6, 0, 1) * 0.7);
+        const mottle = noise.fbm(x * 0.0055, z * 0.0055, 2, 2.1, 0.5);
+        col.multiplyScalar(1 + mottle * 0.16);
         const s = slopeAt(x, z);
         if (s > 0.22) col.lerp(cDirt, clamp((s - 0.22) / 0.3, 0, 1));
         if (s > 0.46) col.lerp(cRock, clamp((s - 0.46) / 0.34, 0, 1));
         const alt = clamp((h + 8) / (map.relief.amp * 2.2), 0, 1);
         col.lerp(cRock, clamp((alt - 0.72) * 2.2, 0, 1) * 0.55);
         // A little value noise so flat ground is never one solid colour.
-        const g = 0.93 + noise.noise2(x * 0.09, z * 0.09) * 0.09;
+        const g = 0.90 + noise.noise2(x * 0.09, z * 0.09) * 0.14;
         colors[i * 3] = col.r * g;
         colors[i * 3 + 1] = col.g * g;
         colors[i * 3 + 2] = col.b * g;
@@ -552,33 +559,52 @@ window.plethoraBit = {
     }
 
     function buildMountains() {
-      // One ring of peaks as a single geometry. Vertex-coloured toward the
-      // haze so the fog does most of the work and the silhouette does the rest.
-      const seg = q.mountainSeg;
-      const verts = [];
-      const cols = [];
-      const cRock = new THREE.Color(map.ground.rock);
-      const cHaze = new THREE.Color(map.sky.haze);
-      const inner = WORLD * 0.62, outer = WORLD * 1.35;
-      for (let i = 0; i < seg; i++) {
-        const a0 = (i / seg) * TAU, a1 = ((i + 1) / seg) * TAU;
-        const am = (a0 + a1) * 0.5;
-        const r = inner + noise.noise2(Math.cos(am) * 3.1, Math.sin(am) * 3.1) * (outer - inner) * 0.35;
-        const hPeak = 60 + (noise.fbm(Math.cos(am) * 2.4, Math.sin(am) * 2.4, 3, 2.1, 0.55) * 0.5 + 0.5) * 190;
-        const x0 = Math.cos(a0) * r, z0 = Math.sin(a0) * r;
-        const x1 = Math.cos(a1) * r, z1 = Math.sin(a1) * r;
-        const xm = Math.cos(am) * r * 0.98, zm = Math.sin(am) * r * 0.98;
-        verts.push(x0, -20, z0, x1, -20, z1, xm, hPeak, zm);
-        // The peak sits further into the haze than its base.
-        const base = S.c1.copy(cRock).lerp(cHaze, 0.55);
-        const tip = S.c2.copy(cRock).lerp(cHaze, 0.82);
-        cols.push(base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b);
+      // A continuous ridgeline, not a ring of cones: peaks share shoulders,
+      // which is the whole difference between a mountain range and traffic
+      // furniture. Two layers, the near one occluding the far one, because
+      // that overlap is what reads as depth.
+      const SEG = 220;
+      const cRock = new THREE.Color(map.ground.rock).lerp(new THREE.Color(0x5d6472), 0.55);
+      const cFar = new THREE.Color(map.sky.mid).lerp(new THREE.Color(map.sky.haze), 0.5);
+      const tint = new THREE.Color();
+      const verts = [], cols = [];
+      for (let layer = 0; layer < 2; layer++) {
+        const radius = layer === 0 ? WORLD * 0.86 : WORLD * 0.78;
+        const hazeMix = layer === 0 ? 0.62 : 0.36;
+        const scale = layer === 0 ? 1 : 0.7;
+        const phase = layer * 3.7 + game.mapIndex * 1.9;
+        const ridge = new Float32Array(SEG + 1);
+        for (let i = 0; i <= SEG; i++) {
+          const a = (i / SEG) * TAU;
+          // Three incommensurate sines: a skyline that never visibly repeats,
+          // and no noise lookup per vertex.
+          // Abs() on the higher terms turns rolling swells into ridges with
+          // real crests, which is what separates a mountain from a dune.
+          const h = 0.42 + 0.26 * Math.sin(a * 3 + phase)
+                         + 0.30 * Math.abs(Math.sin(a * 6.3 + phase * 2.1))
+                         + 0.20 * Math.abs(Math.sin(a * 11.7 + phase * 0.6))
+                         + 0.10 * Math.abs(Math.sin(a * 21.1 + phase * 3.3));
+          ridge[i] = Math.max(26, h * (map.relief.amp * 7 + 120) * scale);
+        }
+        ridge[SEG] = ridge[0];
+        for (let i = 0; i < SEG; i++) {
+          const a0 = (i / SEG) * TAU, a1 = ((i + 1) / SEG) * TAU;
+          const x0 = Math.cos(a0) * radius, z0 = Math.sin(a0) * radius;
+          const x1 = Math.cos(a1) * radius, z1 = Math.sin(a1) * radius;
+          verts.push(x0, -50, z0, x1, -50, z1, x1, ridge[i + 1], z1);
+          verts.push(x0, -50, z0, x1, ridge[i + 1], z1, x0, ridge[i], z0);
+          for (let k = 0; k < 6; k++) {
+            const isTop = (k === 2 || k === 4 || k === 5);
+            tint.copy(cRock).lerp(cFar, isTop ? Math.min(0.95, hazeMix + 0.09) : hazeMix);
+            cols.push(tint.r, tint.g, tint.b);
+          }
+        }
       }
       const geo = own(new THREE.BufferGeometry());
       geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
       geo.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
       geo.computeVertexNormals();
-      const mat = own(new THREE.MeshBasicMaterial({ vertexColors: true, fog: true }));
+      const mat = own(new THREE.MeshBasicMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide }));
       mountainMesh = new THREE.Mesh(geo, mat);
       mountainMesh.frustumCulled = false;
       worldGroup.add(mountainMesh);
@@ -751,7 +777,7 @@ window.plethoraBit = {
         if (!groundIsPlaceable(x, z)) continue;
         const s = 0.7 + rng() * 1.1;
         S.q1.setFromAxisAngle(S.up, rng() * TAU);
-        S.m1.compose(S.v3.set(x, heightAt(x, z) - 0.05, z), S.q1, S.v2.set(s, s * (0.8 + rng() * 0.9), s));
+        S.m1.compose(S.v3.set(x, heightAt(x, z) - 0.05, z), S.q1, S.v2.set(s * 0.9, s * (0.42 + rng() * 0.4), s * 0.9));
         grass.setMatrixAt(gi, S.m1);
         grass.setColorAt(gi, S.c1.copy(cA).lerp(cB, rng()).multiplyScalar(0.82 + rng() * 0.36));
         gi++;
@@ -1820,3 +1846,912 @@ window.plethoraBit = {
       spookWave += 0.8;
       syncHud();
     }
+
+    /* ================================================================ *
+     * 8. RUN STATE
+     * ================================================================ */
+    const game = {
+      screen: "title",       // title | brief | play | over | help
+      mapIndex: 0,
+      timer: 0,
+      started: false
+    };
+    const run = {
+      score: 0, shots: 0, hits: 0, headshots: 0, longest: 0,
+      trophies: 0, taken: {}, timeLeft: RUN_SECONDS
+    };
+    const career = { points: 0, best: 0, runs: 0 };
+
+    function resetRun() {
+      run.score = 0; run.shots = 0; run.hits = 0; run.headshots = 0;
+      run.longest = 0; run.trophies = 0; run.taken = {}; run.timeLeft = RUN_SECONDS;
+      player.shots = 0; player.hits = 0;
+    }
+
+    /* ================================================================ *
+     * 9. SOUND
+     * All synthesized: packaged assets are disabled, and a rifle is one
+     * of the few things a bit can make convincingly from an envelope —
+     * a crack, a body thump, and a tail that arrives late enough to sell
+     * the distance.
+     * ================================================================ */
+    let AC = null, master = null, noiseBuf = null;
+    let sfxOn = true, hapticsOn = true;
+
+    function audioReady() {
+      if (!ctx.capabilities || !ctx.capabilities.audio) return null;
+      if (AC) return AC;
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return null;
+        AC = new Ctor();
+        master = AC.createGain();
+        master.gain.value = 0.55;
+        master.connect(AC.destination);
+        const len = Math.floor(AC.sampleRate * 1.5);
+        noiseBuf = AC.createBuffer(1, len, AC.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        ctx.onDestroy(() => { try { AC && AC.close(); } catch (e) { /* gone */ } });
+      } catch (err) { AC = null; }
+      return AC;
+    }
+
+    function env(node, t0, peak, attack, decay) {
+      const g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + decay);
+      node.connect(g);
+      g.connect(master);
+      return g;
+    }
+
+    function tone(type, f0, f1, dur, peak, delay) {
+      if (!AC || !sfxOn) return;
+      const t0 = AC.currentTime + (delay || 0);
+      const o = AC.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(Math.max(20, f0), t0);
+      if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+      env(o, t0, peak, Math.min(0.008, dur * 0.2), dur);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+    }
+
+    function noiseBurst(dur, peak, type, f0, f1, q, delay) {
+      if (!AC || !sfxOn || !noiseBuf) return;
+      const t0 = AC.currentTime + (delay || 0);
+      const src = AC.createBufferSource();
+      src.buffer = noiseBuf; src.loop = true;
+      const filt = AC.createBiquadFilter();
+      filt.type = type || "bandpass";
+      filt.frequency.setValueAtTime(f0, t0);
+      if (f1 && f1 !== f0) filt.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t0 + dur);
+      filt.Q.value = q || 1;
+      src.connect(filt);
+      env(filt, t0, peak, 0.003, dur);
+      src.start(t0); src.stop(t0 + dur + 0.05);
+    }
+
+    const sfx = {
+      // Crack, then body, then a tail that returns off the far ground. The
+      // tail is what makes a rifle sound like it is outdoors.
+      shot(r) {
+        if (!AC || !sfxOn) return;
+        const heft = clamp(r.muzzle / 800, 0.85, 1.15) * (r.id === "anvil" ? 1.5 : 1);
+        noiseBurst(0.055, 0.55 * heft, "highpass", 3800, 1400, 0.7);
+        noiseBurst(0.3 * heft, 0.34, "lowpass", 700, 110, 1.1, 0.008);
+        tone("sawtooth", 150 * heft, 44, 0.28, 0.2, 0.006);
+        noiseBurst(0.9, 0.075, "lowpass", 420, 150, 0.8, 0.13);
+      },
+      dryFire() { noiseBurst(0.04, 0.14, "bandpass", 2600, 1500, 3); },
+      reload() {
+        noiseBurst(0.05, 0.13, "bandpass", 1700, 900, 4, 0.02);
+        noiseBurst(0.06, 0.16, "bandpass", 900, 500, 3, 0.42);
+        tone("square", 320, 200, 0.05, 0.06, 0.44);
+      },
+      swap() { noiseBurst(0.07, 0.11, "bandpass", 1200, 600, 3); },
+      // A hit heard from 400 m arrives after the crack. That delay is most of
+      // what tells you the shot connected.
+      hit(zone, dist) {
+        const delay = Math.min(1.3, dist / 340);
+        if (zone === "head") {
+          tone("triangle", 880, 420, 0.1, 0.16, delay);
+          noiseBurst(0.14, 0.2, "bandpass", 1500, 400, 1.4, delay);
+        } else {
+          noiseBurst(0.16, 0.16, "lowpass", 620, 150, 1.1, delay);
+        }
+      },
+      impactDirt(dist) { noiseBurst(0.12, 0.09, "lowpass", 900, 200, 1, Math.min(1.3, dist / 340)); },
+      spook() { noiseBurst(0.28, 0.07, "bandpass", 700, 1500, 2.2); },
+      start() { tone("triangle", 392, 587, 0.5, 0.12); tone("triangle", 587, 784, 0.4, 0.09, 0.2); },
+      end() { tone("triangle", 523, 392, 0.35, 0.11); tone("triangle", 392, 262, 0.6, 0.1, 0.28); },
+      tick() { tone("square", 1200, 1200, 0.04, 0.05); }
+    };
+
+    function haptic(kind) {
+      if (!hapticsOn) return;
+      try { ctx.platform.haptic(kind); } catch (err) { /* host without haptics */ }
+    }
+
+    /* ================================================================ *
+     * 10. FX
+     * Pooled and preallocated. A particle system that grows on demand is
+     * how you get an unattributable hitch every forty seconds.
+     * ================================================================ */
+    const MAX_PUFFS = 200;
+    let puffMesh = null, puffPool = null, puffNext = 0;
+    const pops = [];
+
+    function buildFx() {
+      const geo = own(new THREE.PlaneGeometry(1, 1));
+      const mat = own(new THREE.MeshBasicMaterial({
+        color: 0xd8c49a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide
+      }));
+      puffMesh = new THREE.InstancedMesh(geo, mat, MAX_PUFFS);
+      puffMesh.frustumCulled = false;
+      puffMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      scene.add(puffMesh);
+      puffPool = new Array(MAX_PUFFS);
+      for (let i = 0; i < MAX_PUFFS; i++) puffPool[i] = { t: 1e9, life: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, s: 1 };
+      S.m1.makeScale(0, 0, 0);
+      for (let i = 0; i < MAX_PUFFS; i++) puffMesh.setMatrixAt(i, S.m1);
+      puffMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    function impact(x, y, z, kind) {
+      const n = kind === "hit" ? 15 : 10;
+      const spd = kind === "hit" ? 5 : 3.2;
+      for (let i = 0; i < n; i++) {
+        const p = puffPool[puffNext];
+        puffNext = (puffNext + 1) % MAX_PUFFS;
+        p.t = 0;
+        p.life = kind === "hit" ? 0.5 : 0.9;
+        p.x = x; p.y = y; p.z = z;
+        p.vx = (rng() - 0.5) * spd;
+        p.vy = rng() * spd * 0.9 + 0.6;
+        p.vz = (rng() - 0.5) * spd;
+        p.s = (kind === "hit" ? 0.15 : 0.24) * (0.6 + rng());
+      }
+      if (kind !== "hit") {
+        const d = Math.hypot(x - camera.position.x, y - camera.position.y, z - camera.position.z);
+        sfx.impactDirt(d);
+      }
+      bus.emit("bullet:impact", { x, y, z, surface: kind });
+    }
+
+    function popScore(x, y, z, points, zone, name, dist) {
+      pops.push({ x, y, z, points, zone, name, dist, t: 0 });
+      if (pops.length > 6) pops.shift();
+    }
+
+    function updateFx(dt) {
+      let any = false;
+      for (let i = 0; i < MAX_PUFFS; i++) {
+        const p = puffPool[i];
+        if (p.t > p.life) continue;
+        p.t += dt;
+        p.vy -= 6 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+        const k = 1 - p.t / p.life;
+        if (k <= 0) {
+          S.m1.makeScale(0, 0, 0);
+        } else {
+          // Billboard, so a flat quad never shows its edge.
+          const s = p.s * (1.6 - k * 0.6);
+          S.m1.compose(S.v1.set(p.x, p.y, p.z), camera.quaternion, S.v2.set(s, s, s));
+          any = true;
+        }
+        puffMesh.setMatrixAt(i, S.m1);
+      }
+      puffMesh.instanceMatrix.needsUpdate = true;
+      puffMesh.visible = any;
+      for (let i = pops.length - 1; i >= 0; i--) {
+        pops[i].t += dt;
+        if (pops[i].t > 1.9) pops.splice(i, 1);
+      }
+    }
+
+    /* ================================================================ *
+     * 11. THE RIFLE IN YOUR HANDS
+     * Welded from boxes in the overlay scene, which has its own near
+     * plane so it can never clip into a rock.
+     * ================================================================ */
+    let vmGroup = null, vmFlash = null, vmBolt = null;
+
+    function buildViewmodel() {
+      if (vmGroup) { vmGroup.parent && vmGroup.parent.remove(vmGroup); vmGroup = null; }
+      const r = currentRifle();
+      const STOCK = 0x6a6a44, METAL = 0x2a2c30, DARK = 0x16181b;
+      const long = r.id === "anvil" ? 1.35 : r.id === "longbow" ? 1.2 : 1.0;
+      const parts = [
+        // Stock: butt, comb, thumbhole grip, fore-end.
+        { geo: BOX, scale: [0.075, 0.135, 0.30], pos: [0, -0.012, 0.28], color: STOCK },
+        { geo: BOX, scale: [0.07, 0.055, 0.22], pos: [0, 0.045, 0.12], color: STOCK },
+        { geo: BOX, scale: [0.065, 0.115, 0.075], pos: [0, -0.07, 0.13], color: STOCK },
+        { geo: BOX, scale: [0.072, 0.085, 0.34], pos: [0, -0.005, -0.16], color: STOCK },
+        // Receiver and barrel.
+        { geo: BOX, scale: [0.062, 0.07, 0.24], pos: [0, 0.028, 0.0], color: METAL },
+        { geo: CYL, scale: [0.019, 0.62 * long, 0.019], rot: [Math.PI / 2, 0, 0], pos: [0, 0.03, -0.30 - 0.31 * long], color: METAL },
+        { geo: CYL, scale: [0.026, 0.06, 0.026], rot: [Math.PI / 2, 0, 0], pos: [0, 0.03, -0.60 - 0.62 * long], color: DARK },
+        // Scope: tube, objective bell, ocular, two rings, turret.
+        { geo: CYL, scale: [0.021, 0.30, 0.021], rot: [Math.PI / 2, 0, 0], pos: [0, 0.105, -0.05], color: DARK },
+        { geo: CYL, scale: [0.030, 0.07, 0.030], rot: [Math.PI / 2, 0, 0], pos: [0, 0.105, -0.21], color: DARK },
+        { geo: CYL, scale: [0.026, 0.06, 0.026], rot: [Math.PI / 2, 0, 0], pos: [0, 0.105, 0.11], color: DARK },
+        { geo: BOX, scale: [0.03, 0.045, 0.022], pos: [0, 0.075, -0.11], color: METAL },
+        { geo: BOX, scale: [0.03, 0.045, 0.022], pos: [0, 0.075, 0.03], color: METAL },
+        { geo: CYL, scale: [0.016, 0.026, 0.016], pos: [0, 0.135, -0.04], color: METAL },
+        // Magazine and trigger guard.
+        { geo: BOX, scale: [0.038, 0.10, 0.075], pos: [0, -0.075, -0.01], color: DARK },
+        { geo: BOX, scale: [0.05, 0.012, 0.075], pos: [0, -0.038, 0.055], color: METAL },
+        // Bipod, folded down under the fore-end.
+        { geo: CYL, scale: [0.007, 0.18, 0.007], rot: [0.25, 0, 0.42], pos: [0.05, -0.12, -0.28], color: DARK },
+        { geo: CYL, scale: [0.007, 0.18, 0.007], rot: [0.25, 0, -0.42], pos: [-0.05, -0.12, -0.28], color: DARK }
+      ];
+      const geo = weld(parts);
+      const mat = own(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+      vmGroup = new THREE.Group();
+      vmGroup.add(new THREE.Mesh(geo, mat));
+      // Bolt handle, so cycling has something to move.
+      const boltGeo = weld([
+        { geo: CYL, scale: [0.008, 0.075, 0.008], rot: [0, 0, Math.PI / 2], pos: [0.045, 0.03, 0.05], color: METAL },
+        { geo: BOX, scale: [0.022, 0.022, 0.022], pos: [0.082, 0.03, 0.05], color: METAL }
+      ]);
+      vmBolt = new THREE.Mesh(boltGeo, mat);
+      vmGroup.add(vmBolt);
+      // Muzzle flash: additive, hidden until a shot.
+      const fg = own(new THREE.PlaneGeometry(0.22, 0.22));
+      const fm = own(new THREE.MeshBasicMaterial({
+        color: 0xffd88a, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending
+      }));
+      vmFlash = new THREE.Mesh(fg, fm);
+      vmFlash.position.set(0, 0.03, -0.62 - 0.62 * long);
+      vmFlash.visible = false;
+      vmGroup.add(vmFlash);
+
+      vmGroup.scale.setScalar(0.135);
+      vmGroup.position.set(0.052, -0.052, -0.30);
+      vmGroup.rotation.set(0.02, 0.07, 0.02);
+      // Child of the camera, so it is fixed in view space.
+      overlayCamera.add(vmGroup);
+      vmRest = vmGroup.position.clone();
+    }
+    let vmRest = null;
+    let flashT = 0;
+
+    function muzzleFlash() { flashT = 0.055; }
+
+    function updateViewmodel(dt) {
+      if (!vmGroup) return;
+      const p = player;
+      flashT = Math.max(0, flashT - dt);
+      if (vmFlash) {
+        vmFlash.visible = flashT > 0;
+        if (flashT > 0) {
+          const k = flashT / 0.055;
+          vmFlash.scale.setScalar(0.7 + k * 0.9);
+          vmFlash.quaternion.copy(overlayCamera.quaternion);
+        }
+      }
+      // Scoping pulls the rifle back and centres it; recoil kicks it.
+      vmGroup.position.set(
+        lerp(vmRest.x, 0.0, p.scopeT),
+        lerp(vmRest.y, -0.0165, p.scopeT) - p.recoil * 0.006,
+        lerp(vmRest.z, -0.235, p.scopeT) + p.recoil * 0.016
+      );
+      vmGroup.rotation.z = lerp(0.012, 0, p.scopeT);
+      // The bolt runs back and returns over the cycle time.
+      if (vmBolt) {
+        const r = currentRifle();
+        const k = r.cycle > 0.4 ? clamp(p.cycleT / r.cycle, 0, 1) : 0;
+        vmBolt.position.z = Math.sin(k * Math.PI) * 0.075;
+      }
+      vmGroup.visible = p.scopeT < 0.9;
+    }
+
+    /* ================================================================ *
+     * 12. HUD
+     * A DOM overlay, because a HUD wants real text at real sizes and a
+     * canvas one never quite gets there on a phone. Everything pressable
+     * is at least 44 CSS px, which is the floor for a thumb.
+     * ================================================================ */
+    const root = ctx.createRoot({ touchAction: "none" });
+    root.style.cssText = "position:absolute;inset:0;pointer-events:none;"
+      + "font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:#eef3f9;"
+      + "text-shadow:0 1px 3px rgba(0,0,0,.85);-webkit-user-select:none;user-select:none";
+
+    const sa = () => ctx.safeArea || { top: 0, bottom: 0, left: 0, right: 0 };
+
+    root.innerHTML = `
+      <style>
+        .ls-pad{position:absolute;inset:0}
+        .ls-btn{pointer-events:auto;min-width:44px;min-height:44px;display:flex;
+          align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.42);
+          border-radius:10px;background:rgba(10,14,20,.42);color:#eef3f9;font:600 12px/1 ui-monospace,monospace;
+          letter-spacing:.5px;padding:0 12px;backdrop-filter:blur(2px)}
+        .ls-btn:active{background:rgba(255,255,255,.24)}
+        .ls-btn.on{background:rgba(120,200,255,.30);border-color:#9fdcff}
+        .ls-big{font-size:23px;font-weight:600;letter-spacing:.4px}
+        .ls-dim{opacity:.62}
+        .ls-warn{color:#ffb457}
+        .ls-panel{pointer-events:auto;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+          width:min(430px,92%);max-height:88%;overflow:auto;background:rgba(9,13,19,.93);
+          border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:20px 22px}
+        .ls-h1{font-size:26px;font-weight:700;letter-spacing:2px;margin-bottom:2px}
+        .ls-row{display:flex;justify-content:space-between;gap:10px;margin:5px 0}
+        .ls-sep{height:1px;background:rgba(255,255,255,.15);margin:13px 0}
+        .ls-mapbtn{flex:1;text-align:center}
+        .ls-stick{position:absolute;width:104px;height:104px;margin:-52px 0 0 -52px;
+          border:1px solid rgba(255,255,255,.30);border-radius:50%;display:none;pointer-events:none}
+        .ls-nub{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
+          border-radius:50%;background:rgba(255,255,255,.24)}
+        .ls-pop{position:absolute;transform:translate(-50%,-50%);font-weight:600;white-space:nowrap;text-align:center}
+        .ls-scope{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0}
+        .ls-flash{position:absolute;left:50%;top:22%;transform:translateX(-50%);
+          background:rgba(9,13,19,.8);border-radius:8px;padding:7px 13px;opacity:0;transition:opacity .2s}
+      </style>
+      <div class="ls-pad">
+        <svg class="ls-scope" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs><radialGradient id="lsv"><stop offset="66%" stop-color="rgba(0,0,0,0)"/>
+          <stop offset="79%" stop-color="rgba(0,0,0,.9)"/><stop offset="100%" stop-color="#000"/></radialGradient></defs>
+          <rect width="100" height="100" fill="url(#lsv)"/>
+        </svg>
+        <svg id="lsret" width="220" height="220" viewBox="-110 -110 220 220"
+             style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)"></svg>
+        <div id="lsstick" class="ls-stick"><div class="ls-nub"></div></div>
+        <div id="lspops" class="ls-pad" style="overflow:hidden"></div>
+        <div id="lsflash" class="ls-flash"></div>
+        <div id="lshud" style="position:absolute;inset:0"></div>
+        <div id="lsscreen"></div>
+      </div>`;
+
+    const H = {
+      scope: root.querySelector(".ls-scope"),
+      ret: root.querySelector("#lsret"),
+      stick: root.querySelector("#lsstick"),
+      nub: root.querySelector("#lsstick .ls-nub"),
+      pops: root.querySelector("#lspops"),
+      flash: root.querySelector("#lsflash"),
+      hud: root.querySelector("#lshud"),
+      screen: root.querySelector("#lsscreen")
+    };
+
+    function showStick(x, y) {
+      H.stick.style.display = "block";
+      H.stick.style.left = x + "px";
+      H.stick.style.top = y + "px";
+      H.nub.style.transform = "translate(0,0)";
+    }
+    function moveStick(dx, dy) { H.nub.style.transform = `translate(${dx}px,${dy}px)`; }
+    function hideStick() { H.stick.style.display = "none"; }
+
+    let flashTimer = 0;
+    function flash(msg) {
+      H.flash.textContent = msg;
+      H.flash.style.opacity = "1";
+      flashTimer = 2.2;
+    }
+
+    let retScoped = null;
+    function drawReticle(scoped) {
+      if (retScoped === scoped) return;
+      retScoped = scoped;
+      if (scoped) {
+        // Mil-dots are the holdover marks you actually use past the zero.
+        let d = "";
+        for (let i = 1; i <= 5; i++) d += `<circle cx="0" cy="${i * 14}" r="1.6" fill="#111"/>`;
+        for (let i = 1; i <= 4; i++) d += `<circle cx="${i * 14}" cy="0" r="1.6" fill="#111"/><circle cx="${-i * 14}" cy="0" r="1.6" fill="#111"/>`;
+        H.ret.innerHTML = `<g stroke="#111" stroke-width="1.7" fill="none">
+          <line x1="-104" y1="0" x2="-9" y2="0"/><line x1="9" y1="0" x2="104" y2="0"/>
+          <line x1="0" y1="-104" x2="0" y2="-9"/><line x1="0" y1="9" x2="0" y2="104"/></g>
+          ${d}<circle cx="0" cy="0" r="1.2" fill="#c8332a"/>`;
+      } else {
+        H.ret.innerHTML = `<g stroke="rgba(255,255,255,.85)" stroke-width="1.7" fill="none">
+          <line x1="-15" y1="0" x2="-6" y2="0"/><line x1="6" y1="0" x2="15" y2="0"/>
+          <line x1="0" y1="-15" x2="0" y2="-6"/><line x1="0" y1="6" x2="0" y2="15"/></g>
+          <circle cx="0" cy="0" r="1" fill="rgba(255,255,255,.9)"/>`;
+      }
+    }
+
+    /** Range to whatever is under the crosshair — the number a marksman reads. */
+    function rangeUnderCrosshair() {
+      aimDirection(S.v4, true);
+      let t = 0;
+      for (let i = 0; i < 110; i++) {
+        t += 11;
+        const x = camera.position.x + S.v4.x * t;
+        const y = camera.position.y + S.v4.y * t;
+        const z = camera.position.z + S.v4.z * t;
+        if (y < heightAt(x, z)) return t;
+        if (t > 1200) break;
+      }
+      return null;
+    }
+
+    function fmtTime(s) {
+      const m = Math.floor(Math.max(0, s) / 60);
+      const ss = Math.floor(Math.max(0, s) % 60);
+      return m + ":" + (ss < 10 ? "0" : "") + ss;
+    }
+
+    let hudBuilt = false;
+    function buildHud() {
+      const i = sa();
+      H.hud.innerHTML = `
+        <div style="position:absolute;top:${i.top + 12}px;left:${i.left + 14}px">
+          <div class="ls-big" id="h_score">0</div>
+          <div class="ls-dim" id="h_acc">0 shots</div>
+        </div>
+        <div style="position:absolute;top:${i.top + 12}px;left:50%;transform:translateX(-50%);text-align:center">
+          <div class="ls-big" id="h_time">5:00</div>
+        </div>
+        <div style="position:absolute;top:${i.top + 12}px;right:${i.right + 14}px;text-align:right">
+          <div class="ls-big ls-dim" id="h_rng">—</div>
+          <div class="ls-dim" id="h_rifle"></div>
+        </div>
+        <div style="position:absolute;bottom:${i.bottom + 150}px;left:${i.left + 14}px">
+          <div class="ls-big" id="h_ammo">5 / 5</div>
+          <div class="ls-dim" style="font-size:11px">breath</div>
+          <div style="width:118px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;overflow:hidden;margin-top:4px">
+            <div id="h_breath" style="height:100%;width:100%;background:#7fd2ff"></div>
+          </div>
+        </div>
+        <div style="position:absolute;bottom:${i.bottom + 14}px;right:${i.right + 12}px;display:flex;gap:8px;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+            <div style="display:flex;gap:8px">
+              <div class="ls-btn" id="b_gun" style="font-size:11px">GUN</div>
+              <div class="ls-btn" id="b_reload" style="font-size:11px">RELOAD</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <div class="ls-btn" id="b_crouch" style="font-size:11px">CROUCH</div>
+              <div class="ls-btn" id="b_breath" style="font-size:11px">HOLD</div>
+              <div class="ls-btn" id="b_scope" style="font-size:11px">SCOPE</div>
+            </div>
+          </div>
+          <div class="ls-btn" id="b_fire" style="min-width:80px;min-height:80px;border-radius:50%">FIRE</div>
+        </div>`;
+      const on = (id, fn, hold) => {
+        const el = root.querySelector(id);
+        if (!el) return;
+        ctx.listen(el, "pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); firstGesture(); fn(true); }, { passive: false });
+        if (hold) {
+          ctx.listen(el, "pointerup", (e) => { e.preventDefault(); e.stopPropagation(); fn(false); }, { passive: false });
+          ctx.listen(el, "pointercancel", () => fn(false), { passive: true });
+          ctx.listen(el, "pointerleave", () => fn(false), { passive: true });
+        }
+      };
+      on("#b_fire", (d) => { if (d) { input.firePressed = true; input.fire = true; } else input.fire = false; }, true);
+      on("#b_scope", (d) => { if (d) { player.scoped = !player.scoped; root.querySelector("#b_scope").classList.toggle("on", player.scoped); } });
+      on("#b_crouch", (d) => { if (d) { player.wantCrouch = !player.wantCrouch; root.querySelector("#b_crouch").classList.toggle("on", player.wantCrouch); } });
+      on("#b_reload", (d) => { if (d) reload(); });
+      on("#b_gun", (d) => { if (d) cycleRifle(1); });
+      on("#b_breath", (d) => { player.holdingBreath = d; root.querySelector("#b_breath").classList.toggle("on", d); }, true);
+      hudBuilt = true;
+    }
+
+    function syncHud() {
+      if (!hudBuilt) return;
+      const r = currentRifle();
+      const q = (id) => root.querySelector(id);
+      const score = q("#h_score"), ammo = q("#h_ammo"), rifle = q("#h_rifle"), acc = q("#h_acc");
+      if (score) score.textContent = run.score.toLocaleString();
+      if (acc) {
+        const a = run.shots ? Math.round((run.hits / run.shots) * 100) : 0;
+        acc.textContent = `${run.shots} shots · ${a}% · best ${Math.round(run.longest)} m`;
+      }
+      if (ammo) {
+        ammo.textContent = player.reloadT > 0 ? "reloading" : `${player.ammo} / ${r.mag}`;
+        ammo.className = "ls-big" + (player.ammo === 0 && player.reloadT <= 0 ? " ls-warn" : "");
+      }
+      if (rifle) rifle.textContent = `${r.name} · ${r.zoom}x`;
+    }
+
+    /* ================================================================ *
+     * 13. SCREENS
+     * ================================================================ */
+    function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+    function bindScreen() {
+      for (const el of H.screen.querySelectorAll("[data-act]")) {
+        ctx.listen(el, "pointerdown", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          firstGesture();
+          const a = el.getAttribute("data-act");
+          if (a === "start") startRun();
+          else if (a === "help") showHelp();
+          else if (a === "title") showTitle();
+          else if (a === "again") startRun();
+          else if (a.indexOf("map:") === 0) { game.mapIndex = +a.slice(4); showTitle(); }
+          else if (a === "sfx") { sfxOn = !sfxOn; saveSettings(); showTitle(); }
+          else if (a === "hap") { hapticsOn = !hapticsOn; saveSettings(); showTitle(); }
+        }, { passive: false });
+      }
+    }
+
+    function showTitle() {
+      game.screen = "title";
+      const m = MAPS[game.mapIndex];
+      H.screen.innerHTML = `
+        <div class="ls-panel">
+          <div class="ls-h1">LONGSHOT</div>
+          <div class="ls-dim" style="margin-bottom:14px">A marksman hunt. Range is the whole game.</div>
+          <div style="display:flex;gap:7px;margin-bottom:10px">
+            ${MAPS.map((mm, i) => `<div class="ls-btn ls-mapbtn ${i === game.mapIndex ? "on" : ""}" data-act="map:${i}" style="font-size:11px">${esc(mm.name.split(" ")[0].toUpperCase())}</div>`).join("")}
+          </div>
+          <div class="ls-dim" style="margin-bottom:12px">${esc(m.blurb)}</div>
+          <div class="ls-sep"></div>
+          <div class="ls-row"><span class="ls-dim">best</span><span>${career.best.toLocaleString()}</span></div>
+          <div class="ls-row"><span class="ls-dim">career</span><span>${career.points.toLocaleString()} pts · ${career.runs} hunts</span></div>
+          <div class="ls-row"><span class="ls-dim">rifles</span><span>${RIFLES.filter((r, i) => rifleUnlocked(i)).length} of ${RIFLES.length}</span></div>
+          <div class="ls-sep"></div>
+          <div style="display:flex;gap:8px">
+            <div class="ls-btn" data-act="start" style="flex:2;min-height:48px">START HUNT</div>
+            <div class="ls-btn" data-act="help" style="flex:1">HOW</div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <div class="ls-btn ${sfxOn ? "on" : ""}" data-act="sfx" style="flex:1;font-size:11px">SOUND ${sfxOn ? "ON" : "OFF"}</div>
+            <div class="ls-btn ${hapticsOn ? "on" : ""}" data-act="hap" style="flex:1;font-size:11px">HAPTICS ${hapticsOn ? "ON" : "OFF"}</div>
+          </div>
+        </div>`;
+      bindScreen();
+      H.hud.style.display = "none";
+    }
+
+    function showHelp() {
+      game.screen = "help";
+      H.screen.innerHTML = `
+        <div class="ls-panel">
+          <div class="ls-h1" style="font-size:20px">HOW TO PLAY</div>
+          <div class="ls-sep"></div>
+          <div class="ls-row"><span class="ls-dim">move</span><span>drag the left of the screen</span></div>
+          <div class="ls-row"><span class="ls-dim">look</span><span>drag anywhere else</span></div>
+          <div class="ls-row"><span class="ls-dim">shoot</span><span>FIRE, or tap while scoped</span></div>
+          <div class="ls-sep"></div>
+          <div style="margin-bottom:8px">Your round takes time to arrive and falls on the way.
+          Rifles are zeroed at 200 m — past that, hold over using the mil-dots below the crosshair,
+          and lead anything that is running.</div>
+          <div style="margin-bottom:8px">Animals notice you by how close you are, how fast you are
+          moving, and how badly the scrub is hiding you. <b>Crouch in a bush and stop</b> and a cheetah
+          at 200 m will never know.</div>
+          <div style="margin-bottom:8px">HOLD steadies the sight for a few seconds. Score is species
+          value × hit zone × range, so a head shot at 500 m is worth more than ten easy ones.</div>
+          <div class="ls-sep"></div>
+          <div class="ls-row"><span class="ls-dim">warthog / zebra</span><span>25 · 50</span></div>
+          <div class="ls-row"><span class="ls-dim">gazelle / ostrich</span><span>120 · 150</span></div>
+          <div class="ls-row"><span class="ls-dim">leopard / cheetah</span><span>400 · 800</span></div>
+          <div class="ls-sep"></div>
+          <div class="ls-btn" data-act="title" style="min-height:46px">BACK</div>
+        </div>`;
+      bindScreen();
+    }
+
+    function showOver() {
+      game.screen = "over";
+      const acc = run.shots ? Math.round((run.hits / run.shots) * 100) : 0;
+      const taken = Object.keys(run.taken).map((k) => `${SPECIES[k].name} ×${run.taken[k]}`).join(", ") || "nothing";
+      H.screen.innerHTML = `
+        <div class="ls-panel">
+          <div class="ls-h1" style="font-size:22px">HUNT OVER</div>
+          <div class="ls-sep"></div>
+          <div class="ls-row"><span class="ls-dim">score</span><span class="ls-big">${run.score.toLocaleString()}</span></div>
+          <div class="ls-row"><span class="ls-dim">best</span><span>${career.best.toLocaleString()}</span></div>
+          <div class="ls-row"><span class="ls-dim">accuracy</span><span>${run.hits}/${run.shots} · ${acc}%</span></div>
+          <div class="ls-row"><span class="ls-dim">longest shot</span><span>${Math.round(run.longest)} m</span></div>
+          <div class="ls-row"><span class="ls-dim">head shots</span><span>${run.headshots}</span></div>
+          <div class="ls-row"><span class="ls-dim">trophies</span><span>${run.trophies}</span></div>
+          <div class="ls-sep"></div>
+          <div class="ls-dim" style="margin-bottom:12px">${esc(taken)}</div>
+          <div style="display:flex;gap:8px">
+            <div class="ls-btn" data-act="again" style="flex:2;min-height:48px">HUNT AGAIN</div>
+            <div class="ls-btn" data-act="title" style="flex:1">MENU</div>
+          </div>
+          <div class="ls-dim" style="margin-top:10px;font-size:11px">score sent to the leaderboard</div>
+        </div>`;
+      bindScreen();
+      H.hud.style.display = "none";
+    }
+
+    /* ================================================================ *
+     * 14. STORAGE AND LEADERBOARD
+     * ================================================================ */
+    const canStore = () => !!(ctx.capabilities && ctx.capabilities.storage);
+
+    async function loadSaved() {
+      if (!canStore()) return;
+      try {
+        const c = await ctx.storage.get("career");
+        if (c && typeof c === "object") {
+          career.points = Math.max(0, Math.floor(c.points || 0));
+          career.best = Math.max(0, Math.floor(c.best || 0));
+          career.runs = Math.max(0, Math.floor(c.runs || 0));
+        }
+      } catch (err) { /* denied */ }
+      try {
+        const s = await ctx.storage.get("settings");
+        if (s && typeof s === "object") {
+          if (typeof s.sfxOn === "boolean") sfxOn = s.sfxOn;
+          if (typeof s.hapticsOn === "boolean") hapticsOn = s.hapticsOn;
+          if (typeof s.lookSens === "number") lookSens = clamp(s.lookSens, 0.4, 2.5);
+          if (typeof s.mapIndex === "number") game.mapIndex = clamp(s.mapIndex | 0, 0, MAPS.length - 1);
+        }
+      } catch (err) { /* denied */ }
+    }
+    async function saveCareer() {
+      if (!canStore()) return;
+      try { await ctx.storage.set("career", { points: career.points, best: career.best, runs: career.runs }); }
+      catch (err) { /* denied */ }
+    }
+    async function saveSettings() {
+      if (!canStore()) return;
+      try { await ctx.storage.set("settings", { sfxOn, hapticsOn, lookSens, mapIndex: game.mapIndex }); }
+      catch (err) { /* denied */ }
+    }
+    async function submitScore() {
+      if (run.score <= 0) return;
+      try { await ctx.memory.record("score").submit(run.score, { label: run.score.toLocaleString() + " pts" }); }
+      catch (err) { ctx.platform.error({ where: "record_submit" }); }
+    }
+
+    /* ================================================================ *
+     * 15. RUN CONTROL
+     * ================================================================ */
+    let started = false;
+    function firstGesture() {
+      resumeAudioCtx();
+      if (!started) { started = true; ctx.platform.start(); }
+    }
+    function resumeAudioCtx() {
+      const ac = audioReady();
+      if (ac && ac.state === "suspended") ac.resume().catch(() => {});
+    }
+
+    function startRun() {
+      if (game.mapIndex !== builtMapIndex) buildWorld(game.mapIndex);
+      resetRun();
+      game.screen = "play";
+      player.rifleIdx = 0;
+      player.ammo = RIFLES[0].mag;
+      player.reloadT = 0; player.cycleT = 0;
+      player.scoped = false; player.scopeT = 0;
+      player.breath = 1; player.holdingBreath = false;
+      player.wantCrouch = false; player.crouch = 0;
+      buildViewmodel();
+      // Drop the player on the highest ground within reach, so the first thing
+      // they see is a view worth having a rifle for.
+      // A vantage, not the summit. The highest point on the map looks down at
+      // its own bare slope; a shoulder two thirds up sees across the flats.
+      const cand = [];
+      for (let i = 0; i < 420; i++) {
+        const a = (i / 420) * TAU * 9, r = 40 + (i / 420) * (PLAY_RADIUS - 80);
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        if (slopeAt(x, z) > 0.26) continue;
+        cand.push({ x, z, h: heightAt(x, z) });
+      }
+      cand.sort((p, q) => q.h - p.h);
+      const best = cand.length ? cand[Math.min(cand.length - 1, Math.floor(cand.length * 0.18))] : null;
+      player.x = best ? best.x : 0;
+      player.z = best ? best.z : 0;
+      player.y = heightAt(player.x, player.z);
+      player.yaw = Math.atan2(-player.x, -player.z);
+      player.pitch = -0.06;
+      for (const t of targets) despawn(t);
+      for (let i = 0; i < 7; i++) spawnHerd();
+      bullets.forEach((b) => { b.alive = false; });
+      pops.length = 0;
+      H.screen.innerHTML = "";
+      H.hud.style.display = "";
+      if (!hudBuilt) buildHud();
+      syncHud();
+      sfx.start();
+      ctx.platform.setScore(0);
+      ctx.platform.emit("run_start", { map: MAPS[game.mapIndex].id });
+      bus.emit("run:start", { map: MAPS[game.mapIndex].id });
+    }
+
+    function endRun() {
+      game.screen = "over";
+      career.runs++;
+      career.points += run.score;
+      if (run.score > career.best) career.best = run.score;
+      saveCareer();
+      saveSettings();
+      sfx.end();
+      ctx.platform.setScore(run.score);
+      ctx.platform.complete({ score: run.score, hits: run.hits, shots: run.shots, map: MAPS[game.mapIndex].id });
+      submitScore();
+      bus.emit("run:end", { score: run.score, hits: run.hits, shots: run.shots });
+      showOver();
+    }
+
+    /* ================================================================ *
+     * 16. WORLD ASSEMBLY
+     * Building a reserve is a few hundred milliseconds, so it happens on
+     * map change rather than every run. Everything it allocates is tracked
+     * and freed before the next one is built.
+     * ================================================================ */
+    let builtMapIndex = -1;
+    let worldOwned = [];
+
+    function disposeWorld() {
+      for (const o of worldOwned) { try { o.dispose(); } catch (e) { /* gone */ } }
+      worldOwned = [];
+      const kill = (m) => { if (m) { m.parent && m.parent.remove(m); } };
+      while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]);
+      kill(skyMesh); kill(sunDisc); kill(sunGlow);
+      skyMesh = sunDisc = sunGlow = null;
+      terrainMesh = waterMesh = mountainMesh = null;
+      if (cloudMesh) { scene.remove(cloudMesh); cloudMesh = null; }
+      props.length = 0;
+      covers.length = 0;
+      blockers.length = 0;
+      for (const t of targets) { t.group.parent && t.group.parent.remove(t.group); }
+      targets.length = 0;
+      if (animalShade) { animalShade.parent && animalShade.parent.remove(animalShade); animalShade = null; }
+      for (const k in speciesRig) delete speciesRig[k];
+    }
+
+    function buildWorld(index) {
+      if (builtMapIndex >= 0) disposeWorld();
+      game.mapIndex = clamp(index | 0, 0, MAPS.length - 1);
+      map = MAPS[game.mapIndex];
+      // One seed per reserve, so a map is the same reserve every time.
+      rng = makeRng(0x51f7 + game.mapIndex * 7919);
+      noise = makeNoise(rng);
+      const s = map.sun;
+      sunDirection(sunDir);
+      sun.position.copy(sunDir).multiplyScalar(300);
+      sun.color.setHex(s.color);
+      sun.intensity = s.intensity;
+      rim.position.set(-sunDir.x * 200, 80, -sunDir.z * 200);
+      rim.color.setHex(map.sky.mid);
+      hemi.color.setHex(map.sky.mid);
+      hemi.groundColor.setHex(map.ground.dirt);
+      overlaySun.color.setHex(s.color);
+      overlaySun.position.set(1.4, 2.2, 1.8);
+      overlayHemi.color.setHex(map.sky.mid);
+      scene.fog = new THREE.FogExp2(map.sky.haze, map.fogDensity);
+      scene.background = new THREE.Color(map.sky.horizon);
+
+      buildTerrain();
+      buildSky();
+      buildSun();
+      buildMountains();
+      buildClouds();
+      buildWater();
+      buildScatter();
+      buildTargetPool();
+      builtMapIndex = game.mapIndex;
+    }
+
+    /* ================================================================ *
+     * 17. FRAME
+     * ================================================================ */
+    let lastW = 0, lastH = 0;
+
+    function resize() {
+      lastW = ctx.width; lastH = ctx.height;
+      applyPixelRatio();
+      renderer.setSize(ctx.width, ctx.height, false);
+      camera.aspect = ctx.width / Math.max(1, ctx.height);
+      camera.updateProjectionMatrix();
+      overlayCamera.aspect = camera.aspect;
+      overlayCamera.updateProjectionMatrix();
+      if (hudBuilt) { buildHud(); syncHud(); }
+    }
+
+    function render() {
+      // autoClear must be OFF for the second pass, or render() clears the
+      // COLOUR buffer too and the world vanishes behind the rifle.
+      renderer.autoClear = true;
+      renderer.render(scene, camera);
+      if (game.screen === "play" && vmGroup && vmGroup.visible) {
+        renderer.autoClear = false;
+        renderer.clearDepth();
+        overlayCamera.quaternion.copy(camera.quaternion);
+        renderer.render(overlayScene, overlayCamera);
+        renderer.autoClear = true;
+      }
+    }
+
+    let hudTick = 0, lastWholeSecond = -1;
+
+    function updateHudLive(dt) {
+      if (flashTimer > 0) {
+        flashTimer -= dt;
+        if (flashTimer <= 0) H.flash.style.opacity = "0";
+      }
+      H.scope.style.opacity = player.scopeT.toFixed(3);
+      drawReticle(player.scopeT > 0.5);
+      if (game.screen !== "play") { H.pops.innerHTML = ""; return; }
+
+      hudTick -= dt;
+      if (hudTick <= 0) {
+        hudTick = 0.1;
+        const q = (id) => root.querySelector(id);
+        const br = q("#h_breath"); if (br) br.style.width = (player.breath * 100).toFixed(0) + "%";
+        const rg = q("#h_rng");
+        if (rg) {
+          const d = rangeUnderCrosshair();
+          rg.textContent = d ? `${Math.round(d / 5) * 5} m` : "—";
+        }
+        const tm = q("#h_time");
+        if (tm) {
+          tm.textContent = fmtTime(run.timeLeft);
+          tm.className = "ls-big" + (run.timeLeft < 30 ? " ls-warn" : "");
+        }
+      }
+      const whole = Math.ceil(run.timeLeft);
+      if (whole <= 5 && whole !== lastWholeSecond && whole > 0) { lastWholeSecond = whole; sfx.tick(); }
+
+      // Score pops, projected from world space each frame.
+      const host = H.pops;
+      while (host.childElementCount > pops.length) host.lastChild.remove();
+      while (host.childElementCount < pops.length) {
+        const d = document.createElement("div");
+        d.className = "ls-pop";
+        host.appendChild(d);
+      }
+      for (let i = 0; i < pops.length; i++) {
+        const o = pops[i], el = host.children[i];
+        S.v1.set(o.x, o.y + 0.4 + o.t * 0.8, o.z).project(camera);
+        if (S.v1.z > 1) { el.style.display = "none"; continue; }
+        el.style.display = "";
+        el.style.left = ((S.v1.x * 0.5 + 0.5) * 100) + "%";
+        el.style.top = ((-S.v1.y * 0.5 + 0.5) * 100) + "%";
+        el.style.opacity = String(Math.max(0, 1 - o.t / 1.9));
+        el.style.color = o.zone === "head" ? "#ffd86b" : "#eaf2fb";
+        el.innerHTML = `+${o.points}<br><span style="font-size:11px;opacity:.75">${esc(o.name)} · ${Math.round(o.dist)} m${o.zone === "head" ? " · HEAD" : ""}</span>`;
+      }
+    }
+
+    function frame(dtMs, timeMs) {
+      const dt = Math.min((dtMs || 16) / 1000, 0.05);
+      clock.dt = dt;
+      clock.t += dt;
+      clock.frame++;
+      if (ctx.width !== lastW || ctx.height !== lastH) resize();
+
+      if (game.screen === "play") {
+        updatePlayer(dt);
+        updateTargets(dt);
+        updateBullets(dt);
+        run.timeLeft -= dt;
+        if (run.timeLeft <= 0) { run.timeLeft = 0; endRun(); }
+      } else {
+        // Menus get a slow drift over the reserve rather than a frozen frame.
+        player.yaw += dt * 0.045;
+        updateTargets(dt);
+        applyCamera(dt);
+      }
+      updateFx(dt);
+      updateViewmodel(dt);
+      updateHudLive(dt);
+      render();
+    }
+
+    /* ================================================================ *
+     * 18. BOOT
+     * ================================================================ */
+    await loadSaved();
+    buildFx();
+    buildTracers();
+    buildWorld(game.mapIndex);
+
+    // Park the camera somewhere photogenic for the title screen.
+    player.x = 0; player.z = 0;
+    player.y = heightAt(0, 0);
+    player.yaw = 0.6;
+    player.pitch = -0.05;
+    for (let i = 0; i < 5; i++) spawnHerd();
+    resize();
+    buildViewmodel();
+    if (vmGroup) vmGroup.visible = false;
+    showTitle();
+    applyCamera(0);
+    render();
+
+    ctx.markVisualReady("title");
+    ctx.onFrame(frame);
+    ctx.platform.ready({ title: "Longshot" });
+  }
+};
