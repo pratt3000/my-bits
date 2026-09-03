@@ -67,6 +67,13 @@ shell around them:
   icon now.
 - **Layout follows the safe area** and recomputes on resize; the original sized
   itself once from `clientWidth`.
+- **Nothing chains onto a runtime call.** `ctx.storage.set()` hands back nothing
+  on a real device, so a `.catch()` on its result throws `undefined is not an
+  object` and takes the whole bit down. Writes go through the same
+  `fireAndForget` helper [`ripcord/`](../ripcord) uses. `sdk.md` documents
+  `storage.get`/`set` as plain calls, not promises — the harness mock had them
+  as `async`, which hid this until it ran on a phone; the mock is synchronous
+  now.
 
 Preset and octave are remembered in `ctx.storage` between sessions.
 

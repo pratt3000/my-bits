@@ -1080,18 +1080,33 @@ window.plethoraBit = {
     // ===================================================================== //
     // 5. Remember where they left it                                        //
     // ===================================================================== //
+    /**
+     * Fire a side-effect call that may be absent, may throw, and may or may
+     * not hand back a promise. On a real device ctx.storage.set() returns
+     * nothing, so a bare .catch() on the result takes the whole bit down --
+     * never assume a runtime call is thenable.
+     */
+    function fireAndForget(thunk) {
+      try {
+        const r = thunk();
+        if (r && typeof r.catch === "function") r.catch(() => {});
+      } catch (err) { /* not supported on this runtime */ }
+    }
+
+    const canStore = !!(ctx.capabilities && ctx.capabilities.storage && ctx.storage);
+
     let saveTimer = 0;
     function remember() {
-      if (!ctx.capabilities.storage) return;
-      if (saveTimer) return;
+      if (!canStore || saveTimer) return;
       saveTimer = ctx.timeout(() => {
         saveTimer = 0;
-        ctx.storage.set("waveflow", { mode: state.mode, pitch: state.pitch }).catch(() => {});
+        fireAndForget(() => ctx.storage.set("waveflow", { mode: state.mode, pitch: state.pitch }));
       }, 400);
     }
 
-    if (ctx.capabilities.storage) {
+    if (canStore) {
       try {
+        // await copes either way: a promise resolves, a plain value passes through
         const saved = await ctx.storage.get("waveflow");
         if (saved && typeof saved === "object") {
           if (MODES.some((m) => m.id === saved.mode)) state.mode = saved.mode;
