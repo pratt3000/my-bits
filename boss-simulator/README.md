@@ -1,87 +1,127 @@
 # Boss Simulator
 
-The usual arrangement, inverted: **you are the boss**, and the computer is the
-one dodging.
+You are the boss, and the computer is dodging.
 
-A target moves inside a white box and tries very hard to stay alive. You have
-nine attacks along the bottom and sixty seconds to take a thousand points off
-it. No cooldowns — press whatever you like as fast as you like.
+The usual arrangement, inverted. A target hovers inside a lit arena and tries
+very hard to stay alive; you have nine attacks along the bottom and sixty
+seconds to take a thousand hit points off it. No cooldowns — press whatever you
+like as fast as you like.
 
-What makes it a game rather than a button-masher is that the target is genuinely
-good. Every frame it scores sixteen directions for danger — the walls, every
-projectile in flight, where each of those will be fifteen frames from now, the
-footprint of anything telegraphed, plus a slight pull toward the middle so it
-does not hug a wall forever — and walks down the steepest gradient it finds.
+## The target is genuinely good
 
-Fire one bone and it simply steps aside. You have to close the exits: a wave to
-herd it, a void to take half the arena away, a freeze to pin it, then something
-heavy while it cannot move.
+This is the whole game, and it is the original's, line for line. Every frame the
+target scores sixteen directions for danger:
 
-## The nine
+- the walls, at 1000 per pixel of overrun;
+- every projectile in flight, and **where each one will be fifteen frames from
+  now**, which is what makes it duck rather than get clipped;
+- the footprint of anything telegraphed, weighted `25000 / (warning + 0.05)` so
+  an imminent zone is worth fleeing and a distant one is not;
+- a *gradient* inside a large zone, so it can see its way out of a void instead
+  of standing in the middle because every step looks equally bad;
+- a slight pull toward the centre, so it does not hug a wall forever.
 
-| | | |
-|---|---|---|
-| **Bone** one fast shot from a random edge | **Wave** a wall with the gap left exactly where it is standing | **Void** half the arena, 0.8s warning |
-| **Swarm** sixteen outward from the centre | **Beam** vertical, aimed where it was | **Pincer** walls from both sides, two gaps |
-| **Freeze** pins it 1.5s | **Grab** drags it to the centre | **Crush** the walls close in, 20 damage |
+Then it walks down the steepest gradient it finds. Fire one bone at it and it
+simply steps aside. You have to close the exits: a wave to herd it, a void to
+take half the arena away, a freeze to pin it, and then something heavy while it
+cannot move.
 
-The Wave is the joke worth noticing: the gap is placed at the target's current
-position, so fired alone it is guaranteed to miss. It only works as the second
-half of something else.
+## The arena
+
+The simulation still runs flat, in arena coordinates. What changed is that it is
+drawn through a **tilted orthographic camera** onto a real floor:
+
+- Walls with height, brightening and going red as the clock runs down.
+- A floor plate with a `fwidth`-based grid, a slow scan sweep, a damage flash,
+  and a vignette.
+- The target as a hovering icosahedron with a fresnel shell, a bright core, a
+  shadow on the plate, and a status ring while it is pinned or dragged.
+- Projectiles as rounded-rect glow plates flying at elevation, each in its
+  ability's colour — nine things happening at once are still nine legible
+  things.
+- Telegraphs as decals on the plate itself: the void hatches and marches, the
+  beam draws its stripe before it fires.
+- The crusher's slabs really do close in.
+
+Orthographic, not perspective, because the fit is then exact. The arena's corner
+box is projected into camera space and the frustum set to contain it, then grown
+so the whole thing sits inside the band the HUD and the keypad leave free — so
+the arena never creeps under the interface on a screen shape I did not
+anticipate.
+
+## Three things worth recording
+
+**The floor shader was reading local coordinates.** `varying vP = position.xy`
+on a unit `PlaneGeometry` never leaves `[-0.5, 0.5]` — the model matrix does the
+scaling, not the attribute. So the grid collapsed to nothing, and the scan
+sweep, keyed on a uv that was 0.5 everywhere, flashed the *entire floor* on and
+off. It reads `(modelMatrix * position).xz` now.
+
+**The floor decals never appeared, silently.** They sit 1.6 units above the
+plate, and the orthographic camera was built with `near = -4000, far = 4000`.
+1.6 units across an 8000-unit depth range is below the depth buffer's
+resolution, so the void's telegraph lost the comparison against the floor and
+was discarded — with nothing in the console to say so. Narrowing the range to
+±1600 fixed it with the depth test left on, which is better than the usual
+reflex of turning the depth test off.
+
+Both were found by screenshot. Neither threw.
+
+**A near wall at full height hides the target.** The crusher drives the target
+to the bottom edge of the arena, which from a tilted camera is exactly where the
+near wall stands. The near wall is a nine-unit lip now; the other three are full
+height.
+
+## Sound
+
+All generated — the original had five sound files and none could travel — but
+through one master chain rather than nine oscillators wired straight to the
+speakers: a generated convolution room (1.15 s, short and tight, because this is
+a fight and not a cathedral), a ping-pong delay whose feedback stays at 0.22
+because two cross-fed lines have a system gain of *2g*, and a limiter.
+
+One voice per ability, so you can hear which one landed: a bandpassed crack for
+a bone, a swept saw for a wave, a detuned sub for the void, five staggered blips
+for the swarm, a charge into a blast for the beam, an **inharmonic bell cluster**
+(2.76×, 5.4×, 8.93× — ratios a `PeriodicWave` cannot express) for the freeze, a
+downward glide for the grab, and a low impact for the crusher. Hits are pitched
+by how much they hurt. Everything is panned by where in the arena it happened.
+
+One noise buffer is generated once and looped. Making a fresh `AudioBuffer` per
+shot is how a game that fires forty times a second ends up allocating megabytes.
 
 ## Leaderboard
 
-**Fastest Clear** — `ctx.memory.record`, `duration_ms` ascending, formatted as a
-timer, daily / weekly / all-time, best-per-user. Added at the repository owner's
-request; only a win submits.
+`memory.record("clear_time")` — **Fastest Clear**, `duration_ms` ascending,
+daily / weekly / all-time, global and following, `best_per_user`. Submitted only
+on a win.
 
-## Divergence from the original
+## Divergence — assets
 
-**This is the most heavily changed port of the four, and the changes are
-visible.** The repository owner chose "all four, substitutes everywhere" knowing
-that.
+The original shipped sprite art for the target and its attacks, and twelve
+sound files. **A Plethora bit cannot package assets** (`maxAssets: 0`), so none
+of it could come across. The repository owner was asked before the port went
+ahead and chose to continue with substitutes rather than skip the bit; this
+section is that mark.
 
-The original drew four PNG sprites — a heart for the target, a bone projectile,
-a void hazard and a blaster head — through six `drawImage` calls. Plethora
-disables packaged assets (`maxAssets: 0`), so none of them could travel.
-
-Rather than redraw imitations of them, the stand-ins are **deliberately
-abstract**:
-
-| Original sprite | Stand-in |
-|---|---|
-| Heart sprite (the target) | A red diamond with a pale core, in the original's own `heart_col` |
-| Bone projectile | A white capsule with a soft glow |
-| Void hazard | A violet rectangle, outlined and pulsing during its warning |
-| Blaster head | An angular chevron emitter that fires a vertical gradient beam |
-
-Two reasons for abstract rather than lookalike. The honest one: a lookalike is
-still my drawing wearing the original's clothes, and geometry is at least
-plainly itself. The practical one: those sprites are Undertale's, and
-reproducing them by hand on another platform does not make that better.
-
-**Everything except the art is unchanged.** The dodging AI is carried over line
-for line, including the 1000× wall penalty, the `25000 / (warning + 0.05)` zone
-danger, the gradient that lets it see its way out of a large void, the
-fifteen-frame projectile prediction, the 0.1× centre attraction and the `-1`
-threshold that stops it twitching. All nine attack patterns keep their exact
-spawn positions, speeds, damage and timings. Sixty seconds, 1000 HP, 8.0 speed —
-the tune values as shipped.
-
-Sound: the original had five audio files with partial procedural fallbacks. All
-five are gone, so every noise here is generated — a filtered noise burst for a
-bone, a descending sawtooth sweep for the heavy attacks, a short click on a hit,
-a two-note rise on a win.
+What replaced them is not an imitation of the original art — it is geometry and
+shaders built for this rendering, so nothing here pretends to be a redrawing of
+something it has not seen.
 
 ## Verified
 
-`node _skills/sekai/harness/run.js boss-simulator sc-boss.json` — 528 frames,
-**no console or page errors**, `ready` / `start` / `interact` all fired.
-Screenshots confirm the arena and HP bar render, every attack type draws
-correctly (swarm, void warning and active, beam, both wave directions, freeze
-and crush), and the layout survives a resize.
+`node _skills/sekai/harness/run.js boss-simulator sc-boss2.json` — no console or
+page errors; `loadFont`, `ready`, `start`, `interact` and `haptic` all fire, and
+the arena, the swarm, the void telegraph, the beam, the pincer, the freeze and
+the crusher were each checked against a screenshot.
 
-The best evidence that the AI ported correctly: through a scripted burst of nine
-attacks the target finished on **1000/1000**. It dodged all of them. That is the
-game working as designed, not a collision bug — the screenshots show it sitting
-in the gap of a pincer wave, exactly where the danger function would put it.
+Audio was probed separately, since the harness cannot hear: all nine ability
+voices plus both hit tiers and both stingers build with **zero errors**,
+convolver and ping-pong live, context running at 44.1 kHz.
+
+## Provenance
+
+Ported from a standalone Sekai build, then rebuilt at the repository owner's
+request. The dodging AI, all nine attack patterns, the damage numbers, the
+economy of the sixty-second limit and the thousand hit points are the
+original's, unchanged. The arena, the synthesis and the leaderboard are new.

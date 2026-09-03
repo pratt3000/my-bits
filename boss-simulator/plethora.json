@@ -3,10 +3,23 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Boss Simulator",
-  "description": "The usual arrangement, inverted: you are the boss, and the computer is the one dodging. A target moves inside a white box and tries very hard to stay alive; you have nine attacks along the bottom and sixty seconds to take a thousand points off it. No cooldowns — press whatever you like as fast as you like. What makes it a game rather than a button-masher is that the target is genuinely good at this. Every frame it scores sixteen directions for danger — the walls, every projectile in flight, where each of those will be fifteen frames from now, the footprint of anything telegraphed — and walks down the steepest gradient it finds. Fire one bone and it simply steps aside. You have to close the exits: a wave to herd it, a void to take half the arena away, a freeze to pin it, then something heavy while it cannot move.",
-  "tags": ["game", "action", "arcade", "leaderboard", "boss", "reflex"],
-  "permissions": ["audio", "haptics", "storage"],
-  "dependencies": [],
+  "description": "The usual arrangement, inverted: you are the boss, and the computer is the one dodging. A target hovers inside a lit arena and tries very hard to stay alive; you have nine attacks along the bottom and sixty seconds to take a thousand points off it. No cooldowns \u2014 press whatever you like as fast as you like. What makes it a game rather than a button-masher is that the target is genuinely good at this. Every frame it scores sixteen directions for danger \u2014 the walls, every projectile in flight, where each of those will be fifteen frames from now, the footprint of anything telegraphed \u2014 and walks down the steepest gradient it finds. Fire one bone and it simply steps aside. You have to close the exits: a wave to herd it, a void to take half the arena away, a freeze to pin it, then something heavy while it cannot move. Drawn in three.js through a tilted camera, so the walls have height, the target casts a shadow, and the crusher's slabs really do close in.",
+  "tags": [
+    "game",
+    "action",
+    "arcade",
+    "3d",
+    "leaderboard",
+    "boss"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
   "memory": {
     "records": {
       "clear_time": {
@@ -14,8 +27,15 @@
         "valueType": "duration_ms",
         "order": "asc",
         "format": "timer",
-        "periods": ["daily", "weekly", "all_time"],
-        "scopes": ["global", "following"],
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
         "dedupe": "best_per_user"
       }
     }

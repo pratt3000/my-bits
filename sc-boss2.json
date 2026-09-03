@@ -1,0 +1,127 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "steps": [
+    {
+      "wait": 900
+    },
+    {
+      "screenshot": "01-start"
+    },
+    {
+      "tap": [
+        195,
+        470
+      ],
+      "after": 700
+    },
+    {
+      "screenshot": "02-arena"
+    },
+    {
+      "tap": [
+        70,
+        736
+      ],
+      "after": 320
+    },
+    {
+      "screenshot": "03-swarm"
+    },
+    {
+      "tap": [
+        320,
+        684
+      ],
+      "after": 420
+    },
+    {
+      "screenshot": "04-void-warning"
+    },
+    {
+      "wait": 460
+    },
+    {
+      "screenshot": "05-void-active"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "tap": [
+        195,
+        684
+      ],
+      "after": 260
+    },
+    {
+      "tap": [
+        320,
+        736
+      ],
+      "after": 300
+    },
+    {
+      "screenshot": "06-waves"
+    },
+    {
+      "tap": [
+        195,
+        736
+      ],
+      "after": 300
+    },
+    {
+      "screenshot": "07-beam-warning"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "screenshot": "08-beam"
+    },
+    {
+      "tap": [
+        70,
+        788
+      ],
+      "after": 260
+    },
+    {
+      "tap": [
+        320,
+        788
+      ],
+      "after": 820
+    },
+    {
+      "screenshot": "09-freeze-crush"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "10-crush-closed"
+    },
+    {
+      "resize": [
+        360,
+        780
+      ]
+    },
+    {
+      "screenshot": "11-resized"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "start"
+    },
+    {
+      "expectEvent": "interact"
+    }
+  ]
+}
