@@ -47,10 +47,40 @@ objects built to the `plethora-bit@2` agent contract.
 | [`first-rakhi/`](first-rakhi)           | Tear a strip from a woven sari, thread by thread, and bind a cut with it. |
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
-| [`symphony-sketchpad/`](symphony-sketchpad) | Draw a picture, then a scanline sweeps it and plays every point as music. |
-| [`sketch-racer/`](sketch-racer)         | Draw the longest road you dare, then drive it — length is the score. |
-| [`bounce-and-draw/`](bounce-and-draw)   | Draw bars, balls ricochet off them, every bounce pays. Buy better balls. |
+| [`symphony-sketchpad/`](symphony-sketchpad) | Draw a picture, then a plane of light sweeps it and plays every point as music. |
+| [`sketch-racer/`](sketch-racer)         | Draw the longest road you dare, then the camera falls out of the sky and drives it. |
+| [`bounce-and-draw/`](bounce-and-draw)   | Draw bars, balls ricochet off them, every bounce pays — and every bar is a note. |
 | [`boss-simulator/`](boss-simulator)     | You are the boss: nine attacks, sixty seconds, and an AI that really dodges. |
+
+### Sekai ports
+
+`symphony-sketchpad`, `sketch-racer`, `bounce-and-draw` and `boss-simulator`
+began as standalone Sekai builds and were then rebuilt to a higher standard at
+the repository owner's request. In each the *mechanic* is the original's,
+carried over unchanged — the pentatonic mapping and the scanline, the road
+metering and the length score, the physics and the economy, the sixteen-way
+danger gradient the target walks down. The rendering and the sound are new:
+three.js with a bright-pass → quarter-resolution blur → filmic composite in all
+four, and every voice through a generated convolution reverb, a ping-pong delay
+and a master limiter rather than an oscillator wired to `destination`.
+
+Four bugs from that work are worth knowing about before writing another bit,
+and all four were found by looking at screenshots rather than at the console —
+none of them threw:
+
+- An `OrthographicCamera` built with top above bottom (so screen coordinates map
+  straight through) **inverts triangle winding**. Any `FrontSide` material is
+  back-face culled into invisibility. Use `DoubleSide`.
+- `vUv.y` runs bottom-up in GL. A layout that is top-down needs `1.0 - vUv.y`
+  or it lands at the wrong end of the screen.
+- `varying = position.xy` on a unit `PlaneGeometry` never leaves `[-0.5, 0.5]`,
+  because the model matrix does the scaling. Read
+  `(modelMatrix * vec4(position,1.0)).xz` instead.
+- A decal a couple of units above a ground plane will lose the depth comparison
+  and vanish **silently** if the orthographic frustum is thousands of units
+  deep. Narrow the range before reaching for `depthTest: false`.
+
+`boss-simulator` also carries an asset divergence — see its README.
 
 ### Rakshabandhan set
 
