@@ -47,6 +47,10 @@ objects built to the `plethora-bit@2` agent contract.
 | [`first-rakhi/`](first-rakhi)           | Tear a strip from a woven sari, thread by thread, and bind a cut with it. |
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
+| [`symphony-sketchpad/`](symphony-sketchpad) | Draw a picture, then a scanline sweeps it and plays every point as music. |
+| [`sketch-racer/`](sketch-racer)         | Draw the longest road you dare, then drive it — length is the score. |
+| [`bounce-and-draw/`](bounce-and-draw)   | Draw bars, balls ricochet off them, every bounce pays. Buy better balls. |
+| [`boss-simulator/`](boss-simulator)     | You are the boss: nine attacks, sixty seconds, and an AI that really dodges. |
 
 ### Rakshabandhan set
 

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Bounce & Draw",
+  "description": "Draw the walls, let the balls pay you. A ball falls down a dark screen; draw a bar anywhere and it becomes something solid to ricochet off, and every bounce earns. Spend what you make on a better ball — brighter, faster, worth more per hit — or on another ball entirely, until the screen is full of neon rattling around whatever geometry you left lying about. The whole game is one honest idea: a bounce is worth money, so you are really building a machine that maximises bounces. A funnel. A staircase. A long shallow ramp that keeps a ball skimming instead of dropping. Every stroke is a straight bar rather than a freehand curve — press, drag to set the far end, release — and you can have a hundred at once.",
+  "tags": ["game", "physics", "idle", "drawing", "leaderboard", "casual"],
+  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "earnings": {
+        "label": "Peak Earnings",
+        "valueType": "number",
+        "order": "desc",
+        "format": "compact",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

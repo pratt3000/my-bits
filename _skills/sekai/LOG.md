@@ -58,3 +58,58 @@ as an empty button. `icons.js` now reports misses like this automatically.
 **Time sinks worth avoiding:** four pairing codes expired unapproved before one
 was minted while the creator was actually at their phone. Mint on their word,
 not in advance.
+
+---
+
+## 2026-09-03 — four at once: Symphony Sketchpad, Sketch Racer, Bounce & Draw, Boss Simulator
+
+Four Sekai links in one batch. `grab.py` handled all four; two lessons came out
+of the gate rather than the ports.
+
+**The blocker detector cried wolf twice, and was right twice.** Its first pass
+flagged `${img.value}` and `${avatar}` — template-literal placeholders inside
+Sekai's own editor scaffolding, not real files — and missed a `data:` URI
+because the negative lookahead sat before the optional quote rather than after
+it. It also looked for unquoted `images:` keys, and newer builds emit the
+`sekaiEditable` object as strict JSON with quoted keys, so the asset arrays did
+not match at all. Fixed all three. The lesson: **verify a blocker before taking
+it to the creator**. A false alarm spends their attention and teaches them to
+ignore the gate.
+
+**`grab.py` only fetches `index.html`.** Symphony Sketchpad is a newer "sandbox"
+build that loads four sibling files — `asset-urls.js` and three
+`js/sekai/bridge/*.js` modules — none of which came down. Its real config lived
+in a separate inline script, and its asset URLs in `SEKAI_ASSET_URLS`. Worth
+teaching grab.py to follow relative script srcs.
+
+**Asset slots can be declared but empty.** Symphony declared `bgm` and `clear`
+and both were `""` — declared with nothing in them. Always read the *values*,
+not just whether the arrays exist.
+
+| Bit | Real assets | Outcome |
+|---|---|---|
+| Symphony Sketchpad | none | faithful, nothing substituted |
+| Sketch Racer | 3 audio + remote avatars | bgm → `ctx.music`; its win sound was already procedural in the original |
+| Bounce & Draw | image + 12 tracks + 3 sfx | all three sfx already procedural; music picker now offers Plethora beds |
+| Boss Simulator | 4 sprites + 6 sfx | heaviest divergence: sprites → abstract shapes, all sound synthesised |
+
+**Two of the four had procedural fallbacks already.** Sekai games seem to ship
+a synthesised version of their sound effects and only play a file if one is
+attached. Check for that before deciding a sound is lost — in Sketch Racer and
+Bounce & Draw it meant the games sound exactly as they did.
+
+**Config values are not in the source.** Three of the four had `appState`
+fallbacks that differ from the tune values the build shipped, and Symphony's
+was catastrophic: source said `brushSize: 1000`, shipped value was `9`. Always
+read the tune block.
+
+**Where leaderboards fit.** Sketch Racer already had one through Sekai's
+`save_app_result`, so that was a translation. Bounce & Draw ranks *lifetime*
+earnings, not balance — a board that dropped when you bought an upgrade would
+be backwards — throttled to every $100 so an idle game does not hammer the
+channel. Symphony got none: a creative toy with no score, and a board would
+invent a goal it does not have.
+
+**The harness "nothing is animating" check fires on anything static at rest** —
+a sketchpad with nothing playing, a finished race on a result screen. Not a
+fault; do not add motion the original did not have to silence it.

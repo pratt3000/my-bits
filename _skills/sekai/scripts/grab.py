@@ -57,6 +57,26 @@ def find_game_url(html):
     return None
 
 
+def looks_like_a_file(u):
+    """
+    Is this reference an actual file, or scaffolding that merely looks like one?
+
+    Three things reach here that are not assets: data: URIs (inline already),
+    template placeholders like ${img.value} from the host's editor code, and
+    documentation stand-ins like url(...). Flagging any of them sends the
+    creator a decision they do not have to make, which is worse than useless -
+    it teaches them the gate is noise.
+    """
+    u = u.strip()
+    if not u or u.startswith("data:"):
+        return False
+    if "${" in u or "{{" in u or "<" in u:
+        return False
+    if not re.search(r"[A-Za-z0-9]", u.replace("...", "")):
+        return False
+    return "/" in u or re.search(r"\.[A-Za-z0-9]{2,5}$", u) is not None
+
+
 def find_blockers(html, game, markup):
     """
     Things that make a faithful port impossible, as opposed to merely laborious.
@@ -74,19 +94,26 @@ def find_blockers(html, game, markup):
     # Packaged assets are disabled outright (maxAssets: 0), so any real file the
     # game ships — an image, a sample, a font — has nowhere to live in a bit.
     for cat in ("images", "videos", "music", "sfx", "fonts", "models", "voices"):
-        m = re.search(cat + r"\s*:\s*\[(.*?)\]", game, re.S)
-        if m and m.group(1).strip():
-            n = m.group(1).count("{") or 1
-            hard.append(("%d %s in the asset manifest" % (n, cat),
+        m = re.search(r'"?%s"?\s*:\s*\[(.*?)\]' % cat, html, re.S)
+        if not m or not m.group(1).strip():
+            continue
+        # A slot can be declared with nothing in it. Only entries that carry a
+        # real value are assets; the rest are empty shelves.
+        filled = [v for v in re.findall(r'"value"\s*:\s*"([^"]*)"', m.group(1)) if v.strip()]
+        if filled:
+            hard.append(("%d %s in the asset manifest (e.g. %s)"
+                         % (len(filled), cat, filled[0][:48]),
                          "packaged assets are disabled (maxAssets: 0)"))
 
-    media = re.findall(r"<(?:img|audio|video|source)[^>]*src=\"(?!data:)([^\"]+)\"", html)
+    media = [u for u in re.findall(r"<(?:img|audio|video|source)[^>]*src=\"([^\"]+)\"", html)
+             if looks_like_a_file(u)]
     if media:
         hard.append(("%d media file(s) referenced in markup: %s" %
                      (len(media), ", ".join(sorted(set(media))[:3])),
                      "no packaged assets and no network egress"))
 
-    css_urls = [u for u in re.findall(r"url\(\s*['\"]?(?!data:)([^)'\"]+)", html)]
+    css_urls = [u for u in re.findall(r"url\(\s*['\"]?([^)'\"]+)", html)
+                if looks_like_a_file(u)]
     if css_urls:
         hard.append(("%d file(s) referenced from CSS: %s" %
                      (len(css_urls), ", ".join(sorted(set(css_urls))[:3])),
@@ -166,6 +193,23 @@ def main():
     if styles:
         open(os.path.join(out, "styles.css"), "w", encoding="utf-8").write(
             "\n".join(s.strip() for s in styles) + "\n")
+
+    # Sibling files, if the build is split across several. The asset map in
+    # particular lives outside index.html on newer sandbox builds.
+    siblings = [u for u in external if u.startswith("./") or not re.match(r"^[a-z]+:", u)]
+    if siblings:
+        base = game_url.rsplit("/", 1)[0]
+        sib_dir = os.path.join(out, "siblings")
+        os.makedirs(sib_dir, exist_ok=True)
+        for rel in siblings:
+            clean = rel[2:] if rel.startswith("./") else rel
+            dest = os.path.join(sib_dir, os.path.basename(clean))
+            try:
+                n = fetch(base + "/" + clean, dest)
+                print("  sibling: %-22s %d bytes" % (os.path.basename(clean), n))
+                html += "\n" + open(dest, encoding="utf-8", errors="replace").read()
+            except SystemExit:
+                print("  sibling: %-22s could not be fetched" % os.path.basename(clean))
 
     markup = re.sub(r"<script.*?</script>", "", html, flags=re.S)
     markup = re.sub(r"<style.*?</style>", "", markup, flags=re.S)
