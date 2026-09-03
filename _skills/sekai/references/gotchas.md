@@ -132,3 +132,14 @@ constraint is the easy half; not quietly routing around it is the point.
   Sandboxes block those hosts, and a failed library load can abort the page's
   init, leaving a blank screen that looks like a failed recovery when the
   recovery was fine.
+
+## "Request deadline exceeded" on upload is transient, not a rejection
+
+The upload endpoint occasionally returns `Request deadline exceeded`. It reads
+like the validator refusing the bit — it is not. Two of four bits failed with it
+in one batch and both went through unchanged on a single retry, updating the
+same draft id rather than creating a duplicate.
+
+Retry once before bisecting. Only treat a failure as real when the same bit
+fails twice, or when the message names something specific (unsupported remote
+resources, a permission mismatch, a size limit).
