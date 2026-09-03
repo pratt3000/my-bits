@@ -1,26 +1,48 @@
 /**
- * Symphony Sketchpad — draw a picture, then hear it.
+ * Symphony Sketchpad — draw a picture, then hear it played back.
  *
- * Twenty-one instruments, each one a colour. Pick one and draw: the stroke
- * sounds as you make it, pitched by how high up the canvas your finger is, on a
- * major pentatonic so there are no wrong notes. Then press play and a scanline
- * sweeps left to right across everything you have drawn, firing each point it
- * crosses. What you drew is the score.
+ * Pick an instrument, draw, and the stroke sounds as you make it: height is
+ * pitch, quantised to a major pentatonic so nothing you draw is wrong. Press
+ * play and a plane of light sweeps across the canvas, firing every point it
+ * passes through. What you drew is the score.
  *
- * The instruments are not samples. Each is a small Web Audio graph built on the
- * spot — a lowpass-filtered sawtooth for the trumpet, filtered noise for the
- * cymbals, a sine swept 150 Hz to 40 Hz in a tenth of a second for the kick,
- * a detuned saw pair for the synth, noise plus a pitched thump for the snare.
- * Twenty-one of them, so a drawing can be an ensemble.
+ * ── Sound ────────────────────────────────────────────────────────────────
+ * Twenty-one instruments, none of them sampled and none of them a bare
+ * oscillator either. Each pitched voice is built from a PeriodicWave — a real
+ * harmonic spectrum, with the partial amplitudes and phases that give a reed
+ * its buzz or a bell its clang — rather than the raw sawtooth-into-a-filter
+ * that makes synthesised instruments sound cheap.
  *
- * Ported from a standalone Sekai build. The synthesis, the pentatonic mapping,
- * the scanline and the particles are the original's, unchanged. The shell was
- * rebuilt for plethora-bit@2: no CDN, no platform scaffolding, Plethora-owned
- * DOM and frame loop. Icon geometry is lucide (ISC licence), inlined as SVG.
+ * Every voice runs through the same master chain, which is where most of the
+ * quality actually lives:
  *
- * Nothing was substituted. The original declared two audio slots — background
- * music and a clear sound — and both were empty in the build, so there was no
- * asset to lose. Every sound here is the same synthesis the original shipped.
+ *     voice → pan → ┬─────────────────────────→ bus → shelf → limiter → out
+ *                   ├─ reverb send → convolver ──┘
+ *                   └─ delay send → ping-pong ───┘
+ *
+ * The reverb is a ConvolverNode fed an impulse response generated at load:
+ * exponentially decaying noise, ~2.6 s, with the two channels decorrelated so
+ * it opens up in stereo. The delay is a true ping-pong — two delay lines
+ * cross-fed under unity gain so it decays instead of running away. The
+ * limiter is a DynamicsCompressor with a fast attack and a hard ratio, so a
+ * hundred simultaneous notes duck politely instead of clipping.
+ *
+ * Notes are placed in the stereo field by where they sit on the canvas, so a
+ * wide drawing plays wide. Velocity comes from how fast you drew that point:
+ * a quick stroke is louder and brighter, because the filter cutoff tracks it.
+ * Every note is detuned a few cents at random, so a repeated figure never
+ * sounds mechanically identical.
+ *
+ * ── Picture ──────────────────────────────────────────────────────────────
+ * Rendered in three.js, with a real bloom pipeline rather than a canvas
+ * shadowBlur: the scene is drawn to a float target, a bright-pass extracts the
+ * highlights, two separable Gaussian passes blur them at quarter resolution,
+ * and the result is composited back additively with a filmic tone curve and a
+ * little grain. Strokes are camera-facing ribbons whose fragment shader falls
+ * off to nothing at the edges, so they read as light rather than as geometry.
+ *
+ * The drawing plane stays flat and screen-aligned — depth is for looking at,
+ * not for drawing into, and a tilted canvas would only make you miss.
  */
 window.plethoraBit = {
   meta: {
@@ -32,811 +54,1013 @@ window.plethoraBit = {
 
   async init(ctx) {
     // ===================================================================== //
-    // 0. Look                                                               //
+    // 0. Instruments                                                        //
     // ===================================================================== //
-    const BG = "#0a0a0b";        // page
-    const PANEL = "#18181b";     // header and palette
-    const EDGE = "#27272a";
-    const PAD_BG = "#000000";
-    const INK = "#e4e4e7";
-    const DIM = "#a1a1aa";
-    const FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
-
-    const HEAD_H = 50;
-    const PAL_H = 214;           // instrument grid along the bottom
-
-    const ICONS = {
-      "music": '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
-      "shopping-bag": '<path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/>',
-      "rotate-ccw": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
-      "trash-2": '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
-      "play": '<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>',
-      "square": '<rect width="18" height="18" x="3" y="3" rx="2"/>'
-    };
-
-    function svg(name, size, colour, fill) {
-      return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" ' +
-        'fill="' + (fill || "none") + '" stroke="' + colour + '" stroke-width="2" ' +
-        'stroke-linecap="round" stroke-linejoin="round" ' +
-        'style="display:block;pointer-events:none;">' + (ICONS[name] || "") + "</svg>";
-    }
-
-    // The instrument list and its colours, exactly as the original had them.
+    // Each entry carries its colour, and how its sound is built. `partials`
+    // is a harmonic series used to bake a PeriodicWave: index 0 is the
+    // fundamental. `odd` spectra sound hollow and clarinet-like; steep
+    // rolloffs sound soft; inharmonic ratios sound metallic.
     const INSTRUMENTS = [
-      { id: "red", name: "Trumpet", colour: "#ef4444" },
-      { id: "crystal", name: "Crystal Bell", colour: "#38bdf8" },
-      { id: "spacesynth", name: "Space Synth", colour: "#c084fc" },
-      { id: "deepbass", name: "Deep Bass", colour: "#0284c7" },
-      { id: "orange", name: "Piano", colour: "#f97316" },
-      { id: "yellow", name: "Cymbals", colour: "#eab308" },
-      { id: "green", name: "Xylophone", colour: "#22c55e" },
-      { id: "cyan", name: "Bass", colour: "#06b6d4" },
-      { id: "blue", name: "Drum", colour: "#3b82f6" },
-      { id: "purple", name: "Synthesizer", colour: "#a855f7" },
-      { id: "pink", name: "Percussion", colour: "#ec4899" },
-      { id: "white", name: "Fem Vocals", colour: "#f8fafc" },
-      { id: "black", name: "Male Vocals", colour: "#111827" },
-      { id: "brown", name: "Guitar", colour: "#92400e" },
-      { id: "grey", name: "Violin", colour: "#9ca3af" },
-      { id: "magenta", name: "Flute", colour: "#d946ef" },
-      { id: "snare", name: "Snare", colour: "#f43f5e" },
-      { id: "shaker", name: "Shaker", colour: "#f59e0b" },
-      { id: "kick", name: "Kick Drum", colour: "#2563eb" },
-      { id: "woodblock", name: "Woodblock", colour: "#a16207" },
-      { id: "tambourine", name: "Tambourine", colour: "#facc15" }
+      { id: "trumpet", name: "Trumpet", colour: "#ff5a4d",
+        partials: [1, 0.72, 0.62, 0.48, 0.34, 0.22, 0.14, 0.09, 0.05],
+        atk: 0.045, dec: 0.22, sus: 0.72, rel: 0.28, cut: 2.4, q: 3.5, gain: 0.30 },
+      { id: "bell", name: "Crystal Bell", colour: "#4fc3f7",
+        inharmonic: [1, 2.76, 5.4, 8.93, 13.3], amps: [1, 0.5, 0.28, 0.14, 0.07],
+        atk: 0.004, dec: 1.6, sus: 0.0, rel: 1.4, cut: 8, q: 0.4, gain: 0.24 },
+      { id: "spacesynth", name: "Space Synth", colour: "#b388ff",
+        partials: [1, 0.5, 0.42, 0.28, 0.24, 0.16, 0.12, 0.08],
+        atk: 0.28, dec: 0.5, sus: 0.65, rel: 0.9, cut: 1.6, q: 5, sweep: 3.6, gain: 0.22 },
+      { id: "deepbass", name: "Deep Bass", colour: "#0288d1", octave: -2,
+        partials: [1, 0.28, 0.1, 0.04],
+        atk: 0.02, dec: 0.4, sus: 0.8, rel: 0.35, cut: 1.1, q: 1.2, gain: 0.42 },
+      { id: "piano", name: "Piano", colour: "#ff9142",
+        partials: [1, 0.42, 0.26, 0.14, 0.09, 0.05, 0.035, 0.02, 0.012],
+        atk: 0.003, dec: 1.1, sus: 0.12, rel: 0.5, cut: 5, q: 0.6, gain: 0.34 },
+      { id: "cymbal", name: "Cymbals", colour: "#ffd54f", noise: "bright",
+        atk: 0.002, dec: 1.2, sus: 0.0, rel: 0.6, cut: 9, q: 0.7, gain: 0.16 },
+      { id: "xylo", name: "Xylophone", colour: "#4ade80",
+        inharmonic: [1, 3.0, 6.2, 9.8], amps: [1, 0.42, 0.16, 0.06], octave: 1,
+        atk: 0.002, dec: 0.38, sus: 0.0, rel: 0.25, cut: 7, q: 0.5, gain: 0.28 },
+      { id: "bass", name: "Bass", colour: "#22d3ee", octave: -1,
+        partials: [1, 0.62, 0.2, 0.14, 0.06, 0.03],
+        atk: 0.012, dec: 0.3, sus: 0.7, rel: 0.22, cut: 1.3, q: 4, gain: 0.38 },
+      { id: "drum", name: "Drum", colour: "#3b82f6", drum: "kick",
+        atk: 0.002, dec: 0.34, sus: 0.0, rel: 0.2, gain: 0.62 },
+      { id: "synth", name: "Synthesizer", colour: "#a855f7", unison: 3, spread: 11,
+        partials: [1, 0.6, 0.45, 0.34, 0.26, 0.2, 0.15, 0.11, 0.08, 0.06],
+        atk: 0.02, dec: 0.35, sus: 0.7, rel: 0.4, cut: 2.2, q: 4.5, gain: 0.14 },
+      { id: "woodblk", name: "Woodblock", colour: "#f472b6", fixed: 880,
+        inharmonic: [1, 2.4, 4.1], amps: [1, 0.34, 0.12],
+        atk: 0.001, dec: 0.11, sus: 0.0, rel: 0.08, cut: 6, q: 1, gain: 0.34 },
+      { id: "voxhigh", name: "Fem Vocals", colour: "#f8fafc", formants: [700, 1220, 2600],
+        partials: [1, 0.7, 0.5, 0.36, 0.24, 0.16, 0.1, 0.06],
+        atk: 0.09, dec: 0.3, sus: 0.75, rel: 0.4, cut: 3.2, q: 1.4, gain: 0.22 },
+      { id: "voxlow", name: "Male Vocals", colour: "#94a3b8", formants: [420, 900, 2400], octave: -1,
+        partials: [1, 0.78, 0.56, 0.4, 0.26, 0.17, 0.1],
+        atk: 0.1, dec: 0.3, sus: 0.75, rel: 0.45, cut: 2.2, q: 1.4, gain: 0.26 },
+      { id: "guitar", name: "Guitar", colour: "#b45309", pluck: true,
+        partials: [1, 0.55, 0.42, 0.24, 0.18, 0.1, 0.07, 0.04],
+        atk: 0.004, dec: 0.9, sus: 0.1, rel: 0.6, cut: 3, q: 1.6, gain: 0.30 },
+      { id: "violin", name: "Violin", colour: "#cbd5e1", vibrato: 5.6, vibDepth: 5,
+        partials: [1, 0.86, 0.62, 0.5, 0.36, 0.28, 0.2, 0.15, 0.11, 0.08],
+        atk: 0.16, dec: 0.3, sus: 0.82, rel: 0.35, cut: 2.6, q: 2.2, gain: 0.24 },
+      { id: "flute", name: "Flute", colour: "#e879f9", vibrato: 4.8, vibDepth: 2.2, breath: 0.06,
+        partials: [1, 0.14, 0.07, 0.03],
+        atk: 0.11, dec: 0.2, sus: 0.85, rel: 0.28, cut: 4, q: 0.8, gain: 0.30 },
+      { id: "snare", name: "Snare", colour: "#fb7185", drum: "snare",
+        atk: 0.001, dec: 0.19, sus: 0.0, rel: 0.12, gain: 0.4 },
+      { id: "shaker", name: "Shaker", colour: "#f59e0b", noise: "shaker",
+        atk: 0.004, dec: 0.09, sus: 0.0, rel: 0.06, cut: 11, q: 1.6, gain: 0.2 },
+      { id: "kick", name: "Kick Drum", colour: "#2563eb", drum: "deepkick",
+        atk: 0.002, dec: 0.55, sus: 0.0, rel: 0.3, gain: 0.85 },
+      { id: "organ", name: "Retro Organ", colour: "#a16207",
+        partials: [1, 0, 0.86, 0.4, 0, 0.62, 0, 0.3, 0.24],
+        atk: 0.02, dec: 0.05, sus: 0.95, rel: 0.16, cut: 3.4, q: 0.7, gain: 0.22 },
+      { id: "tamb", name: "Tambourine", colour: "#facc15", noise: "jingle",
+        atk: 0.002, dec: 0.22, sus: 0.0, rel: 0.14, cut: 12, q: 2.4, gain: 0.17 }
     ];
-    const colourOf = {};
-    for (const i of INSTRUMENTS) colourOf[i.id] = i.colour;
+    const byId = {};
+    for (const i of INSTRUMENTS) byId[i.id] = i;
 
-    // The joke shop. Every tier is a volume multiplier, and the numbers get
-    // silly on purpose — that is the gag, and it is the creator's.
-    const TIERS = [
-      { mult: 1.5, label: "Loud", pct: "150%" },
-      { mult: 3.0, label: "Mega", pct: "300%" },
-      { mult: 6.0, label: "Super Mega", pct: "600%" },
-      { mult: 12.0, label: "Max", pct: "1200%" },
-      { mult: 25.0, label: "Final", pct: "2500%" },
-      { mult: 50.0, label: "Super Final", pct: "5000%" },
-      { mult: 100.0, label: "Mega Final", pct: "10000%" },
-      { mult: 500.0, label: "Overpowered", pct: "50000%" },
-      { mult: 100000.0, label: "Infinite", pct: "??????%" },
-      { mult: 9999999.0, label: "The End", pct: "ω%" }
-    ];
+    // Major pentatonic over four octaves — no wrong notes.
+    const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36];
+    const ROOT = 261.63;
 
-    // Defaults are the values the original build actually shipped, not the
-    // fallbacks in its source — its brushSize fell back to 1000, which would
-    // paint the whole canvas in one stroke.
     const state = {
-      brushSize: 9,
-      playbackSpeed: 8,
-      glow: false,
-      rainbow: false,
-      particleTrails: true,
-      playbackBursts: true,
-      volumeMultiplier: 1.0,
-      instrument: "red",
+      instrument: "piano",
       strokes: [],
       drawing: null,
       playing: false,
-      scanX: 0,
-      hue: 0
+      scan: 0,
+      glow: 1,
+      showPalette: true
     };
 
     // ===================================================================== //
-    // 1. Surfaces                                                           //
+    // 1. Sound                                                              //
     // ===================================================================== //
-    const view = ctx.createCanvas2D({ touchAction: "none" });
-    const g = view.getContext("2d");
-    const ui = ctx.createRoot({ touchAction: "none" });
-    ui.style.zIndex = "3";
-    ui.style.pointerEvents = "none";
-
-    const SAFE_T = Math.max((ctx.safeArea && ctx.safeArea.top) || 0, 6);
-    const SAFE_B = Math.max((ctx.safeArea && ctx.safeArea.bottom) || 0, 6);
-
-    let W = Math.max(1, ctx.width), H = Math.max(1, ctx.height);
-    let padX = 0, padY = 0, padW = 1, padH = 1;
-
-    function layout() {
-      W = Math.max(1, ctx.width);
-      H = Math.max(1, ctx.height);
-      const bw = Math.round(W * ctx.dpr), bh = Math.round(H * ctx.dpr);
-      if (view.width !== bw || view.height !== bh) { view.width = bw; view.height = bh; }
-      g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
-
-      padX = 0;
-      padY = SAFE_T + HEAD_H;
-      padW = W;
-      padH = Math.max(80, H - padY - PAL_H - SAFE_B);
-
-      head.style.top = SAFE_T + "px";
-      head.style.height = HEAD_H + "px";
-      palette.style.height = PAL_H + "px";
-      palette.style.bottom = SAFE_B + "px";
-      playBtn.style.bottom = (PAL_H + SAFE_B + 14) + "px";
-      hint.style.top = padY + "px";
-      hint.style.height = padH + "px";
-    }
-
-    ui.innerHTML =
-      '<div style="position:absolute;inset:0;font-family:' + FONT + ";color:" + INK + ";" +
-      '-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;">' +
-
-      // header
-      '<div data-el="head" style="position:absolute;left:0;right:0;background:' + PANEL + ";" +
-      "border-bottom:1px solid " + EDGE + ';display:flex;align-items:center;justify-content:space-between;' +
-      'padding:0 12px;pointer-events:auto;">' +
-        '<div style="display:flex;align-items:center;gap:9px;">' +
-          '<div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;' +
-          'justify-content:center;background:linear-gradient(45deg,#a855f7,#3b82f6);">' +
-          svg("music", 13, "#ffffff") + "</div>" +
-          '<div><div style="font-size:12.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;' +
-          'color:' + DIM + ';">Symphony</div>' +
-          '<div data-el="inst" style="font-size:11px;color:#ef4444;font-weight:600;letter-spacing:0.4px;' +
-          'line-height:1.2;">Trumpet</div></div>' +
-        "</div>" +
-        '<div style="display:flex;gap:7px;">' +
-          '<button data-el="shop" style="width:36px;height:36px;border-radius:18px;border:0;' +
-          'background:#b45309;display:flex;align-items:center;justify-content:center;padding:0;' +
-          'pointer-events:auto;">' + svg("shopping-bag", 16, "#ffffff") + "</button>" +
-          '<button data-el="undo" style="width:36px;height:36px;border-radius:18px;border:0;' +
-          'background:#27272a;display:flex;align-items:center;justify-content:center;padding:0;' +
-          'pointer-events:auto;">' + svg("rotate-ccw", 16, DIM) + "</button>" +
-          '<button data-el="clear" style="width:36px;height:36px;border-radius:18px;border:0;' +
-          'background:#27272a;display:flex;align-items:center;justify-content:center;padding:0;' +
-          'pointer-events:auto;">' + svg("trash-2", 16, DIM) + "</button>" +
-        "</div>" +
-      "</div>" +
-
-      // first-run hint over the canvas
-      '<div data-el="hint" style="position:absolute;left:0;right:0;display:flex;align-items:center;' +
-      'justify-content:center;pointer-events:none;transition:opacity 500ms ease;">' +
-        '<div style="text-align:center;background:rgba(0,0,0,0.55);padding:13px 20px;border-radius:14px;">' +
-        '<div style="font-size:15px;font-weight:600;">Tap and drag to compose</div>' +
-        '<div style="font-size:11.5px;color:' + DIM + ';margin-top:5px;">higher is a higher note</div>' +
-        "</div>" +
-      "</div>" +
-
-      // play / stop
-      '<button data-el="play" style="position:absolute;right:16px;width:54px;height:54px;' +
-      'border-radius:27px;border:0;background:#22c55e;display:flex;align-items:center;' +
-      'justify-content:center;padding:0;box-shadow:0 6px 20px rgba(0,0,0,0.45);pointer-events:auto;">' +
-      svg("play", 21, "#ffffff", "#ffffff") + "</button>" +
-
-      // palette
-      '<div data-el="palette" style="position:absolute;left:0;right:0;background:' + PANEL + ";" +
-      "border-top:1px solid " + EDGE + ';overflow-y:auto;overflow-x:hidden;padding:9px;' +
-      // grid-auto-rows rather than aspect-ratio on the items: inside a scroller
-      // the implicit rows collapse and the tiles overlap each other.
-      'display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:66px;gap:7px;align-content:start;' +
-      'touch-action:pan-y;-webkit-overflow-scrolling:touch;pointer-events:auto;"></div>' +
-
-      // shop
-      '<div data-el="shop_modal" style="position:absolute;inset:0;display:none;background:rgba(6,6,8,0.94);' +
-      'z-index:9;padding:22px;pointer-events:auto;overflow-y:auto;touch-action:pan-y;">' +
-        '<div style="max-width:340px;margin:0 auto;">' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">' +
-            '<div style="font-size:18px;font-weight:700;">Volume Shop</div>' +
-            '<button data-el="shop_close" style="width:34px;height:34px;border-radius:17px;border:0;' +
-            'background:#27272a;color:' + INK + ';font-size:17px;padding:0;pointer-events:auto;">×</button>' +
-          "</div>" +
-          '<div data-el="tiers"></div>' +
-        "</div>" +
-      "</div>" +
-      "</div>";
-
-    const nodes = {};
-    for (const el of ui.querySelectorAll("[data-el]")) nodes[el.getAttribute("data-el")] = el;
-    const head = nodes.head, palette = nodes.palette, playBtn = nodes.play, hint = nodes.hint;
-
-    // instrument buttons
-    const instBtns = [];
-    for (const inst of INSTRUMENTS) {
-      const b = document.createElement("button");
-      b.setAttribute("data-id", inst.id);
-      b.style.cssText =
-        "border-radius:11px;background:#27272a;border:1.5px solid transparent;" +
-        "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;" +
-        "padding:3px 2px;cursor:pointer;pointer-events:auto;touch-action:manipulation;overflow:hidden;";
-      b.innerHTML =
-        '<div style="width:21px;height:21px;border-radius:50%;background:' + inst.colour + ";" +
-        "box-shadow:0 0 8px " + inst.colour + '80;"></div>' +
-        '<span style="font-size:8.5px;font-weight:500;color:' + DIM + ';text-transform:uppercase;' +
-        'letter-spacing:0.3px;text-align:center;line-height:1.1;">' + inst.name + "</span>";
-      palette.appendChild(b);
-      instBtns.push(b);
-    }
-
-    function paintPalette() {
-      for (let i = 0; i < instBtns.length; i++) {
-        const on = INSTRUMENTS[i].id === state.instrument;
-        instBtns[i].style.background = on ? "#3f3f46" : "#27272a";
-        instBtns[i].style.borderColor = on ? INSTRUMENTS[i].colour : "transparent";
-      }
-      const inst = INSTRUMENTS.find((x) => x.id === state.instrument);
-      if (inst) {
-        nodes.inst.textContent = inst.name;
-        nodes.inst.style.color = inst.colour;
-      }
-    }
-
-    // shop tiers
-    const tierBtns = [];
-    for (const t of TIERS) {
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;" +
-        "background:#18181b;border:1px solid " + EDGE + ";border-radius:11px;padding:11px 13px;margin-bottom:8px;";
-      const btn = document.createElement("button");
-      btn.style.cssText = "border:0;border-radius:9px;background:#b45309;color:#fff;font-size:12px;" +
-        "font-weight:700;font-family:inherit;padding:8px 13px;pointer-events:auto;white-space:nowrap;";
-      btn.textContent = "Activate";
-      row.innerHTML = '<div><div style="font-size:14px;font-weight:600;">' + t.label + "</div>" +
-        '<div style="font-size:11px;color:' + DIM + ';margin-top:2px;">' + t.pct + "</div></div>";
-      row.appendChild(btn);
-      nodes.tiers.appendChild(row);
-      tierBtns.push({ btn: btn, tier: t });
-    }
-
-    function paintTiers() {
-      for (const { btn, tier } of tierBtns) {
-        const on = state.volumeMultiplier === tier.mult;
-        btn.textContent = on ? "Active (" + tier.pct + ")" : "Activate";
-        btn.style.background = on ? "#22c55e" : "#b45309";
-      }
-    }
-
-    // ===================================================================== //
-    // 2. The instruments                                                    //
-    // ===================================================================== //
-    // Twenty-one graphs, built on note-on and torn down on note-off. Carried
-    // over from the original unchanged — same oscillator types, same filter
-    // frequencies, same envelopes.
-    class SoundEngine {
-      constructor() {
-        this.ac = null;
-        this.masterGain = null;
-        this.active = {};        // pointerId -> voice
-      }
+    const Sound = {
+      ac: null, ready: false,
+      bus: null, wet: null, delaySend: null, limiter: null,
+      waves: {},
+      voices: 0,
 
       init() {
         if (this.ac) return;
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
-        this.ac = new AC();
-        this.masterGain = this.ac.createGain();
-        this.masterGain.gain.value = 0.5 * (state.volumeMultiplier || 1);
-        this.masterGain.connect(this.ac.destination);
-      }
+        const ac = this.ac = new AC();
 
-      setVolumeMultiplier(mult) {
-        if (!this.ac) return;
-        this.masterGain.gain.setValueAtTime(0.5 * mult, this.ac.currentTime);
-      }
+        // --- master chain -------------------------------------------------
+        // A limiter first, so nothing downstream can ever clip however many
+        // notes are ringing; then a gentle shelf to take the glassy top off.
+        this.limiter = ac.createDynamicsCompressor();
+        this.limiter.threshold.value = -8;
+        this.limiter.knee.value = 6;
+        this.limiter.ratio.value = 12;
+        this.limiter.attack.value = 0.003;
+        this.limiter.release.value = 0.22;
 
-      // Y from 0 (bottom) to 1 (top), quantised to a major pentatonic so that
-      // any drawing lands on notes that agree with each other.
-      getFrequency(y) {
-        const base = 261.63;   // middle C
-        const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36];
-        const idx = Math.max(0, Math.min(scale.length - 1, Math.floor(y * scale.length)));
-        return base * Math.pow(2, scale[idx] / 12);
-      }
+        const shelf = ac.createBiquadFilter();
+        shelf.type = "highshelf";
+        shelf.frequency.value = 6200;
+        shelf.gain.value = -4.5;
 
-      startTone(id, y, pointerId) {
-        if (!this.ac) this.init();
-        if (!this.ac) return;
-        if (this.ac.state === "suspended") { try { this.ac.resume(); } catch (_) {} }
-        if (this.active[pointerId]) this.active[pointerId].stop();
+        const master = ac.createGain();
+        master.gain.value = 0.85;
 
-        const nodes = this.build(id, this.getFrequency(y), this.ac.currentTime);
-        const self = this;
-        this.active[pointerId] = {
-          stop: function () {
-            const release = 0.1;
-            if (nodes.gain) nodes.gain.gain.setTargetAtTime(0, self.ac.currentTime, release);
-            ctx.timeout(function () {
-              for (const s of nodes.sources) { try { s.stop(); } catch (_) {} }
-            }, release * 1000 + 100);
-            delete self.active[pointerId];
-          },
-          setFreq: function (newY) {
-            const f = self.getFrequency(newY);
-            if (nodes.osc) nodes.osc.frequency.setTargetAtTime(f, self.ac.currentTime, 0.05);
-            if (nodes.filter && id === "red") {
-              nodes.filter.frequency.setTargetAtTime(f * 2, self.ac.currentTime, 0.05);
+        shelf.connect(this.limiter);
+        this.limiter.connect(master);
+        master.connect(ac.destination);
+
+        this.bus = ac.createGain();
+        this.bus.gain.value = 1;
+        this.bus.connect(shelf);
+
+        // --- reverb -------------------------------------------------------
+        // A generated impulse: decaying noise, decorrelated per channel so the
+        // tail spreads rather than sitting in the middle of your head.
+        const conv = ac.createConvolver();
+        conv.buffer = this.impulse(2.6, 2.4);
+        const wet = this.wet = ac.createGain();
+        wet.gain.value = 0.42;
+        const wetTrim = ac.createGain();
+        wetTrim.gain.value = 0.9;
+        wet.connect(conv);
+        conv.connect(wetTrim);
+        wetTrim.connect(shelf);
+
+        // --- ping-pong delay ----------------------------------------------
+        // Two lines cross-fed. Feedback is kept well under 0.5 because a pair
+        // of cross-fed delays has a system gain of 2g — at 0.5 it never decays.
+        const dl = ac.createDelay(1.2), dr = ac.createDelay(1.2);
+        dl.delayTime.value = 0.28;
+        dr.delayTime.value = 0.42;
+        const fbL = ac.createGain(), fbR = ac.createGain();
+        fbL.gain.value = 0.30;
+        fbR.gain.value = 0.30;
+        const damp = ac.createBiquadFilter();
+        damp.type = "lowpass";
+        damp.frequency.value = 2600;
+        const panL = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain();
+        const panR = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain();
+        if (panL.pan) { panL.pan.value = -0.75; panR.pan.value = 0.75; }
+        dl.connect(damp); damp.connect(fbL); fbL.connect(dr);
+        dr.connect(fbR); fbR.connect(dl);
+        dl.connect(panL); dr.connect(panR);
+        const dlyTrim = ac.createGain();
+        dlyTrim.gain.value = 0.5;
+        panL.connect(dlyTrim); panR.connect(dlyTrim);
+        dlyTrim.connect(shelf);
+        const send = this.delaySend = ac.createGain();
+        send.gain.value = 0.2;
+        send.connect(dl);
+
+        this.bake();
+        this.ready = true;
+      },
+
+      // Exponentially decaying noise, shaped so the onset is dense and the
+      // tail thins out — a plausible small hall rather than a burst of hiss.
+      impulse(seconds, decay) {
+        const rate = this.ac.sampleRate;
+        const n = Math.floor(rate * seconds);
+        const buf = this.ac.createBuffer(2, n, rate);
+        for (let c = 0; c < 2; c++) {
+          const d = buf.getChannelData(c);
+          for (let i = 0; i < n; i++) {
+            const t = i / n;
+            // A short pre-delay of near-silence gives the space some size.
+            const early = i < rate * 0.012 ? 0.25 : 1;
+            d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay) * early;
+          }
+        }
+        return buf;
+      },
+
+      // Bake a PeriodicWave per instrument once, rather than per note.
+      bake() {
+        for (const inst of INSTRUMENTS) {
+          const amps = inst.partials || inst.amps;
+          if (!amps) continue;
+          if (inst.inharmonic) {
+            // Inharmonic ratios cannot be expressed as a PeriodicWave (its
+            // partials are integer multiples), so those voices stack real
+            // oscillators instead. Nothing to bake.
+            continue;
+          }
+          const n = amps.length + 1;
+          const real = new Float32Array(n);
+          const imag = new Float32Array(n);
+          for (let i = 0; i < amps.length; i++) {
+            // A little phase scatter stops every partial starting aligned,
+            // which is what makes an additive tone sound like a buzzer.
+            const phase = (i * 2.399963) % (Math.PI * 2);
+            imag[i + 1] = amps[i] * Math.cos(phase);
+            real[i + 1] = amps[i] * Math.sin(phase);
+          }
+          try {
+            this.waves[inst.id] = this.ac.createPeriodicWave(real, imag, { disableNormalization: false });
+          } catch (_) { /* fall back to a plain wave below */ }
+        }
+      },
+
+      noiseBuffer(seconds, kind) {
+        const rate = this.ac.sampleRate;
+        const n = Math.max(1, Math.floor(rate * seconds));
+        const buf = this.ac.createBuffer(1, n, rate);
+        const d = buf.getChannelData(0);
+        if (kind === "jingle" || kind === "shaker") {
+          // Grainy rather than smooth: bursts of noise, so it rattles.
+          for (let i = 0; i < n; i++) {
+            d[i] = (Math.random() * 2 - 1) * (Math.random() < 0.55 ? 1 : 0.25);
+          }
+        } else {
+          for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+        }
+        return buf;
+      },
+
+      freqFor(inst, y) {
+        if (inst.fixed) return inst.fixed;
+        const idx = Math.max(0, Math.min(SCALE.length - 1, Math.floor(y * SCALE.length)));
+        const oct = inst.octave || 0;
+        return ROOT * Math.pow(2, SCALE[idx] / 12 + oct);
+      },
+
+      /**
+       * Build one voice. Returns handles so a held note can be bent and
+       * released, or null for the percussive voices that simply ring out.
+       *
+       * `vel` is 0..1 from draw speed, `pan` is -1..1 from canvas x.
+       */
+      voice(inst, freq, vel, pan, when, sustained) {
+        const ac = this.ac;
+        const t = when || ac.currentTime;
+        if (this.voices > 48) return null;      // a mercy limit
+        this.voices++;
+
+        const amp = ac.createGain();
+        amp.gain.value = 0;
+
+        const panner = ac.createStereoPanner ? ac.createStereoPanner() : null;
+        if (panner) { panner.pan.value = Math.max(-1, Math.min(1, pan)); amp.connect(panner); }
+        const tail = panner || amp;
+        tail.connect(this.bus);
+        tail.connect(this.wet);
+        tail.connect(this.delaySend);
+
+        const sources = [];
+        let filter = null;
+        let pitchTargets = [];
+
+        if (inst.drum) {
+          // Drums are pitch envelopes, not notes.
+          const osc = ac.createOscillator();
+          osc.type = "sine";
+          const top = inst.drum === "deepkick" ? 190 : inst.drum === "kick" ? 165 : 210;
+          const bot = inst.drum === "deepkick" ? 32 : inst.drum === "kick" ? 44 : 90;
+          osc.frequency.setValueAtTime(top, t);
+          osc.frequency.exponentialRampToValueAtTime(bot, t + (inst.drum === "deepkick" ? 0.16 : 0.09));
+          osc.connect(amp);
+          sources.push(osc);
+          if (inst.drum === "snare") {
+            const ns = ac.createBufferSource();
+            ns.buffer = this.noiseBuffer(0.3, "noise");
+            const hp = ac.createBiquadFilter();
+            hp.type = "highpass";
+            hp.frequency.value = 1500;
+            const ng = ac.createGain();
+            ng.gain.value = 0.7;
+            ns.connect(hp); hp.connect(ng); ng.connect(amp);
+            sources.push(ns);
+          }
+        } else if (inst.noise) {
+          const ns = ac.createBufferSource();
+          ns.buffer = this.noiseBuffer(1.4, inst.noise);
+          ns.loop = true;
+          filter = ac.createBiquadFilter();
+          filter.type = inst.noise === "bright" ? "highpass" : "bandpass";
+          filter.frequency.value = (inst.cut || 8) * 1000 * (0.6 + vel * 0.6);
+          filter.Q.value = inst.q || 1;
+          ns.connect(filter); filter.connect(amp);
+          sources.push(ns);
+        } else if (inst.inharmonic) {
+          // Stacked oscillators at non-integer ratios: the way a struck bar or
+          // a bell actually rings.
+          for (let i = 0; i < inst.inharmonic.length; i++) {
+            const osc = ac.createOscillator();
+            osc.type = "sine";
+            osc.frequency.value = freq * inst.inharmonic[i];
+            const g = ac.createGain();
+            g.gain.value = (inst.amps[i] || 0.2) * 0.9;
+            osc.connect(g); g.connect(amp);
+            sources.push(osc);
+            if (i === 0) pitchTargets.push(osc.frequency);
+          }
+        } else {
+          const wave = this.waves[inst.id];
+          const count = inst.unison || 1;
+          filter = ac.createBiquadFilter();
+          filter.type = "lowpass";
+          // Cutoff tracks the note and the velocity: play harder, sound brighter.
+          const base = Math.min(16000, freq * (inst.cut || 3) * (0.55 + vel * 0.9));
+          filter.frequency.setValueAtTime(base, t);
+          filter.Q.value = inst.q || 1;
+          if (inst.sweep) {
+            filter.frequency.linearRampToValueAtTime(
+              Math.min(16000, base * inst.sweep), t + (inst.atk + inst.dec));
+          }
+          filter.connect(amp);
+
+          for (let u = 0; u < count; u++) {
+            const osc = ac.createOscillator();
+            if (wave) osc.setPeriodicWave(wave); else osc.type = "sawtooth";
+            osc.frequency.value = freq;
+            // A few cents of drift per note, plus unison spread.
+            const centre = (count - 1) / 2;
+            osc.detune.value = (u - centre) * (inst.spread || 0) + (Math.random() - 0.5) * 7;
+            const ug = ac.createGain();
+            ug.gain.value = 1 / count;
+            osc.connect(ug); ug.connect(filter);
+            sources.push(osc);
+            pitchTargets.push(osc.frequency);
+          }
+
+          if (inst.formants) {
+            // Vocal-ish: park a couple of resonant peaks over the spectrum.
+            for (const f of inst.formants) {
+              const bp = ac.createBiquadFilter();
+              bp.type = "peaking";
+              bp.frequency.value = f;
+              bp.Q.value = 6;
+              bp.gain.value = 9;
+              filter.connect(bp);
+              bp.connect(amp);
             }
           }
-        };
-      }
-
-      updateTone(pointerId, y) {
-        if (this.active[pointerId]) this.active[pointerId].setFreq(y);
-      }
-
-      stopTone(pointerId) {
-        if (this.active[pointerId]) this.active[pointerId].stop();
-      }
-
-      stopAll() {
-        for (const id of Object.keys(this.active)) this.stopTone(id);
-      }
-
-      // The scanline's one-shot: same graph, fixed length.
-      playNoteOneShot(id, y, duration) {
-        if (!this.ac) return;
-        const now = this.ac.currentTime;
-        const nodes = this.build(id, this.getFrequency(y), now);
-        const releaseStart = now + (duration || 0.2);
-        nodes.gain.gain.setValueAtTime(nodes.gain.gain.value, releaseStart);
-        nodes.gain.gain.linearRampToValueAtTime(0, releaseStart + 0.1);
-        for (const s of nodes.sources) { try { s.stop(releaseStart + 0.2); } catch (_) {} }
-      }
-
-      build(id, freq, now) {
-        const gain = this.ac.createGain();
-        gain.connect(this.masterGain);
-        const sources = [];
-        let osc = null, filter = null;
-
-        switch (id) {
-          case "red":            // Trumpet
-            osc = this.ac.createOscillator();
-            osc.type = "sawtooth";
-            osc.frequency.value = freq;
-            filter = this.ac.createBiquadFilter();
-            filter.type = "lowpass";
-            filter.Q.value = 5;
-            filter.frequency.value = freq * 2;
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
-            sources.push(osc);
-            break;
-
-          case "orange":         // Piano
-            osc = this.ac.createOscillator();
-            osc.type = "triangle";
-            osc.frequency.value = freq;
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.4, now + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.1, now + 0.5);
-            sources.push(osc);
-            break;
-
-          case "yellow": {       // Cymbals
-            const buf = this.noise(2);
-            const noise = this.ac.createBufferSource();
-            noise.buffer = buf;
-            noise.loop = true;
-            filter = this.ac.createBiquadFilter();
-            filter.type = "highpass";
-            filter.frequency.value = 5000 + freq * 2;
-            noise.connect(filter);
-            filter.connect(gain);
-            gain.gain.setValueAtTime(0.15, now);
-            sources.push(noise);
-            break;
-          }
-
-          case "green":          // Xylophone
-            osc = this.ac.createOscillator();
-            osc.type = "sine";
-            osc.frequency.value = freq * 2;
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.4, now + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-            sources.push(osc);
-            break;
-
-          case "cyan":           // Bass
-            osc = this.ac.createOscillator();
-            osc.type = "square";
-            osc.frequency.value = freq / 2;
-            filter = this.ac.createBiquadFilter();
-            filter.type = "lowpass";
-            filter.frequency.value = 400;
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.gain.setValueAtTime(0.4, now);
-            sources.push(osc);
-            break;
-
-          case "blue":           // Drum
-            osc = this.ac.createOscillator();
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(150, now);
-            osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0.8, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-            sources.push(osc);
-            break;
-
-          case "purple": {       // Synthesizer — two saws a hair apart
-            osc = this.ac.createOscillator();
-            osc.type = "sawtooth";
-            osc.frequency.value = freq;
-            const osc2 = this.ac.createOscillator();
-            osc2.type = "sawtooth";
-            osc2.frequency.value = freq * 1.01;
-            osc.connect(gain);
-            osc2.connect(gain);
-            gain.gain.setValueAtTime(0.15, now);
-            sources.push(osc, osc2);
-            break;
-          }
-
-          case "crystal":        // Crystal Bell
-            osc = this.ac.createOscillator();
-            osc.type = "sine";
-            osc.frequency.value = freq * 3;
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.3, now + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
-            sources.push(osc);
-            break;
-
-          case "spacesynth": {   // Space Synth — bandpass sweeping open
-            osc = this.ac.createOscillator();
-            osc.type = "sawtooth";
-            osc.frequency.value = freq;
-            const bp = this.ac.createBiquadFilter();
+          if (inst.breath) {
+            const ns = ac.createBufferSource();
+            ns.buffer = this.noiseBuffer(1.0, "noise");
+            ns.loop = true;
+            const bp = ac.createBiquadFilter();
             bp.type = "bandpass";
-            bp.frequency.setValueAtTime(freq, now);
-            bp.frequency.linearRampToValueAtTime(freq * 4, now + 0.5);
-            osc.connect(bp);
-            bp.connect(gain);
-            gain.gain.setValueAtTime(0.2, now);
-            sources.push(osc);
-            break;
+            bp.frequency.value = freq * 2.4;
+            bp.Q.value = 1.2;
+            const bg = ac.createGain();
+            bg.gain.value = inst.breath;
+            ns.connect(bp); bp.connect(bg); bg.connect(amp);
+            sources.push(ns);
           }
-
-          case "deepbass":       // Deep Bass
-            osc = this.ac.createOscillator();
-            osc.type = "triangle";
-            osc.frequency.value = freq * 0.25;
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0.5, now);
-            sources.push(osc);
-            break;
-
-          case "pink":           // Percussion: woodblock
-            osc = this.ac.createOscillator();
-            osc.type = "sine";
-            osc.frequency.value = 800;
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.5, now + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            sources.push(osc);
-            break;
-
-          case "white":          // Fem Vocals — a formant-ish bandpass
-            osc = this.ac.createOscillator();
-            osc.type = "triangle";
-            osc.frequency.value = freq * 1.5;
-            filter = this.ac.createBiquadFilter();
-            filter.type = "bandpass";
-            filter.frequency.value = 900;
-            filter.Q.value = 2;
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.gain.setValueAtTime(0.3, now);
-            sources.push(osc);
-            break;
-
-          case "black":          // Male Vocals
-            osc = this.ac.createOscillator();
-            osc.type = "sawtooth";
-            osc.frequency.value = freq * 0.5;
-            filter = this.ac.createBiquadFilter();
-            filter.type = "lowpass";
-            filter.frequency.value = 600;
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.gain.setValueAtTime(0.3, now);
-            sources.push(osc);
-            break;
-
-          case "brown":          // Guitar
-            osc = this.ac.createOscillator();
-            osc.type = "sawtooth";
-            osc.frequency.value = freq;
-            filter = this.ac.createBiquadFilter();
-            filter.type = "lowpass";
-            filter.frequency.value = 2000;
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
-            sources.push(osc);
-            break;
-
-          case "grey": {         // Violin — 6 Hz vibrato on the pitch
-            osc = this.ac.createOscillator();
-            osc.type = "sawtooth";
-            osc.frequency.value = freq;
-            const lfo = this.ac.createOscillator();
-            lfo.frequency.value = 6;
-            const lfoGain = this.ac.createGain();
-            lfoGain.gain.value = 5;
-            lfo.connect(lfoGain);
-            lfoGain.connect(osc.frequency);
-            lfo.start(now);
-            filter = this.ac.createBiquadFilter();
-            filter.type = "lowpass";
-            filter.frequency.value = 3000;
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.3, now + 0.4);
-            sources.push(osc, lfo);
-            break;
+          if (inst.vibrato) {
+            const lfo = ac.createOscillator();
+            lfo.frequency.value = inst.vibrato;
+            const lg = ac.createGain();
+            lg.gain.value = inst.vibDepth || 4;
+            lfo.connect(lg);
+            for (const p of pitchTargets) lg.connect(p);
+            // Vibrato eases in — nobody starts a note already wobbling.
+            lg.gain.setValueAtTime(0, t);
+            lg.gain.linearRampToValueAtTime(inst.vibDepth || 4, t + 0.35);
+            sources.push(lfo);
           }
-
-          case "magenta": {      // Flute — 5 Hz tremolo on the gain
-            osc = this.ac.createOscillator();
-            osc.type = "sine";
-            osc.frequency.value = freq;
-            const tLfo = this.ac.createOscillator();
-            tLfo.frequency.value = 5;
-            const tGain = this.ac.createGain();
-            tGain.gain.value = 0.1;
-            tLfo.connect(tGain);
-            tGain.connect(gain.gain);
-            tLfo.start(now);
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
-            sources.push(osc, tLfo);
-            break;
-          }
-
-          case "snare": {        // Snare — noise plus a pitched thump
-            const snareNoise = this.ac.createBufferSource();
-            snareNoise.buffer = this.noise(0.2);
-            const hp = this.ac.createBiquadFilter();
-            hp.type = "highpass";
-            hp.frequency.value = 1000;
-            snareNoise.connect(hp);
-            hp.connect(gain);
-            osc = this.ac.createOscillator();
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(180, now);
-            osc.frequency.exponentialRampToValueAtTime(80, now + 0.1);
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.8, now + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-            sources.push(snareNoise, osc);
-            break;
-          }
-
-          case "shaker": {       // Shaker
-            const sh = this.ac.createBufferSource();
-            sh.buffer = this.noise(0.1);
-            const hp = this.ac.createBiquadFilter();
-            hp.type = "highpass";
-            hp.frequency.value = 4000 + freq * 0.5;
-            sh.connect(hp);
-            hp.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.4, now + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-            sources.push(sh);
-            break;
-          }
-
-          case "kick":           // Kick
-            osc = this.ac.createOscillator();
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(180, now);
-            osc.frequency.exponentialRampToValueAtTime(45, now + 0.1);
-            osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(1.0, now + 0.002);
-            gain.gain.exponentialRampToValueAtTime(0.5, now + 0.1);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-            sources.push(osc);
-            break;
-
-          case "woodblock":      // Woodblock
-            osc = this.ac.createOscillator();
-            osc.type = "triangle";
-            osc.frequency.value = 600 + freq * 0.5;
-            osc.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.6, now + 0.005);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            sources.push(osc);
-            break;
-
-          case "tambourine": {   // Tambourine
-            const tam = this.ac.createBufferSource();
-            tam.buffer = this.noise(0.15);
-            const hp = this.ac.createBiquadFilter();
-            hp.type = "highpass";
-            hp.frequency.value = 6000;
-            tam.connect(hp);
-            hp.connect(gain);
-            gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.3, now + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            sources.push(tam);
-            break;
-          }
-
-          default:
-            osc = this.ac.createOscillator();
-            osc.connect(gain);
-            sources.push(osc);
         }
 
-        for (const s of sources) { try { s.start(now); } catch (_) {} }
-        return { osc: osc, filter: filter, gain: gain, sources: sources };
-      }
+        // --- envelope -------------------------------------------------------
+        const peak = (inst.gain || 0.3) * (0.45 + vel * 0.75);
+        const atk = inst.atk || 0.01;
+        const dec = inst.dec || 0.2;
+        const sus = inst.sus === undefined ? 0.6 : inst.sus;
+        amp.gain.setValueAtTime(0.0001, t);
+        amp.gain.exponentialRampToValueAtTime(peak, t + atk);
+        // Exponential decay to the sustain floor sounds natural; a linear one
+        // sounds like a fader being pulled.
+        amp.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * sus), t + atk + dec);
 
-      noise(seconds) {
-        const n = Math.max(1, Math.floor(this.ac.sampleRate * seconds));
-        const buf = this.ac.createBuffer(1, n, this.ac.sampleRate);
-        const d = buf.getChannelData(0);
-        for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-        return buf;
-      }
+        for (const s of sources) { try { s.start(t); } catch (_) {} }
+
+        const stopAll = (at) => {
+          for (const s of sources) { try { s.stop(at); } catch (_) {} }
+          ctx.timeout(() => {
+            this.voices = Math.max(0, this.voices - 1);
+            try { tail.disconnect(); } catch (_) {}
+          }, Math.max(0, (at - ac.currentTime) * 1000) + 120);
+        };
+
+        if (!sustained || sus === 0) {
+          const end = t + atk + dec + (inst.rel || 0.2);
+          amp.gain.exponentialRampToValueAtTime(0.0001, end);
+          stopAll(end + 0.05);
+          return null;
+        }
+
+        return {
+          bend: (f) => {
+            const now = ac.currentTime;
+            for (const p of pitchTargets) p.setTargetAtTime(f, now, 0.045);
+            if (filter && !inst.sweep) {
+              filter.frequency.setTargetAtTime(
+                Math.min(16000, f * (inst.cut || 3) * (0.55 + vel * 0.9)), now, 0.06);
+            }
+          },
+          release: () => {
+            const now = ac.currentTime;
+            const rel = inst.rel || 0.3;
+            amp.gain.cancelScheduledValues(now);
+            amp.gain.setValueAtTime(Math.max(0.0001, amp.gain.value), now);
+            amp.gain.exponentialRampToValueAtTime(0.0001, now + rel);
+            stopAll(now + rel + 0.05);
+          }
+        };
+      },
 
       close() {
-        try { this.stopAll(); } catch (_) {}
         if (this.ac) { try { this.ac.close(); } catch (_) {} }
         this.ac = null;
+        this.ready = false;
       }
+    };
+
+    // ===================================================================== //
+    // 2. Three                                                              //
+    // ===================================================================== //
+    let THREE = null;
+    try {
+      THREE = await ctx.importModule("three", "0.164.1");
+    } catch (_) {
+      try {
+        THREE = await ctx.importModule("https://libs.plethora.studio/three/0.164.1/three.module.js");
+      } catch (e2) { THREE = null; }
     }
 
-    const synth = new SoundEngine();
+    // A registry typeface, so the UI is not set in whatever the phone defaults
+    // to. Falls back gracefully if the font service is unavailable.
+    let FONT = "'Space Grotesk',-apple-system,BlinkMacSystemFont,sans-serif";
+    try {
+      await ctx.loadFont("Space Grotesk", "space-grotesk", "1.0.0", { weight: "300 700" });
+    } catch (_) {
+      FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+    }
 
-    // ===================================================================== //
-    // 3. The canvas                                                         //
-    // ===================================================================== //
-    const particles = [];
+    const view = ctx.createCanvas({ touchAction: "none" });
+    const ui = ctx.createRoot({ touchAction: "none" });
+    ui.style.zIndex = "4";
+    ui.style.pointerEvents = "none";
 
-    function addParticle(x, y, colour, burst) {
-      const count = burst ? 12 : 1;
+    const SAFE_T = Math.max((ctx.safeArea && ctx.safeArea.top) || 0, 8);
+    const SAFE_B = Math.max((ctx.safeArea && ctx.safeArea.bottom) || 0, 10);
+    const HEAD_H = 52;
+    const PAL_H = 150;
+
+    let W = Math.max(1, ctx.width), H = Math.max(1, ctx.height);
+
+    if (!THREE) {
+      ui.innerHTML =
+        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
+        'padding:30px;text-align:center;font-family:' + FONT + ';color:#e7e5f0;background:#08070f;">' +
+        '<div><div style="font-size:19px;font-weight:700;margin-bottom:9px;">Symphony Sketchpad</div>' +
+        '<div style="font-size:13.5px;opacity:0.75;line-height:1.6;">This needs 3D, and it could not ' +
+        "start here. Try opening it again in the Plethora app.</div></div></div>";
+      ctx.platform.error({ where: "three_import" });
+      ctx.platform.ready();
+      return;
+    }
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas: view, antialias: false, alpha: false, powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(Math.min(2, ctx.nativeDpr || 1));
+    renderer.setSize(W, H, false);
+    renderer.setClearColor(0x07060e, 1);
+
+    const scene = new THREE.Scene();
+    // Orthographic with top above bottom, so a pixel on screen is a unit in
+    // world and y runs downward like the DOM. That flips the projection's Y,
+    // which inverts triangle winding — every material here must be DoubleSide
+    // or it gets back-face culled into invisibility.
+    const camera = new THREE.OrthographicCamera(0, W, 0, H, -1000, 1000);
+    camera.position.z = 10;
+
+    // ---- pad geometry ----------------------------------------------------
+    let padX = 0, padY = 0, padW = 1, padH = 1;
+
+    // ---- the backdrop: a slow drifting field, drawn in a shader ----------
+    const bgMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uRes: { value: new THREE.Vector2(W, H) },
+        uTime: { value: 0 },
+        uPad: { value: new THREE.Vector4(0, 0, 1, 1) },
+        uEnergy: { value: 0 }
+      },
+      vertexShader:
+        "varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.999,1.0);}",
+      fragmentShader: [
+        "precision highp float;",
+        "varying vec2 vUv;",
+        "uniform vec2 uRes; uniform float uTime; uniform vec4 uPad; uniform float uEnergy;",
+        "float hash(vec2 p){return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453);}",
+        "void main(){",
+        // vUv.y runs bottom-up in GL; the layout is top-down, so flip it or the
+        // pad rectangle lands at the wrong end of the screen.
+        "  vec2 frag = vec2(vUv.x, 1.0 - vUv.y) * uRes;",
+        // Inside the drawing pad it is near-black so the strokes carry; outside
+        // it lifts very slightly, which frames the canvas without a border.
+        "  float inPad = step(uPad.x,frag.x)*step(frag.x,uPad.x+uPad.z)",
+        "              * step(uPad.y,frag.y)*step(frag.y,uPad.y+uPad.w);",
+        "  vec2 c = (frag - uPad.xy) / max(uPad.zw, vec2(1.0));",
+        "  float r = length(c - 0.5);",
+        // A very slow aurora, brightening as more is playing.
+        "  float a = sin(c.x*3.1 + uTime*0.19) * cos(c.y*2.3 - uTime*0.13);",
+        "  float aur = smoothstep(0.2, 1.0, a) * (0.035 + uEnergy*0.10);",
+        "  vec3 col = mix(vec3(0.028,0.024,0.052), vec3(0.012,0.010,0.026), inPad);",
+        "  col += vec3(0.30,0.16,0.62) * aur * inPad;",
+        "  col *= 1.0 - r*0.34;",             // vignette
+        "  float g = hash(frag + fract(uTime)) - 0.5;",
+        "  col += g * 0.016;",                // grain, so flat areas are not dead
+        "  gl_FragColor = vec4(col,1.0);",
+        "}"
+      ].join("\n"),
+      depthWrite: false, depthTest: false
+    });
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMat);
+    bg.frustumCulled = false;
+    bg.renderOrder = -10;
+    scene.add(bg);
+
+    // ---- strokes: camera-facing ribbons that read as light ---------------
+    // Each stroke owns a buffer of quads. The fragment shader fades to zero at
+    // the ribbon edge, so there is no hard silhouette anywhere.
+    const strokeMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uGlow: { value: 1 } },
+      vertexShader: [
+        "attribute float aSide; attribute float aFlare; attribute vec3 aColor;",
+        "varying float vSide; varying float vFlare; varying vec3 vColor;",
+        "void main(){ vSide=aSide; vFlare=aFlare; vColor=aColor;",
+        "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }"
+      ].join("\n"),
+      fragmentShader: [
+        "precision highp float;",
+        "varying float vSide; varying float vFlare; varying vec3 vColor;",
+        "uniform float uGlow;",
+        "void main(){",
+        "  float d = abs(vSide);",
+        // A soft core plus a wide halo — two falloffs rather than one, which is
+        // what stops it looking like a fat antialiased line.
+        "  float core = smoothstep(1.0, 0.12, d);",
+        "  float halo = smoothstep(1.0, 0.0, d) * 0.42;",
+        "  float a = core + halo * uGlow;",
+        "  vec3 c = mix(vColor, vec3(1.0), core*core*0.55 + vFlare*0.5);",
+        "  gl_FragColor = vec4(c * (0.75 + vFlare*1.7), a);",
+        "}"
+      ].join("\n"),
+      transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, depthTest: false, side: THREE.DoubleSide
+    });
+
+    const MAX_POINTS = 9000;
+    const strokeGeo = new THREE.BufferGeometry();
+    const sPos = new Float32Array(MAX_POINTS * 2 * 3);
+    const sSide = new Float32Array(MAX_POINTS * 2);
+    const sFlare = new Float32Array(MAX_POINTS * 2);
+    const sCol = new Float32Array(MAX_POINTS * 2 * 3);
+    const sIdx = new Uint32Array(MAX_POINTS * 6);
+    strokeGeo.setAttribute("position", new THREE.BufferAttribute(sPos, 3));
+    strokeGeo.setAttribute("aSide", new THREE.BufferAttribute(sSide, 1));
+    strokeGeo.setAttribute("aFlare", new THREE.BufferAttribute(sFlare, 1));
+    strokeGeo.setAttribute("aColor", new THREE.BufferAttribute(sCol, 3));
+    strokeGeo.setIndex(new THREE.BufferAttribute(sIdx, 1));
+    strokeGeo.setDrawRange(0, 0);
+    const strokeMesh = new THREE.Mesh(strokeGeo, strokeMat);
+    strokeMesh.frustumCulled = false;
+    scene.add(strokeMesh);
+
+    const tmpCol = new THREE.Color();
+
+    // Rebuild the ribbon buffers. Only on change, not per frame.
+    let ribbonDirty = true;
+    function buildRibbons() {
+      let v = 0, tri = 0;
+      const all = state.drawing ? state.strokes.concat([state.drawing]) : state.strokes;
+      for (const st of all) {
+        const pts = st.points;
+        if (pts.length < 2) continue;
+        tmpCol.set(st.colour);
+        const half = st.width * 0.5;
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i];
+          const a = pts[Math.max(0, i - 1)];
+          const b = pts[Math.min(pts.length - 1, i + 1)];
+          let dx = b.x - a.x, dy = b.y - a.y;
+          const len = Math.hypot(dx, dy) || 1;
+          dx /= len; dy /= len;
+          const nx = -dy * half, ny = dx * half;
+          if (v + 2 > MAX_POINTS * 2) break;
+
+          for (const s of [-1, 1]) {
+            const o = v * 3;
+            sPos[o] = padX + p.x + nx * s;
+            sPos[o + 1] = padY + p.y + ny * s;
+            sPos[o + 2] = 0;
+            sSide[v] = s;
+            sFlare[v] = p.flare || 0;
+            sCol[o] = tmpCol.r; sCol[o + 1] = tmpCol.g; sCol[o + 2] = tmpCol.b;
+            v++;
+          }
+          if (i > 0) {
+            const q = v - 4;
+            sIdx[tri++] = q; sIdx[tri++] = q + 1; sIdx[tri++] = q + 2;
+            sIdx[tri++] = q + 1; sIdx[tri++] = q + 3; sIdx[tri++] = q + 2;
+          }
+        }
+      }
+      strokeGeo.attributes.position.needsUpdate = true;
+      strokeGeo.attributes.aSide.needsUpdate = true;
+      strokeGeo.attributes.aFlare.needsUpdate = true;
+      strokeGeo.attributes.aColor.needsUpdate = true;
+      strokeGeo.index.needsUpdate = true;
+      strokeGeo.setDrawRange(0, tri);
+      ribbonDirty = false;
+    }
+
+    // ---- the sweeping plane of light -------------------------------------
+    const scanMat = new THREE.ShaderMaterial({
+      uniforms: { uOn: { value: 0 } },
+      vertexShader: "varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
+      fragmentShader: [
+        "precision highp float; varying vec2 vUv; uniform float uOn;",
+        "void main(){",
+        "  float d = abs(vUv.x - 0.5) * 2.0;",
+        "  float a = smoothstep(1.0, 0.0, d);",
+        "  vec3 c = mix(vec3(0.55,0.75,1.0), vec3(1.0), pow(1.0-d, 6.0));",
+        "  gl_FragColor = vec4(c, a*a*0.85*uOn);",
+        "}"
+      ].join("\n"),
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+      side: THREE.DoubleSide
+    });
+    const scanMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), scanMat);
+    scanMesh.frustumCulled = false;
+    scene.add(scanMesh);
+
+    // ---- sparks ----------------------------------------------------------
+    const SPARKS = 900;
+    const spPos = new Float32Array(SPARKS * 3);
+    const spCol = new Float32Array(SPARKS * 3);
+    const spSize = new Float32Array(SPARKS);
+    const spLife = new Float32Array(SPARKS);
+    const spVel = new Float32Array(SPARKS * 2);
+    let spHead = 0;
+    const sparkGeo = new THREE.BufferGeometry();
+    sparkGeo.setAttribute("position", new THREE.BufferAttribute(spPos, 3));
+    sparkGeo.setAttribute("aColor", new THREE.BufferAttribute(spCol, 3));
+    sparkGeo.setAttribute("aSize", new THREE.BufferAttribute(spSize, 1));
+    sparkGeo.setAttribute("aLife", new THREE.BufferAttribute(spLife, 1));
+    const sparkMat = new THREE.ShaderMaterial({
+      uniforms: { uDpr: { value: renderer.getPixelRatio() } },
+      vertexShader: [
+        "attribute vec3 aColor; attribute float aSize; attribute float aLife;",
+        "varying vec3 vColor; varying float vLife; uniform float uDpr;",
+        "void main(){ vColor=aColor; vLife=aLife;",
+        "  vec4 mv = modelViewMatrix * vec4(position,1.0);",
+        "  gl_PointSize = aSize * uDpr * (0.35 + aLife*0.85);",
+        "  gl_Position = projectionMatrix * mv; }"
+      ].join("\n"),
+      fragmentShader: [
+        "precision highp float; varying vec3 vColor; varying float vLife;",
+        "void main(){",
+        "  float d = length(gl_PointCoord - 0.5) * 2.0;",
+        "  float a = smoothstep(1.0, 0.0, d);",
+        "  gl_FragColor = vec4(vColor, a*a*vLife);",
+        "}"
+      ].join("\n"),
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false
+    });
+    const sparks = new THREE.Points(sparkGeo, sparkMat);
+    sparks.frustumCulled = false;
+    scene.add(sparks);
+
+    function spark(x, y, colour, count, spread) {
+      tmpCol.set(colour);
       for (let i = 0; i < count; i++) {
+        const k = spHead;
+        spHead = (spHead + 1) % SPARKS;
         const a = Math.random() * Math.PI * 2;
-        const sp = burst ? Math.random() * 6 + 2 : Math.random() * 1.5;
-        particles.push({
-          x: x, y: y,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          life: 1, decay: burst ? 0.02 : 0.05,
-          colour: colour,
-          size: burst ? Math.random() * 6 + 2 : Math.random() * 4 + 1
-        });
+        const s = Math.random() * spread;
+        spPos[k * 3] = padX + x;
+        spPos[k * 3 + 1] = padY + y;
+        spPos[k * 3 + 2] = 1;
+        spVel[k * 2] = Math.cos(a) * s;
+        spVel[k * 2 + 1] = Math.sin(a) * s;
+        spCol[k * 3] = tmpCol.r; spCol[k * 3 + 1] = tmpCol.g; spCol[k * 3 + 2] = tmpCol.b;
+        spSize[k] = 5 + Math.random() * 12;
+        spLife[k] = 1;
       }
-    }
-
-    function strokePath(pts) {
-      g.beginPath();
-      g.moveTo(padX + pts[0].x, padY + pts[0].y);
-      for (let i = 1; i < pts.length; i++) g.lineTo(padX + pts[i].x, padY + pts[i].y);
-    }
-
-    function draw() {
-      g.clearRect(0, 0, W, H);
-      g.fillStyle = BG;
-      g.fillRect(0, 0, W, H);
-      g.save();
-      g.beginPath();
-      g.rect(padX, padY, padW, padH);
-      g.clip();
-
-      g.fillStyle = PAD_BG;
-      g.fillRect(padX, padY, padW, padH);
-
-      // grid
-      g.strokeStyle = "rgba(255,255,255,0.05)";
-      g.lineWidth = 1;
-      for (let x = 0; x < padW; x += 40) {
-        g.beginPath(); g.moveTo(padX + x, padY); g.lineTo(padX + x, padY + padH); g.stroke();
-      }
-      for (let y = 0; y < padH; y += 40) {
-        g.beginPath(); g.moveTo(padX, padY + y); g.lineTo(padX + padW, padY + y); g.stroke();
-      }
-
-      g.lineCap = "round";
-      g.lineJoin = "round";
-      g.lineWidth = state.brushSize;
-
-      for (const s of state.strokes) {
-        if (!s.points.length) continue;
-        strokePath(s.points);
-        g.strokeStyle = s.colour;
-        if (state.glow) { g.shadowBlur = 15; g.shadowColor = s.colour; }
-        g.stroke();
-        g.shadowBlur = 0;
-      }
-
-      if (state.drawing && state.drawing.points.length > 1) {
-        strokePath(state.drawing.points);
-        g.strokeStyle = state.drawing.colour;
-        if (state.glow) { g.shadowBlur = 15; g.shadowColor = state.drawing.colour; }
-        g.stroke();
-        g.shadowBlur = 0;
-      }
-
-      for (const p of particles) {
-        g.globalAlpha = Math.max(0, p.life);
-        g.fillStyle = p.colour;
-        g.beginPath();
-        g.arc(padX + p.x, padY + p.y, p.size, 0, Math.PI * 2);
-        g.fill();
-      }
-      g.globalAlpha = 1;
-
-      if (state.playing) {
-        const x = padX + state.scanX;
-        g.strokeStyle = "rgba(255,255,255,0.85)";
-        g.lineWidth = 2;
-        g.shadowBlur = 12;
-        g.shadowColor = "#ffffff";
-        g.beginPath();
-        g.moveTo(x, padY);
-        g.lineTo(x, padY + padH);
-        g.stroke();
-        g.shadowBlur = 0;
-      }
-      g.restore();
     }
 
     // ===================================================================== //
-    // 4. Playing it back                                                    //
+    // 3. Bloom                                                              //
+    // ===================================================================== //
+    // Scene → bright pass → two separable blurs at quarter res → additive
+    // composite with a filmic curve. This is the difference between "glowing"
+    // and "a bright line with a blurry copy behind it".
+    const rtScene = new THREE.WebGLRenderTarget(1, 1, {
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat
+    });
+    const rtA = new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    const rtB = new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+
+    const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const quadGeo = new THREE.PlaneGeometry(2, 2);
+    const passScene = new THREE.Scene();
+    const passQuad = new THREE.Mesh(quadGeo, null);
+    passScene.add(passQuad);
+
+    const VERT = "varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}";
+
+    const brightMat = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, uThresh: { value: 0.28 } },
+      vertexShader: VERT,
+      fragmentShader: [
+        "precision highp float; varying vec2 vUv;",
+        "uniform sampler2D tDiffuse; uniform float uThresh;",
+        "void main(){",
+        "  vec3 c = texture2D(tDiffuse, vUv).rgb;",
+        "  float l = dot(c, vec3(0.2126,0.7152,0.0722));",
+        "  float k = smoothstep(uThresh, uThresh+0.45, l);",
+        "  gl_FragColor = vec4(c*k, 1.0);",
+        "}"
+      ].join("\n"),
+      depthTest: false, depthWrite: false
+    });
+
+    const blurMat = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, uDir: { value: new THREE.Vector2(1, 0) }, uTexel: { value: new THREE.Vector2() } },
+      vertexShader: VERT,
+      fragmentShader: [
+        "precision highp float; varying vec2 vUv;",
+        "uniform sampler2D tDiffuse; uniform vec2 uDir; uniform vec2 uTexel;",
+        // Nine-tap Gaussian, weights from a normalised kernel.
+        "void main(){",
+        "  vec2 o = uDir * uTexel;",
+        "  vec3 s = texture2D(tDiffuse, vUv).rgb * 0.2270270270;",
+        "  s += texture2D(tDiffuse, vUv + o*1.3846153846).rgb * 0.3162162162;",
+        "  s += texture2D(tDiffuse, vUv - o*1.3846153846).rgb * 0.3162162162;",
+        "  s += texture2D(tDiffuse, vUv + o*3.2307692308).rgb * 0.0702702703;",
+        "  s += texture2D(tDiffuse, vUv - o*3.2307692308).rgb * 0.0702702703;",
+        "  gl_FragColor = vec4(s, 1.0);",
+        "}"
+      ].join("\n"),
+      depthTest: false, depthWrite: false
+    });
+
+    const compMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tScene: { value: null }, tBloom: { value: null },
+        uAmount: { value: 1.15 }, uTime: { value: 0 }
+      },
+      vertexShader: VERT,
+      fragmentShader: [
+        "precision highp float; varying vec2 vUv;",
+        "uniform sampler2D tScene; uniform sampler2D tBloom;",
+        "uniform float uAmount; uniform float uTime;",
+        "float hash(vec2 p){return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453);}",
+        "void main(){",
+        "  vec3 c = texture2D(tScene, vUv).rgb;",
+        "  vec3 b = texture2D(tBloom, vUv).rgb;",
+        "  c += b * uAmount;",
+        // ACES-ish filmic curve: highlights roll off instead of clipping to
+        // flat white, which is most of why this reads as photographed light.
+        "  c = (c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14);",
+        "  c += (hash(vUv*1024.0 + fract(uTime)) - 0.5) * 0.012;",
+        "  gl_FragColor = vec4(clamp(c,0.0,1.0), 1.0);",
+        "}"
+      ].join("\n"),
+      depthTest: false, depthWrite: false
+    });
+
+    function pass(material, target) {
+      passQuad.material = material;
+      renderer.setRenderTarget(target || null);
+      renderer.render(passScene, quadCam);
+    }
+
+    // ===================================================================== //
+    // 4. Layout                                                             //
+    // ===================================================================== //
+    function layout() {
+      W = Math.max(1, ctx.width);
+      H = Math.max(1, ctx.height);
+      renderer.setSize(W, H, false);
+      camera.left = 0; camera.right = W; camera.top = 0; camera.bottom = H;
+      camera.updateProjectionMatrix();
+
+      padX = 0;
+      padY = SAFE_T + HEAD_H;
+      padW = W;
+      padH = Math.max(120, H - padY - (state.showPalette ? PAL_H : 34) - SAFE_B);
+
+      bgMat.uniforms.uRes.value.set(W, H);
+      bgMat.uniforms.uPad.value.set(padX, padY, padW, padH);
+
+      scanMesh.scale.set(54, padH, 1);
+      scanMesh.position.y = padY + padH / 2;
+
+      const dpr = renderer.getPixelRatio();
+      rtScene.setSize(Math.max(1, Math.floor(W * dpr)), Math.max(1, Math.floor(H * dpr)));
+      const bw = Math.max(1, Math.floor(W * dpr * 0.25));
+      const bh = Math.max(1, Math.floor(H * dpr * 0.25));
+      rtA.setSize(bw, bh);
+      rtB.setSize(bw, bh);
+      blurMat.uniforms.uTexel.value.set(1 / bw, 1 / bh);
+      sparkMat.uniforms.uDpr.value = dpr;
+
+      head.style.top = SAFE_T + "px";
+      head.style.height = HEAD_H + "px";
+      palette.style.height = PAL_H + "px";
+      palette.style.bottom = SAFE_B + "px";
+      transport.style.bottom = (SAFE_B + (state.showPalette ? PAL_H : 0) + 14) + "px";
+      hint.style.top = padY + "px";
+      hint.style.height = padH + "px";
+      ribbonDirty = true;
+    }
+
+    // ===================================================================== //
+    // 5. Interface                                                          //
+    // ===================================================================== //
+    const INK = "#f2f0f7", DIM = "rgba(242,240,247,0.5)";
+
+    const icon = (d, size, colour, fill) =>
+      '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="' + (fill || "none") +
+      '" stroke="' + colour + '" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+      'style="display:block;pointer-events:none;">' + d + "</svg>";
+    const I_PLAY = '<path d="M6 4.5v15l13-7.5z"/>';
+    const I_STOP = '<rect x="6" y="6" width="12" height="12" rx="1.5"/>';
+    const I_UNDO = '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>';
+    const I_CLEAR = '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>';
+    const I_CHEV = '<path d="m6 9 6 6 6-6"/>';
+
+    ui.innerHTML =
+      '<div style="position:absolute;inset:0;font-family:' + FONT + ";color:" + INK + ";" +
+      '-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;">' +
+
+      '<div data-el="head" style="position:absolute;left:0;right:0;display:flex;align-items:center;' +
+      'justify-content:space-between;padding:0 20px;">' +
+        "<div>" +
+          '<div style="font-size:10px;letter-spacing:3.4px;text-transform:uppercase;color:' + DIM + ';' +
+          'font-weight:500;">Symphony</div>' +
+          '<div data-el="inst" style="font-size:17px;font-weight:600;letter-spacing:-0.2px;' +
+          'line-height:1.25;margin-top:1px;">Piano</div>' +
+        "</div>" +
+        '<div style="display:flex;gap:8px;">' +
+          '<button data-el="undo" style="pointer-events:auto;width:38px;height:38px;border-radius:12px;' +
+          'border:1px solid rgba(255,255,255,0.10);background:rgba(255,255,255,0.05);display:flex;' +
+          'align-items:center;justify-content:center;padding:0;">' + icon(I_UNDO, 16, INK) + "</button>" +
+          '<button data-el="clear" style="pointer-events:auto;width:38px;height:38px;border-radius:12px;' +
+          'border:1px solid rgba(255,255,255,0.10);background:rgba(255,255,255,0.05);display:flex;' +
+          'align-items:center;justify-content:center;padding:0;">' + icon(I_CLEAR, 16, INK) + "</button>" +
+        "</div>" +
+      "</div>" +
+
+      '<div data-el="hint" style="position:absolute;left:0;right:0;display:flex;align-items:center;' +
+      'justify-content:center;pointer-events:none;transition:opacity 700ms cubic-bezier(.2,.7,.3,1);">' +
+        '<div style="text-align:center;">' +
+          '<div style="font-size:15.5px;font-weight:500;letter-spacing:0.2px;">Draw something</div>' +
+          '<div style="font-size:12.5px;color:' + DIM + ';margin-top:7px;letter-spacing:0.2px;">' +
+          "higher is a higher note</div>" +
+        "</div>" +
+      "</div>" +
+
+      '<div data-el="transport" style="position:absolute;left:0;right:0;display:flex;align-items:center;' +
+      'justify-content:center;gap:12px;pointer-events:none;">' +
+        '<button data-el="play" style="pointer-events:auto;width:62px;height:62px;border-radius:31px;' +
+        'border:0;background:linear-gradient(160deg,#fdfcff,#cfc9e6);display:flex;align-items:center;' +
+        'justify-content:center;padding:0;box-shadow:0 10px 34px rgba(120,90,255,0.34),' +
+        'inset 0 1px 0 rgba(255,255,255,0.9);transition:transform 160ms cubic-bezier(.2,.7,.3,1);">' +
+        icon(I_PLAY, 23, "#0b0916", "#0b0916") + "</button>" +
+      "</div>" +
+
+      '<div data-el="palette" style="position:absolute;left:0;right:0;pointer-events:auto;' +
+      'background:linear-gradient(180deg,rgba(10,9,20,0) 0%,rgba(10,9,20,0.82) 26%,rgba(10,9,20,0.95) 100%);' +
+      'transition:transform 340ms cubic-bezier(.2,.7,.3,1);">' +
+        '<button data-el="fold" style="pointer-events:auto;position:absolute;top:-2px;left:50%;' +
+        'transform:translateX(-50%);width:54px;height:26px;border:0;background:transparent;padding:0;' +
+        'display:flex;align-items:center;justify-content:center;">' +
+        '<span data-el="chev" style="display:block;transition:transform 300ms;">' +
+        icon(I_CHEV, 17, DIM) + "</span></button>" +
+        '<div data-el="rail" style="position:absolute;left:0;right:0;top:24px;bottom:8px;' +
+        'overflow-x:auto;overflow-y:hidden;display:flex;gap:9px;padding:4px 18px;align-items:center;' +
+        'touch-action:pan-x;-webkit-overflow-scrolling:touch;"></div>' +
+      "</div>" +
+      "</div>";
+
+    const nodes = {};
+    for (const el of ui.querySelectorAll("[data-el]")) nodes[el.getAttribute("data-el")] = el;
+    const head = nodes.head, palette = nodes.palette, hint = nodes.hint, transport = nodes.transport;
+
+    const chips = [];
+    for (const inst of INSTRUMENTS) {
+      const b = document.createElement("button");
+      b.setAttribute("data-id", inst.id);
+      b.style.cssText =
+        "flex:0 0 auto;height:88px;width:72px;border-radius:16px;padding:11px 6px 9px;" +
+        "border:1px solid rgba(255,255,255,0.09);background:rgba(255,255,255,0.045);" +
+        "display:flex;flex-direction:column;align-items:center;justify-content:space-between;" +
+        "pointer-events:auto;touch-action:manipulation;font-family:inherit;" +
+        "transition:transform 200ms cubic-bezier(.2,.7,.3,1),background 200ms,border-color 200ms;";
+      b.innerHTML =
+        '<span data-dot style="width:26px;height:26px;border-radius:50%;background:' + inst.colour + ";" +
+        "box-shadow:0 0 16px " + inst.colour + '99,inset 0 -3px 6px rgba(0,0,0,0.32);display:block;' +
+        'transition:box-shadow 220ms,transform 220ms;"></span>' +
+        '<span style="font-size:9.5px;font-weight:500;letter-spacing:0.35px;color:' + DIM + ';' +
+        'text-align:center;line-height:1.2;">' + inst.name + "</span>";
+      nodes.rail.appendChild(b);
+      chips.push(b);
+    }
+
+    function paintPalette() {
+      for (let i = 0; i < chips.length; i++) {
+        const inst = INSTRUMENTS[i];
+        const on = inst.id === state.instrument;
+        chips[i].style.background = on ? "rgba(255,255,255,0.11)" : "rgba(255,255,255,0.045)";
+        chips[i].style.borderColor = on ? inst.colour : "rgba(255,255,255,0.09)";
+        chips[i].style.transform = on ? "translateY(-3px)" : "none";
+        const dot = chips[i].querySelector("[data-dot]");
+        dot.style.boxShadow = on
+          ? "0 0 26px " + inst.colour + ", inset 0 -3px 6px rgba(0,0,0,0.32)"
+          : "0 0 16px " + inst.colour + "99, inset 0 -3px 6px rgba(0,0,0,0.32)";
+        dot.style.transform = on ? "scale(1.12)" : "scale(1)";
+      }
+      const inst = byId[state.instrument];
+      if (inst) { nodes.inst.textContent = inst.name; nodes.inst.style.color = inst.colour; }
+    }
+
+    // Keep the chosen instrument in view. Without this a remembered choice can
+    // sit off the end of the rail, so the bit opens looking like nothing is
+    // selected. scrollIntoView would move the whole page, so scroll the rail.
+    function revealChip(smooth) {
+      const i = INSTRUMENTS.findIndex((x) => x.id === state.instrument);
+      if (i < 0) return;
+      const chip = chips[i];
+      const target = chip.offsetLeft - (nodes.rail.clientWidth - chip.offsetWidth) / 2;
+      const max = Math.max(0, nodes.rail.scrollWidth - nodes.rail.clientWidth);
+      const left = Math.max(0, Math.min(max, target));
+      if (smooth && nodes.rail.scrollTo) nodes.rail.scrollTo({ left: left, behavior: "smooth" });
+      else nodes.rail.scrollLeft = left;
+    }
+
+    // ===================================================================== //
+    // 6. Playing it                                                         //
     // ===================================================================== //
     function setPlaying(on) {
       state.playing = on;
-      playBtn.style.background = on ? "#ef4444" : "#22c55e";
-      playBtn.innerHTML = on ? svg("square", 19, "#ffffff", "#ffffff") : svg("play", 21, "#ffffff", "#ffffff");
-      if (!on) synth.stopAll();
+      nodes.play.innerHTML = on ? icon(I_STOP, 20, "#0b0916", "#0b0916") : icon(I_PLAY, 23, "#0b0916", "#0b0916");
+      scanMat.uniforms.uOn.value = on ? 1 : 0;
+      if (!on) for (const st of state.strokes) for (const p of st.points) p.flare = 0;
+      ribbonDirty = true;
     }
 
     function togglePlay() {
       if (state.playing) { setPlaying(false); return; }
       if (!state.strokes.length) return;
-      state.scanX = 0;
+      state.scan = 0;
       setPlaying(true);
       ctx.platform.interact({ kind: "play", strokes: state.strokes.length });
     }
 
-    // The scanline sweeps and fires every point it crosses this frame. Speed is
-    // per-frame in the original, so it is kept per-frame here.
-    function advanceScan() {
-      const prevX = state.scanX;
-      state.scanX += state.playbackSpeed * 0.1 * 6;
+    let energy = 0;
+    function advanceScan(dt) {
+      const prev = state.scan;
+      state.scan += 210 * dt;                 // px per second
       let wrapped = false;
-      if (state.scanX >= padW) { state.scanX = state.scanX % padW; wrapped = true; }
+      if (state.scan >= padW) { state.scan -= padW; wrapped = true; }
 
-      for (const s of state.strokes) {
-        for (const p of s.points) {
-          const hit = wrapped ? (p.x >= prevX || p.x < state.scanX)
-                              : (p.x >= prevX && p.x < state.scanX);
+      const when = Sound.ac ? Sound.ac.currentTime : 0;
+      for (const st of state.strokes) {
+        const inst = byId[st.instrument];
+        for (const p of st.points) {
+          const hit = wrapped ? (p.x >= prev || p.x < state.scan) : (p.x >= prev && p.x < state.scan);
+          p.flare = Math.max(0, (p.flare || 0) - dt * 3.4);
           if (!hit) continue;
-          synth.playNoteOneShot(s.instrument, p.ny, 0.2);
-          if (state.playbackBursts) addParticle(p.x, p.y, s.colour, true);
+          p.flare = 1;
+          if (Sound.ready && inst) {
+            Sound.voice(inst, Sound.freqFor(inst, p.ny), 0.35 + p.vel * 0.6,
+                        (p.x / padW) * 1.7 - 0.85, when, false);
+          }
+          spark(p.x, p.y, st.colour, 3, 62);
+          energy = Math.min(1, energy + 0.10);
         }
       }
+      ribbonDirty = true;
     }
 
     // ===================================================================== //
-    // 5. Hands on it                                                        //
+    // 7. Drawing                                                            //
     // ===================================================================== //
     let started = false;
     function firstGesture() {
       if (started) return;
       started = true;
-      synth.init();
+      Sound.init();
       ctx.platform.start();
       hint.style.opacity = "0";
     }
@@ -845,95 +1069,118 @@ window.plethoraBit = {
       return e.offsetX >= padX && e.offsetX <= padX + padW &&
              e.offsetY >= padY && e.offsetY <= padY + padH;
     }
-    function point(e) {
+
+    let held = null, lastPt = null, lastT = 0;
+
+    function makePoint(e, now) {
       const x = Math.max(0, Math.min(padW, e.offsetX - padX));
       const y = Math.max(0, Math.min(padH, e.offsetY - padY));
-      return { x: x, y: y, ny: 1 - y / padH };
+      // Velocity from how fast the finger is moving: a flick is loud and
+      // bright, a slow drag is soft. Free expression, no extra controls.
+      let vel = 0.35;
+      if (lastPt && now > lastT) {
+        const d = Math.hypot(x - lastPt.x, y - lastPt.y);
+        vel = Math.max(0, Math.min(1, (d / (now - lastT)) * 5.5));
+      }
+      lastPt = { x: x, y: y };
+      lastT = now;
+      return { x: x, y: y, ny: 1 - y / padH, vel: vel, flare: 0 };
     }
 
     ctx.listen(view, "pointerdown", (e) => {
       if (state.playing || !inPad(e)) return;
       firstGesture();
       if (view.setPointerCapture) { try { view.setPointerCapture(e.pointerId); } catch (_) {} }
-      const p = point(e);
-      const colour = state.rainbow ? "hsl(" + state.hue + ",100%,60%)" : colourOf[state.instrument];
-      state.drawing = { instrument: state.instrument, colour: colour, points: [p], pointerId: e.pointerId };
-      synth.startTone(state.instrument, p.ny, e.pointerId);
-      if (state.particleTrails) addParticle(p.x, p.y, colour);
+      lastPt = null;
+      const inst = byId[state.instrument];
+      const p = makePoint(e, performance.now());
+      state.drawing = {
+        instrument: state.instrument, colour: inst.colour,
+        width: 7 + p.vel * 9, points: [p]
+      };
+      if (Sound.ready) {
+        held = Sound.voice(inst, Sound.freqFor(inst, p.ny), 0.35 + p.vel * 0.6,
+                           (p.x / padW) * 1.7 - 0.85, 0, true);
+      }
+      spark(p.x, p.y, inst.colour, 5, 40);
       ctx.platform.haptic("light");
+      ribbonDirty = true;
     });
 
     ctx.listen(view, "pointermove", (e) => {
       if (!state.drawing || state.playing) return;
-      const p = point(e);
-      if (state.rainbow) state.drawing.colour = "hsl(" + state.hue + ",100%,60%)";
-      state.drawing.points.push(p);
-      if (state.particleTrails) addParticle(p.x, p.y, state.drawing.colour);
-      synth.updateTone(e.pointerId, p.ny);
+      const p = makePoint(e, performance.now());
+      const pts = state.drawing.points;
+      const last = pts[pts.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 2.2) return;
+      pts.push(p);
+      const inst = byId[state.instrument];
+      if (held) held.bend(Sound.freqFor(inst, p.ny));
+      if (Math.random() < 0.5) spark(p.x, p.y, state.drawing.colour, 1, 26);
+      ribbonDirty = true;
     });
 
-    const endStroke = (e) => {
+    const endStroke = () => {
       if (!state.drawing) return;
-      synth.stopTone(e.pointerId);
-      if (state.drawing.points.length) state.strokes.push(state.drawing);
+      if (held) { held.release(); held = null; }
+      if (state.drawing.points.length > 1) {
+        state.strokes.push(state.drawing);
+        ctx.platform.interact({ kind: "stroke", instrument: state.instrument });
+      }
       state.drawing = null;
-      ctx.platform.interact({ kind: "stroke", instrument: state.instrument });
+      lastPt = null;
+      ribbonDirty = true;
     };
     ctx.listen(view, "pointerup", endStroke);
     ctx.listen(view, "pointercancel", endStroke);
     ctx.listen(view, "lostpointercapture", endStroke);
 
-    for (let i = 0; i < instBtns.length; i++) {
+    for (let i = 0; i < chips.length; i++) {
       const id = INSTRUMENTS[i].id;
-      ctx.listen(instBtns[i], "pointerdown", (e) => {
+      ctx.listen(chips[i], "pointerdown", (e) => {
         e.preventDefault();
         firstGesture();
         state.instrument = id;
         paintPalette();
+        revealChip(true);
         remember();
         ctx.platform.haptic("light");
+        // Audition the instrument on selection — you should hear what you picked.
+        if (Sound.ready) {
+          const inst = byId[id];
+          Sound.voice(inst, Sound.freqFor(inst, 0.55), 0.7, 0, 0, false);
+        }
       });
     }
 
-    ctx.listen(nodes.undo, "pointerdown", (e) => {
-      e.preventDefault();
-      firstGesture();
+    const tap = (el, fn) => ctx.listen(el, "pointerdown", (e) => { e.preventDefault(); firstGesture(); fn(); });
+    tap(nodes.undo, () => {
       state.strokes.pop();
+      ribbonDirty = true;
       ctx.platform.haptic("light");
     });
-    ctx.listen(nodes.clear, "pointerdown", (e) => {
-      e.preventDefault();
-      firstGesture();
+    tap(nodes.clear, () => {
       state.strokes.length = 0;
       setPlaying(false);
+      ribbonDirty = true;
       ctx.platform.haptic("medium");
     });
-    ctx.listen(playBtn, "pointerdown", (e) => { e.preventDefault(); firstGesture(); togglePlay(); });
-    ctx.listen(nodes.shop, "pointerdown", (e) => {
-      e.preventDefault();
-      firstGesture();
-      nodes.shop_modal.style.display = "block";
-      paintTiers();
+    tap(nodes.play, () => {
+      nodes.play.style.transform = "scale(0.9)";
+      ctx.timeout(() => { nodes.play.style.transform = ""; }, 150);
+      togglePlay();
+      ctx.platform.haptic("medium");
     });
-    ctx.listen(nodes.shop_close, "pointerdown", (e) => {
-      e.preventDefault();
-      nodes.shop_modal.style.display = "none";
+    tap(nodes.fold, () => {
+      state.showPalette = !state.showPalette;
+      palette.style.transform = state.showPalette ? "none" : "translateY(" + (PAL_H - 26) + "px)";
+      nodes.chev.style.transform = state.showPalette ? "none" : "rotate(180deg)";
+      layout();
+      remember();
     });
-    for (const { btn, tier } of tierBtns) {
-      ctx.listen(btn, "pointerdown", (e) => {
-        e.preventDefault();
-        firstGesture();
-        // Tapping the active tier turns it back off, as in the original.
-        state.volumeMultiplier = state.volumeMultiplier === tier.mult ? 1.0 : tier.mult;
-        synth.setVolumeMultiplier(state.volumeMultiplier);
-        paintTiers();
-        remember();
-        ctx.platform.haptic("medium");
-      });
-    }
 
     // ===================================================================== //
-    // 6. Remember the instrument they picked                                //
+    // 8. Remembering                                                        //
     // ===================================================================== //
     function fireAndForget(thunk) {
       try {
@@ -947,47 +1194,97 @@ window.plethoraBit = {
       if (!canStore || saveTimer) return;
       saveTimer = ctx.timeout(() => {
         saveTimer = 0;
-        fireAndForget(() => ctx.storage.set("symphony", {
-          instrument: state.instrument, volumeMultiplier: state.volumeMultiplier
+        fireAndForget(() => ctx.storage.set("symphony2", {
+          instrument: state.instrument, showPalette: state.showPalette
         }));
-      }, 400);
+      }, 500);
     }
     if (canStore) {
       try {
-        const saved = await ctx.storage.get("symphony");
-        if (saved && typeof saved === "object") {
-          if (INSTRUMENTS.some((i) => i.id === saved.instrument)) state.instrument = saved.instrument;
-          if (typeof saved.volumeMultiplier === "number" && saved.volumeMultiplier > 0) {
-            state.volumeMultiplier = saved.volumeMultiplier;
-          }
+        const s = await ctx.storage.get("symphony2");
+        if (s && typeof s === "object") {
+          if (byId[s.instrument]) state.instrument = s.instrument;
+          if (typeof s.showPalette === "boolean") state.showPalette = s.showPalette;
         }
       } catch (_) { /* first run */ }
     }
 
     // ===================================================================== //
-    // 7. Go                                                                 //
+    // 9. Go                                                                 //
     // ===================================================================== //
-    ctx.onDestroy(() => { synth.close(); });
+    ctx.onDestroy(() => {
+      Sound.close();
+      try { renderer.dispose(); } catch (_) {}
+      for (const t of [rtScene, rtA, rtB]) { try { t.dispose(); } catch (_) {} }
+    });
 
     paintPalette();
-    paintTiers();
+    revealChip(false);
+    if (!state.showPalette) {
+      palette.style.transform = "translateY(" + (PAL_H - 26) + "px)";
+      nodes.chev.style.transform = "rotate(180deg)";
+    }
     layout();
-    draw();
-    ctx.markVisualReady("canvas drawn");
-    ctx.platform.ready();
 
-    ctx.onFrame((dt, now) => {
+    let clock = 0;
+    function frame(dtMs) {
+      const dt = Math.min(0.05, (dtMs || 16) / 1000);
+      clock += dt;
+
       if (ctx.width !== W || ctx.height !== H) layout();
+      if (state.playing) advanceScan(dt);
 
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx; p.y += p.vy; p.life -= p.decay;
-        if (p.life <= 0) particles.splice(i, 1);
+      energy *= Math.pow(0.35, dt);
+      bgMat.uniforms.uTime.value = clock;
+      bgMat.uniforms.uEnergy.value = energy;
+      compMat.uniforms.uTime.value = clock;
+      strokeMat.uniforms.uTime.value = clock;
+      // The whole picture breathes a little while a note is held.
+      strokeMat.uniforms.uGlow.value = 1 + energy * 0.5 + (held ? 0.25 : 0);
+
+      scanMesh.position.x = padX + state.scan;
+
+      for (let i = 0; i < SPARKS; i++) {
+        if (spLife[i] <= 0) continue;
+        spLife[i] = Math.max(0, spLife[i] - dt * 1.55);
+        spPos[i * 3] += spVel[i * 2] * dt;
+        spPos[i * 3 + 1] += spVel[i * 2 + 1] * dt;
+        spVel[i * 2] *= 0.94;
+        spVel[i * 2 + 1] = spVel[i * 2 + 1] * 0.94 + 34 * dt;
       }
-      if (state.rainbow) state.hue = (state.hue + 2) % 360;
-      if (state.playing) advanceScan();
+      sparkGeo.attributes.position.needsUpdate = true;
+      sparkGeo.attributes.aLife.needsUpdate = true;
 
-      draw();
+      if (ribbonDirty) buildRibbons();
+
+      // scene → bright → blur h → blur v → composite
+      renderer.setRenderTarget(rtScene);
+      renderer.clear();
+      renderer.render(scene, camera);
+
+      brightMat.uniforms.tDiffuse.value = rtScene.texture;
+      pass(brightMat, rtA);
+      blurMat.uniforms.tDiffuse.value = rtA.texture;
+      blurMat.uniforms.uDir.value.set(1, 0);
+      pass(blurMat, rtB);
+      blurMat.uniforms.tDiffuse.value = rtB.texture;
+      blurMat.uniforms.uDir.value.set(0, 1);
+      pass(blurMat, rtA);
+
+      compMat.uniforms.tScene.value = rtScene.texture;
+      compMat.uniforms.tBloom.value = rtA.texture;
+      pass(compMat, null);
+    }
+
+    window.__scanDbg = () => ({
+      on: scanMat.uniforms.uOn.value, x: scanMesh.position.x, y: scanMesh.position.y,
+      sx: scanMesh.scale.x, sy: scanMesh.scale.y, vis: scanMesh.visible,
+      playing: state.playing, scan: state.scan, padY: padY, padH: padH, W: W, H: H
     });
+
+    frame(16);
+    ctx.markVisualReady("first frame");
+    ctx.platform.ready();
+    ctx.onFrame(frame);
   }
 };

@@ -3,8 +3,21 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Symphony Sketchpad",
-  "description": "Draw a picture, then hear it. Twenty-one instruments, each one a colour: pick one and draw, and the stroke sounds as you make it, pitched by how high up the canvas your finger is. It is quantised to a major pentatonic, so there are no wrong notes — a scribble still comes out musical. Then press play and a scanline sweeps across everything you have drawn, firing every point it crosses, and the picture becomes the score. Nothing is sampled: each instrument is a small Web Audio graph built on the spot — a filtered sawtooth for the trumpet, bandpassed noise for the cymbals, a sine swept 150 Hz down to 40 in a tenth of a second for the kick drum. Draw in layers and it plays as an ensemble.",
-  "tags": ["music", "creative", "drawing", "toy", "audio", "sandbox"],
-  "permissions": ["audio", "haptics", "storage"],
-  "dependencies": []
+  "description": "Draw a picture, then hear it played back. Twenty-one instruments, each one a colour: pick one and draw, and the stroke sounds as you make it, pitched by how high up the canvas your finger is and quantised to a major pentatonic so nothing you draw is wrong. Press play and a plane of light sweeps across, firing every point it passes through \u2014 the picture is the score. Nothing is sampled and nothing is a bare oscillator either: each voice is built from a real harmonic spectrum, then run through a generated convolution reverb, a ping-pong delay and a master limiter, and placed in the stereo field by where it sits on the canvas. How fast you drew a point sets how loud and bright it sounds. Rendered in three.js with a proper bloom pipeline, so the strokes read as light rather than as lines.",
+  "tags": [
+    "music",
+    "creative",
+    "drawing",
+    "toy",
+    "audio",
+    "sandbox"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ]
 }

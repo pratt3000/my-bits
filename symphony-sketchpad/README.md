@@ -1,79 +1,103 @@
 # Symphony Sketchpad
 
-Draw a picture, then hear it.
+Draw a picture, then hear it played back.
 
-Twenty-one instruments, each one a colour. Pick one and draw: the stroke sounds
-as you make it, pitched by how high up the canvas your finger is. The pitch is
-quantised to a major pentatonic, so there are no wrong notes — a scribble still
-comes out musical. Then press play and a scanline sweeps left to right across
-everything you have drawn, firing every point it crosses. The picture is the
-score, and drawing in layers gives you an ensemble.
+Pick an instrument, draw, and the stroke sounds as you make it — height is
+pitch, quantised to a major pentatonic so nothing you draw is wrong. Press play
+and a plane of light sweeps across the canvas, firing every point it passes
+through and flaring the stroke white as it crosses. What you drew is the score.
 
-Nothing is sampled. Each instrument is a small Web Audio graph built on the
-spot:
+## Sound
 
-| | |
-|---|---|
-| Trumpet | sawtooth into a resonant lowpass that tracks the note |
-| Cymbals | looping white noise through a highpass at 5 kHz + pitch |
-| Kick | a sine swept 180 → 45 → 30 Hz over 300 ms |
-| Snare | noise through a highpass, plus a 180 → 80 Hz thump |
-| Violin | sawtooth with a 6 Hz vibrato LFO on the pitch |
-| Flute | sine with a 5 Hz tremolo LFO on the gain |
-| Synthesizer | two sawtooths 1% apart |
-| Crystal Bell | a sine at the third harmonic, decaying over 1.2 s |
+Twenty-one instruments, none sampled and none a bare oscillator either.
 
-…and thirteen more.
+Each pitched voice is a baked **`PeriodicWave`** — a real harmonic spectrum with
+scattered partial phases, because partials that all start aligned are what makes
+an additive tone sound like a buzzer. Bells, xylophone and woodblock don't use
+one: their partials sit at **inharmonic** ratios (2.76×, 5.4×, 8.93× for the
+bell) that a `PeriodicWave` cannot express, since its partials are integer
+multiples of the fundamental. Those stack real oscillators instead, which is
+what makes struck metal sound struck.
 
-The shop is a joke about volume, and it is the original's joke — ten tiers from
-150% up to "The End" at ω%. Tapping the active tier turns it back off.
+Every voice runs through one master chain, and this is where most of the quality
+actually lives:
 
-## Notes on the port
+```
+voice → pan → ┬──────────────────────────→ bus → shelf → limiter → out
+              ├─ reverb send → convolver ───┘
+              └─ delay send  → ping-pong ───┘
+```
 
-Ported from a standalone Sekai build. The synthesis, the pentatonic mapping, the
-scanline playback and the particles are unchanged — same oscillator types, same
-filter frequencies, same envelopes, same scale table. The shell was rebuilt:
+- **Reverb** is a `ConvolverNode` fed an impulse generated at load: exponentially
+  decaying noise, 2.6 s, with the two channels decorrelated so the tail spreads
+  instead of sitting in the middle of your head.
+- **Delay** is a true ping-pong — two lines cross-fed. Feedback is held at 0.30
+  because a pair of cross-fed delays has a system gain of *2g*; at 0.5 it never
+  decays. That exact mistake cost real time in [`aarti`](../README.md) once.
+- **Limiter** is a `DynamicsCompressor` with a 3 ms attack and a 12:1 ratio, so
+  a hundred ringing notes duck politely instead of clipping.
 
-- **No CDN.** The original loaded Tailwind and Font Awesome. Styling is inline
-  and the six control icons are inlined as SVG geometry (lucide, ISC licence).
-- **No platform scaffolding.** The `sekaiEditable` block, the `postMessage`
-  editing API, the audio-unlock shim, and the `snapdom` screenshot-share button
-  are gone — the last of those needed a host share API that a bit does not have.
-- **Plethora owns the DOM and the clock**: `ctx.createCanvas2D`, `ctx.createRoot`,
-  `ctx.listen`, `ctx.onFrame`.
-- **Real config values, not the source defaults.** The code's fallbacks were
-  `brushSize: 1000` and `playbackSpeed: 45`; the values the build actually
-  shipped were `9` and `8`, carried in the platform's editable metadata rather
-  than in the source. Ported with the shipped values — the fallback would have
-  painted the entire canvas in a single stroke.
-- **The palette grid uses `grid-auto-rows`, not `aspect-ratio`.** Inside a
-  scrolling container the implicit rows collapse and the tiles overlap; caught
-  in a screenshot, not by the console.
-- **Nothing chains onto `ctx.storage.set()`** — see
-  [`_skills/sekai/references/gotchas.md`](../_skills/sekai/references/gotchas.md).
+Then the expressive parts, which cost nothing and change everything:
 
-## Nothing was substituted
+- **Stereo placement by canvas x** — a wide drawing plays wide.
+- **Velocity from draw speed.** A flick is louder *and* brighter, because the
+  filter cutoff tracks velocity as well as pitch. No extra control to learn.
+- **±7 cents of drift per note**, so a repeated figure never sounds mechanical.
+- Vibrato that eases in over 350 ms, because nobody starts a note already
+  wobbling.
+- Selecting an instrument auditions it.
 
-The original declared two audio slots — background music and a clear sound — and
-**both were empty in the shipped build**, so there was no asset to lose and no
-replacement to invent. Every sound here is the same synthesis the original had.
-This is the only one of the four ported in this batch that needed no compromise.
+## Picture
 
-No leaderboard: it is a creative toy with no score, and adding one would invent
-a goal the thing does not have.
+three.js with a real bloom pipeline, not a canvas `shadowBlur`:
 
-The chosen instrument and volume tier persist in `ctx.storage`.
+```
+scene → bright pass → blur H → blur V → composite (+ filmic curve, + grain)
+                      └── quarter resolution ──┘
+```
+
+Strokes are camera-facing ribbons whose fragment shader has a **two-stage
+falloff** — a tight core plus a wide halo — which is what stops a glowing line
+looking like a fat antialiased one. The backdrop is a shader with a slow aurora
+that brightens with how much is playing, a vignette, and enough grain that flat
+areas are never dead. Type is Space Grotesk from the font registry.
+
+The drawing plane stays flat and screen-aligned. Depth is for looking at; a
+tilted canvas would only make you miss.
+
+## Two bugs worth recording
+
+Both were invisible to the console and found by looking at screenshots.
+
+**The scan plane did not render at all.** The orthographic camera is built as
+`(0, W, 0, H)` — top above bottom, so screen coordinates map straight through
+and y runs downward like the DOM. That flips the projection's Y, which **inverts
+triangle winding**, so any `FrontSide` material is back-face culled into
+invisibility. The strokes only survived by luck of their winding; a stroke drawn
+right-to-left would have vanished too. Both materials are `DoubleSide` now, and
+there is a comment at the camera saying why.
+
+**The backdrop was vertically flipped.** `vUv.y` runs bottom-up in GL and the
+layout is top-down, so the darker canvas region landed at the wrong end.
 
 ## Verified
 
-`node _skills/sekai/harness/run.js symphony-sketchpad sc-symphony.json` — 535
-frames, no console or page errors, `ready` / `start` / `markVisualReady` /
-`interact` all fired. Screenshots confirm strokes render in their instrument's
-colour, the palette selects, the scanline sweeps and fires particle bursts as it
-crosses each stroke, the shop opens and tiers toggle, and the layout survives a
-resize to 360×780.
+`node _skills/sekai/harness/run.js symphony-sketchpad sc-sym2.json` — 308 frames,
+no console or page errors, `loadFont` / `ready` / `start` / `interact` all fired.
 
-The harness reports "two frames 500 ms apart are byte-identical" at the end of
-the run. That is correct behaviour, not a fault: a sketchpad at rest, with
-nothing playing and no particles alive, draws the same frame. The original did
-the same.
+Audio was probed separately, since the harness cannot hear: all 21 instruments
+build their graph with **zero errors**, 12 `PeriodicWave`s baked (the other nine
+are the drums, noise and inharmonic voices), context running at 44.1 kHz.
+
+## Provenance
+
+Ported from a standalone Sekai build, then rebuilt to a higher standard at the
+repository owner's request. The concept, the pentatonic mapping, the scanline
+and the instrument list are the original's. The synthesis and the rendering are
+new — the original's voices were single oscillators into `destination`, which is
+what made it sound thin.
+
+Nothing was substituted for a missing asset: the original declared two audio
+slots and both were empty in the shipped build, so there was never an asset to
+lose. No leaderboard — it is a creative toy with no score, and one would invent
+a goal it does not have.
