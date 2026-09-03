@@ -83,6 +83,12 @@ root at upload time, which is independent of where the bit sits in this repo.
 
 New bits follow this same shape; don't add bit sources to the repo root.
 
+The one exception is [`_skills/`](_skills), which holds reusable tooling rather
+than bits — the underscore keeps it sorted away from them. Right now it holds
+[`_skills/sekai/`](_skills/sekai): the route from a Sekai game link to a bit,
+plus the headless harness, the pre-upload validator and the draft uploader, all
+of which are useful for any bit and not just ported ones.
+
 ## Working on a bit
 
 Fetch the current contract before writing code — these endpoints are the source

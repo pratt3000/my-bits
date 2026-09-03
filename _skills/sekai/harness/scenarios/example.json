@@ -1,0 +1,39 @@
+{
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "wait": 900 },
+    { "screenshot": "01-idle" },
+
+    { "down": [120, 300], "after": 300 },
+    { "moveTo": [200, 420], "after": 400 },
+    { "screenshot": "02-playing" },
+    { "moveTo": [290, 600], "after": 400 },
+    { "screenshot": "03-dragged" },
+    { "up": true, "after": 300 },
+
+    { "tap": [362, 300], "after": 350 },
+    { "screenshot": "04-preset-changed" },
+
+    { "down": [140, 720], "after": 250 },
+    { "moveTo": [280, 720], "after": 400 },
+    { "screenshot": "05-held-other-preset" },
+    { "up": true, "after": 250 },
+
+    { "down": [90, 787], "after": 200 },
+    { "moveTo": [250, 787], "after": 300 },
+    { "up": true, "after": 200 },
+    { "screenshot": "06-octave-shifted" },
+
+    { "tap": [362, 480], "after": 300 },
+    { "tap": [362, 560], "after": 300 },
+    { "screenshot": "07-more-presets" },
+
+    { "resize": [360, 780] },
+    { "screenshot": "08-resized" },
+
+    { "expectEvent": "ready" },
+    { "expectEvent": "start" },
+    { "expectEvent": "markVisualReady" },
+    { "expectEvent": "interact" }
+  ]
+}
