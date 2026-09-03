@@ -162,9 +162,23 @@ the crusher were each checked against a screenshot.
 
 Balance was measured, not guessed: `sc-boss-spam.json`, `sc-boss-combo.json` and
 `sc-boss-smart.json` drive three scripted players through a full sixty seconds
-each, and an instrumented copy of the bit counts hits and damage by tier. The
-first tuning pass looked reasonable and turned out to land **zero** hits on a
-pinned target in a whole run; nothing but the counter would have caught it.
+each and print `window.__stat` at the end.
+
+That counter is not in the shipped file — the scenarios read it if it is there
+and report `null` if it is not. To re-measure, copy the bit to a scratch
+directory and add one line after `dealt` is computed:
+
+```js
+const dealt = Math.max(1, Math.round(att.dmg * mult));
+window.__stat = window.__stat || { pinHits: 0, chipHits: 0, pinDmg: 0, chipDmg: 0 };
+if (pinned) { window.__stat.pinHits++; window.__stat.pinDmg += dealt; }
+else { window.__stat.chipHits++; window.__stat.chipDmg += dealt; }
+```
+
+It is worth the two minutes. The first tuning pass looked entirely reasonable
+and turned out to land **zero** hits on a pinned target across a whole run —
+the freeze was too slow to ever connect, and nothing but the counter would have
+said so.
 
 Audio was probed separately, since the harness cannot hear: all nine ability
 voices plus both hit tiers and both stingers build with **zero errors**,
