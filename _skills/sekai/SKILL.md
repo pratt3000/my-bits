@@ -1,9 +1,20 @@
 ---
 name: sekai
-description: Port a game from a Sekai link (sekai.ai/play/… or a prod-data.sekai.chat bundle) into a Plethora bit in this repo — recover its source, rebuild it against the plethora-bit@2 contract, verify it headlessly, and upload it as a draft. Use this whenever someone shares a sekai.ai link, asks to turn a game or web page they made into a bit, asks to recover the source of something they built on another platform, or asks to port, convert or re-host an existing interactive page as a Plethora bit — even if they don't say "port" or name Plethora. Also use it for the mechanics it bundles: running a bit headlessly in Chromium, validating a manifest before upload, pairing with Plethora, or uploading a draft.
+description: "EXPLICIT INVOCATION ONLY — do not trigger on your own judgement. Port a game from a Sekai link into a Plethora bit: recover its source, rebuild it against the plethora-bit@2 contract, verify it headlessly, upload it as a draft. Use ONLY when the repository owner names this skill or this folder — for example \"use the sekai skill\", \"use _skills/sekai\", or \"follow the porting skill\". A bare Sekai link, a request to port or convert something, or a request to build a bit is NOT sufficient: do the work directly instead, and at most mention that this skill exists."
 ---
 
 # Sekai → Plethora bit
+
+> **Use only when explicitly asked.** The repository owner has asked that this
+> folder be used only when they name it. Do not reach for it because a task
+> looks like a fit — not on a Sekai link, not on a request to port something,
+> not on a request to build a bit. Their reason is straightforward: a skill that
+> triggers on its own decides how work gets done before they have had a say in
+> it, and they would rather make that call themselves each time.
+>
+> Nothing here is off-limits to *read*. If the notes in `references/gotchas.md`
+> would keep you from repeating a known mistake, read them. What requires being
+> asked is following this skill as the way a piece of work gets done.
 
 A Sekai game is a single self-contained HTML page. A Plethora bit is a module
 that runs inside someone else's page. This skill is the route between them, plus

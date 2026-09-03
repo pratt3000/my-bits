@@ -86,8 +86,12 @@ New bits follow this same shape; don't add bit sources to the repo root.
 The one exception is [`_skills/`](_skills), which holds reusable tooling rather
 than bits — the underscore keeps it sorted away from them. Right now it holds
 [`_skills/sekai/`](_skills/sekai): the route from a Sekai game link to a bit,
-plus the headless harness, the pre-upload validator and the draft uploader, all
-of which are useful for any bit and not just ported ones.
+plus the headless harness, the pre-upload validator and the draft uploader.
+
+**`_skills/` is opt-in.** Nothing in it should be used unless it is asked for by
+name — not on a Sekai link, not on a request to port something, not on a request
+to build a bit. See [`CLAUDE.md`](CLAUDE.md). Its notes are still worth reading;
+it is *following* one of these as the method for a task that needs asking.
 
 ## Working on a bit
 
