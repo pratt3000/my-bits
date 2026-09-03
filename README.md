@@ -43,6 +43,20 @@ objects built to the `plethora-bit@2` agent contract.
 | [`skip-stop/`](skip-stop)               | Minimalist NYC subway map — race a local against an express and learn why it wins. |
 | [`pixel-fog/`](pixel-fog)               | Rub a living mosaic off nine San Francisco views to find a fact hidden in each. |
 | [`deep-pockets/`](deep-pockets)         | Digging game — mine ten strata to the core of the Earth, sell the loot, upgrade the shovel. |
+| [`unbreakable/`](unbreakable)           | Tie a knot in real rope, close it, and let physics and knot theory decide whether it is one. |
+| [`first-rakhi/`](first-rakhi)           | Tear a strip from a woven sari, thread by thread, and bind a cut with it. |
+| [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
+| [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
+
+### Rakshabandhan set
+
+`unbreakable`, `first-rakhi` and `cats-cradle` are three takes on one festival,
+and none of them is a rakhi maker. The festival is a bond, a debt and a thing
+passed between two people, so: a knot you tie and then have proved on you, the
+cloth the first one was torn from, and a game that cannot be played alone. Each
+is built on something real underneath — knot invariants, a loom and a crack tip,
+and a simulated string loop — so the payoff is a fact about what you did, not an
+animation of it.
 
 ### Generative art set
 
@@ -68,6 +82,12 @@ Keep `entry` as `"main.js"` in the manifest — it names the file at the *packag
 root at upload time, which is independent of where the bit sits in this repo.
 
 New bits follow this same shape; don't add bit sources to the repo root.
+
+The one exception is [`_skills/`](_skills), which holds reusable tooling rather
+than bits — the underscore keeps it sorted away from them. Right now it holds
+[`_skills/sekai/`](_skills/sekai): the route from a Sekai game link to a bit,
+plus the headless harness, the pre-upload validator and the draft uploader, all
+of which are useful for any bit and not just ported ones.
 
 ## Working on a bit
 
@@ -103,6 +123,37 @@ is still scanned; and constructs that merely *look* exotic are usually fine if
 some already-uploaded bit in this repo uses them. Both
 [`pixel-fog/`](pixel-fog) and [`heartwood/`](heartwood#what-the-upload-validator-rejects)
 record how to bisect a rejection cheaply.
+
+### Rendering and physics gotchas
+
+Not validator rules — runtime traps that cost real time here, all of which look
+like art-direction or tuning failures until you find them:
+
+- **`THREE.Color.setHex()` already converts to the linear working space.** A
+  following `.convertSRGBToLinear()` converts twice and crushes saturated
+  colours to near-black — invisible until you notice that changing a palette
+  changes nothing.
+- **`CanvasTexture` used as a colour map needs `colorSpace = SRGBColorSpace`.**
+  Left at the default it is treated as linear and every warm texture comes out
+  pale. Normal maps are the exception and should stay unset.
+- **`sheen: 1` swamps the base colour.** A bright `sheenColor` over a dark base
+  renders every palette the same warm gold. Silk still wants a sheen; it wants a
+  dim one.
+- **Vertex colours are linear**, so an on-screen flame orange is roughly
+  `(1.0, 0.15, 0.02)`, not `(1.0, 0.5, 0.2)`.
+- **A feedback reverb with two cross-fed delays has a loop gain of 2g**, so the
+  feedback gain has to stay under 0.5 or the network diverges — silently for
+  twenty seconds, then as a `BiquadFilterNode: state is bad` warning that points
+  at whatever else you happened to be automating.
+- **Verlet takes `a·dt²` per step.** A stray frame-rate factor in a gravity term
+  destroys a cloth under its own weight before it is touched. See
+  [`first-rakhi/`](first-rakhi#one-that-cost-a-round).
+- **Gauss-Seidel only carries information as far as it sweeps.** Alternating the
+  sweep direction each iteration is the cheapest way to get tension across a
+  long chain — without it a pull never reaches the far end. Used in both
+  [`first-rakhi/`](first-rakhi) and [`cats-cradle/`](cats-cradle).
+- **Particles that integrate their drift wander off**, and one that drifts
+  through the near plane fills the screen. Orbit a fixed home instead.
 
 ## Publishing
 

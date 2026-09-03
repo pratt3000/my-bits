@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Unbreakable",
+  "description": "Tie a knot and find out whether it is one. The rope is real — a Verlet chain that cannot pass through itself — and you author every crossing yourself with an OVER/UNDER switch. Then close it into a loop, the way a rakhi is a loop, and watch it tighten: a rope that was never knotted collapses into a clean ring, and a real knot jams against its own thickness and stops. That is the proof, not an animation of one. Whatever survives gets read off the rope as a Gauss code, reduced by Reidemeister moves, and named — the unknot, the trefoil, the figure-eight, the cinquefoil, the three-twist. Most crossings that will not come out goes to the leaderboard.",
+  "tags": ["3d", "puzzle", "physics", "maths", "art", "toy", "festival"],
+  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "crossings": {
+        "label": "Hardest Knot",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

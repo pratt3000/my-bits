@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "The First Rakhi",
+  "description": "Krishna cut his finger; Draupadi tore a strip from her sari and bound it, and he owed her forever. This is that tear. The cloth is genuinely woven — thirty-two warp threads and forty-two weft threads, each an actual ribbon riding over and under its neighbours, with the stripes and the zari border emerging where the two colour sequences meet, exactly as they do on a loom. Underneath is a spring net with breakable links and a nick already in the hem. Pull it and the crack runs up the grain on its own, one thread at a time, each snapping with its own sound and recoiling. Pull straight for a clean strip, crooked for a ragged one. When it comes away it winds itself around the cut. New sari every time.",
+  "tags": ["3d", "physics", "art", "story", "tactile", "festival", "sensory"],
+  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
+  "dependencies": ["three@0.164.1"]
+}

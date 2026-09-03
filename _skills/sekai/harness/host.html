@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}
+  #bit{position:fixed;inset:0;overflow:hidden}
+</style></head>
+<body><div id="bit"></div>
+<script src="/harness/mockctx.js"></script>
+<script>
+  window.__manifest = JSON.parse(decodeURIComponent(new URLSearchParams(location.search).get("manifest") || "%7B%7D"));
+</script>
+<script id="bitsrc"></script>
+<script>
+  (async function () {
+    const bit = new URLSearchParams(location.search).get("bit");
+    const res = await fetch("/repo/" + bit + "/main.js");
+    const src = await res.text();
+    const s = document.createElement("script");
+    s.textContent = src;
+    document.body.appendChild(s);
+    await window.__boot();
+    window.__booted = true;
+  })();
+</script>
+</body></html>

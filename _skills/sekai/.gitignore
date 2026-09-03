@@ -1,0 +1,4 @@
+# Fetched on demand by run.js / icons.js — three.js is 1.2 MB, lucide 424 KB.
+vendor/
+# Never commit a credential. The agent token lives in ~/.plethora/, not here.
+*token*.json
