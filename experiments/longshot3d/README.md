@@ -27,10 +27,25 @@ hit zone times distance, so the long shot is the point.
 | raw | 5,356 tris / 302 KB | 74,195 tris / 10.5 MB |
 | after free `reduce_triangles` | — | 3,008 tris |
 | after `gltf-transform` (webp, 1K) | 208 KB | **411 KB** |
-| parts | **48 named** — bolt, magazine, bipod legs, turrets | **1 merged mesh** |
+| parts, as generated | **48 named** — bolt, magazine, bipod legs, turrets | **1 merged mesh** |
+| parts, in the shipped file | **8** — see the warning below | 1 |
 | cost | ~66 cubes | 47 cubes |
 
-That part-count row is the finding. `create_model` returns an animatable
+### `gltf-transform optimize` silently destroys the part hierarchy
+
+Thrixel delivered the rifle with 48 correctly named parts. The shipped
+`rifle-web.glb` has **8**, because `gltf-transform optimize` runs a `join` pass
+that merges meshes by material — `BoltHandle`, `Magazine` and `BipodLeg_L` are
+now welded into `Cylinder002`. Nothing warns you; the file just gets smaller.
+
+It cost nothing here, because the rifle is a static viewmodel. It would have
+quietly removed the ability to animate a bolt cycle.
+
+**Thrixel's own `reduce_triangles` does not do this.** `cheetah-parts.glb` went
+through it and kept all 21 named parts including every leg. So: reduce with
+Thrixel, and if you then run `gltf-transform`, pass `--no-join`.
+
+That part-count row is the other finding. `create_model` returns an animatable
 hierarchy and poor organic anatomy; `sculpt_model` returns excellent anatomy and
 one welded lump. For a running animal neither is right on its own — the cheetah
 here is animated by heading, bob and lean because it has no legs to swing, which
