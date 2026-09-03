@@ -1,0 +1,32 @@
+{
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "wait": 800 },
+    { "screenshot": "01-start" },
+    { "tap": [195, 470], "after": 700 },
+    { "screenshot": "02-arena" },
+    { "tap": [70, 695], "after": 200 },
+    { "tap": [70, 695], "after": 200 },
+    { "tap": [70, 743], "after": 350 },
+    { "screenshot": "03-swarm" },
+    { "tap": [319, 695], "after": 450 },
+    { "screenshot": "04-void-warning" },
+    { "wait": 600 },
+    { "screenshot": "05-void-active" },
+    { "tap": [195, 743], "after": 350 },
+    { "screenshot": "06-beam" },
+    { "tap": [195, 695], "after": 400 },
+    { "tap": [319, 743], "after": 400 },
+    { "screenshot": "07-waves" },
+    { "tap": [70, 784], "after": 300 },
+    { "tap": [319, 784], "after": 700 },
+    { "screenshot": "08-freeze-crush" },
+    { "wait": 1200 },
+    { "screenshot": "09-mid-fight" },
+    { "resize": [360, 780] },
+    { "screenshot": "10-resized" },
+    { "expectEvent": "ready" },
+    { "expectEvent": "start" },
+    { "expectEvent": "interact" }
+  ]
+}

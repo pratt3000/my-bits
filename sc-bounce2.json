@@ -1,0 +1,33 @@
+{
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "wait": 1200 },
+    { "screenshot": "01-idle" },
+    { "down": [40, 620], "after": 110 },
+    { "moveTo": [350, 660], "after": 160 },
+    { "up": true, "after": 160 },
+    { "down": [330, 500], "after": 110 },
+    { "moveTo": [70, 540], "after": 160 },
+    { "up": true, "after": 160 },
+    { "down": [110, 380], "after": 110 },
+    { "moveTo": [200, 400], "after": 140 },
+    { "up": true, "after": 140 },
+    { "down": [250, 300], "after": 110 },
+    { "moveTo": [300, 310], "after": 140 },
+    { "up": true, "after": 140 },
+    { "down": [60, 730], "after": 110 },
+    { "moveTo": [340, 760], "after": 160 },
+    { "up": true, "after": 200 },
+    { "screenshot": "02-bars" },
+    { "wait": 2200 },
+    { "screenshot": "03-bouncing" },
+    { "wait": 3000 },
+    { "screenshot": "04-earning" },
+    { "tap": [312, 48], "after": 700 },
+    { "screenshot": "05-board" },
+    { "resize": [360, 780] },
+    { "screenshot": "06-resized" },
+    { "expectEvent": "ready" },
+    { "expectEvent": "start" }
+  ]
+}

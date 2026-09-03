@@ -3,10 +3,24 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Bounce & Draw",
-  "description": "Draw the walls, let the balls pay you. A ball falls down a dark screen; draw a bar anywhere and it becomes something solid to ricochet off, and every bounce earns. Spend what you make on a better ball — brighter, faster, worth more per hit — or on another ball entirely, until the screen is full of neon rattling around whatever geometry you left lying about. The whole game is one honest idea: a bounce is worth money, so you are really building a machine that maximises bounces. A funnel. A staircase. A long shallow ramp that keeps a ball skimming instead of dropping. Every stroke is a straight bar rather than a freehand curve — press, drag to set the far end, release — and you can have a hundred at once.",
-  "tags": ["game", "physics", "idle", "drawing", "leaderboard", "casual"],
-  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
-  "dependencies": [],
+  "description": "Draw the walls, let the balls pay you. A ball falls down a dark board; draw a bar anywhere and it becomes something solid to ricochet off, and every bounce earns. The whole game is one honest idea \u2014 a bounce is worth money, so you are really building a machine that maximises bounces. A funnel. A staircase. A long shallow ramp that keeps a ball skimming instead of dropping. Every bar is also a note: its pitch comes from its length, long bars low and short bars high, quantised to a major pentatonic, and its colour comes from that same pitch \u2014 so the board is legible as music before you hear it, and a machine that maximises bounces is composing. Rendered in three.js through a real bloom pass, with every voice running through a generated convolution reverb, a ping-pong delay and a master limiter. Spend what you make on a brighter, faster, better-paying ball, or on another ball entirely.",
+  "tags": [
+    "game",
+    "physics",
+    "idle",
+    "drawing",
+    "music",
+    "leaderboard"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
   "memory": {
     "records": {
       "earnings": {
@@ -14,8 +28,15 @@
         "valueType": "number",
         "order": "desc",
         "format": "compact",
-        "periods": ["daily", "weekly", "all_time"],
-        "scopes": ["global", "following"],
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
         "dedupe": "best_per_user"
       }
     }
