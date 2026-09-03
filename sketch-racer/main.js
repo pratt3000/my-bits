@@ -66,6 +66,9 @@ window.plethoraBit = {
       diamondUnlocked: false,
       diamondEquipped: false,
       camBlend: 0,                 // 0 overhead, 1 chase
+      smooth: [],                  // path with the finger tremor filtered out
+      carHeading: 0,
+      cut: 0,                      // fades the "it touched itself" marker
       targetSpeed: SPEED_MIN,
       orbit: 0,
       orbitMix: 0,
@@ -249,6 +252,27 @@ window.plethoraBit = {
         this.blip(659.25, "triangle", 0.5, 0.15, 0.0, t + 0.09);
         this.blip(783.99, "triangle", 0.9, 0.16, 0.3, t + 0.18);
         this.blip(1046.5, "sine", 1.2, 0.10, 0.0, t + 0.28);
+      },
+
+      // The road meeting itself. A downward tritone plus a filtered thud —
+      // unmistakably a stop, not a score.
+      crash() {
+        if (!this.ready) return;
+        const t = this.ac.currentTime;
+        this.blip(311.13, "sawtooth", 0.28, 0.13, 0, t);
+        this.blip(220.0, "sawtooth", 0.42, 0.12, 0, t + 0.06);
+        const ac = this.ac;
+        const n = Math.floor(ac.sampleRate * 0.3);
+        const buf = ac.createBuffer(1, n, ac.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.4);
+        const src = ac.createBufferSource(); src.buffer = buf;
+        const f = ac.createBiquadFilter(); f.type = "lowpass";
+        f.frequency.setValueAtTime(1400, t);
+        f.frequency.exponentialRampToValueAtTime(180, t + 0.3);
+        const g = ac.createGain(); g.gain.value = 0.22;
+        src.connect(f); f.connect(g); g.connect(this.bus || ac.destination);
+        try { src.start(t); src.stop(t + 0.32); } catch (_) {}
       },
 
       close() {
@@ -728,8 +752,76 @@ window.plethoraBit = {
     let roadDirty = true;
     const cum = [];                 // cumulative length at each point
 
+    // A finger is not a spline. Two binomial passes with the ends pinned take
+    // the tremor out of a drag without rounding off corners the player meant,
+    // and the car stops twitching its way along the seams between raw samples.
+    function smoothPath() {
+      const src = state.path, out = state.smooth;
+      const n = src.length;
+      out.length = 0;
+      for (let i = 0; i < n; i++) out.push({ x: src[i].x, y: src[i].y });
+      if (n < 3) return;
+      for (let pass = 0; pass < 3; pass++) {
+        let px = out[0].x, py = out[0].y;
+        for (let i = 1; i < n - 1; i++) {
+          const cx = out[i].x, cy = out[i].y;
+          out[i].x = px * 0.25 + cx * 0.5 + out[i + 1].x * 0.25;
+          out[i].y = py * 0.25 + cy * 0.5 + out[i + 1].y * 0.25;
+          px = cx; py = cy;
+        }
+      }
+    }
+
+    // The road may not touch itself. Without this the longest track is just
+    // whoever scribbles the longest, because laps can be laid on top of each
+    // other — with it, the score is how much road you can pack into the screen
+    // without the lanes meeting, which has a real ceiling and rewards planning.
+    const STEP = 7;                     // path sample spacing, screen pixels
+    // Centre-to-centre. The surfaces meet at exactly 2*ROAD_W, but a hand-drawn
+    // hairpin dips a few pixels under that on the outside of the turn, so the
+    // limit sits just below: tight enough that laps cannot be stacked, loose
+    // enough that a serpentine drawn with a thumb is legal.
+    const CLEAR_D = ROAD_W * 1.85;
+    const CELL = CLEAR_D;
+    // Samples near the tip are adjacent by construction. Skip back far enough to
+    // clear them, but not so far that a legal hairpin — two lanes exactly
+    // CLEAR_D apart, so an arc of about pi*ROAD_W — goes unchecked.
+    const SKIP_BACK = Math.max(4, Math.round((Math.PI * ROAD_W * 0.8) / STEP));
+    const cells = new Map();
+    function gridReset() { cells.clear(); }
+    function gridAdd(i) {
+      const p = state.path[i];
+      const key = Math.floor(p.x / CELL) + "," + Math.floor(p.y / CELL);
+      let a = cells.get(key);
+      if (!a) { a = []; cells.set(key, a); }
+      a.push(i);
+    }
+    function touchesSelf(x, y) {
+      const limit = state.path.length - 1 - SKIP_BACK;
+      if (limit < 0) return false;
+      const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+      const d2 = CLEAR_D * CLEAR_D;
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (let gy = cy - 1; gy <= cy + 1; gy++) {
+          const a = cells.get(gx + "," + gy);
+          if (!a) continue;
+          for (const i of a) {
+            if (i > limit) continue;
+            const q = state.path[i];
+            const dx = x - q.x, dy = y - q.y;
+            if (dx * dx + dy * dy < d2) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    let lastDx = 0, lastDz = 1;
+    const prevO = new Float32Array(4);
     function rebuildRoad() {
-      const pts = state.drawing ? state.path : state.path;
+      smoothPath();
+      lastDx = 0; lastDz = 1;
+      const pts = state.smooth;
       let v = 0, tri = 0;
       cum.length = 0;
       let total = 0;
@@ -741,18 +833,37 @@ window.plethoraBit = {
 
       for (let i = 0; i < pts.length && v + 2 <= MAXP * 2; i++) {
         const p = pts[i];
-        const a = pts[Math.max(0, i - 1)];
-        const b = pts[Math.min(pts.length - 1, i + 1)];
+        // Take the tangent across a wider window than one sample either side.
+        // At a hairpin the immediate neighbours turn ~20 degrees apart, and the
+        // inner edge of the ribbon inverts into a visible fold; a wider window
+        // is a steadier direction and the fold goes.
+        const a = pts[Math.max(0, i - 2)];
+        const b = pts[Math.min(pts.length - 1, i + 2)];
         let dx = b.x - a.x, dz = b.y - a.y;
-        const len = Math.hypot(dx, dz) || 1;
-        dx /= len; dz /= len;
+        const len = Math.hypot(dx, dz);
+        if (len < 0.001) { dx = lastDx; dz = lastDz; } else { dx /= len; dz /= len; }
+        lastDx = dx; lastDz = dz;
         const nx = -dz * ROAD_W, nz = dx * ROAD_W;
         const t = total > 0 ? cum[i] / total : 0;
-        for (const s of [-1, 1]) {
+        const cx = toWorldX(p.x), cz = toWorldZ(p.y);
+        for (let k = 0; k < 2; k++) {
+          const s = k ? 1 : -1;
+          let ox = cx + nx * s, oz = cz + nz * s;
+          // On the inside of a turn tighter than the road is wide, the offset
+          // edge runs backwards and the ribbon folds — which renders as a
+          // bright chevron of rail across the middle of the tarmac. Collapsing
+          // the inner edge onto the centreline is the standard cure: the road
+          // keeps its full width everywhere it can have it, and simply comes to
+          // a point where it cannot.
+          if (i > 0) {
+            const vx = ox - prevO[k * 2], vz = oz - prevO[k * 2 + 1];
+            if (vx * dx + vz * dz < 0) { ox = cx; oz = cz; }
+          }
+          prevO[k * 2] = ox; prevO[k * 2 + 1] = oz;
           const o = v * 3;
-          rPos[o] = toWorldX(p.x) + nx * s;
+          rPos[o] = ox;
           rPos[o + 1] = 0;
-          rPos[o + 2] = toWorldZ(p.y) + nz * s;
+          rPos[o + 2] = oz;
           rUv[v * 2] = s < 0 ? 0 : 1;
           rUv[v * 2 + 1] = t;
           v++;
@@ -783,7 +894,7 @@ window.plethoraBit = {
     // Position and heading a given distance along the path, in world space.
     const pos = new THREE.Vector3();
     function sampleAt(dist, out) {
-      const pts = state.path;
+      const pts = state.smooth;
       if (pts.length < 2) { out.set(0, 0, 0); return 0; }
       let i = 1;
       while (i < cum.length - 1 && cum[i] < dist) i++;
@@ -819,12 +930,15 @@ window.plethoraBit = {
         'font-variant-numeric:tabular-nums;">0.0<span style="font-size:20px;font-weight:500;' +
         'letter-spacing:0;">m</span></div>' +
         '<div data-el="best" style="font-size:11px;color:' + DIM + ';letter-spacing:0.6px;"></div>' +
+        '<div data-el="note" style="font-size:11.5px;color:' + ACCENT + ';letter-spacing:0.4px;' +
+        'margin-top:3px;opacity:0;transition:opacity 260ms ease;">&nbsp;</div>' +
       "</div>" +
 
       '<div data-el="hint" style="position:absolute;left:0;right:0;top:52%;text-align:center;' +
       'pointer-events:none;transition:opacity 600ms cubic-bezier(.2,.7,.3,1);">' +
         '<div style="font-size:15px;font-weight:500;">Draw a road</div>' +
-        '<div style="font-size:12.5px;color:' + DIM + ';margin-top:6px;">one finger, as long as you dare</div>' +
+        '<div style="font-size:12.5px;color:' + DIM + ';margin-top:6px;line-height:1.55;">' +
+        "one finger, as long as you dare —<br>but the road may not touch itself</div>" +
       "</div>" +
 
       '<div data-el="dock" style="position:absolute;left:0;right:0;display:flex;align-items:center;' +
@@ -887,7 +1001,13 @@ window.plethoraBit = {
       state.speed = 0;
       state.camBlend = 0;
       state.drawing = false;
+      state.smooth.length = 0;
+      state.carHeading = 0;
+      state.cut = 0;
+      camSettled = false;           // snap, do not glide back from the flag
+      gridReset();
       cum.length = 0;
+      nodes.note.style.opacity = "0";
       roadDirty = true;
       showDist(0);
       nodes.hudlabel.textContent = "Track length";
@@ -1058,7 +1178,10 @@ window.plethoraBit = {
       if (view.setPointerCapture) { try { view.setPointerCapture(e.pointerId); } catch (_) {} }
       state.drawing = true;
       state.path.length = 0;
+      gridReset();
       state.path.push({ x: e.offsetX, y: e.offsetY });
+      gridAdd(0);
+      nodes.note.style.opacity = "0";
       nodes.hint.style.opacity = "0";
       nodes.race.style.display = "none";
       nodes.clear.style.display = "none";
@@ -1070,8 +1193,29 @@ window.plethoraBit = {
       if (!state.drawing || state.mode !== "draw") return;
       const last = state.path[state.path.length - 1];
       const d = Math.hypot(e.offsetX - last.x, e.offsetY - last.y);
-      if (d < 7) return;              // thin the samples; the road reads the same
-      state.path.push({ x: e.offsetX, y: e.offsetY });
+      if (d < STEP) return;           // thin the samples; the road reads the same
+      // Walk the gap rather than jumping it. A pointermove can arrive hundreds
+      // of pixels from the last one on a fast flick, and taking that as a single
+      // sample both corners off the geometry and lets the stroke leap clean over
+      // an earlier lane without the self-touch rule ever seeing it.
+      const steps = Math.min(400, Math.ceil(d / STEP));
+      let added = 0;
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const px = last.x + (e.offsetX - last.x) * t;
+        const py = last.y + (e.offsetY - last.y) * t;
+        if (touchesSelf(px, py)) {
+          // The stroke ends where the road would have met itself. Keeping what
+          // you drew and stopping there is the whole risk in the game: every
+          // extra metre is another chance to close yourself in.
+          if (added) { roadDirty = true; rebuildRoad(); showDist(metres(state.length)); }
+          crash(px, py);
+          return;
+        }
+        state.path.push({ x: px, y: py });
+        gridAdd(state.path.length - 1);
+        added++;
+      }
       roadDirty = true;
       rebuildRoad();
       showDist(metres(state.length));
@@ -1084,6 +1228,20 @@ window.plethoraBit = {
                    (e.offsetX / W) * 1.6 - 0.8);
       }
     });
+
+    function crash(x, y) {
+      state.cut = 1;
+      state.cutAt = { x: x, y: y };
+      state.shake = Math.max(state.shake, 0.18);
+      for (let i = 0; i < 22; i++) {
+        spark(toWorldX(x), 6, toWorldZ(y), 1, 150);
+      }
+      Sound.crash();
+      ctx.platform.haptic("warning");
+      nodes.note.textContent = "the road met itself";
+      nodes.note.style.opacity = "1";
+      endDraw();
+    }
 
     const endDraw = () => {
       if (!state.drawing) return;
@@ -1169,6 +1327,11 @@ window.plethoraBit = {
     const carPos = new THREE.Vector3();
     const camWant = new THREE.Vector3();
     const lookWant = new THREE.Vector3();
+    const camDesired = new THREE.Vector3();
+    const lookDesired = new THREE.Vector3();
+    const camPos = new THREE.Vector3();
+    const lookPos = new THREE.Vector3();
+    let camSettled = false;
     const easeInOut = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
     layout();
@@ -1199,8 +1362,19 @@ window.plethoraBit = {
         if (state.progress >= state.length) { state.progress = state.length; finishRace(); }
       }
 
-      // Car placement.
-      const heading = sampleAt(state.mode === "draw" ? 0 : state.progress, pos);
+      // Car placement. The sampled heading steps from one path segment to the
+      // next; following it raw is what made the car twitch. Damp it, the short
+      // way round the circle, and let the camera follow the damped value.
+      const sampled = sampleAt(state.mode === "draw" ? 0 : state.progress, pos);
+      if (state.mode === "draw") {
+        state.carHeading = sampled;
+      } else {
+        let d = sampled - state.carHeading;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        state.carHeading += d * Math.min(1, dt * 8);
+      }
+      const heading = state.carHeading;
       carPos.copy(pos);
       car.position.copy(carPos);
       car.rotation.y = heading;
@@ -1233,11 +1407,16 @@ window.plethoraBit = {
         above,
         carPos.z - Math.cos(heading + swing) * behind
       );
-      camera.position.set(
+      camDesired.set(
         0 * (1 - k) + camWant.x * k,
         camHeight * (1 - k) + camWant.y * k,
         0.001 * (1 - k) + camWant.z * k
       );
+      // A second, lighter smoothing on top of the dive ease: the blend is
+      // already smooth, but the point it is blending toward moves with the car.
+      if (camSettled) camPos.lerp(camDesired, Math.min(1, dt * 7));
+      else { camPos.copy(camDesired); camSettled = true; }
+      camera.position.copy(camPos);
       // Aim ahead of the car while racing, and at the car itself once stopped.
       const om2 = state.mode === "done" ? easeInOut(state.orbitMix) : 0;
       const aim = 90 * (1 - om2);
@@ -1248,15 +1427,26 @@ window.plethoraBit = {
         12 - 78 * om2,
         carPos.z + Math.cos(heading) * aim
       );
-      const lx = 0 * (1 - k) + lookWant.x * k;
-      const ly = 0 * (1 - k) + lookWant.y * k;
-      const lz = 0 * (1 - k) + lookWant.z * k;
+      lookDesired.set(
+        0 * (1 - k) + lookWant.x * k,
+        0 * (1 - k) + lookWant.y * k,
+        0 * (1 - k) + lookWant.z * k
+      );
+      lookPos.lerp(lookDesired, Math.min(1, dt * 7));
+      const lx = lookPos.x, ly = lookPos.y, lz = lookPos.z;
       if (state.shake > 0) {
         state.shake = Math.max(0, state.shake - dt);
         camera.position.x += (Math.random() - 0.5) * state.shake * 26;
         camera.position.y += (Math.random() - 0.5) * state.shake * 20;
       }
-      camera.up.set(0, k, 1 - k);       // overhead needs +Z up, chase needs +Y
+      // Looking straight down, three builds the camera basis as
+      // right = cross(up, eye-target). With up = +Z and the camera on +Y that
+      // gives right = -X and screen-up = +Z, which mirrors BOTH axes: the road
+      // appeared rotated 180 degrees from where it was drawn. -Z is the up
+      // vector that puts screen-right on +X and screen-down on +Z, matching
+      // toWorldX/toWorldZ. At k = 1 it is +Y either way, so the chase is
+      // untouched.
+      camera.up.set(0, k, -(1 - k));
       camera.lookAt(lx, ly, lz);
 
       for (let i = 0; i < SP; i++) {

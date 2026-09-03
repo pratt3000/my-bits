@@ -4,8 +4,53 @@ You are the boss, and the computer is dodging.
 
 The usual arrangement, inverted. A target hovers inside a lit arena and tries
 very hard to stay alive; you have nine attacks along the bottom and sixty
-seconds to take a thousand hit points off it. No cooldowns — press whatever you
-like as fast as you like.
+seconds to take a thousand hit points off it.
+
+## Why mashing does not work
+
+It used to. Every attack was free and damage landed **once per frame per
+overlapping projectile**, so a sustained wave did sixty ticks a second and the
+game played itself. Three changes fix that without touching the AI:
+
+1. **Energy.** Attacks cost from one shared pool of 100 that refills at 30 a
+   second, so every press is a choice. Costs run from 5 for a bone to 30 for the
+   crusher.
+2. **A damage clock.** Projectiles still do not vanish on contact — a wave that
+   engulfs the target is still worth a great deal — but each attack can only
+   land once every sixth of a second.
+3. **Guard.** A target that is still free to move takes **half** damage. Only
+   while it is pinned — frozen, grabbed or crushed — does it take **triple**.
+
+So the game becomes the sentence the original was always about: *close the
+exits, pin it, then spend everything.* Squeeze the arena with the crusher until
+there is only a corridor left, put a freeze into that corridor, and empty the
+pool into the second and a half you bought. The HUD says which state you are in
+and what the multiplier is, and chip numbers are greyed so you can see at a
+glance that you are wasting energy.
+
+Two supporting changes fell out of measuring it:
+
+- **The freeze had to get faster** — 12 to 26. At 12 the target simply walked
+  away from it, and a scripted sixty seconds of play landed *exactly zero* hits
+  on a pinned target. The pin is the whole game; it has to be landable once you
+  have set it up, and still wasted if you throw it into open space.
+- **The crusher's walls no longer meet in the middle.** They stopped at exactly
+  the centre line, which made the crusher an undodgeable pin for 26 energy —
+  press it on a loop and the game plays itself again. They reach 86% now, so it
+  is the tool that *closes the exits* rather than the pin itself.
+
+### Measured
+
+Three scripted players, sixty seconds each, against the shipped build:
+
+| player | result | pin damage | chip damage | presses denied |
+|---|---|---|---|---|
+| presses a random button every 110 ms | **loses**, 891/1000 left | 60 | 49 | 457 |
+| pincer → freeze on a blind 4 s loop | **loses**, 245/1000 left | 657 | 98 | 11 |
+| crusher → wait for the squeeze → freeze → burst | **wins in 35.0 s** | 918 | 86 | 1 |
+
+Which is the shape it should be: mashing is not useless, it is just nowhere
+near enough, and sequencing beats it by a factor of eight.
 
 ## The target is genuinely good
 
@@ -114,6 +159,12 @@ something it has not seen.
 page errors; `loadFont`, `ready`, `start`, `interact` and `haptic` all fire, and
 the arena, the swarm, the void telegraph, the beam, the pincer, the freeze and
 the crusher were each checked against a screenshot.
+
+Balance was measured, not guessed: `sc-boss-spam.json`, `sc-boss-combo.json` and
+`sc-boss-smart.json` drive three scripted players through a full sixty seconds
+each, and an instrumented copy of the bit counts hits and damage by tier. The
+first tuning pass looked reasonable and turned out to land **zero** hits on a
+pinned target in a whole run; nothing but the counter would have caught it.
 
 Audio was probed separately, since the harness cannot hear: all nine ability
 voices plus both hit tiers and both stingers build with **zero errors**,

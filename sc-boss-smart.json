@@ -1,0 +1,10 @@
+{
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "wait": 1200 },
+    { "eval": "(function(){var g=document.querySelector('[data-el=\"go\"]');g.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));var m={};document.querySelectorAll('[data-ab]').forEach(function(b){m[b.getAttribute('data-ab')]=b;});function f(id){m[id].dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));}var seq=[['crusher',0],['freeze',980],['blaster',1120],['swarm',1300],['bone',1500],['bone',1700]];window.__t=[];function run(){seq.forEach(function(s){window.__t.push(setTimeout(function(){f(s[0]);},s[1]));});}run();window.__c=setInterval(run,3400);})()" },
+    { "wait": 63000 },
+    { "eval": "(function(){clearInterval(window.__c);window.__t.forEach(clearTimeout);console.error('SMARTRESULT '+JSON.stringify({stat:window.__stat,denied:window.__denied,hp:document.querySelector('[data-el=\"hptext\"]').textContent,title:document.querySelector('[data-el=\"title\"]').textContent}));})()" },
+    { "expectEvent": "ready" }
+  ]
+}

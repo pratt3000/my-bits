@@ -1,0 +1,187 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "steps": [
+    {
+      "wait": 1400
+    },
+    {
+      "screenshot": "01-idle"
+    },
+    {
+      "down": [
+        50,
+        170
+      ],
+      "after": 110
+    },
+    {
+      "moveTo": [
+        340,
+        170
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        340,
+        228
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        50,
+        228
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        50,
+        286
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        340,
+        286
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        340,
+        344
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        50,
+        344
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        50,
+        402
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        340,
+        402
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        340,
+        460
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        50,
+        460
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        50,
+        518
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        340,
+        518
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        340,
+        576
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        50,
+        576
+      ],
+      "after": 55
+    },
+    {
+      "moveTo": [
+        50,
+        634
+      ],
+      "after": 45
+    },
+    {
+      "moveTo": [
+        340,
+        634
+      ],
+      "after": 55
+    },
+    {
+      "up": true,
+      "after": 350
+    },
+    {
+      "screenshot": "02-drawn"
+    },
+    {
+      "tap": [
+        160,
+        800
+      ],
+      "after": 260
+    },
+    {
+      "screenshot": "03-dive"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "04-chase"
+    },
+    {
+      "wait": 1800
+    },
+    {
+      "screenshot": "05-racing"
+    },
+    {
+      "wait": 2400
+    },
+    {
+      "screenshot": "06-mid"
+    },
+    {
+      "wait": 5000
+    },
+    {
+      "screenshot": "07-result"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "start"
+    }
+  ]
+}

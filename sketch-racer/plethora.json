@@ -3,14 +3,14 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Sketch Racer",
-  "description": "Draw the longest road you dare, then drop into it and drive. Drag one finger and a road unrolls under it, metering its own length as you go \u2014 then hit RACE and the camera falls out of the sky, swings in behind the car and follows it along every curve you drew until it crosses the chequered flag. That fall is the point: you draw looking straight down, where a perspective camera pointed at a flat plane behaves like an orthographic one, so what you draw is exactly what you get; then the same camera eases to a chase position and your flat sketch becomes a road with a horizon. There is no skill in the driving, the car always finishes. The game is how much road you can fit into one gesture. Finish in the global top five and the car turns to diamond.",
+  "description": "Draw the longest road you dare, then drop into it and drive. Drag one finger and a road unrolls under it, metering its own length as you go \u2014 but the road may not touch itself, and the stroke ends the instant it does. That one rule is the game: laps cannot be stacked, so the score is not who scribbles longest but how much road you can pack into one screen without the lanes meeting, and every extra metre is another chance to close yourself in. Then hit RACE and the camera falls out of the sky, swings in behind the car and follows it along every curve you drew until it crosses the chequered flag. That fall is the point: you draw looking straight down, where a perspective camera pointed at a flat plane behaves like an orthographic one, so what you draw is exactly what you get; then the same camera eases to a chase position and your flat sketch becomes a road with a horizon. There is no skill in the driving, the car always finishes. Finish in the global top five and the car turns to diamond.",
   "tags": [
     "game",
     "drawing",
     "racing",
     "3d",
-    "leaderboard",
-    "casual"
+    "puzzle",
+    "leaderboard"
   ],
   "permissions": [
     "audio",

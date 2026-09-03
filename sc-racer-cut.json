@@ -1,0 +1,63 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "steps": [
+    {
+      "wait": 1400
+    },
+    {
+      "down": [
+        60,
+        300
+      ],
+      "after": 120
+    },
+    {
+      "moveTo": [
+        330,
+        300
+      ],
+      "after": 160
+    },
+    {
+      "moveTo": [
+        330,
+        420
+      ],
+      "after": 120
+    },
+    {
+      "moveTo": [
+        60,
+        420
+      ],
+      "after": 160
+    },
+    {
+      "moveTo": [
+        60,
+        310
+      ],
+      "after": 200
+    },
+    {
+      "moveTo": [
+        200,
+        305
+      ],
+      "after": 200
+    },
+    {
+      "up": true,
+      "after": 400
+    },
+    {
+      "screenshot": "01-cut"
+    },
+    {
+      "expectEvent": "ready"
+    }
+  ]
+}

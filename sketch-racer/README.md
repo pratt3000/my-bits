@@ -2,11 +2,35 @@
 
 Draw the longest road you dare, then drop into it and drive.
 
-Drag one finger and a road unrolls under it, metering its own length as you go.
-Hit RACE and the camera falls out of the sky, swings in behind the car and
-follows it along every curve you drew until it crosses the chequered flag.
-There is no skill in the driving — the car always finishes. The game is how much
-road you can fit into one gesture.
+Drag one finger and a road unrolls under it, metering its own length as you go
+— **but the road may not touch itself, and the stroke ends the instant it
+does.** Hit RACE and the camera falls out of the sky, swings in behind the car
+and follows it along every curve you drew until it crosses the chequered flag.
+
+## The one rule
+
+Without it there is no game. Laps can be laid on top of each other, so the
+longest track is simply whoever scribbles the longest — no planning, no ceiling,
+no reason to be careful. With it the score becomes *how much road you can pack
+into one screen without the lanes meeting*, which has a real maximum (roughly
+the drawable area divided by the road width) and rewards the thing the game is
+actually about: laying out a circuit.
+
+It also puts risk in every metre. The stroke keeps whatever it drew up to the
+cut, so at 250 m you are deciding whether one more sweep is worth losing the
+run over.
+
+Mechanically: each new sample is rejected if it comes within `ROAD_W * 1.85` of
+any earlier sample more than `SKIP_BACK` back along the path, tested through a
+spatial hash so it stays O(1) as the track grows. The skip-back window is
+derived from the road width rather than fixed — it has to clear the samples that
+are adjacent by construction without also excusing a hairpin, whose two lanes
+are about `pi * ROAD_W` apart along the path.
+
+And the check walks the gap between pointer events rather than jumping it. A
+`pointermove` can arrive hundreds of pixels from the last one on a fast flick;
+taking that as a single sample both corners off the geometry and lets the stroke
+leap clean over an earlier lane without the rule ever seeing it.
 
 ## Why 3D earns its place here
 
@@ -24,15 +48,21 @@ position and the flat sketch you just made becomes a road with a horizon. Two
 views, one camera, no cheating — and it only works because the drawing view is
 a real 3D camera that happens to be overhead.
 
-The blend needs one non-obvious line:
+The blend needs one non-obvious line, and getting its sign wrong is the bug
+this bit shipped with:
 
 ```js
-camera.up.set(0, k, 1 - k);   // overhead needs +Z up, chase needs +Y
+camera.up.set(0, k, -(1 - k));   // overhead needs -Z up, chase needs +Y
 ```
 
 Straight down, `+Y` is degenerate as an up vector — `lookAt` has no way to pick
-a roll. Blending the up vector along with the position is what makes the dive
-land the right way round.
+a roll — so the up vector has to be blended along with the position. But three
+builds the basis as `right = cross(up, eye - target)`. With `up = +Z` and the
+camera on `+Y`, that gives `right = -X` and screen-up `= +Z`, which mirrors
+**both** axes: the road came out rotated 180 degrees from where it was drawn.
+`-Z` is the up vector that puts screen-right on `+X` and screen-down on `+Z`,
+matching `toWorldX` / `toWorldZ`. At `k = 1` it is `+Y` either way, so the chase
+view never showed the fault.
 
 At the flag the camera lifts and orbits, so the car you just drove is sitting
 above the result sheet rather than hidden behind it.
@@ -49,6 +79,26 @@ has grain when the camera is right down on it.
 The road, the grid and the sky all converge to the **same** haze colour with
 distance. They have to: fade the ground to black and the horizon becomes a hard
 line straight across the middle of the phone.
+
+## Smoothing
+
+A finger is not a spline. Three sources of jitter, three fixes:
+
+- The raw samples wobble, so the path is filtered with **three binomial passes,
+  ends pinned** — enough to take out the tremor without rounding off corners the
+  player meant. Geometry, length, sampling and the flag all read the filtered
+  path.
+- `sampleAt` returns a heading that **steps** from one path segment to the next.
+  Following it raw is what made the car twitch, so it is damped the short way
+  round the circle.
+- The camera was snapping to a chase point that itself moves with the car. It
+  now eases toward it, on top of the dive blend.
+
+The ribbon also needed one classic fix. Where the road turns tighter than it is
+wide, the inside edge runs backwards and the ribbon folds — which renders as a
+bright chevron of rail across the middle of the tarmac. Collapsing the inner
+edge onto the centreline is the cure: the road keeps its full width everywhere
+it can have one, and comes to a point where it cannot.
 
 ## Three bugs found by looking, not by reading
 
@@ -103,10 +153,14 @@ seconds.
 
 ## Verified
 
-`node _skills/sekai/harness/run.js sketch-racer sc-racer2.json` — no console or
+`node _skills/sekai/harness/run.js sketch-racer sc-racer3.json` — no console or
 page errors; `loadFont`, `ready`, `start`, `interact`, `complete`,
 `record.submit` and `milestone` all fire, and the overhead view, the dive, the
 chase and the result sheet were each checked against a screenshot.
+
+`sc-racer-cut.json` drives a stroke deliberately back onto its own first lane
+and confirms the cut fires where the lanes meet, keeping the metres drawn up to
+that point.
 
 ## Provenance
 

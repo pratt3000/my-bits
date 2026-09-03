@@ -1,0 +1,11 @@
+{
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "wait": 1200 },
+    { "eval": "(function(){var g=document.querySelector('[data-el=\"go\"]');g.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));var b=document.querySelectorAll('[data-ab]');window.__spam=setInterval(function(){var t=b[Math.floor(Math.random()*b.length)];t.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));},110);})()" },
+    { "wait": 63000 },
+    { "eval": "(function(){clearInterval(window.__spam);console.error('SPAMRESULT '+JSON.stringify({hp:document.querySelector('[data-el=\"hptext\"]').textContent,title:document.querySelector('[data-el=\"title\"]').textContent}));})()" },
+    { "screenshot": "spam-end" },
+    { "expectEvent": "ready" }
+  ]
+}

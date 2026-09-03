@@ -52,17 +52,37 @@ window.plethoraBit = {
 
     // Each ability has a colour, and its projectiles are that colour, so nine
     // things happening at once are still nine legible things.
+    // Spamming used to win: every attack was free, and damage landed once per
+    // frame per overlapping projectile, so a sustained wave did sixty ticks a
+    // second. Three things fix that without touching the AI.
+    //
+    //  1. Attacks cost energy from one shared pool, so every press is a choice.
+    //  2. An attack can only hurt the target once every DMG_TICK, so a wave is
+    //     worth a lot without being worth everything.
+    //  3. A target that is free to move is GUARDED and takes a quarter damage.
+    //     Only while it is pinned — frozen, grabbed or crushed — does it take
+    //     full damage, multiplied. So the intended play is the only play that
+    //     works: close the exits, pin it, then spend everything.
+    const ENERGY_MAX = 100;
+    const ENERGY_REGEN = 30;       // per second
+    const DMG_TICK = 0.16;         // seconds between hits from one attack
+    const GUARD_MULT = 0.5;
+    const EXPOSED_MULT = 3.0;
+    const CRUSH_REACH = 0.86;      // fraction of the half-arena the walls cover
+
     const ABILITIES = [
-      { id: "bone", name: "Bone", hint: "one fast shot", c: "#e8ecff" },
-      { id: "wave", name: "Wave", hint: "wall, gap on it", c: "#7de2ff" },
-      { id: "void", name: "Void", hint: "half the arena", c: "#a855f7" },
-      { id: "swarm", name: "Swarm", hint: "16 outward", c: "#ffd166" },
-      { id: "blaster", name: "Beam", hint: "vertical, aimed", c: "#dff3ff" },
-      { id: "twowaves", name: "Pincer", hint: "both sides", c: "#5eead4" },
-      { id: "freeze", name: "Freeze", hint: "pins it 1.5s", c: "#38bdf8" },
-      { id: "grab", name: "Grab", hint: "drags to centre", c: "#f472b6" },
-      { id: "crusher", name: "Crush", hint: "walls close in", c: "#fb7185" }
+      { id: "bone", name: "Bone", hint: "one fast shot", c: "#e8ecff", cost: 5 },
+      { id: "wave", name: "Wave", hint: "wall, gap on it", c: "#7de2ff", cost: 15 },
+      { id: "void", name: "Void", hint: "half the arena", c: "#a855f7", cost: 20 },
+      { id: "swarm", name: "Swarm", hint: "16 outward", c: "#ffd166", cost: 16 },
+      { id: "blaster", name: "Beam", hint: "vertical, aimed", c: "#dff3ff", cost: 18 },
+      { id: "twowaves", name: "Pincer", hint: "both sides", c: "#5eead4", cost: 20 },
+      { id: "freeze", name: "Freeze", hint: "pins it 1.5s", c: "#38bdf8", cost: 22 },
+      { id: "grab", name: "Grab", hint: "drags to centre", c: "#f472b6", cost: 18 },
+      { id: "crusher", name: "Crush", hint: "squeezes the arena", c: "#fb7185", cost: 30 }
     ];
+    const ABILITY_COST = {};
+    for (const a of ABILITIES) ABILITY_COST[a.id] = a.cost;
     const ABILITY_C = {};
     for (const a of ABILITIES) ABILITY_C[a.id] = a.c;
 
@@ -76,7 +96,9 @@ window.plethoraBit = {
       best: 0,
       shake: 0,
       flinch: 0,
-      hpGhost: MAX_HP
+      hpGhost: MAX_HP,
+      energy: ENERGY_MAX,
+      exposed: false
     };
 
     const floaters = [];
@@ -319,11 +341,21 @@ window.plethoraBit = {
         else if (id === "grab") this.tone(620, 150, 0.36, "triangle", 0.13, p, "delay");
         else if (id === "crusher") { this.tone(58, 26, 1.0, "sawtooth", 0.20, 0); this.noise(0.7, "lowpass", 400, 0.8, 0.14, 0, 90); }
       },
-      hit(dmg, ax) {
-        // Pitched by how much it hurt, so a big hit sounds like a big hit.
+      hit(dmg, ax, pinned) {
+        // Pitched by how much it hurt, so a big hit sounds like a big hit — and
+        // a hit that only chipped a guarded target sounds like it bounced off.
         const p = this.pan(ax);
+        if (!pinned) {
+          this.noise(0.035, "bandpass", 3400, 6, 0.045, p, 2600);
+          return;
+        }
         this.noise(0.045, "bandpass", 2400 - Math.min(1600, dmg * 70), 4, 0.10, p, 500);
         this.tone(280 - Math.min(190, dmg * 8), 90, 0.09, "square", 0.055, p, false);
+      },
+      // Out of energy.
+      denied() {
+        if (!this.ready) return;
+        this.tone(196, 146, 0.10, "square", 0.05, 0, false);
       },
       win() {
         [0, 4, 7, 12, 19].forEach((s, i) => {
@@ -826,6 +858,8 @@ window.plethoraBit = {
         'transition:transform 90ms ease, background 120ms ease;">' +
         '<span style="position:absolute;left:0;right:0;top:0;height:2px;background:' + a.c + ';' +
         'opacity:0.85;"></span>' +
+        '<span style="position:absolute;top:3px;right:5px;font-size:8px;font-weight:600;' +
+        'color:rgba(165,243,252,0.75);font-variant-numeric:tabular-nums;">' + a.cost + "</span>" +
         '<span style="font-size:11.5px;font-weight:600;color:' + INK + ';letter-spacing:0.2px;">' +
         a.name + "</span>" +
         '<span style="font-size:7.5px;color:' + DIM + ';white-space:nowrap;">' + a.hint + "</span>" +
@@ -852,8 +886,19 @@ window.plethoraBit = {
           '<div data-el="hpbar" style="position:absolute;inset:0;width:100%;' +
           'background:linear-gradient(90deg,#ff2f45,#ff6b5a);transition:width 90ms linear;"></div>' +
         "</div>" +
-        '<div data-el="hptext" style="font-size:10.5px;color:' + DIM + ';margin-top:5px;' +
-        'font-variant-numeric:tabular-nums;">1000 / 1000</div>' +
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:5px;">' +
+          '<div data-el="hptext" style="font-size:10.5px;color:' + DIM + ';' +
+          'font-variant-numeric:tabular-nums;">1000 / 1000</div>' +
+          '<div data-el="guard" style="font-size:9.5px;letter-spacing:1.6px;color:' + DIM + ';' +
+          'transition:color 160ms;">GUARDED ×0.5</div>' +
+        "</div>" +
+        // Energy. Without it every button is free and the game is a mash.
+        '<div data-el="energywrap" style="height:5px;border-radius:3px;margin-top:7px;' +
+        'background:rgba(255,255,255,0.08);overflow:hidden;transform-origin:center;' +
+        'transition:transform 120ms cubic-bezier(.2,1.5,.4,1);">' +
+          '<div data-el="energy" style="height:100%;width:100%;' +
+          'background:linear-gradient(90deg,#38bdf8,#a5f3fc);"></div>' +
+        "</div>" +
       "</div>" +
 
       '<div data-el="floaters" style="position:absolute;inset:0;pointer-events:none;"></div>' +
@@ -870,7 +915,8 @@ window.plethoraBit = {
           "Boss Simulator</div>" +
           '<div data-el="blurb" style="font-size:13.5px;color:' + DIM + ';line-height:1.65;' +
           'margin:12px 0 20px;">You are the boss. Sixty seconds to take a thousand points off a ' +
-          "target that dodges properly.<br><br>One attack will not do it. Corner it.</div>" +
+          "target that dodges properly.<br><br>Attacks cost energy, and a target that can still " +
+          "move only takes a quarter damage. Close the exits, pin it, then spend everything.</div>" +
           '<div data-el="board" style="text-align:left;margin-bottom:18px;"></div>' +
           '<button data-el="go" style="pointer-events:auto;width:100%;height:54px;border-radius:27px;' +
           'border:0;background:' + TARGET_C + ';color:#fff;font-size:15px;font-weight:600;' +
@@ -907,6 +953,16 @@ window.plethoraBit = {
       if (state.status !== "playing") return;
       // A hard cap, so a mashed button cannot bury the frame rate.
       if (state.attacks.length > 400) return;
+
+      const cost = ABILITY_COST[type] || 0;
+      if (state.energy < cost) {
+        // Refused, and it says so — a button that does nothing silently is a
+        // bug as far as the player is concerned.
+        Sound.denied();
+        flashEnergy();
+        return;
+      }
+      state.energy -= cost;
 
       const b = state.box;
       const bot = state.bot;
@@ -977,13 +1033,13 @@ window.plethoraBit = {
         const angle = Math.atan2(bot.y - (b.y - 50), bot.x - (b.x + b.w / 2));
         state.attacks.push({
           type: "freeze", src: "freeze", x: b.x + b.w / 2, y: b.y - 50, w: 30, h: 30,
-          vx: Math.cos(angle) * 12, vy: Math.sin(angle) * 12, dmg: 2, active: true, effect: "freeze"
+          vx: Math.cos(angle) * 26, vy: Math.sin(angle) * 26, dmg: 2, active: true, effect: "freeze"
         });
       } else if (type === "grab") {
         const angle = Math.atan2(bot.y - (b.y + b.h + 50), bot.x - (b.x + b.w / 2));
         state.attacks.push({
           type: "grab", src: "grab", x: b.x + b.w / 2, y: b.y + b.h + 50, w: 30, h: 30,
-          vx: Math.cos(angle) * 12, vy: Math.sin(angle) * 12, dmg: 2, active: true, effect: "grab"
+          vx: Math.cos(angle) * 26, vy: Math.sin(angle) * 26, dmg: 2, active: true, effect: "grab"
         });
       } else if (type === "crusher") {
         state.attacks.push({
@@ -1023,7 +1079,7 @@ window.plethoraBit = {
           } else if (att.type === "blaster") {
             inZone = Math.abs(tx - att.targetX) < 40;
           } else if (att.type === "crusher") {
-            const progress = att.active ? Math.pow(1 - att.lifetime / att.maxLifetime, 2) : 0;
+            const progress = att.active ? Math.pow(1 - att.lifetime / att.maxLifetime, 2) * CRUSH_REACH : 0;
             const left = box.x + (box.w / 2 * progress) + 40;
             const right = (box.x + box.w) - (box.w / 2 * progress) - 40;
             inZone = tx < left || tx > right;
@@ -1120,7 +1176,7 @@ window.plethoraBit = {
               att.y < box.y - 200 || att.y > box.y + box.h + 200) remove = true;
         }
 
-        if (att.active && b.invulnTimer <= 0) {
+        if (att.active && (att.nextHit || 0) <= state.elapsed) {
           let hit = false;
           if (att.type === "void") {
             hit = (b.x + b.size / 2 > att.x && b.x - b.size / 2 < att.x + att.w &&
@@ -1129,7 +1185,7 @@ window.plethoraBit = {
             hit = Math.abs(b.x - att.targetX) < 30;
           } else if (att.type === "crusher") {
             const box = state.box;
-            const progress = Math.pow(1 - att.lifetime / att.maxLifetime, 2);
+            const progress = Math.pow(1 - att.lifetime / att.maxLifetime, 2) * CRUSH_REACH;
             hit = (b.x - b.size / 2 < box.x + (box.w / 2 * progress) ||
                    b.x + b.size / 2 > (box.x + box.w) - (box.w / 2 * progress));
           } else {
@@ -1139,22 +1195,31 @@ window.plethoraBit = {
           }
 
           if (hit) {
-            b.hp -= att.dmg;
-            // Damage on every touch — projectiles do not vanish on contact,
-            // which is what makes a sustained wave worth so much.
-            b.invulnTimer = 0;
+            // Projectiles still do not vanish on contact — a wave that engulfs
+            // the target is still worth a great deal — but each attack lands on
+            // its own clock rather than once per rendered frame.
+            att.nextHit = state.elapsed + DMG_TICK;
+
+            const pinned = b.frozenTimer > 0 || b.grabbedTimer > 0;
+            const mult = pinned ? EXPOSED_MULT : GUARD_MULT;
+            const dealt = Math.max(1, Math.round(att.dmg * mult));
+            b.hp -= dealt;
+
             if (att.effect === "freeze") b.frozenTimer = 1.5;
             else if (att.effect === "grab") b.grabbedTimer = 1.0;
             else if (att.effect === "crush") {
               b.frozenTimer = 1.5;
               b.y = state.box.y + state.box.h - b.size / 2;
             }
-            Sound.hit(att.dmg, b.x);
-            state.shake = Math.max(state.shake, 0.1);
-            state.flinch = 1;
-            floorMat.uniforms.uHit.value = Math.min(0.5, floorMat.uniforms.uHit.value + att.dmg * 0.022);
-            spark(b.x, b.y, ATT_RGB[att.src] || [1, 0.4, 0.4], 3 + Math.min(10, att.dmg), 120);
-            if (att.dmg > 0) floaters.push({ x: b.x, y: b.y - 20, life: 1, text: "-" + att.dmg, big: att.dmg >= 8 });
+            Sound.hit(dealt, b.x, pinned);
+            state.shake = Math.max(state.shake, pinned ? 0.14 : 0.06);
+            state.flinch = pinned ? 1 : 0.45;
+            floorMat.uniforms.uHit.value = Math.min(0.5, floorMat.uniforms.uHit.value + dealt * 0.014);
+            spark(b.x, b.y, ATT_RGB[att.src] || [1, 0.4, 0.4], 3 + Math.min(10, dealt), 120);
+            floaters.push({
+              x: b.x, y: b.y - 20, life: 1, text: "-" + dealt,
+              big: pinned && dealt >= 8, guarded: !pinned
+            });
             if (b.hp <= 0) { b.hp = 0; endGame(true); }
           }
         }
@@ -1162,6 +1227,8 @@ window.plethoraBit = {
         if (remove) state.attacks.splice(i, 1);
       }
 
+      state.energy = Math.min(ENERGY_MAX, state.energy + ENERGY_REGEN * dt);
+      state.exposed = state.bot.frozenTimer > 0 || state.bot.grabbedTimer > 0;
       if (state.shake > 0) state.shake -= dt;
       state.flinch = Math.max(0, state.flinch - dt * 5);
       floorMat.uniforms.uHit.value = Math.max(0, floorMat.uniforms.uHit.value - dt * 3.2);
@@ -1187,6 +1254,28 @@ window.plethoraBit = {
         }, 140);
       }
       nodes.hptext.textContent = Math.max(0, Math.ceil(state.bot.hp)) + " / " + MAX_HP;
+
+      const ep = (state.energy / ENERGY_MAX) * 100;
+      nodes.energy.style.width = ep + "%";
+      if (state.exposed) {
+        nodes.guard.textContent = "EXPOSED ×" + EXPOSED_MULT;
+        nodes.guard.style.color = "#fde68a";
+      } else {
+        nodes.guard.textContent = "GUARDED ×" + GUARD_MULT;
+        nodes.guard.style.color = DIM;
+      }
+      for (const btn of padButtons) {
+        const afford = state.energy >= btn.cost;
+        if (btn.afford !== afford) {
+          btn.afford = afford;
+          btn.el.style.opacity = afford ? "1" : "0.38";
+        }
+      }
+    }
+
+    function flashEnergy() {
+      nodes.energywrap.style.transform = "scaleY(1.9)";
+      ctx.timeout(() => { nodes.energywrap.style.transform = "scaleY(1)"; }, 130);
     }
 
     // ===================================================================== //
@@ -1291,7 +1380,7 @@ window.plethoraBit = {
           }
         } else if (att.type === "crusher") {
           crushProgress = att.active
-            ? Math.pow(1 - att.lifetime / att.maxLifetime, 2)
+            ? Math.pow(1 - att.lifetime / att.maxLifetime, 2) * CRUSH_REACH
             : 0.06 + 0.06 * Math.sin(clock * 24);
         }
       }
@@ -1371,7 +1460,14 @@ window.plethoraBit = {
         const sx = (_v.x * 0.5 + 0.5) * W;
         const sy = (1 - (_v.y * 0.5 + 0.5)) * H;
         if (el.textContent !== f.text) el.textContent = f.text;
-        el.style.opacity = String(Math.max(0, Math.min(1, f.life)));
+        const guarded = !!f.guarded;
+        if (el.__guarded !== guarded) {
+          el.__guarded = guarded;
+          el.style.color = guarded ? "rgba(226,232,240,0.62)" : "#fff";
+          el.style.textShadow = guarded ? "none" : "0 0 12px rgba(255,80,100,0.95)";
+          el.style.fontWeight = guarded ? "500" : "700";
+        }
+        el.style.opacity = String(Math.max(0, Math.min(1, f.life)) * (guarded ? 0.8 : 1));
         el.style.transform = "translate(" + (sx - 14) + "px," + (sy - 9) + "px) scale(" +
           (f.big ? 1.5 : 1) * (0.8 + f.life * 0.3) + ")";
       }
@@ -1410,6 +1506,8 @@ window.plethoraBit = {
       state.bot.frozenTimer = 0;
       state.bot.grabbedTimer = 0;
       state.bot.invulnTimer = 0;
+      state.energy = ENERGY_MAX;
+      state.exposed = false;
       state.bot.x = state.box.x + state.box.w / 2;
       state.bot.y = state.box.y + state.box.h / 2;
       nodes.hpghost.style.width = "100%";
@@ -1428,7 +1526,8 @@ window.plethoraBit = {
       nodes.blurb.innerHTML = won
         ? "A thousand points, gone. Faster next time?"
         : "Sixty seconds up with " + Math.ceil(state.bot.hp) + " points still on it. " +
-          "One attack at a time will never work — freeze it, then hit it with everything.";
+          "Chip damage will never get there. Herd it with a wave, land a freeze, and put " +
+          "everything you have into that second and a half.";
       nodes.go.textContent = "AGAIN";
       nodes.curtain.style.display = "flex";
       nodes.board.innerHTML = "";
@@ -1482,21 +1581,27 @@ window.plethoraBit = {
     // ===================================================================== //
     // 12. Hands on it                                                       //
     // ===================================================================== //
+    const padButtons = [];
+    for (const el of pad.querySelectorAll("[data-ab]")) {
+      padButtons.push({ el: el, cost: ABILITY_COST[el.getAttribute("data-ab")], afford: true });
+    }
+
     for (const btn of pad.querySelectorAll("[data-ab]")) {
       const id = btn.getAttribute("data-ab");
       ctx.listen(btn, "pointerdown", (e) => {
         e.preventDefault();
         Sound.init();
         Sound.resume();
+        const afforded = state.status === "playing" && state.energy >= ABILITY_COST[id];
         useAbility(id);
         btn.style.transform = "scale(0.94)";
-        btn.style.background = ABILITY_C[id] + "33";
+        if (afforded) btn.style.background = ABILITY_C[id] + "33";
         ctx.timeout(() => {
           btn.style.transform = "scale(1)";
           btn.style.background = "linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.035))";
         }, 110);
-        ctx.platform.haptic("light");
-        ctx.platform.interact({ kind: "attack", ability: id });
+        ctx.platform.haptic(afforded ? "light" : "warning");
+        if (afforded) ctx.platform.interact({ kind: "attack", ability: id });
       });
     }
     ctx.listen(nodes.go, "pointerdown", (e) => {

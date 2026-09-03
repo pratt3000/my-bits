@@ -1,0 +1,11 @@
+{
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "wait": 1200 },
+    { "eval": "(function(){var g=document.querySelector('[data-el=\"go\"]');g.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));var m={};document.querySelectorAll('[data-ab]').forEach(function(b){m[b.getAttribute('data-ab')]=b;});function f(id){m[id].dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));}var seq=[['twowaves',0],['freeze',260],['blaster',420],['crusher',620],['swarm',900],['bone',1100],['bone',1300]];var cyc=4000;window.__t=[];function run(){seq.forEach(function(s){window.__t.push(setTimeout(function(){f(s[0]);},s[1]));});}run();window.__c=setInterval(run,cyc);})()" },
+    { "wait": 63000 },
+    { "eval": "(function(){clearInterval(window.__c);window.__t.forEach(clearTimeout);console.error('COMBORESULT '+JSON.stringify({hp:document.querySelector('[data-el=\"hptext\"]').textContent,title:document.querySelector('[data-el=\"title\"]').textContent}));})()" },
+    { "screenshot": "combo-end" },
+    { "expectEvent": "ready" }
+  ]
+}
