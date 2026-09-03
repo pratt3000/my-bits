@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "WaveFlow XY Synth",
+  "description": "One finger, twenty-five voices. A performance pad instead of a keyboard: up the screen is pitch, an exponential sweep from A1 to A6 so the whole range sits under one thumb, and across is timbre — which means something different on every voice. On Analog it opens a resonant lowpass, on Digital FM it drives the modulation index, on Static Noise it sweeps a bandpass through the hiss. Nothing is sampled. Each voice is a small hand-built Web Audio graph — oscillators, filters, LFOs, a waveshaper for the dirty one — so the oscilloscope drawn across the pad is the real output, not a decoration. The strip along the bottom shifts the whole instrument two octaves either way while a note is still ringing.",
+  "tags": ["music", "audio", "creative", "instrument", "toy", "synth"],
+  "permissions": ["audio", "haptics", "storage"],
+  "dependencies": []
+}

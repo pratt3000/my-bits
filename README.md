@@ -46,6 +46,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`unbreakable/`](unbreakable)           | Tie a knot in real rope, close it, and let physics and knot theory decide whether it is one. |
 | [`first-rakhi/`](first-rakhi)           | Tear a strip from a woven sari, thread by thread, and bind a cut with it. |
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
+| [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
 
 ### Rakshabandhan set
 
