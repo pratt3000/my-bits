@@ -104,6 +104,21 @@ If it does, say so immediately rather than letting them find it.
 
 ---
 
+## Fit
+
+Not every game can become a bit, and the ones that cannot usually fail on
+content rather than code. Packaged assets are disabled entirely (`maxAssets: 0`),
+so a game built around sprites, samples or a custom font has no route that keeps
+it intact. `grab.py` detects this and stops; SKILL.md step 1a is what to do
+about it.
+
+The failure mode to avoid is subtle and worth naming: with source access and a
+capable renderer it is genuinely easy to *generate a replacement* — draw the
+sprite procedurally, synthesise the sound — and end up with something that runs,
+looks plausible, and is no longer the creator's work. It reads as a successful
+port right up until they open it and find art they never made. Detecting the
+constraint is the easy half; not quietly routing around it is the point.
+
 ## Recovery
 
 - Sekai play pages are Next.js shells; the game address is in the flight data

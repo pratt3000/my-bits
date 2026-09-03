@@ -27,6 +27,13 @@ UA = "Mozilla/5.0 (compatible; bit-porter/1.0)"
 
 
 def fetch(url, dest):
+    # A path that already exists is taken as-is, so a bundle you have on disk can
+    # be re-analysed without going back to the network.
+    if os.path.exists(url):
+        data = open(url, "rb").read()
+        if os.path.abspath(url) != os.path.abspath(dest):
+            open(dest, "wb").write(data)
+        return len(data)
     r = subprocess.run(
         ["curl", "-sSL", "-A", UA, "-o", dest, "-w", "%{http_code} %{size_download}", url],
         capture_output=True, text=True,
@@ -48,6 +55,62 @@ def find_game_url(html):
         if m:
             return m.group(1).replace("\\u002F", "/").replace("\\/", "/")
     return None
+
+
+def find_blockers(html, game, markup):
+    """
+    Things that make a faithful port impossible, as opposed to merely laborious.
+
+    The distinction matters because the response is different. Laborious is your
+    problem: inline the CSS, rebuild the slider, get on with it. Impossible is
+    the creator's decision, because the only ways past it are to substitute
+    something of your own or to drop a feature — and both mean the result is no
+    longer the thing they made. Quietly picking either one is not a port.
+
+    "hard" is a stop. "check" means look it up before assuming either way.
+    """
+    hard, check = [], []
+
+    # Packaged assets are disabled outright (maxAssets: 0), so any real file the
+    # game ships — an image, a sample, a font — has nowhere to live in a bit.
+    for cat in ("images", "videos", "music", "sfx", "fonts", "models", "voices"):
+        m = re.search(cat + r"\s*:\s*\[(.*?)\]", game, re.S)
+        if m and m.group(1).strip():
+            n = m.group(1).count("{") or 1
+            hard.append(("%d %s in the asset manifest" % (n, cat),
+                         "packaged assets are disabled (maxAssets: 0)"))
+
+    media = re.findall(r"<(?:img|audio|video|source)[^>]*src=\"(?!data:)([^\"]+)\"", html)
+    if media:
+        hard.append(("%d media file(s) referenced in markup: %s" %
+                     (len(media), ", ".join(sorted(set(media))[:3])),
+                     "no packaged assets and no network egress"))
+
+    css_urls = [u for u in re.findall(r"url\(\s*['\"]?(?!data:)([^)'\"]+)", html)]
+    if css_urls:
+        hard.append(("%d file(s) referenced from CSS: %s" %
+                     (len(css_urls), ", ".join(sorted(set(css_urls))[:3])),
+                     "no packaged assets"))
+
+    if re.search(r"@font-face|fonts\.googleapis\.com", html):
+        hard.append(("a web font is loaded",
+                     "fonts must come from Plethora's font registry, or be dropped"))
+
+    calls = re.findall(r"fetch\(\s*[`'\"](https?://[^`'\"]+)", game) + \
+            (["XMLHttpRequest"] if "XMLHttpRequest" in game else []) + \
+            (["WebSocket"] if "WebSocket" in game else [])
+    if calls:
+        hard.append(("talks to a server: %s" % ", ".join(sorted(set(calls))[:3]),
+                     "no http egress, and the server half of the code is not in this bundle"))
+
+    # Libraries are only a problem if Plethora has not pinned them.
+    REPLACEABLE = ("tailwindcss", "lucide", "font-awesome", "feather")
+    for url in re.findall(r"<script[^>]*src=\"(https?://[^\"]+)\"", html):
+        if not any(r in url for r in REPLACEABLE):
+            check.append(("third-party library: %s" % url,
+                          "check /v1/agent/libraries.json for an approved pin"))
+
+    return hard, check
 
 
 def dedent(text):
@@ -121,6 +184,22 @@ def main():
     }
     data_attrs = Counter(re.findall(r"\b(data-[a-z-]+)=", html))
     icons = re.findall(r'data-lucide="([a-z0-9-]+)"', html)
+    hard, check = find_blockers(html, game, markup)
+
+    if hard:
+        # Written to disk as well as printed, so the decision is on the record
+        # even if this output scrolls away.
+        with open(os.path.join(out, "BLOCKERS.md"), "w", encoding="utf-8") as f:
+            f.write("# Hard constraints found in %s\n\n" % game_url)
+            f.write("A faithful port is not possible without a decision from the creator.\n\n")
+            for what, why in hard:
+                f.write("- **%s** — %s\n" % (what, why))
+            if check:
+                f.write("\n## Needs checking\n\n")
+                for what, why in check:
+                    f.write("- %s — %s\n" % (what, why))
+            f.write("\nAsk before building. Do not substitute your own assets, and do not\n"
+                    "drop the feature that needs them, without the creator choosing that.\n")
 
     # Persist before reporting: piping this into head or less should never cost
     # you the inventory the next step reads.
@@ -130,6 +209,8 @@ def main():
         "external": external, "scaffolding": {k: v for k, v in scaffolding.items() if v},
         "icons": sorted(set(icons)),
         "dataAttributes": dict(data_attrs),
+        "blockers": [{"what": w, "why": y} for w, y in hard],
+        "needsChecking": [{"what": w, "why": y} for w, y in check],
     }, open(os.path.join(out, "inventory.json"), "w"), indent=2)
 
     print("\ninline scripts (largest first — the first is the game):")
@@ -155,6 +236,24 @@ def main():
         print("\nlucide icons used (%d, %d distinct) — run scripts/icons.js to inline them:"
               % (len(icons), len(set(icons))))
         print("  ", " ".join(sorted(set(icons))))
+
+    if check:
+        print("\nneeds checking before you rely on it:")
+        for what, why in check:
+            print("   %s\n     -> %s" % (what, why))
+
+    if hard:
+        print("\n" + "=" * 72)
+        print("STOP — HARD CONSTRAINTS. A faithful port is not possible as-is:")
+        for what, why in hard:
+            print("   %s\n     -> %s" % (what, why))
+        print("")
+        print("Ask the creator whether to continue, and how, before building anything.")
+        print("Substituting your own assets or dropping the feature that needs them is")
+        print("their call, not yours — either way the result stops being the thing they")
+        print("made, and they are the only one who can say that is acceptable.")
+        print("Written to %s/BLOCKERS.md" % out)
+        print("=" * 72)
 
     print("\nwritten to %s/ — read game.js before porting anything" % out)
 

@@ -5,12 +5,23 @@ original turned out to be made of, what the port had to change, and anything
 that went wrong, since that is what makes the next one faster. Anything
 generalisable belongs in `references/gotchas.md` as well.
 
+Log the ones that were **not** built too. A hard constraint that stopped a port,
+and what the creator decided about it, is worth more to the next attempt than
+another success story — it stops someone starting from scratch and rediscovering
+the same wall. Entries that diverged from the original must say so here and in
+the bit's own README; see SKILL.md step 1b.
+
 ---
 
 ## 2026-09-03 — WaveFlow XY Synth → `waveflow/`
 
 **Source:** `sekai.ai/play/d179d91b-dca4-40d3-98dd-a473516a094a`
 → `prod-data.sekai.chat/v3-games/dist/3e13b519-…/index.html`, 62 KB.
+
+**Blockers: none.** No packaged assets, no web font, no server. Every sound is
+synthesised and every visual drawn, so nothing had to be substituted and the
+port is faithful — which is exactly why it went smoothly, and is not the case to
+generalise from.
 
 **What it was:** one self-contained HTML file. 1 014 lines of game JS, a 2.3 KB
 stylesheet, 14 KB of markup, plus a 32-line audio-unlock shim Sekai injects.

@@ -36,6 +36,50 @@ source and reveals bugs the original already had:
 node scripts/preview.js <scratch>/recovered/original.html
 ```
 
+### 1a. If there are hard constraints, stop and ask
+
+`grab.py` ends with a `STOP` block and writes `BLOCKERS.md` when the game
+depends on something a bit cannot have: packaged image, audio, video, font or
+model files (Plethora sets `maxAssets: 0`), a web font, or a server it talks to.
+
+**When that happens, do not start building. Ask the creator first**, with
+`AskUserQuestion`, and wait for an answer.
+
+The reason is not procedural caution. There are only three ways past a hard
+constraint, and all three change what the thing *is*:
+
+- **substitute** — generate replacement art or sound procedurally,
+- **drop** — cut the feature that needs the asset,
+- **don't build it** — the game is not a good fit for a bit.
+
+Choosing any of those silently means handing back something that looks like a
+port but is partly your invention wearing the creator's name. They asked for
+their game. Only they can say which compromise is acceptable, or whether any is.
+So present what is blocked, in plain terms, say what each option would cost, and
+let them pick. If they want it built anyway, build exactly what they chose and
+nothing more — do not improvise a second substitution later in the port because
+it seemed convenient.
+
+Libraries listed under "needs checking" are a different matter: look them up in
+`libraries.json` first. If Plethora has an approved pin, there is no constraint
+to raise. Only bring it to the creator if there is no pin and no way to do
+without it.
+
+### 1b. Mark it, whatever they decide
+
+A port that diverged must say so, permanently, in three places — otherwise in
+six months nobody can tell which bits are faithful and which quietly are not:
+
+- `inventory.json` already records `blockers`; keep the recovered directory.
+- The bit's `README.md` gets a **`## Divergence from the original`** section
+  naming each constraint, the decision taken, and who took it. Write it even
+  when the answer was "substitute and carry on" — especially then.
+- `LOG.md` gets the same summary in its entry.
+
+If they decide not to build it, still add the `LOG.md` entry. A recorded "we
+looked at this and stopped, because X" saves the next person from starting over
+and rediscovering X.
+
 ### 2. Read `game.js` before writing anything
 
 Read it properly, all of it. You are about to decide which parts are the
@@ -112,8 +156,14 @@ to find. Improvements are a separate, later conversation.
 Two exceptions worth making deliberately, and mentioning to the creator:
 
 - **Bugs the original had.** If a control never worked, fix it and say so.
-- **Things the bit contract requires.** No CDN, no packaged assets, no document
-  ownership. These are not choices.
+- **Things the bit contract requires.** No CDN, no document ownership. These are
+  not choices — but note the difference between *rewriting* a dependency and
+  *replacing content*. Inlining Tailwind as styles or lucide as SVG changes no
+  pixel the creator chose; it is the same design expressed differently, so it
+  needs no permission. Generating a sprite to stand in for one you cannot ship
+  is new content, and that is step 1a's territory.
+
+The line to hold: rebuild the shell freely, never invent the substance.
 
 ## Before you start
 
