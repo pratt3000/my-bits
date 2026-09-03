@@ -1,0 +1,133 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "steps": [
+    {
+      "wait": 1500
+    },
+    {
+      "screenshot": "01-idle"
+    },
+    {
+      "down": [
+        60,
+        190
+      ],
+      "after": 120
+    },
+    {
+      "moveTo": [
+        300,
+        150
+      ],
+      "after": 60
+    },
+    {
+      "moveTo": [
+        330,
+        300
+      ],
+      "after": 60
+    },
+    {
+      "moveTo": [
+        90,
+        340
+      ],
+      "after": 60
+    },
+    {
+      "moveTo": [
+        60,
+        470
+      ],
+      "after": 60
+    },
+    {
+      "moveTo": [
+        310,
+        500
+      ],
+      "after": 60
+    },
+    {
+      "moveTo": [
+        330,
+        640
+      ],
+      "after": 60
+    },
+    {
+      "moveTo": [
+        80,
+        680
+      ],
+      "after": 60
+    },
+    {
+      "moveTo": [
+        70,
+        760
+      ],
+      "after": 60
+    },
+    {
+      "up": true,
+      "after": 350
+    },
+    {
+      "screenshot": "02-drawn"
+    },
+    {
+      "tap": [
+        160,
+        800
+      ],
+      "after": 220
+    },
+    {
+      "screenshot": "03-dive"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "04-chase"
+    },
+    {
+      "wait": 1600
+    },
+    {
+      "screenshot": "05-racing"
+    },
+    {
+      "wait": 2200
+    },
+    {
+      "screenshot": "06-mid"
+    },
+    {
+      "wait": 4500
+    },
+    {
+      "screenshot": "07-result"
+    },
+    {
+      "resize": [
+        360,
+        780
+      ]
+    },
+    {
+      "screenshot": "08-resized"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "start"
+    }
+  ]
+}

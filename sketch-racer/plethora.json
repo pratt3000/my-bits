@@ -3,10 +3,23 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Sketch Racer",
-  "description": "Draw the longest road you dare, then drive it. Drag one finger across the paper and it becomes a track, metering its own length as you go — then hit RACE and a small car sets off along it, nose following every curve, camera locked to the bonnet, engine note climbing with speed, until it crosses the chequered flag you left at the far end. There is no skill in the driving; the car always finishes. The whole game is in the drawing, and how much road you can cram into a single gesture before you run out of screen or patience. Finish in the global top five and the car turns to diamond, which is purely cosmetic and entirely the point.",
-  "tags": ["game", "drawing", "racing", "casual", "leaderboard", "toy"],
-  "permissions": ["audio", "backgroundMusic", "haptics", "storage"],
-  "dependencies": [],
+  "description": "Draw the longest road you dare, then drop into it and drive. Drag one finger and a road unrolls under it, metering its own length as you go \u2014 then hit RACE and the camera falls out of the sky, swings in behind the car and follows it along every curve you drew until it crosses the chequered flag. That fall is the point: you draw looking straight down, where a perspective camera pointed at a flat plane behaves like an orthographic one, so what you draw is exactly what you get; then the same camera eases to a chase position and your flat sketch becomes a road with a horizon. There is no skill in the driving, the car always finishes. The game is how much road you can fit into one gesture. Finish in the global top five and the car turns to diamond.",
+  "tags": [
+    "game",
+    "drawing",
+    "racing",
+    "3d",
+    "leaderboard",
+    "casual"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
   "memory": {
     "records": {
       "distance": {
@@ -14,8 +27,15 @@
         "valueType": "number",
         "order": "desc",
         "format": "decimal",
-        "periods": ["daily", "weekly", "all_time"],
-        "scopes": ["global", "following"],
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
         "dedupe": "best_per_user"
       }
     }
