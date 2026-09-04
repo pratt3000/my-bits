@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Govinda Ala Re",
+  "description": "Build the human pyramid and break the dahi handi. Send up one thar at a time and hold the whole tower steady with your thumb — every govinda's weight is solved down through the shoulders below him, so the way you lean the pyramid decides who is carrying it. Lean off the man who is shaking and he recovers; lean too long and someone else buckles. Get your Govinda to the pot before the base gives out, and the handi hangs higher every round, all the way to nine thar and forty-three feet.",
+  "tags": [
+    "game",
+    "physics",
+    "balance",
+    "festival",
+    "janmashtami",
+    "dahi-handi",
+    "india",
+    "arcade",
+    "skill",
+    "krishna"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "handi_height": {
+        "label": "Highest Handi",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
