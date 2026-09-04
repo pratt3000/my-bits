@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Govinda Ala Re",
-  "description": "Build the human pyramid and break the dahi handi. Send up one thar at a time and hold the whole tower steady with your thumb — every govinda's weight is solved down through the shoulders below him, so the way you lean the pyramid decides who is carrying it. Lean off the man who is shaking and he recovers; lean too long and someone else buckles. Get your Govinda to the pot before the base gives out, and the handi hangs higher every round, all the way to nine thar and forty-three feet.",
+  "description": "Build the human pyramid in 3D and break the dahi handi. Send up one thar at a time and hold the whole tower steady with your thumb \u2014 every govinda's weight is solved down through the shoulders below him, so the way you lean the pyramid decides who is carrying it. Lean off the man who is shaking and he recovers; lean too long and someone else buckles. Get your Govinda to the pot before the base gives out, and the handi hangs higher every round, all the way to nine thar and forty-two feet.",
   "tags": [
     "game",
     "physics",
@@ -22,7 +22,9 @@
     "haptics",
     "storage"
   ],
-  "dependencies": [],
+  "dependencies": [
+    "three@0.164.1"
+  ],
   "memory": {
     "records": {
       "handi_height": {
