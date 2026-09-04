@@ -36,15 +36,20 @@ window.plethoraBit = {
     const LEAN_LIMIT = SPACING_FT / (2 * TIER_FT);
 
     const MAX_THAR = 9;
-    const FIRST_THAR = 3;
+    const FIRST_THAR = 4;
 
     // Stamina, tuned against the solver: the centre man of a seven thar sits at
     // ratio ~1.25 and lasts about twenty seconds. A rested flank recovers in
     // eighteen, so rocking buys time without ever solving the problem.
-    const DRAIN = 0.0256;
+    // A cube made everything under his limit almost free, so the first three
+    // rounds could not be lost at all. 2.4 still rewards resting a man but
+    // makes a five thar cost something inside one round.
+    const DRAIN = 0.055;
+    const DRAIN_POW = 2.4;
     const IDLE_DRAIN = 0.006;
-    const RECOVER = 0.11;
-    const RECOVER_BELOW = 0.6;
+    const RECOVER = 0.14;
+    const RECOVER_BELOW = 0.55;
+    const REACH_STRAIN = 1.4;   // holding a boy at full stretch costs the tower
 
     // Lean dynamics. Untouched the tower diverges with an e-fold near four
     // seconds; under your thumb it is a responsive, slightly underdamped pull.
@@ -55,7 +60,7 @@ window.plethoraBit = {
     // survivable. The crowd braces it loosely; whether that is enough depends
     // on how tall it is, which is the honest answer anyway — a three thar
     // settles itself and a nine thar is going over unless you are on it.
-    const LOOSE_AUTHORITY = 0.32;
+    const LOOSE_AUTHORITY = 0.1;
 
     const TAP_MS = 260;
     const TAP_SLOP = 12;
@@ -592,7 +597,7 @@ window.plethoraBit = {
 
       if (live) {
         // ---- hazards: the crowd throws water to make the base slip
-        if (S.round >= 2) {
+        if (S.round >= 1) {
           S.sprayNext -= dt;
           if (S.sprayNext <= 0 && !S.spray) {
             S.spray = { side: rnd() < 0.5 ? -1 : 1, t: 0, dur: rrange(1.6, 2.8) };
@@ -617,7 +622,7 @@ window.plethoraBit = {
         // ---- lean. The tower falls away on its own; your thumb is the only
         // thing bracing it, and where you hold it decides who carries the load.
         const authority = S.touching ? 1 : LOOSE_AUTHORITY;
-        const gustAmp = 0.06 + S.tiers.length * 0.022 + (S.phase === "forming" ? 0.14 : 0);
+        const gustAmp = 0.12 + S.tiers.length * 0.04 + (S.phase === "forming" ? 0.2 : 0);
         const gust = (Math.sin(S.time * 0.85 + S.gustA) * 0.62
                     + Math.sin(S.time * 1.9 + S.gustB) * 0.38) * gustAmp;
         // More of the mass sits high on a tall pyramid, so it wants to go over
@@ -634,7 +639,8 @@ window.plethoraBit = {
         solveLoads(S.tiers, S.theta);
 
         // ---- stamina
-        const wet = S.spray && S.spray.t < S.spray.dur ? 1.55 : 1;
+        const wet = (S.spray && S.spray.t < S.spray.dur ? 1.55 : 1)
+                  * (S.phase === "reaching" ? REACH_STRAIN : 1);
         let worst = 0;
         for (const m of allMen()) {
           if (m.climb < 1) continue;
@@ -644,7 +650,7 @@ window.plethoraBit = {
             m.stamina = Math.min(1, m.stamina + RECOVER * (RECOVER_BELOW - r) * dt);
             m.stamina -= IDLE_DRAIN * dt;
           } else {
-            m.stamina -= (DRAIN * r * r * r * wet + IDLE_DRAIN) * dt;
+            m.stamina -= (DRAIN * Math.pow(r, DRAIN_POW) * wet + IDLE_DRAIN) * dt;
           }
           if (m.stamina <= 0) {
             m.stamina = 0;
