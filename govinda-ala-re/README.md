@@ -117,3 +117,41 @@ closest mode the runtime offers.
   validator constraints; see the root `README.md`.
 - `ctx.storage.set()` returns nothing on device, so writes go through
   `fireAndForget()`.
+
+## Verified
+
+Headless Chromium against the strict mock `ctx` in
+[`_skills/sekai/harness`](../_skills/sekai/harness) — no console or page
+errors, frames advancing, `ready()` fired, gestures landing, and the layout
+re-fitting on resize.
+
+An automated "player" that rocks the tower and taps as fast as it can:
+
+| run  | wall  | handis | thar reached | ended |
+| ---- | ----- | ------ | ------------ | ----- |
+| 87 s | 87 s  | 4      | 6            | alive |
+| 3 m  | 175 s | 6      | 9 (42 ft)    | fell  |
+
+The thar counts match what the round sizes predict exactly — six handis is
+2+3+4+5+6+7 = 27 sent tiers — so the loop is doing what the model says.
+`python3 _skills/sekai/scripts/check.py govinda-ala-re` passes.
+
+### One that cost a round
+
+A tap that arrived while the previous thar was still climbing was dropped on
+the floor. Nothing in the harness complains about that — every event fires,
+frames advance, no error — and it only showed up as a handi that never got
+broken, because the pyramid silently never reached full height. Taps are now
+queued and consumed when the climb finishes, and the hint says so.
+
+The general lesson: a swallowed input is invisible to every check that looks
+for errors, and it reads to a player as a dead button.
+
+## Uploading a draft
+
+```bash
+python3 _skills/sekai/scripts/check.py govinda-ala-re   # gates the upload
+python3 _skills/sekai/scripts/upload.py govinda-ala-re
+```
+
+Publishing stays manual, from the Plethora app or dashboard.
