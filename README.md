@@ -155,6 +155,15 @@ like art-direction or tuning failures until you find them:
   [`first-rakhi/`](first-rakhi) and [`cats-cradle/`](cats-cradle).
 - **Particles that integrate their drift wander off**, and one that drifts
   through the near plane fills the screen. Orbit a fixed home instead.
+- **A custom `ShaderMaterial` writes linear colour straight to the screen.**
+  three's built-in materials convert to sRGB on output; a hand-written
+  fragment shader does not, so a pale translucent ribbon renders as a
+  saturated stripe. End the fragment shader with
+  `#include <colorspace_fragment>`. See [`sled-surfers/`](sled-surfers).
+- **Flipping a lateral axis flips triangle winding.** Correcting a mirrored
+  right vector on a generated surface reverses every face, and back-face
+  culling then hides the whole mesh. Change the index order in the same
+  commit. See [`sled-surfers/`](sled-surfers).
 
 ## Publishing
 
