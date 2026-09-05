@@ -118,6 +118,8 @@ window.plethoraBit = {
       .pt-ico:active { transform:scale(.92); }
       .pt-ico.anchor { width:54px; height:54px; font-size:22px; background:linear-gradient(180deg,#5cc2ff,#2a8fe6); border-color:#fff; box-shadow:0 4px 12px rgba(0,0,0,.3); }
       .pt-ico.anchor.busy { opacity:.45; }
+      .pt-ico.anchor.dive { background:linear-gradient(180deg,#ffd35a,#e59a1c); color:#3a2000; animation:ptPulse 1.2s ease-in-out infinite; }
+      @keyframes ptPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.08); } }
       .pt-ico small { position:absolute; bottom:-6px; font-size:8px; font-weight:900; letter-spacing:.5px; background:#0b2740; padding:1px 5px; border-radius:6px; }
       .pt-corner { position:absolute; left:calc(${sa.left}px + 12px); top:calc(${sa.top}px + 68px); display:flex; flex-direction:column; gap:8px; z-index:30; }
       .pt-corner .pt-ico { width:40px; height:40px; font-size:16px; }
@@ -282,6 +284,7 @@ window.plethoraBit = {
       <div class="pt-compass pt-hidden" id="compass"><div class="arr" id="compassArr"></div><div class="lbl" id="compassLbl"></div></div>
       <div class="pt-stopcard pt-hidden" id="stopCard"></div>
       <div class="pt-side pt-hidden" id="seaSide">
+        <button class="pt-ico anchor dive pt-hidden" id="btnDive" aria-label="Dive">🤿<small>DIVE</small></button>
         <button class="pt-ico anchor" id="btnPort" aria-label="Return to port">⚓<small>PORT</small></button>
       </div>
 
@@ -329,7 +332,7 @@ window.plethoraBit = {
             ⬡ Every ship wears its <b>level</b>. Green is prey, gold is a fair fight, red will sink you.<br>
             🪙 Sunk ships drop <b>loot</b>. Sail over it. Your <b>hold</b> has a limit — bank it at port with the ⚓ button.<br>
             💀 Sink and you lose <b>half</b> of the hold you carried.<br>
-            🏰 <b>Forts</b> guard the deep sea. ❓ marks <b>sunken treasure</b>: stop over it to dive.<br>
+            🏰 <b>Forts</b> guard the deep sea. ❓ marks <b>sunken treasure</b>: sail up to the buoy and tap <b>DIVE</b> (or just stop over it).<br>
             📜 Quests pay coins and gems. 💎 Gems buy bigger hulls and the best cannons.<br>
             🌊 The further from port, the stronger the sea.
           </div>
@@ -371,7 +374,7 @@ window.plethoraBit = {
     const el = {
       lbls: $("lbls"), edges: $("edges"), top: $("topBar"), tLvl: $("tLvl"), qText: $("qText"), qBar: $("qBar"), qReward: $("qReward"),
       wCoins: $("wCoins"), wGems: $("wGems"), wHold: $("wHold"),
-      seaCorner: $("seaCorner"), seaSide: $("seaSide"), btnPort: $("btnPort"), stick: $("stick"), knob: $("knob"), stickArrow: $("stickArrow"),
+      seaCorner: $("seaCorner"), seaSide: $("seaSide"), btnPort: $("btnPort"), btnDive: $("btnDive"), stick: $("stick"), knob: $("knob"), stickArrow: $("stickArrow"),
       touchHint: $("touchHint"), dive: $("dive"), diveArc: $("diveArc"),
       toast: $("toast"), big: $("bigText"), conf: $("conf"), flashHurt: $("flashHurt"), flashGood: $("flashGood"), fade: $("fade"),
       menu: $("menu"), mPlunder: $("mPlunder"), mBounty: $("mBounty"),
@@ -2168,7 +2171,7 @@ window.plethoraBit = {
 
     // ---- joystick ---------------------------------------------------------------------------
     let stick = null;
-    function stickEnd() { stick = null; el.stick.classList.remove("on"); if (me) me.throttle = Math.max(0.25, me.throttle * 0.6); }
+    function stickEnd() { stick = null; el.stick.classList.remove("on"); if (me) me.throttle = Math.max(0.12, me.throttle * 0.6); }
     ctx.listen(canvas, "pointerdown", (e) => {
       if (state !== "sea" || !me || !me.alive) return;
       firstGesture();
@@ -2192,7 +2195,7 @@ window.plethoraBit = {
     function applyStick(dt) {
       if (!stick) return;
       const d = Math.hypot(stick.dx, stick.dy);
-      if (d < 8) { me.throttle = Math.max(0.25, me.throttle - dt * 0.6); return; }
+      if (d < 8) { me.throttle = Math.max(0.12, me.throttle - dt * 0.6); return; }
       // screen up is -z (the camera sits to the north looking south), screen right is +x
       me.wantHeading = Math.atan2(stick.dx, stick.dy);
       me.throttle = clamp(d / 62, 0.25, 1);
@@ -2740,13 +2743,15 @@ window.plethoraBit = {
     // =====================================================================
     // 11. Treasure diving, repair, camera, frame loop.
     // =====================================================================
+    let diveAnchor = false, diveHintT = 0;
     function updateTreasure(dt) {
-      let diving = null;
+      let diving = null, nearBuoy = null;
       for (const t of world.treasures) {
         const d = Math.hypot(me.x - t.x, me.z - t.z);
         t.mesh.userData.ring.scale.setScalar(5 + Math.sin(timeNow * 2) * 0.5);
         t.mesh.position.y = Math.sin(timeNow * 1.5 + t.x) * 0.15;
-        if (d < 7 && me.alive && me.speed < 2.5) { t.dive += dt / 2.6; diving = t; }
+        if (d < 18 && me.alive) nearBuoy = t;
+        if (d < 13 && me.alive && (me.speed < 3.2 || diveAnchor)) { t.dive += dt / 2.4; diving = t; }
         else t.dive = Math.max(0, t.dive - dt * 0.8);
         if (t.dive >= 1) {
           const lvl = levelAt(t.x, t.z);
@@ -2770,7 +2775,13 @@ window.plethoraBit = {
       }
       if (diving) { el.dive.classList.add("show"); el.diveArc.style.strokeDashoffset = String(138.2 * (1 - diving.dive)); }
       else el.dive.classList.remove("show");
+      // the DIVE button: drops anchor over the buoy so you do not have to feather the joystick
+      el.btnDive.classList.toggle("pt-hidden", !nearBuoy || diving);
+      if (diveAnchor) { me.throttle = 0; me.speed *= Math.max(0, 1 - dt * 3); if (!nearBuoy || stick) diveAnchor = false; }
+      if (nearBuoy && !diving && !diveAnchor) { diveHintT += dt; if (diveHintT > 1.2 && diveHintT < 1.3) toast("🤿 Stop over the buoy, or tap DIVE", 2200); }
+      else diveHintT = 0;
     }
+    ctx.listen(el.btnDive, "click", () => { if (state !== "sea") return; firstGesture(); diveAnchor = true; stickEnd(); me.throttle = 0; sfx.ui(); haptic("light"); el.btnDive.classList.add("pt-hidden"); });
 
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camWant = new THREE.Vector3(), lookWant = new THREE.Vector3();
     let camInit = false, spawnT = 0, hudT = 0, scoreT = 0, playSaveT = 0, revealT = 0, curRegion = 0;
@@ -2809,7 +2820,7 @@ window.plethoraBit = {
         if (state === "sea") {
           voyage.t += dt;
           applyStick(dt);
-          if (!stick && me.alive) me.throttle = Math.max(0.25, me.throttle - dt * 0.15);
+          if (!stick && me.alive && !diveAnchor) me.throttle = Math.max(0.12, me.throttle - dt * 0.25);
         }
         // everyone sails
         for (const s of ships) {
