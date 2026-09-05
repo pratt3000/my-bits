@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Plunder Tide",
+  "description": "Command a pirate ship on an open sea. Sail out from port, hunt ships weaker than yours, dodge or fight the ones that aren't, scoop up the loot they drop and bring it home to bank it. Gold and gems buy cannons, bigger hulls, sails, hold space and carpenters. Forts guard the deep water, sunken treasure waits under the ? markers, and a quest chain keeps sending you further out. The further from port, the meaner the sea.",
+  "tags": ["3d", "pirates", "naval", "action", "upgrade", "open-world", "mobile"],
+  "permissions": ["haptics", "backgroundMusic", "audio", "storage"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "plunder": {
+        "label": "Gold Plundered",
+        "valueType": "number",
+        "order": "desc",
+        "format": "compact",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "bounty": {
+        "label": "Bounty",
+        "valueType": "number",
+        "order": "desc",
+        "format": "compact",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
