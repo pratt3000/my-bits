@@ -128,7 +128,7 @@ window.plethoraBit = {
         opacity:0; transition:opacity .22s ease, transform .22s ease; pointer-events:none; }
       .pt-toast.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
       .pt-big { position:absolute; left:50%; top:34%; transform:translate(-50%,-50%) scale(.6); z-index:33; text-align:center;
-        font-size:30px; font-weight:900; font-style:italic; color:#ffd35a; white-space:nowrap; pointer-events:none; opacity:0;
+        font-size:26px; font-weight:900; font-style:italic; color:#ffd35a; white-space:normal; max-width:92vw; line-height:1.1; pointer-events:none; opacity:0;
         text-shadow:0 3px 0 #7a3c00, 0 8px 22px rgba(0,0,0,.5); transition:opacity .25s ease, transform .3s cubic-bezier(.2,1.6,.4,1); }
       .pt-big.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
       .pt-big small { display:block; font-size:13px; letter-spacing:3px; font-style:normal; color:#fff; margin-top:4px; }
@@ -164,7 +164,7 @@ window.plethoraBit = {
       .pt-act.up { background:linear-gradient(180deg,#b57bff,#7a3ee6); }
       .pt-act.arm { background:linear-gradient(180deg,#5cc2ff,#2a6fd6); }
       .pt-act.go { background:linear-gradient(180deg,#8ef07a,#3cb44a); color:#0c2a10; width:92px; }
-      .pt-hp { position:absolute; left:50%; bottom:calc(${sa.bottom}px + 156px); transform:translateX(-50%); width:220px; text-align:center; font-size:11.5px; font-weight:800; }
+      .pt-hp { position:absolute; left:50%; bottom:calc(${sa.bottom}px + 190px); transform:translateX(-50%); width:220px; text-align:center; font-size:11.5px; font-weight:800; }
       .pt-hp .bar { height:8px; border-radius:4px; background:rgba(0,0,0,.4); overflow:hidden; margin-top:4px; border:1px solid rgba(255,255,255,.3); }
       .pt-hp .bar i { display:block; height:100%; background:linear-gradient(90deg,#5ef07a,#2fbf5c); }
       .pt-stats { display:flex; justify-content:center; gap:8px; margin-top:6px; }
@@ -215,6 +215,34 @@ window.plethoraBit = {
       .pt-stat { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 12px; border-radius:12px;
         background:rgba(90,48,0,.07); margin-bottom:6px; font-size:13.5px; font-weight:700; }
       .pt-stat b { font-size:17px; font-weight:900; color:#5a3000; font-variant-numeric:tabular-nums; }
+      /* chart + minimap + compass + stop card */
+      .pt-mini { position:absolute; left:calc(${sa.left}px + 12px); top:calc(${sa.top}px + 174px); width:104px; height:104px; border-radius:50%; overflow:hidden;
+        border:2px solid rgba(255,255,255,.7); box-shadow:0 4px 14px rgba(0,0,0,.35); background:#0b2740; pointer-events:auto; z-index:29; }
+      .pt-mini svg { width:100%; height:100%; display:block; }
+      .pt-mini .n { position:absolute; left:0; right:0; bottom:4px; text-align:center; font-size:8px; font-weight:900; letter-spacing:1px; color:#fff; text-shadow:0 1px 3px #000; pointer-events:none; }
+      .pt-compass { position:absolute; left:0; top:0; pointer-events:none; z-index:18; transform:translate(-50%,-50%); }
+      .pt-compass .arr { width:0; height:0; margin:0 auto; border-left:11px solid transparent; border-right:11px solid transparent; border-bottom:26px solid #ffd35a;
+        filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); transform-origin:50% 100%; }
+      .pt-compass .lbl { margin-top:4px; padding:2px 8px; border-radius:999px; background:rgba(6,32,52,.7); border:1px solid rgba(255,211,90,.6);
+        font-size:10px; font-weight:800; white-space:nowrap; color:#ffd35a; transform:translateX(-50%); position:absolute; left:50%; top:30px; }
+      .pt-chart { width:100%; max-width:420px; border-radius:22px; overflow:hidden; background:#0b2740; border:1px solid rgba(255,255,255,.35); box-shadow:0 20px 60px rgba(0,10,20,.6); pointer-events:auto; }
+      .pt-chart svg { width:100%; display:block; background:#0b2740; }
+      .pt-chart .hd { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:linear-gradient(180deg,#f1e6cf,#e3d3b0); color:#3a2a14; }
+      .pt-chart .hd b { font-size:17px; font-weight:900; }
+      .pt-chart .hd span { font-size:11px; opacity:.8; }
+      .pt-chart .ft { display:flex; gap:8px; padding:10px 12px; background:#0b2740; flex-wrap:wrap; }
+      .pt-chart .ft .pt-btn { margin:0; flex:1; padding:10px 8px; font-size:13px; min-width:110px; }
+      .pt-chart .lg { font-size:10.5px; color:#fff; opacity:.85; padding:0 12px 8px; display:flex; gap:10px; flex-wrap:wrap; }
+      .pt-stopcard { position:absolute; left:50%; bottom:calc(${sa.bottom}px + 186px); transform:translateX(-50%); width:min(330px,88vw); z-index:31; pointer-events:auto;
+        border-radius:18px; padding:12px 12px 10px; background:linear-gradient(180deg, rgba(255,250,240,.97), rgba(240,232,214,.97)); color:#3a2a14;
+        box-shadow:0 12px 34px rgba(0,10,20,.5); border:1px solid rgba(255,255,255,.9); }
+      .pt-stopcard h3 { margin:0; font-size:16px; font-weight:900; color:#5a3000; }
+      .pt-stopcard .sub { font-size:11px; opacity:.75; margin:2px 0 8px; }
+      .pt-stopcard .row { display:flex; gap:6px; flex-wrap:wrap; }
+      .pt-stopcard .pt-buy { flex:1; min-width:90px; padding:9px 6px; font-size:11.5px; }
+      .pt-from { position:absolute; left:50%; bottom:calc(${sa.bottom}px + 156px); transform:translateX(-50%); display:flex; gap:6px; pointer-events:auto; flex-wrap:wrap; justify-content:center; width:92vw; }
+      .pt-from span { font-size:10.5px; font-weight:800; padding:4px 9px; border-radius:999px; background:rgba(6,32,52,.62); border:1px solid rgba(255,255,255,.3); cursor:pointer; }
+      .pt-from span.on { background:linear-gradient(180deg,#ffd35a,#e59a1c); color:#3a2000; border-color:transparent; }
       .pt-fatal { position:absolute; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
         padding:26px; text-align:center; background:#0b2740; color:#fff; pointer-events:auto; }
       .pt-conf { position:absolute; inset:0; pointer-events:none; z-index:34; overflow:hidden; }
@@ -248,7 +276,11 @@ window.plethoraBit = {
 
       <div class="pt-corner pt-hidden" id="seaCorner">
         <button class="pt-ico" id="btnPause" aria-label="Pause">⏸</button>
+        <button class="pt-ico" id="btnChart" aria-label="Chart">🧭</button>
       </div>
+      <div class="pt-mini pt-hidden" id="mini"><svg id="miniSvg" viewBox="-260 -260 520 520"><use href="#chartBase"/><use href="#chartFog"/><use href="#chartPins"/><use href="#chartMe"/></svg><div class="n" id="miniName"></div></div>
+      <div class="pt-compass pt-hidden" id="compass"><div class="arr" id="compassArr"></div><div class="lbl" id="compassLbl"></div></div>
+      <div class="pt-stopcard pt-hidden" id="stopCard"></div>
       <div class="pt-side pt-hidden" id="seaSide">
         <button class="pt-ico anchor" id="btnPort" aria-label="Return to port">⚓<small>PORT</small></button>
       </div>
@@ -278,13 +310,14 @@ window.plethoraBit = {
         <div class="pt-slots" id="slots"></div>
         <div class="pt-hp"><div id="hpText">HULL 300 / 300</div><div class="bar"><i id="hpBar" style="width:100%"></i></div>
           <div class="pt-stats" id="shipStats"></div></div>
+        <div class="pt-from" id="sailFrom"></div>
         <div class="pt-actions">
           <button class="pt-act shop" id="btnShop"><i>🏪</i>Shop</button>
           <button class="pt-act up" id="btnUp"><i>🔨</i>Upgrade</button>
           <button class="pt-act arm" id="btnArm"><i>💣</i>Armory</button>
           <button class="pt-act go" id="btnGo"><i>⚔️</i>SAIL!</button>
         </div>
-        <div class="pt-corner"><button class="pt-ico" id="btnMute" aria-label="Sound">🔊</button><button class="pt-ico" id="btnHow2" aria-label="Help">?</button></div>
+        <div class="pt-corner"><button class="pt-ico" id="btnMute" aria-label="Sound">🔊</button><button class="pt-ico" id="btnHow2" aria-label="Help">?</button><button class="pt-ico" id="btnChart2" aria-label="Chart">🧭</button></div>
       </div>
 
       <div class="pt-ov pt-hidden" id="ovHow">
@@ -316,6 +349,21 @@ window.plethoraBit = {
       </div>
 
       <div class="pt-ov pt-hidden" id="ovShop"><div class="pt-panel" id="shopPanel"></div></div>
+      <div class="pt-ov pt-hidden" id="ovChart" style="padding:10px;">
+        <div class="pt-chart">
+          <div class="hd"><b>🧭 Chart</b><span id="chartSub">tap a pin to set course</span></div>
+          <svg id="chartSvg" viewBox="-1000 -1000 2000 2000">
+            <g id="chartBase"></g>
+            <path id="chartFog" fill="#0b2740" fill-opacity="0.93" fill-rule="evenodd" d=""></path>
+            <g id="chartPins"></g>
+            <g id="chartLabels"></g>
+            <g id="chartTarget"></g>
+            <g id="chartMe"><polygon points="0,-30 18,22 0,12 -18,22" fill="#ffffff" stroke="#0b2740" stroke-width="5"/></g>
+          </svg>
+          <div class="lg"><span>⚓ port</span><span>🏪 trading post</span><span>🕯 cove</span><span>☠ pirate nest</span><span>🏰 fort</span><span>? treasure</span><span>🚢 convoy</span><span>🆘 flare</span></div>
+          <div class="ft"><button class="pt-btn gold" id="btnRumour">🗣️ Buy a rumour · 🪙 300</button><button class="pt-btn ghost" id="btnChartClose">Close</button></div>
+        </div>
+      </div>
       <div class="pt-ov pt-hidden" id="ovSunk"><div class="pt-panel" id="sunkPanel"></div></div>
     `;
     root.appendChild(ui);
@@ -329,7 +377,9 @@ window.plethoraBit = {
       menu: $("menu"), mPlunder: $("mPlunder"), mBounty: $("mBounty"),
       port: $("port"), shipName: $("shipName"), shipSub: $("shipSub"), slots: $("slots"), hpText: $("hpText"), hpBar: $("hpBar"), shipStats: $("shipStats"),
       how: $("ovHow"), pause: $("ovPause"), shop: $("ovShop"), shopPanel: $("shopPanel"), sunk: $("ovSunk"), sunkPanel: $("sunkPanel"),
-      btnMute: $("btnMute"), btnMute2: $("btnMute2")
+      btnMute: $("btnMute"), btnMute2: $("btnMute2"),
+      mini: $("mini"), miniSvg: $("miniSvg"), miniName: $("miniName"), compass: $("compass"), compassArr: $("compassArr"), compassLbl: $("compassLbl"), stopCard: $("stopCard"), sailFrom: $("sailFrom"),
+      ovChart: $("ovChart"), chartSvg: $("chartSvg"), chartBase: $("chartBase"), chartFog: $("chartFog"), chartPins: $("chartPins"), chartLabels: $("chartLabels"), chartTarget: $("chartTarget"), chartMe: $("chartMe"), chartSub: $("chartSub")
     };
 
     // =====================================================================
@@ -388,40 +438,58 @@ window.plethoraBit = {
     ];
     function upCost(u, lv) { return Math.round(u.base * Math.pow(u.growth, lv)); }
 
+    // ---- regions: rings of sea, each with its own water, level band and fort ----
+    const REGIONS = [
+      { id: 0, name: "Home Waters", r: 230, lo: 1, hi: 5, deep: 0x1f6f8f, mid: 0x2f8faa, shallow: 0x6fd0d6, fog: 0x3d93ad, fort: null },
+      { id: 1, name: "The Shoals", r: 440, lo: 5, hi: 12, deep: 0x1c6c7e, mid: 0x2e94a0, shallow: 0x7fd8cf, fog: 0x3f97a6, fort: 12 },
+      { id: 2, name: "Kraken Reach", r: 650, lo: 12, hi: 22, deep: 0x17506f, mid: 0x25708f, shallow: 0x62b7c8, fog: 0x2f6f8f, fort: 22 },
+      { id: 3, name: "The Iron Strait", r: 830, lo: 22, hi: 36, deep: 0x1b4356, mid: 0x2b5f74, shallow: 0x5a9fb0, fog: 0x2e5f74, fort: 36 },
+      { id: 4, name: "Dead Man's Deep", r: 990, lo: 36, hi: 60, deep: 0x141f36, mid: 0x223a55, shallow: 0x3d6f8a, fog: 0x1d3149, fort: 52 }
+    ];
+    function regionAt(x, z) { const d = Math.hypot(x, z); for (const r of REGIONS) if (d < r.r) return r; return REGIONS[REGIONS.length - 1]; }
+    function regionInner(r) { return r.id === 0 ? 0 : REGIONS[r.id - 1].r; }
+
     // ---- quests -----------------------------------------------------------------
     const QUESTS = [
       { kind: "sink", n: 2, text: "Plunder 2 ships", coins: 600, gems: 2 },
-      { kind: "loot", n: 1500, text: "Bank 1,500 gold", coins: 800, gems: 3 },
-      { kind: "treasure", n: 1, text: "Find 1 sunken treasure", coins: 900, gems: 4 },
+      { kind: "treasure", n: 1, text: "Dive for the marked treasure", coins: 900, gems: 4 },
+      { kind: "visit", stop: "post", n: 1, text: "Find the nearest trading post", coins: 800, gems: 3 },
       { kind: "sink", n: 4, text: "Plunder 4 ships", coins: 1200, gems: 4 },
-      { kind: "level", n: 8, text: "Sink a level 8+ ship", coins: 1600, gems: 5 },
-      { kind: "far", n: 300, text: "Sail 300 m from port", coins: 1000, gems: 4 },
-      { kind: "sink", n: 6, text: "Plunder 6 ships", coins: 2200, gems: 6 },
-      { kind: "treasure", n: 2, text: "Find 2 sunken treasures", coins: 2400, gems: 8 },
-      { kind: "level", n: 15, text: "Sink a level 15+ ship", coins: 3000, gems: 8 },
-      { kind: "fort", n: 1, text: "Destroy a fort", coins: 6000, gems: 20 },
-      { kind: "loot", n: 12000, text: "Bank 12,000 gold", coins: 4000, gems: 10 },
-      { kind: "sink", n: 10, text: "Plunder 10 ships", coins: 5000, gems: 12 },
-      { kind: "level", n: 25, text: "Sink a level 25+ ship", coins: 7000, gems: 16 },
-      { kind: "far", n: 650, text: "Sail 650 m from port", coins: 5000, gems: 14 },
-      { kind: "treasure", n: 3, text: "Find 3 sunken treasures", coins: 7000, gems: 20 },
-      { kind: "fort", n: 2, text: "Destroy 2 forts", coins: 15000, gems: 45 },
-      { kind: "level", n: 40, text: "Sink a level 40+ ship", coins: 18000, gems: 40 },
-      { kind: "sink", n: 20, text: "Plunder 20 ships", coins: 20000, gems: 40 },
-      { kind: "loot", n: 80000, text: "Bank 80,000 gold", coins: 25000, gems: 50 },
-      { kind: "fort", n: 3, text: "Destroy 3 forts", coins: 40000, gems: 90 }
+      { kind: "region", n: 1, text: "Sail into the Shoals", coins: 1000, gems: 5 },
+      { kind: "convoy", n: 1, text: "Plunder a merchant convoy", coins: 1600, gems: 5 },
+      { kind: "loot", n: 3000, text: "Bank 3,000 gold", coins: 1200, gems: 4 },
+      { kind: "visit", stop: "cove", n: 1, text: "Find a smuggler's cove", coins: 1400, gems: 6 },
+      { kind: "level", n: 8, text: "Sink a level 8+ ship", coins: 1800, gems: 5 },
+      { kind: "flare", n: 1, text: "Answer a distress flare", coins: 2000, gems: 6 },
+      { kind: "fort", n: 1, text: "Destroy the fort of the Shoals", coins: 6000, gems: 20 },
+      { kind: "region", n: 2, text: "Sail into Kraken Reach", coins: 3000, gems: 10 },
+      { kind: "nest", n: 1, text: "Clear a pirate nest", coins: 6000, gems: 18 },
+      { kind: "sink", n: 8, text: "Plunder 8 ships", coins: 4000, gems: 10 },
+      { kind: "treasure", n: 2, text: "Dive for 2 treasures", coins: 4500, gems: 12 },
+      { kind: "level", n: 18, text: "Sink a level 18+ ship", coins: 6000, gems: 14 },
+      { kind: "loot", n: 15000, text: "Bank 15,000 gold", coins: 6000, gems: 14 },
+      { kind: "fort", n: 2, text: "Destroy the fort of Kraken Reach", coins: 12000, gems: 32 },
+      { kind: "region", n: 3, text: "Sail into the Iron Strait", coins: 8000, gems: 20 },
+      { kind: "convoy", n: 3, text: "Plunder 3 convoys", coins: 12000, gems: 25 },
+      { kind: "level", n: 30, text: "Sink a level 30+ ship", coins: 15000, gems: 30 },
+      { kind: "nest", n: 2, text: "Clear 2 pirate nests", coins: 20000, gems: 45 },
+      { kind: "fort", n: 3, text: "Destroy the fort of the Iron Strait", coins: 30000, gems: 60 },
+      { kind: "region", n: 4, text: "Sail into Dead Man's Deep", coins: 20000, gems: 40 },
+      { kind: "level", n: 45, text: "Sink a level 45+ ship", coins: 40000, gems: 80 },
+      { kind: "fort", n: 4, text: "Destroy the fort of the Deep", coins: 80000, gems: 150 }
     ];
     // After the list, quests repeat with growing targets.
     function questAt(i) {
       if (i < QUESTS.length) return QUESTS[i];
-      const k = i - QUESTS.length, cycle = (k / 4 | 0) + 1;
+      const k = i - QUESTS.length, cycle = (k / 5 | 0) + 1;
       const q = [
-        { kind: "sink", n: 20 + cycle * 8, text: "Plunder " + (20 + cycle * 8) + " ships", coins: 25000 * cycle, gems: 45 * cycle },
+        { kind: "sink", n: 10 + cycle * 5, text: "Plunder " + (10 + cycle * 5) + " ships", coins: 25000 * cycle, gems: 45 * cycle },
         { kind: "level", n: Math.min(60, 40 + cycle * 4), text: "Sink a level " + Math.min(60, 40 + cycle * 4) + "+ ship", coins: 20000 * cycle, gems: 40 * cycle },
-        { kind: "treasure", n: 3 + cycle, text: "Find " + (3 + cycle) + " sunken treasures", coins: 12000 * cycle, gems: 30 * cycle },
-        { kind: "fort", n: 3, text: "Destroy 3 forts", coins: 45000 * cycle, gems: 90 * cycle }
+        { kind: "treasure", n: 2 + cycle, text: "Dive for " + (2 + cycle) + " treasures", coins: 12000 * cycle, gems: 30 * cycle },
+        { kind: "convoy", n: 2 + cycle, text: "Plunder " + (2 + cycle) + " convoys", coins: 15000 * cycle, gems: 30 * cycle },
+        { kind: "fort", n: 4, text: "Destroy the fort of the Deep", coins: 60000 * cycle, gems: 120 * cycle }
       ];
-      return q[k % 4];
+      return q[k % 5];
     }
 
     // ---- saved state ----------------------------------------------------------
@@ -431,7 +499,9 @@ window.plethoraBit = {
       slots: [1, null, 2, null],
       xp: 0, quest: 0, qp: 0,
       life: { plunder: 0, bounty: 0, sunk: 0, forts: 0, treasures: 0, best: 0 },
-      hp: -1, seed: (Math.random() * 1e9) | 0, hint: 0, muted: false
+      hp: -1, seed: (Math.random() * 1e9) | 0, hint: 0, muted: false,
+      fog: [], seen: { isl: [], fort: [], wreck: [], stop: [] }, regions: [true, false, false, false, false],
+      coveT: {}, playT: 0, sailFrom: -1, nests: {}, rumours: 0
     });
     let S = null;
     function loadSave() {
@@ -441,6 +511,9 @@ window.plethoraBit = {
         for (const k in s) if (k in S) S[k] = s[k];
         S.up = Object.assign(DEFAULT_SAVE().up, s.up || {});
         S.life = Object.assign(DEFAULT_SAVE().life, s.life || {});
+        S.seen = Object.assign(DEFAULT_SAVE().seen, s.seen || {});
+        if (!Array.isArray(S.fog) || S.fog.length !== 32) S.fog = new Array(32).fill(0);
+        if (!Array.isArray(S.regions) || S.regions.length !== 5) S.regions = [true, false, false, false, false];
       }
       if (!Array.isArray(S.slots) || S.slots.length !== TIERS[S.tier].slots.length) {
         const n = TIERS[S.tier].slots.length, old = Array.isArray(S.slots) ? S.slots : [];
@@ -454,6 +527,7 @@ window.plethoraBit = {
       ctx.timeout(() => { if (tok === saveTok) store.set("save", S); }, 120);
     }
     loadSave();
+    if (!Array.isArray(S.fog) || S.fog.length !== 32) S.fog = new Array(32).fill(0);
     function upLv(id) { return S.up[id] || 0; }
     function tier() { return TIERS[S.tier]; }
     function cannonById(id) { for (const c of S.cannons) if (c.id === id) return c; return null; }
@@ -635,7 +709,9 @@ window.plethoraBit = {
     function questProgress(kind, amount, value) {
       const q = questAt(S.quest);
       if (q.kind !== kind) return;
-      if (kind === "level" || kind === "far") { if (value >= q.n) S.qp = q.n; }
+      if (kind === "level" || kind === "far" || kind === "region") { if (value >= q.n) S.qp = q.n; }
+      else if (kind === "visit") { if (value === q.stop) S.qp = Math.min(q.n, S.qp + amount); }
+      else if (kind === "fort") { if (value >= q.n) S.qp = q.n; }
       else S.qp = Math.min(q.n, S.qp + amount);
       refreshQuest();
       if (S.qp >= q.n) {
@@ -1047,9 +1123,10 @@ window.plethoraBit = {
     const islandUni = new Float32Array(MAX_ISL * 4);
     const waterUniforms = {
       time: { value: 0 },
-      deep: { value: new THREE.Color(0x1f6f8f) },
-      mid: { value: new THREE.Color(0x2f8faa) },
-      shallow: { value: new THREE.Color(0x6fd0d6) },
+      regR: { value: REGIONS.map((r) => r.r) },
+      regDeep: { value: REGIONS.map((r) => new THREE.Color(r.deep)) },
+      regMid: { value: REGIONS.map((r) => new THREE.Color(r.mid)) },
+      regShallow: { value: REGIONS.map((r) => new THREE.Color(r.shallow)) },
       foam: { value: new THREE.Color(0xffffff) },
       isl: { value: islandUni },
       islN: { value: 0 },
@@ -1072,7 +1149,8 @@ window.plethoraBit = {
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: `
-        uniform float time; uniform vec3 deep, mid, shallow, foam; uniform vec4 isl[${MAX_ISL}]; uniform int islN;
+        uniform float time; uniform vec3 foam; uniform vec4 isl[${MAX_ISL}]; uniform int islN;
+        uniform float regR[5]; uniform vec3 regDeep[5]; uniform vec3 regMid[5]; uniform vec3 regShallow[5];
         uniform vec3 fogColor; uniform float fogNear, fogFar;
         varying vec3 vW; varying float vFog;
         float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -1083,6 +1161,13 @@ window.plethoraBit = {
           float n1 = vnoise(uv * 0.09 + vec2(time * 0.05, -time * 0.03));
           float n2 = vnoise(uv * 0.23 - vec2(time * 0.07, time * 0.04));
           float wave = n1 * 0.6 + n2 * 0.4;
+          // which ring of the sea are we in? blend colours across the boundaries
+          float dc = length(uv);
+          vec3 deep = regDeep[0], mid = regMid[0], shallow = regShallow[0];
+          for (int i = 0; i < 4; i++) {
+            float w = smoothstep(regR[i] - 30.0, regR[i] + 30.0, dc);
+            deep = mix(deep, regDeep[i + 1], w); mid = mix(mid, regMid[i + 1], w); shallow = mix(shallow, regShallow[i + 1], w);
+          }
           vec3 col = mix(deep, mid, wave);
           // caustic-ish bright lines
           float c = pow(max(0.0, sin((uv.x + uv.y) * 0.9 + n2 * 6.0 + time * 1.6)), 22.0) * 0.045;
@@ -1255,12 +1340,13 @@ window.plethoraBit = {
         world.islands.push({ x, z, r: 3.5, rock: true });
       }
       // Forts at three ranges.
-      [[330, 15], [600, 32], [860, 50]].forEach(([d, lvl], i) => {
+      REGIONS.slice(1).forEach((reg, i) => {
+        const d = (regionInner(reg) + reg.r) / 2, lvl = reg.fort;
         let x = 0, z = 0, ok = false, t = 0;
-        while (!ok && t++ < 60) { const a = rr() * TAU; x = Math.cos(a) * d; z = Math.sin(a) * d; ok = nearestIslandGap(x, z, 16) > 40; }
+        while (!ok && t++ < 80) { const a = rr() * TAU; x = Math.cos(a) * d; z = Math.sin(a) * d; ok = nearestIslandGap(x, z, 16) > 40; }
         const m = fortMesh(12); m.position.set(x, 0, z); world.group.add(m);
-        world.islands.push({ x, z, r: 15, fort: true });
-        world.forts.push({ x, z, lvl, hp: 0, maxHp: 0, mesh: m, alive: true, cd: 0, id: "fort" + i, respawn: 0 });
+        world.islands.push({ x, z, r: 15, fort: true, name: "Fort of " + reg.name.replace(/^The /, "the ") });
+        world.forts.push({ x, z, lvl, hp: 0, maxHp: 0, mesh: m, alive: true, cd: 0, id: "fort" + i, respawn: 0, region: reg.id, name: "Fort of " + reg.name.replace(/^The /, "the ") });
       });
       // Wrecks: scenery with a little loot.
       for (let i = 0; i < 8; i++) {
@@ -1276,19 +1362,18 @@ window.plethoraBit = {
       waterUniforms.islN.value = n;
       // Treasures
       for (let i = 0; i < 5; i++) spawnTreasure();
+      buildStops();
     }
     function spawnTreasure() {
       let x = 0, z = 0, t = 0;
       do { const a = rnd(0, TAU), d = rnd(110, SEA_R - 120); x = Math.cos(a) * d; z = Math.sin(a) * d; } while (nearestIslandGap(x, z, 8) < 14 && t++ < 40);
       const m = buoyMesh(); m.position.set(x, 0, z); world.group.add(m);
-      world.treasures.push({ x, z, mesh: m, dive: 0 });
+      world.treasures.push({ x, z, mesh: m, dive: 0, seen: false, marked: false });
     }
     function fortStats(f) {
       f.maxHp = Math.round(600 + f.lvl * 110);
       f.hp = f.maxHp; f.alive = true; f.mesh.visible = true; f.burn = 0;
     }
-    buildWorld();
-    for (const f of world.forts) fortStats(f);
 
     // =====================================================================
     // 9. Ships: the player and the AI captains.
@@ -1352,8 +1437,9 @@ window.plethoraBit = {
     // ---- enemies ---------------------------------------------------------------------
     let enemySeq = 0;
     function levelAt(x, z) {
-      const d = Math.hypot(x, z);
-      return Math.max(1, Math.round(1 + d / 36 + (captainLevel() - 1) * 0.3));
+      const d = Math.hypot(x, z), r = regionAt(x, z);
+      const t = clamp((d - regionInner(r)) / (r.r - regionInner(r)), 0, 1);
+      return Math.max(1, Math.round(r.lo + (r.hi - r.lo) * t + (captainLevel() - 1) * 0.25 * (r.id === 0 ? 1 : 0.4)));
     }
     function spawnEnemy(x, z, lvl, ai) {
       const t = levelToTier(lvl);
@@ -1475,7 +1561,7 @@ window.plethoraBit = {
       m.position.copy(gw);
       if (gn.type === "fire") { m.material = mat(0xff6a1a, { emissive: 0xff3a00, flatShading: false }); }
       scene.add(m);
-      projectiles.push({ x: gw.x, y: gw.y, z: gw.z, vx: Math.sin(a) * speed, vz: Math.cos(a) * speed, vy: lob, mesh: m, owner: s, dmg: gn.dmg, def, life: 6, type: gn.type, tx, tz, T, t0: timeNow });
+      projectiles.push({ x: gw.x, y: gw.y, z: gw.z, vx: Math.sin(a) * speed, vz: Math.cos(a) * speed, vy: lob, mesh: m, owner: s, target, dmg: gn.dmg, def, life: 6, type: gn.type, tx, tz, T, t0: timeNow });
       if (s.player) dbgStats.fired++;
       // effects
       const fx = Math.sin(s.heading + gn.ref.yaw), fz = Math.cos(s.heading + gn.ref.yaw);
@@ -1486,7 +1572,7 @@ window.plethoraBit = {
       if (s.player) { haptic("light"); s.roll += (gn.ref.yaw > 0 ? 1 : -1) * 0.025; }
     }
     function updateGuns(s, dt) {
-      const enemies = s.player ? ships.filter((o) => !o.player && o.alive) : [me];
+      const enemies = s.player ? ships.filter((o) => !o.player && o.alive) : (s.prey && s.prey.alive ? [me, s.prey] : [me]);
       for (const gn of s.guns) {
         gn.cd -= dt * s.rateMul;
         if (gn.cd > 0) continue;
@@ -1518,7 +1604,7 @@ window.plethoraBit = {
     function probeHit(p) {
       for (const s of ships) {
         if (s === p.owner || !s.alive) continue;
-        if (p.owner.player === s.player) continue;   // no friendly fire among bots
+        if (!p.owner.player && !s.player && s !== p.target) continue;   // bots only hit what they aimed at
         if (p.y > 4) continue;
         // hull as a capsule along heading
         const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
@@ -1583,7 +1669,10 @@ window.plethoraBit = {
       if (!s.alive) return;
       s.hp -= amount;
       s.lastHit = timeNow;
-      if (from && !s.player) { s.target = from; if (s.state === "patrol") { s.state = "engage"; s.stateT = 0; } }
+      if (from && !s.player) {
+        if (s.ai === "convoy" || s.ai === "victim") { s.threat = from; s.state = "flee"; s.stateT = 0; }
+        else if (from.player) { s.target = from; s.prey = null; if (s.state === "patrol") { s.state = "engage"; s.stateT = 0; } }
+      }
       if (type === "fire") { s.burn = Math.max(s.burn, (from && from.player && from.guns.length ? 36 : 24)); s.burnT = 6; }
       if (type === "chain") s.slow = 5;
       if (s.player) { flash(el.flashHurt); haptic("medium"); shake = Math.max(shake, Math.min(1, amount / 60)); }
@@ -1611,6 +1700,8 @@ window.plethoraBit = {
       S.xp += xp; S.life.sunk += 1; S.life.bounty += s.lvl * 10; S.life.best = Math.max(S.life.best, s.lvl);
       voyage.sunk += 1; voyage.bounty += s.lvl * 10;
       questProgress("sink", 1); questProgress("level", 0, s.lvl);
+      if (s.convoy && !s.convoy.plundered) { s.convoy.plundered = true; questProgress("convoy", 1); }
+      if (s.captain) { S.life.bounty += 200; voyage.bounty += 200; bigText("CAPTAIN SUNK", s.name.replace("☠ ", "") + " goes down with the ship", 2000); }
       toast("☠️ " + s.name + " sunk · +" + xp + " xp");
       if (captainLevel() > lvBefore) { ctx.timeout(() => { bigText("CAPTAIN LEVEL " + captainLevel(), "the sea takes notice", 2000); sfx.levelUp(); refreshWallet(); }, 900); }
       refreshWallet(); save();
@@ -1627,7 +1718,7 @@ window.plethoraBit = {
       for (let i = 0; i < 7; i++) dropLoot(f.x + rnd(-16, 16), f.z + rnd(-16, 16), "coins", Math.round(coins / 7));
       for (let i = 0; i < gems; i++) dropLoot(f.x + rnd(-16, 16), f.z + rnd(-16, 16), "gems", 1);
       S.xp += f.lvl * 30; S.life.forts += 1; S.life.bounty += 500; voyage.bounty += 500; voyage.forts += 1;
-      questProgress("fort", 1);
+      questProgress("fort", 0, f.region);
       bigText("FORT DESTROYED", "the sea is yours for a while", 2200); confetti();
       refreshWallet(); save();
       try { ctx.platform.milestone("fort_destroyed", { level: f.lvl }); } catch (_) {}
@@ -1669,46 +1760,7 @@ window.plethoraBit = {
     }
 
     // ---- enemy AI --------------------------------------------------------------------
-    function aiStep(s, dt) {
-      if (s.ai === "hold") { s.throttle = 0; return; }
-      s.stateT += dt;
-      const dxm = me.x - s.x, dzm = me.z - s.z, dm = Math.hypot(dxm, dzm);
-      const myPower = captainLevel() + playerPower() * 0.25;
-      const brave = s.lvl >= myPower * 0.55 || s.ai === "hunt";
-      const range = s.guns.length ? s.guns[0].def.range : 50;
-      if (!me.alive) { s.state = "patrol"; }
-      else if (s.state === "patrol") {
-        if (dm < (s.ai === "hunt" ? 230 : 95) && brave) { s.state = "engage"; s.stateT = 0; }
-      } else if (s.state === "engage") {
-        if (s.hp < s.maxHp * (brave ? 0.22 : 0.45) && s.lvl < myPower * 0.8 && s.ai !== "hunt") { s.state = "flee"; s.stateT = 0; }
-        else if (dm > 260) s.state = "patrol";
-      } else if (s.state === "flee") {
-        if (dm > 150) { s.state = "patrol"; s.wp = { x: s.x + rnd(-100, 100), z: s.z + rnd(-100, 100) }; }
-      }
-      if (s.state === "patrol") {
-        const dx = s.wp.x - s.x, dz = s.wp.z - s.z, d = Math.hypot(dx, dz);
-        if (d < 12 || s.stateT > 40) { s.wp = { x: clamp(s.x + rnd(-120, 120), -SEA_R + 60, SEA_R - 60), z: clamp(s.z + rnd(-120, 120), -SEA_R + 60, SEA_R - 60) }; s.stateT = 0; }
-        s.wantHeading = Math.atan2(dx, dz); s.throttle = 0.55;
-      } else if (s.state === "engage") {
-        // Close to gun range, then hold a broadside: sail perpendicular to the player.
-        const ideal = range * 0.62;
-        const side = s.side || (s.side = Math.random() < 0.5 ? 1 : -1);
-        if (dm > ideal + 12) {
-          // Aim for a point off the player's beam, not the player: a stern
-          // chase never lets anyone's guns bear.
-          const rx = Math.cos(me.heading), rz = -Math.sin(me.heading);
-          const fx = me.x + rx * side * ideal * 0.8 + me.vx * 1.5, fz = me.z + rz * side * ideal * 0.8 + me.vz * 1.5;
-          s.wantHeading = Math.atan2(fx - s.x, fz - s.z); s.throttle = 1;
-        } else {
-          // Hold a broadside: sail parallel to the player, guns toward them.
-          const a = Math.atan2(dxm, dzm);
-          s.wantHeading = a + side * Math.PI / 2 + (dm < ideal - 10 ? side * 0.4 : dm > ideal + 4 ? -side * 0.3 : 0);
-          s.throttle = 0.75;
-        }
-      } else if (s.state === "flee") {
-        s.wantHeading = Math.atan2(-dxm, -dzm); s.throttle = 1;
-      }
-      // steer around land
+    function avoidLand(s) {
       const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
       for (const i of world.islands) {
         const px = s.x + fx * 22, pz = s.z + fz * 22;
@@ -1716,9 +1768,74 @@ window.plethoraBit = {
           const cross = (i.x - s.x) * fz - (i.z - s.z) * fx;
           s.wantHeading = s.heading + (cross > 0 ? 1 : -1) * 1.1;
           s.throttle = Math.min(s.throttle, 0.6);
-          break;
+          return;
         }
       }
+    }
+    function aiStep(s, dt) {
+      if (s.ai === "hold") { s.throttle = 0; return; }
+      s.stateT += dt;
+      // Merchants and victims sail their lane and run from whoever hurt them.
+      if (s.ai === "convoy" || s.ai === "victim") {
+        const th = s.threat && s.threat.alive ? s.threat : null;
+        if (th && s.state === "flee") {
+          if (timeNow - s.lastHit > 12 && Math.hypot(th.x - s.x, th.z - s.z) > 90) s.state = "patrol";
+          else { s.wantHeading = Math.atan2(s.x - th.x, s.z - th.z); s.throttle = 1; }
+        } else {
+          const dx = s.wp.x - s.x, dz = s.wp.z - s.z, d = Math.hypot(dx, dz);
+          if (d < 15) {
+            s.wp = s.ai === "victim" ? { x: s.x + rnd(-40, 40), z: s.z + rnd(-40, 40) } : { x: clamp(-s.x * 0.5 + rnd(-120, 120), -SEA_R + 80, SEA_R - 80), z: clamp(-s.z * 0.5 + rnd(-120, 120), -SEA_R + 80, SEA_R - 80) };
+            if (s.convoy) for (const o of s.convoy.ships) o.wp = s.wp;
+          }
+          s.wantHeading = Math.atan2(dx, dz); s.throttle = s.ai === "victim" ? 0.4 : 0.8;
+        }
+        avoidLand(s); return;
+      }
+      const foe = s.prey && s.prey.alive ? s.prey : me;
+      const dxm = foe.x - s.x, dzm = foe.z - s.z, dm = Math.hypot(dxm, dzm);
+      const myPower = captainLevel() + playerPower() * 0.25;
+      const brave = !!s.prey || s.lvl >= myPower * 0.55 || s.ai === "hunt";
+      const range = s.guns.length ? s.guns[0].def.range : 50;
+      const dme = Math.hypot(me.x - s.x, me.z - s.z);
+      // tethers: nest guards stay home, escorts stay with the convoy
+      if (s.nest && Math.hypot(s.x - s.nest.x, s.z - s.nest.z) > 320 && s.state !== "flee") { s.state = "patrol"; s.wp = { x: s.nest.px, z: s.nest.pz }; }
+      if (s.ai === "escort" && s.convoy) {
+        const l = s.convoy.ships.find((x) => x.alive);
+        if (l && s.state === "patrol") { s.wp = { x: l.x - Math.sin(l.heading) * 16, z: l.z - Math.cos(l.heading) * 16 }; }
+        if (l && s.state === "engage" && Math.hypot(l.x - s.x, l.z - s.z) > 150) s.state = "patrol";
+      }
+      if (!foe.alive) { s.state = "patrol"; }
+      else if (s.state === "patrol") {
+        const aggro = s.ai === "hunt" ? 230 : s.ai === "escort" ? 110 : 95;
+        if (dm < aggro && brave) { s.state = "engage"; s.stateT = 0; }
+      } else if (s.state === "engage") {
+        if (s.hp < s.maxHp * (brave ? 0.22 : 0.45) && s.lvl < myPower * 0.8 && s.ai !== "hunt") { s.state = "flee"; s.stateT = 0; }
+        else if (dm > 260) s.state = "patrol";
+      } else if (s.state === "flee") {
+        if (dme > 150) { s.state = "patrol"; s.wp = { x: s.x + rnd(-100, 100), z: s.z + rnd(-100, 100) }; }
+      }
+      if (s.state === "patrol") {
+        const dx = s.wp.x - s.x, dz = s.wp.z - s.z, d = Math.hypot(dx, dz);
+        if ((d < 12 || s.stateT > 40) && s.ai !== "escort") { s.wp = s.nest ? { x: s.nest.x + rnd(-60, 60), z: s.nest.z + rnd(-60, 60) } : { x: clamp(s.x + rnd(-120, 120), -SEA_R + 60, SEA_R - 60), z: clamp(s.z + rnd(-120, 120), -SEA_R + 60, SEA_R - 60) }; s.stateT = 0; }
+        s.wantHeading = Math.atan2(dx, dz); s.throttle = s.ai === "escort" ? (d > 20 ? 0.9 : 0.5) : 0.55;
+      } else if (s.state === "engage") {
+        const ideal = range * 0.62;
+        const side = s.side || (s.side = Math.random() < 0.5 ? 1 : -1);
+        if (dm > ideal + 12) {
+          // Aim for a point off the foe's beam, not the foe: a stern chase never lets anyone's guns bear.
+          const rx = Math.cos(foe.heading), rz = -Math.sin(foe.heading);
+          const fx = foe.x + rx * side * ideal * 0.8 + (foe.vx || 0) * 1.5, fz = foe.z + rz * side * ideal * 0.8 + (foe.vz || 0) * 1.5;
+          s.wantHeading = Math.atan2(fx - s.x, fz - s.z); s.throttle = 1;
+        } else {
+          const a = Math.atan2(dxm, dzm);
+          s.wantHeading = a + side * Math.PI / 2 + (dm < ideal - 10 ? side * 0.4 : dm > ideal + 4 ? -side * 0.3 : 0);
+          s.throttle = 0.75;
+        }
+      } else if (s.state === "flee") {
+        const th = s.threat && s.threat.alive ? s.threat : me;
+        s.wantHeading = Math.atan2(s.x - th.x, s.z - th.z); s.throttle = 1;
+      }
+      avoidLand(s);
     }
     function updateForts(dt) {
       for (const f of world.forts) {
@@ -1762,6 +1879,15 @@ window.plethoraBit = {
       loot.length = 0;
       for (const k in labels) { labels[k].remove(); delete labels[k]; }
       el.edges.innerHTML = "";
+      convoys.length = 0; flares.length = 0;
+      for (const st of stops) st.guards = null;
+      activeStop = null; el.stopCard.classList.add("pt-hidden");
+    }
+    function renderSailFrom() {
+      const posts = stops.filter((st) => st.type === "post" && S.seen.stop.indexOf(st.idx) >= 0);
+      if (!posts.length) { el.sailFrom.innerHTML = ""; return; }
+      el.sailFrom.innerHTML = `<span class="${S.sailFrom < 0 ? "on" : ""}" data-from="-1">⚓ Home</span>` + posts.map((st) => `<span class="${S.sailFrom === st.idx ? "on" : ""}" data-from="${st.idx}">🏪 ${esc(st.name)}</span>`).join("");
+      for (const c of el.sailFrom.querySelectorAll("[data-from]")) ctx.listen(c, "click", () => { S.sailFrom = +c.dataset.from; save(); sfx.ui(); renderSailFrom(); });
     }
 
     // ---- port -----------------------------------------------------------------------
@@ -1774,7 +1900,9 @@ window.plethoraBit = {
       el.seaCorner.classList.add("pt-hidden"); el.seaSide.classList.add("pt-hidden");
       el.port.classList.remove("pt-hidden");
       el.stick.classList.remove("on"); el.touchHint.classList.remove("show"); el.dive.classList.remove("show");
-      el.wHold.classList.add("pt-hidden");
+      el.wHold.classList.add("pt-hidden"); el.mini.classList.add("pt-hidden"); el.compass.classList.add("pt-hidden"); el.stopCard.classList.add("pt-hidden");
+      activeStop = null; course = null;
+      renderSailFrom();
       buildPlayer(7, -36, 0);
       camInit = false;
       me.hp = me.maxHp; S.hp = me.maxHp; save();
@@ -1823,8 +1951,14 @@ window.plethoraBit = {
         el.seaCorner.classList.remove("pt-hidden"); el.seaSide.classList.remove("pt-hidden");
         el.wHold.classList.remove("pt-hidden");
         resetVoyage();
-        buildPlayer(0, -70, Math.PI);
+        const from = stops.find((st) => st.idx === S.sailFrom && S.seen.stop.indexOf(st.idx) >= 0);
+        if (from) { const a = Math.atan2(-from.pz, -from.px); buildPlayer(from.px + Math.cos(a) * 14, from.pz + Math.sin(a) * 14, Math.atan2(Math.cos(a), Math.sin(a))); }
+        else buildPlayer(0, -70, Math.PI);
         me.throttle = 0.6; me.speed = 4;
+        curRegion = regionAt(me.x, me.z).id; el.miniName.textContent = REGIONS[curRegion].name;
+        el.mini.classList.remove("pt-hidden");
+        reveal(me.x, me.z, 150); pinsDirty = true; fogDirty = true; miniT = 1;
+        convoyT = 35; flareT = 60;
         camInit = false;
         refreshHold();
         for (let i = 0; i < 6; i++) ensureEnemies();
@@ -2117,16 +2251,19 @@ window.plethoraBit = {
     function updateEdges() {
       const items = [];
       items.push({ x: 0, z: -40, ic: "⚓", cls: "port", d: Math.hypot(me.x, me.z + 40) });
-      const tq = world.treasures.map((t) => ({ x: t.x, z: t.z, ic: "?", cls: "q", d: Math.hypot(me.x - t.x, me.z - t.z) })).sort((a, b) => a.d - b.d).slice(0, 2);
+      const tq = world.treasures.filter((t) => t.seen || t.marked).map((t) => ({ x: t.x, z: t.z, ic: "?", cls: "q", d: Math.hypot(me.x - t.x, me.z - t.z) })).sort((a, b) => a.d - b.d).slice(0, 2);
       for (const t of tq) items.push(t);
-      for (const f of world.forts) if (f.alive) items.push({ x: f.x, z: f.z, ic: "🏰", cls: "fort", d: Math.hypot(me.x - f.x, me.z - f.z) });
-      for (const s of ships) if (!s.player && s.alive && s.ai === "hunt") items.push({ x: s.x, z: s.z, ic: "☠", cls: "hunt", d: Math.hypot(me.x - s.x, me.z - s.z) });
+      world.forts.forEach((f, i) => { if (f.alive && (S.seen.fort.indexOf(i) >= 0 || f.marked)) items.push({ x: f.x, z: f.z, ic: "🏰", cls: "fort", d: Math.hypot(me.x - f.x, me.z - f.z) }); });
+      for (const st of stops) if (S.seen.stop.indexOf(st.idx) >= 0 || st.marked) items.push({ x: st.px, z: st.pz, ic: S.seen.stop.indexOf(st.idx) < 0 ? "?" : st.type === "post" ? "🏪" : st.type === "cove" ? "🕯" : "☠", cls: S.seen.stop.indexOf(st.idx) < 0 ? "q" : st.type === "nest" ? "hunt" : "port", d: Math.hypot(me.x - st.px, me.z - st.pz) });
+      for (const c of convoys) { const l = c.seen && c.ships.find((x) => x.alive); if (l) items.push({ x: l.x, z: l.z, ic: "🚢", cls: "q", d: Math.hypot(me.x - l.x, me.z - l.z) }); }
+      for (const f of flares) if (f.alive && f.seen) items.push({ x: f.x, z: f.z, ic: "🆘", cls: "hunt", d: Math.hypot(me.x - f.x, me.z - f.z) });
+      for (const s of ships) if (!s.player && s.alive && s.ai === "hunt" && !s.nest && !s.prey) items.push({ x: s.x, z: s.z, ic: "☠", cls: "hunt", d: Math.hypot(me.x - s.x, me.z - s.z) });
       items.sort((a, b) => a.d - b.d);
       let n = 0;
       const placed = [];
       const W = ctx.width, H = ctx.height, inset = 34, top = sa.top + 100, bottom = sa.bottom + 40;
       for (const it of items) {
-        if (n >= 9) break;
+        if (n >= 10) break;
         if (it.d > 700 && it.cls === "q") continue;
         const p = project(it.x, 0, it.z);
         const inside = !p.behind && p.x > 10 && p.x < W - 10 && p.y > top && p.y < H - bottom;
@@ -2142,10 +2279,11 @@ window.plethoraBit = {
         const t = Math.min(tx, ty);
         let ex = cx + sx * t, ey = cy + sy * t;
         // nudge along the edge if another marker already sits here
-        for (let k = 0; k < 4; k++) {
-          const clash = placed.find((q) => Math.abs(q.x - ex) < 58 && Math.abs(q.y - ey) < 60);
+        for (let k = 0; k < 8; k++) {
+          const clash = placed.find((q) => Math.abs(q.x - ex) < 58 && Math.abs(q.y - ey) < 50);
           if (!clash) break;
-          if (tx < ty) ey += ey > cy ? -64 : 64; else ex += ex > cx ? -62 : 62;
+          if (tx < ty) ey += (k % 2 ? 1 : -1) * 52 * (k + 1); else ex += (k % 2 ? 1 : -1) * 62 * (k + 1);
+          ey = clamp(ey, top + inset, H - bottom - inset); ex = clamp(ex, inset, W - inset);
         }
         if (ex > W - 96 && ey > H - sa.bottom - 200) ey = H - sa.bottom - 210;
         placed.push({ x: ex, y: ey });
@@ -2159,6 +2297,445 @@ window.plethoraBit = {
       }
       for (let i = n; i < edgePool.length; i++) edgePool[i].style.display = "none";
     }
+
+    // =====================================================================
+    // 10b. Chart, fog of war, courses and the compass.
+    // =====================================================================
+    const FOGN = 32, FOGC = 2000 / FOGN;
+    let fogDirty = true, pinsDirty = true, chartOpen = false;
+    function fogHas(r, c) { return (S.fog[r] >>> c) & 1; }
+    function reveal(x, z, radius) {
+      const c0 = Math.max(0, Math.floor((x - radius + 1000) / FOGC)), c1 = Math.min(FOGN - 1, Math.floor((x + radius + 1000) / FOGC));
+      const r0 = Math.max(0, Math.floor((z - radius + 1000) / FOGC)), r1 = Math.min(FOGN - 1, Math.floor((z + radius + 1000) / FOGC));
+      let changed = false;
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+        if (fogHas(r, c)) continue;
+        const cx = -1000 + (c + 0.5) * FOGC, cz = -1000 + (r + 0.5) * FOGC;
+        if (Math.hypot(cx - x, cz - z) > radius) continue;
+        S.fog[r] = (S.fog[r] | (1 << c)) >>> 0; changed = true;
+      }
+      if (changed) { fogDirty = true; save(); }
+      return changed;
+    }
+    function fogExplored() { let n = 0; for (let r = 0; r < FOGN; r++) for (let c = 0; c < FOGN; c++) n += fogHas(r, c); return n; }
+    function buildChartBase() {
+      let h = "";
+      for (let i = REGIONS.length - 1; i >= 0; i--) {
+        const r = REGIONS[i];
+        h += `<circle cx="0" cy="0" r="${r.r}" fill="#${r.mid.toString(16).padStart(6, "0")}" stroke="rgba(255,255,255,0.18)" stroke-width="3" stroke-dasharray="14 10"/>`;
+      }
+      // a faint grid, like a sea chart
+      for (let i = -1000; i <= 1000; i += 250) h += `<line x1="${i}" y1="-1000" x2="${i}" y2="1000" stroke="rgba(255,255,255,0.06)" stroke-width="2"/><line x1="-1000" y1="${i}" x2="1000" y2="${i}" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>`;
+      el.chartBase.innerHTML = h;
+      let l = "";
+      const angles = [Math.PI / 2, -Math.PI / 2, Math.PI * 0.12, Math.PI * 0.85, -Math.PI * 0.2];
+      REGIONS.forEach((r, i) => {
+        const rad = r.id === 0 ? 120 : (regionInner(r) + r.r) / 2;
+        const x = Math.cos(angles[i]) * rad, y = Math.sin(angles[i]) * rad;
+        l += `<text x="${x}" y="${y + 14}" text-anchor="middle" font-size="46" font-weight="800" letter-spacing="6" fill="rgba(255,255,255,0.72)" font-family="sans-serif" style="text-transform:uppercase">${esc(r.name)}</text>`;
+        l += `<text x="${x}" y="${y + 52}" text-anchor="middle" font-size="30" fill="rgba(255,255,255,0.55)" font-family="sans-serif">lv ${r.lo}–${r.hi}</text>`;
+      });
+      el.chartLabels.innerHTML = l;
+    }
+    function rebuildFog() {
+      let d = "M-1000 -1000h2000v2000h-2000z";
+      for (let r = 0; r < FOGN; r++) {
+        if (!S.fog[r]) continue;
+        for (let c = 0; c < FOGN; c++) if (fogHas(r, c)) d += `M${-1000 + c * FOGC} ${-1000 + r * FOGC}h${FOGC}v${FOGC}h${-FOGC}z`;
+      }
+      el.chartFog.setAttribute("d", d);
+      fogDirty = false;
+    }
+    function pin(x, z, icon, cls, key, label, big) {
+      const r = big ? 34 : 26;
+      const fill = { port: "#2b90e8", post: "#ffd35a", cove: "#b57bff", nest: "#e8453c", fort: "#8a97a8", q: "#ffd35a", wreck: "#6b7a8a", isl: "#5fae5a", ship: "#ff5a4a", prey: "#7be07a", convoy: "#f7b733", flare: "#ff3b3b", me: "#fff" }[cls] || "#fff";
+      const stroke = cls === "isl" ? "none" : "#fff";
+      return `<g data-pin="${key}" style="cursor:pointer"><circle cx="${x}" cy="${z}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="4"/>` +
+        (icon ? `<text x="${x}" y="${z + r * 0.42}" text-anchor="middle" font-size="${r * 1.25}" font-family="sans-serif" fill="${cls === "post" || cls === "q" ? "#3a2000" : "#fff"}" font-weight="900">${icon}</text>` : "") +
+        (label ? `<text x="${x}" y="${z + r + 34}" text-anchor="middle" font-size="30" font-weight="800" fill="#fff" stroke="#0b2740" stroke-width="6" paint-order="stroke" font-family="sans-serif">${esc(label)}</text>` : "") + `</g>`;
+    }
+    function rebuildPins() {
+      let h = "";
+      h += pin(0, -30, "⚓", "port", "port", "Home Port", true);
+      world.islands.forEach((i, idx) => {
+        if (i.port || i.fort || i.rock) return;
+        if (S.seen.isl.indexOf(idx) < 0) return;
+        const st = i.stop;
+        if (st) {
+          if (S.seen.stop.indexOf(st.idx) >= 0) h += pin(i.x, i.z, st.type === "post" ? "🏪" : st.type === "cove" ? "🕯" : "☠", st.type, "stop:" + st.idx, st.name, true);
+          else if (st.marked) h += pin(i.x, i.z, "?", "q", "stop:" + st.idx, "rumour");
+          else h += `<circle cx="${i.x}" cy="${i.z}" r="${i.r * 0.9}" fill="#5fae5a" stroke="#e8d5a3" stroke-width="6"/>`;
+        } else h += `<circle cx="${i.x}" cy="${i.z}" r="${i.r * 0.9}" fill="#5fae5a" stroke="#e8d5a3" stroke-width="6"/>`;
+      });
+      world.forts.forEach((f, idx) => {
+        if (S.seen.fort.indexOf(idx) < 0 && !f.marked) return;
+        h += pin(f.x, f.z, "🏰", "fort", "fort:" + idx, (f.alive ? "lv " + f.lvl + " · " : "ruined · ") + f.name, true);
+      });
+      world.wrecks.forEach((w, idx) => { if (S.seen.wreck.indexOf(idx) >= 0) h += `<text x="${w.x}" y="${w.z + 10}" text-anchor="middle" font-size="34" fill="rgba(255,255,255,0.7)">⚓</text>`; });
+      world.treasures.forEach((t, idx) => { if (t.seen || t.marked) h += pin(t.x, t.z, "?", "q", "treasure:" + idx, t.marked ? "treasure" : ""); });
+      for (const c of convoys) if (c.seen && c.ships.some((x) => x.alive)) { const l = c.ships.find((x) => x.alive); h += pin(l.x, l.z, "🚢", "convoy", "convoy:" + c.id, "convoy"); }
+      for (const f of flares) if (f.alive) h += pin(f.x, f.z, "🆘", "flare", "flare:" + f.id, "distress");
+      for (const sh of ships) if (!sh.player && sh.alive && Math.hypot(sh.x - me.x, sh.z - me.z) < 190) { const rel = sh.lvl / Math.max(1, captainLevel() * 0.6 + playerPower() * 0.4); h += `<circle cx="${sh.x}" cy="${sh.z}" r="12" fill="${rel < 0.7 ? "#7be07a" : rel > 1.35 ? "#ff5a4a" : "#ffd35a"}" stroke="#0b2740" stroke-width="3"/>`; }
+      el.chartPins.innerHTML = h;
+      pinsDirty = false;
+    }
+    function updateChartMe() {
+      if (!me) return;
+      el.chartMe.setAttribute("transform", `translate(${me.x.toFixed(1)} ${me.z.toFixed(1)}) rotate(${(180 - me.heading * 180 / Math.PI).toFixed(1)})`);
+      const t = currentTarget();
+      el.chartTarget.innerHTML = t ? `<circle cx="${t.x}" cy="${t.z}" r="40" fill="none" stroke="#ffd35a" stroke-width="6" stroke-dasharray="14 10"><animateTransform attributeName="transform" type="rotate" from="0 ${t.x} ${t.z}" to="360 ${t.x} ${t.z}" dur="6s" repeatCount="indefinite"/></circle>` : "";
+      el.miniSvg.setAttribute("viewBox", `${(me.x - 260).toFixed(0)} ${(me.z - 260).toFixed(0)} 520 520`);
+    }
+    let miniT = 0;
+    function updateChart(dt) {
+      miniT += dt;
+      if (miniT < 0.25 && !chartOpen) return;
+      miniT = 0;
+      if (fogDirty) rebuildFog();
+      if (pinsDirty || chartOpen || state === "sea") rebuildPins();
+      updateChartMe();
+    }
+    function openChart() {
+      chartOpen = true;
+      el.chartSub.textContent = "explored " + Math.round(fogExplored() / (FOGN * FOGN * 0.785) * 100) + "% · tap a pin to set course";
+      rebuildFog(); rebuildPins(); updateChartMe();
+      el.ovChart.classList.remove("pt-hidden");
+      if (state === "sea") { state = "paused"; stickEnd(); }
+    }
+    function closeChart() {
+      chartOpen = false;
+      el.ovChart.classList.add("pt-hidden");
+      if (state === "paused" && el.pause.classList.contains("pt-hidden")) state = "sea";
+    }
+    ctx.listen(el.chartSvg, "click", (e) => {
+      const g = e.target && e.target.closest ? e.target.closest("[data-pin]") : null;
+      if (!g) return;
+      const [kind, id] = g.dataset.pin.split(":");
+      let t = null;
+      if (kind === "port") t = { x: 0, z: -60, label: "Home Port" };
+      else if (kind === "stop") { const st = stops[+id]; t = { x: st.px, z: st.pz, label: st.name }; }
+      else if (kind === "fort") { const f = world.forts[+id]; t = { x: f.x, z: f.z, label: f.name }; }
+      else if (kind === "treasure") { const tr = world.treasures[+id]; if (tr) t = { x: tr.x, z: tr.z, label: "Treasure", treasure: tr }; }
+      else if (kind === "convoy") { const c = convoys.find((x) => String(x.id) === id); if (c) t = { x: c.ships[0].x, z: c.ships[0].z, label: "Convoy", convoy: c }; }
+      else if (kind === "flare") { const f = flares.find((x) => String(x.id) === id); if (f) t = { x: f.x, z: f.z, label: "Distress flare", flare: f }; }
+      if (!t) return;
+      course = t; sfx.ui(); haptic("light");
+      el.chartSub.textContent = "Course set: " + t.label;
+      updateChartMe();
+      try { ctx.platform.interact({ type: "set_course", kind }); } catch (_) {}
+    });
+    ctx.listen($("btnChartClose"), "click", () => { sfx.ui(); closeChart(); });
+    ctx.listen($("btnRumour"), "click", () => {
+      if (S.coins < 300) { toast("Not enough gold for a rumour"); return; }
+      const r = buyRumour();
+      if (!r) { toast("The tavern has nothing new"); return; }
+      S.coins -= 300; S.rumours += 1; save(); refreshWallet(); sfx.buy(); haptic("success");
+      el.chartSub.textContent = "Rumour: " + r;
+      rebuildPins();
+    });
+    ctx.listen($("btnChart2"), "click", () => { sfx.ui(); openChart(); });
+    ctx.listen($("btnChart"), "click", () => { if (state === "sea") { sfx.ui(); openChart(); } });
+    ctx.listen(el.mini, "click", () => { if (state === "sea") { sfx.ui(); openChart(); } });
+    function buyRumour() {
+      // Nearest thing the player has not found: an undiscovered stop, then a treasure, then a fort.
+      const cand = [];
+      for (const st of stops) if (S.seen.stop.indexOf(st.idx) < 0 && !st.marked) cand.push({ d: Math.hypot(st.x - (me ? me.x : 0), st.z - (me ? me.z : 0)), mark: () => { st.marked = true; return "an island of interest, " + Math.round(Math.hypot(st.x, st.z)) + " m from port"; } });
+      for (const t of world.treasures) if (!t.seen && !t.marked) cand.push({ d: Math.hypot(t.x - (me ? me.x : 0), t.z - (me ? me.z : 0)) + 200, mark: () => { t.marked = true; return "sunken treasure, marked on the chart"; } });
+      world.forts.forEach((f, i) => { if (S.seen.fort.indexOf(i) < 0 && !f.marked) cand.push({ d: Math.hypot(f.x - (me ? me.x : 0), f.z - (me ? me.z : 0)) + 400, mark: () => { f.marked = true; return f.name + ", marked on the chart"; } }); });
+      if (!cand.length) return null;
+      cand.sort((a, b) => a.d - b.d);
+      pinsDirty = true;
+      return cand[0].mark();
+    }
+
+    // ---- what the compass points at ----------------------------------------------
+    let course = null;
+    function nearestShip(filter) {
+      let best = null, bd = Infinity;
+      for (const sh of ships) { if (sh.player || !sh.alive || !filter(sh)) continue; const d = Math.hypot(sh.x - me.x, sh.z - me.z); if (d < bd) { bd = d; best = sh; } }
+      return best;
+    }
+    function fairLevel() { return Math.max(1, captainLevel() * 0.6 + playerPower() * 0.4); }
+    function questTarget() {
+      const q = questAt(S.quest);
+      const fl = fairLevel();
+      if (q.kind === "sink") { const sh = nearestShip((x) => x.lvl / fl < 1.35 && !x.convoyId); return sh ? { x: sh.x, z: sh.z, label: "Prey · " + sh.name } : null; }
+      if (q.kind === "loot") {
+        if (voyage.hold >= q.n - S.qp || voyage.hold >= holdCap()) return { x: 0, z: -60, label: "Bank it at port" };
+        const sh = nearestShip((x) => x.lvl / fl < 1.35); return sh ? { x: sh.x, z: sh.z, label: "Prey · " + sh.name } : null;
+      }
+      if (q.kind === "treasure") { let best = null, bd = Infinity; for (const t of world.treasures) { const d = Math.hypot(t.x - me.x, t.z - me.z); if (d < bd) { bd = d; best = t; } } if (best) { if (!best.marked) { best.marked = true; pinsDirty = true; } return { x: best.x, z: best.z, label: "Sunken treasure" }; } return null; }
+      if (q.kind === "visit") { let best = null, bd = Infinity; for (const st of stops) { if (st.type !== q.stop || S.seen.stop.indexOf(st.idx) >= 0) continue; const d = Math.hypot(st.x - me.x, st.z - me.z); if (d < bd) { bd = d; best = st; } } if (best) { if (!best.marked) { best.marked = true; pinsDirty = true; } return { x: best.px, z: best.pz, label: q.stop === "post" ? "Trading post (rumour)" : q.stop === "cove" ? "Smuggler's cove (rumour)" : "Pirate nest (rumour)" }; } return null; }
+      if (q.kind === "region") { const r = REGIONS[q.n]; const a = Math.atan2(me.z, me.x) || 0; const rr = regionInner(r) + 20; return { x: Math.cos(a) * rr, z: Math.sin(a) * rr, label: r.name }; }
+      if (q.kind === "convoy") { for (const c of convoys) { const l = c.ships.find((x) => x.alive); if (l) return { x: l.x, z: l.z, label: "Convoy" }; } return null; }
+      if (q.kind === "flare") { const f = flares.find((x) => x.alive); return f ? { x: f.x, z: f.z, label: "Distress flare" } : null; }
+      if (q.kind === "fort") { const f = world.forts[q.n - 1]; if (f) { if (!f.marked) { f.marked = true; pinsDirty = true; } return { x: f.x, z: f.z, label: f.name + (f.alive ? "" : " (rebuilding)") }; } return null; }
+      if (q.kind === "nest") { let best = null, bd = Infinity; for (const st of stops) { if (st.type !== "nest" || nestCleared(st)) continue; const d = Math.hypot(st.x - me.x, st.z - me.z); if (d < bd) { bd = d; best = st; } } if (best) { if (!best.marked) { best.marked = true; pinsDirty = true; } return { x: best.px, z: best.pz, label: "Pirate nest · " + best.name }; } return null; }
+      if (q.kind === "level") { const sh = nearestShip((x) => x.lvl >= q.n); if (sh) return { x: sh.x, z: sh.z, label: "Level " + sh.lvl + " · " + sh.name }; return { x: 0, z: 0, label: "Level " + q.n + "+ ships sail further out", explore: true }; }
+      return null;
+    }
+    function currentTarget() {
+      if (!me) return null;
+      if (course) {
+        if (Math.hypot(course.x - me.x, course.z - me.z) < 22 || (course.treasure && world.treasures.indexOf(course.treasure) < 0) || (course.convoy && !course.convoy.ships.some((x) => x.alive)) || (course.flare && !course.flare.alive)) course = null;
+        else return course;
+      }
+      if (voyage.hold >= holdCap()) return { x: 0, z: -60, label: "Hold full · bank at port" };
+      const qt = questTarget();
+      if (qt && !qt.explore) return qt;
+      if (loot.length) { let b = null, bd = Infinity; for (const l of loot) { const d = Math.hypot(l.x - me.x, l.z - me.z); if (d < bd) { bd = d; b = l; } } if (bd < 120) return { x: b.x, z: b.z, label: "Loot" }; }
+      if (qt) return qt;
+      const sh = nearestShip((x) => x.lvl / fairLevel() < 1.35);
+      return sh ? { x: sh.x, z: sh.z, label: "Prey · " + sh.name } : null;
+    }
+    function updateCompass() {
+      const t = currentTarget();
+      if (!t || state !== "sea") { el.compass.classList.add("pt-hidden"); return; }
+      const dx = t.x - me.x, dz = t.z - me.z, d = Math.hypot(dx, dz);
+      if (d < 18) { el.compass.classList.add("pt-hidden"); return; }
+      const p = project(me.x, 2, me.z);
+      const a = Math.atan2(dx, -dz);
+      const R = 104;
+      el.compass.style.transform = `translate(${Math.round(p.x + Math.sin(a) * R)}px, ${Math.round(p.y - Math.cos(a) * R)}px) translate(-50%,-50%)`;
+      el.compassArr.style.transform = `rotate(${(a * 180 / Math.PI).toFixed(0)}deg)`;
+      el.compassLbl.textContent = t.label + " · " + Math.round(d) + " m";
+      el.compass.classList.remove("pt-hidden");
+    }
+
+    // =====================================================================
+    // 10c. Islands that are places: trading posts, coves and nests.
+    // =====================================================================
+    const STOP_NAMES = ["Gull Rock", "Saltmarsh", "Widow's Cay", "Kettle Isle", "Bonefish Key", "Lantern Point", "Skull Shoal", "Redsand", "Fiddler's Reef", "Hangman's Cay", "Quiet Water", "Black Tooth"];
+    const stops = [];
+    function buildStops() {
+      const rr = seeded(S.seed + 17);
+      const cands = world.islands.map((i, idx) => Object.assign({ idx }, i)).filter((i) => !i.port && !i.fort && !i.rock);
+      const byRegion = (r) => cands.filter((i) => regionAt(i.x, i.z).id === r && !i.stop).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+      const plan = [["post", 0], ["post", 1], ["post", 2], ["cove", 1], ["cove", 2], ["cove", 3], ["nest", 2], ["nest", 3]];
+      let n = 0;
+      for (const [type, reg] of plan) {
+        const list = byRegion(reg);
+        if (!list.length) continue;
+        const pickI = list[Math.min(list.length - 1, type === "post" ? 0 : (rr() * Math.min(3, list.length)) | 0)];
+        const isl = world.islands[pickI.idx];
+        const a = Math.atan2(-isl.z, -isl.x);             // side facing the port
+        const pr = isl.r * 1.25 + 7;
+        const st = { idx: n++, type, name: STOP_NAMES[(n + ((S.seed >>> 3) % 5)) % STOP_NAMES.length], x: isl.x, z: isl.z, r: isl.r, px: isl.x + Math.cos(a) * pr, pz: isl.z + Math.sin(a) * pr, isl: pickI.idx, region: reg, marked: false, guards: null, cardShown: false };
+        isl.stop = st; pickI.stop = st;
+        stops.push(st);
+        // a pier, a lantern and a flag so a stop reads as a place from the sea
+        const g = new THREE.Group();
+        const pier = mesh(GEO.box, MAT.hull, true, true); pier.scale.set(3, 0.5, 12); pier.position.set(0, 0.5, -3); g.add(pier);
+        for (let i = 0; i < 3; i++) for (const sd of [-1, 1]) { const post = mesh(GEO.cyl, mat(0x5a3a1a)); post.scale.set(0.22, 2.2, 0.22); post.position.set(sd * 1.4, -0.2, 2 - i * 5); g.add(post); }
+        const pole = mesh(GEO.cyl, mat(0x6a4426)); pole.scale.set(0.08, 6, 0.08); pole.position.set(1.2, 3, 3); g.add(pole);
+        const flag = mesh(GEO.box, mat(type === "post" ? 0xffd35a : type === "cove" ? 0xb57bff : 0x1a1a22)); flag.scale.set(0.06, 0.7, 1.3); flag.position.set(1.2, 5.6, 3.7); g.add(flag);
+        const lamp = mesh(GEO.sphere, mat(0xfff0a0, { emissive: type === "nest" ? 0xff4020 : 0xffd050 })); lamp.scale.setScalar(0.35); lamp.position.set(-1.2, 2.2, 3); g.add(lamp);
+        if (type === "post") { const hut = mesh(GEO.box, mat(0xd9b27a), true); hut.scale.set(4, 2.6, 3.5); hut.position.set(0, 1.6, -9.5); g.add(hut); const roof = mesh(GEO.cone, mat(0x9a3a2a), true); roof.scale.set(3.4, 1.8, 3.4); roof.rotation.y = Math.PI / 4; roof.position.set(0, 3.8, -9.5); g.add(roof); }
+        if (type === "nest") { for (let i = 0; i < 3; i++) { const tent = mesh(GEO.cone, mat(0x3a3a44), true); tent.scale.set(2, 2.2, 2); tent.position.set(-3 + i * 3, 1.5, -10 - (i % 2) * 3); g.add(tent); } const fire = mesh(GEO.sphere, mat(0xff8a2a, { emissive: 0xff5000 })); fire.scale.setScalar(0.5); fire.position.set(0, 0.6, -7); g.add(fire); }
+        if (type === "cove") { for (let i = 0; i < 3; i++) { const crate = mesh(GEO.box, MAT.hull, true); crate.scale.setScalar(1.1); crate.position.set(-1.5 + i * 1.5, 1.1, -8 + (i % 2)); g.add(crate); } }
+        g.position.set(st.px, 0, st.pz); g.rotation.y = a + Math.PI / 2;
+        world.group.add(g);
+        st.mesh = g;
+      }
+    }
+    function nestCleared(st) { const t = S.nests[st.idx]; return t != null && S.playT - t < 600; }
+    let activeStop = null, stopCardFor = null;
+    function stopCoveReady(st) { const t = S.coveT[st.idx]; return t == null || S.playT - t > 240; }
+    function renderStopCard(st) {
+      stopCardFor = st;
+      const C = el.stopCard;
+      let body = "";
+      if (st.type === "post") {
+        const fee = Math.round(voyage.hold * 0.12);
+        const rep = Math.round((me.maxHp - me.hp) * 1.2);
+        body = `<h3>🏪 ${esc(st.name)} <span style="font-size:11px;opacity:.7;">trading post</span></h3><div class="sub">Bank here for a cut, patch the hull, hear the gossip.</div><div class="row">
+          <button class="pt-buy" data-act="bank" ${voyage.hold + voyage.gems > 0 ? "" : "disabled"}>Bank hold<br>−${fmtK(fee)} fee</button>
+          <button class="pt-buy blue" data-act="repair" ${rep > 0 && S.coins + voyage.hold >= rep ? "" : "disabled"}>Repair<br>🪙 ${fmtK(rep)}</button>
+          <button class="pt-buy" data-act="rumour">Rumour<br>🪙 300</button>
+          <button class="pt-buy ${S.sailFrom === st.idx ? "max" : "blue"}" data-act="from">${S.sailFrom === st.idx ? "Home base ✓" : "Set out<br>from here"}</button></div>`;
+      } else if (st.type === "cove") {
+        const ready = stopCoveReady(st);
+        const wait = ready ? 0 : Math.ceil(240 - (S.playT - S.coveT[st.idx]));
+        body = `<h3>🕯 ${esc(st.name)} <span style="font-size:11px;opacity:.7;">smuggler's cove</span></h3><div class="sub">${ready ? "Something is stashed under the rocks." : "Picked clean. The smugglers return in " + wait + " s."}</div><div class="row">
+          <button class="pt-buy" data-act="search" ${ready ? "" : "disabled"}>Search the cove</button></div>`;
+      } else {
+        const alive = st.guards ? st.guards.filter((g) => g.alive).length : 0;
+        const cleared = nestCleared(st);
+        body = `<h3>☠ ${esc(st.name)} <span style="font-size:11px;opacity:.7;">pirate nest</span></h3><div class="sub">${cleared ? "Cleared. They'll be back." : alive ? alive + " pirates still afloat — sink them all, captain included." : "The nest is quiet… for now."}</div>`;
+      }
+      C.innerHTML = body;
+      for (const b of C.querySelectorAll("[data-act]")) ctx.listen(b, "click", () => stopAction(st, b.dataset.act));
+      C.classList.remove("pt-hidden");
+    }
+    function stopAction(st, act) {
+      if (act === "bank") {
+        const coins = Math.round(voyage.hold * 0.88), gems = voyage.gems;
+        S.coins += coins; S.gems += gems; S.life.plunder += coins;
+        questProgress("loot", coins);
+        voyage.hold = 0; voyage.gems = 0; refreshHold(); refreshWallet(); save();
+        sfx.bell(); haptic("success"); toast("Banked " + fmtK(coins) + " gold" + (gems ? " · " + gems + " gems" : ""));
+        try { ctx.platform.setScore(Math.floor(S.life.bounty)); ctx.memory.record("plunder").submit(Math.floor(S.life.plunder), { label: fmtK(S.life.plunder) + " gold" }).catch(() => {}); } catch (_) {}
+      } else if (act === "repair") {
+        const rep = Math.round((me.maxHp - me.hp) * 1.2);
+        if (S.coins >= rep) S.coins -= rep; else { const left = rep - S.coins; S.coins = 0; voyage.hold = Math.max(0, voyage.hold - left); refreshHold(); }
+        me.hp = me.maxHp; save(); refreshWallet(); sfx.buy(); haptic("light"); toast("Hull patched");
+      } else if (act === "rumour") {
+        if (S.coins < 300) { toast("Not enough gold"); return; }
+        const r = buyRumour(); if (!r) { toast("Nothing new"); return; }
+        S.coins -= 300; S.rumours += 1; save(); refreshWallet(); sfx.buy(); toast("🗣️ " + r, 2600);
+      } else if (act === "from") {
+        S.sailFrom = S.sailFrom === st.idx ? -1 : st.idx; save(); sfx.ui(); toast(S.sailFrom === st.idx ? "Voyages now start from " + st.name : "Voyages start from home again");
+      } else if (act === "search") {
+        if (!stopCoveReady(st)) return;
+        const lvl = levelAt(st.x, st.z);
+        const coins = Math.round(220 * lvl + 300 + rnd(0, 150) * lvl), gems = Math.random() < 0.5 ? 1 + (lvl / 10 | 0) : 0;
+        const take = Math.min(coins, holdCap() - voyage.hold);
+        voyage.hold += Math.max(0, take); voyage.gems += gems;
+        S.coveT[st.idx] = S.playT; save(); refreshHold();
+        sfx.treasure(); haptic("success"); flash(el.flashGood);
+        bigText("SMUGGLER'S CACHE", "+" + fmtK(take) + " gold" + (gems ? " · +" + gems + " gems" : ""), 2000);
+        emit(3, st.px, 1, st.pz, 14, { spread: 3, up: 5, size: 0.8, life: 0.7, grow: 0 });
+        try { ctx.platform.interact({ type: "cove" }); } catch (_) {}
+      }
+      renderStopCard(st);
+    }
+    function updateStops(dt) {
+      let near = null;
+      for (const st of stops) {
+        const d = Math.hypot(me.x - st.x, me.z - st.z);
+        // discovery
+        if (d < 170 && S.seen.stop.indexOf(st.idx) < 0) {
+          S.seen.stop.push(st.idx); pinsDirty = true; save();
+          S.xp += 40; S.gems += 2; refreshWallet();
+          sfx.treasure(); haptic("success");
+          bigText("DISCOVERED · " + st.name.toUpperCase(), st.type === "post" ? "trading post · +2 gems" : st.type === "cove" ? "smuggler's cove · +2 gems" : "pirate nest · +2 gems", 2200);
+          questProgress("visit", 1, st.type);
+          try { ctx.platform.milestone("discover_stop", { type: st.type }); } catch (_) {}
+        }
+        // nests wake up
+        if (st.type === "nest" && d < 220 && !st.guards && !nestCleared(st)) spawnNest(st);
+        if (st.type === "nest" && st.guards && st.guards.length && st.guards.every((g) => !g.alive) && !nestCleared(st)) {
+          S.nests[st.idx] = S.playT; save();
+          const reward = 1500 * (1 + st.region), gems = 5 + st.region * 3;
+          for (let i = 0; i < 5; i++) dropLoot(st.px + rnd(-8, 8), st.pz + rnd(-8, 8), "coins", Math.round(reward / 5));
+          for (let i = 0; i < gems; i++) dropLoot(st.px + rnd(-8, 8), st.pz + rnd(-8, 8), "gems", 1);
+          S.life.bounty += 300; voyage.bounty += 300;
+          questProgress("nest", 1);
+          bigText("NEST CLEARED", st.name + " is quiet", 2200); confetti(); sfx.quest();
+          st.guards = [];
+          try { ctx.platform.milestone("nest_cleared", { region: st.region }); } catch (_) {}
+        }
+        const dp = Math.hypot(me.x - st.px, me.z - st.pz);
+        if (dp < 24 && me.speed < 3.5) near = st;
+      }
+      if (near !== activeStop) {
+        activeStop = near;
+        if (near) { renderStopCard(near); sfx.bell(); } else { el.stopCard.classList.add("pt-hidden"); stopCardFor = null; }
+      }
+    }
+    function spawnNest(st) {
+      st.guards = [];
+      const reg = REGIONS[st.region];
+      for (let i = 0; i < 3; i++) {
+        const a = rnd(0, TAU), d = st.r * 1.25 + 25 + rnd(0, 20);
+        const g = spawnEnemy(st.x + Math.cos(a) * d, st.z + Math.sin(a) * d, reg.hi - 1 + (i % 2), "hunt");
+        g.nest = st; g.name = ["Nest guard", "Nest cutter", "Nest raider"][i]; st.guards.push(g);
+      }
+      const a = rnd(0, TAU), d = st.r * 1.25 + 30;
+      const cap = spawnEnemy(st.x + Math.cos(a) * d, st.z + Math.sin(a) * d, reg.hi + 4, "hunt");
+      cap.nest = st; cap.name = "☠ Captain " + pick(["Vane", "Rackham", "Teach", "Bonny", "Kidd", "Low"]); cap.hp = cap.maxHp = Math.round(cap.maxHp * 1.6);
+      cap.lootCoins = Math.round(cap.lootCoins * 2.5); cap.lootGems += 3; cap.captain = true;
+      st.guards.push(cap);
+      toast("☠ " + st.name + " sends out its ships!", 2200); haptic("warning");
+    }
+
+    // =====================================================================
+    // 10d. Convoys and distress flares: things to run into between stops.
+    // =====================================================================
+    const convoys = [], flares = [];
+    let convoySeq = 0, flareSeq = 0, convoyT = 40, flareT = 70;
+    function merchantSpec(lvl, t) {
+      const T = TIERS[t];
+      const cannons = T.slots.map((s2, i) => (i === 0 || i === (T.slots.length / 2 | 0)) ? "iron" : null);
+      return { len: T.len * 1.05, beam: T.beam * 1.25, masts: T.masts, color: 0x8a6a3a, stripe: 0xffffff, flag: 0x2fbf8c, slots: T.slots, cannons };
+    }
+    function spawnConvoy(near) {
+      const a = rnd(0, TAU), d = near ? rnd(120, 180) : rnd(170, 240);
+      let x = me.x + Math.cos(a) * d, z = me.z + Math.sin(a) * d;
+      if (Math.hypot(x, z) > SEA_R - 60) { x *= 0.8; z *= 0.8; }
+      if (nearestIslandGap(x, z, 12) < 20) return null;
+      const reg = regionAt(x, z), lvl = Math.max(1, Math.round(levelAt(x, z) * 0.8));
+      const c = { id: convoySeq++, ships: [], seen: false, plundered: false, wp: { x: -x * 0.6 + rnd(-80, 80), z: -z * 0.6 + rnd(-80, 80) } };
+      const n = 2 + (reg.id >= 1 ? 1 : 0);
+      const heading = Math.atan2(c.wp.x - x, c.wp.z - z);
+      for (let i = 0; i < n; i++) {
+        const t = levelToTier(lvl);
+        const m = makeShip({ id: "m" + convoySeq + "_" + i, x: x + Math.sin(heading + Math.PI) * i * 14 + rnd(-3, 3), z: z + Math.cos(heading + Math.PI) * i * 14 + rnd(-3, 3), heading, spec: merchantSpec(lvl, t),
+          maxSpeed: TIERS[t].speed * 0.5, turnRate: TIERS[t].turn * 0.7, hp: Math.round(60 * Math.pow(1 + lvl * 0.4, 1.1)), lvl, name: pick(["Fat Goose", "Merchant Rose", "Cargo Star", "Golden Hen", "Plump Pelican", "Trader's Luck"]), ai: "convoy", gunDmg: 5 + lvl,
+          lootCoins: Math.round(140 * lvl * (1 + lvl * 0.06)), lootGems: lvl >= 6 && Math.random() < 0.5 ? 1 + (lvl / 12 | 0) : 0 });
+        m.convoy = c; m.convoyId = c.id; m.state = "patrol"; m.stateT = 0; m.wp = c.wp;
+        c.ships.push(m);
+      }
+      if (reg.id >= 1) {
+        const e = spawnEnemy(x + rnd(-10, 10), z - 18, Math.round(levelAt(x, z) * 1.05), "escort");
+        e.convoy = c; e.name = "Escort"; e.wp = c.wp; c.escort = e;
+      }
+      convoys.push(c);
+      return c;
+    }
+    function spawnFlare() {
+      const a = rnd(0, TAU), d = rnd(150, 210);
+      let x = me.x + Math.cos(a) * d, z = me.z + Math.sin(a) * d;
+      if (Math.hypot(x, z) > SEA_R - 60 || nearestIslandGap(x, z, 12) < 24) return null;
+      const lvl = Math.max(1, Math.round(levelAt(x, z) * 0.9)), t = levelToTier(lvl);
+      const victim = makeShip({ id: "v" + flareSeq, x, z, heading: rnd(0, TAU), spec: merchantSpec(lvl, t), maxSpeed: TIERS[t].speed * 0.45, turnRate: TIERS[t].turn * 0.7,
+        hp: Math.round(90 * Math.pow(1 + lvl * 0.4, 1.1)), lvl, name: pick(["Mercy", "Lady Bright", "Harbour Lass", "Kind Wind"]), ai: "victim", gunDmg: 4 + lvl, lootCoins: 0, lootGems: 0 });
+      victim.state = "patrol"; victim.wp = { x: x + rnd(-40, 40), z: z + rnd(-40, 40) };
+      const pirate = spawnEnemy(x + 26, z + 10, Math.round(levelAt(x, z) * 1.1) + 1, "hunt");
+      pirate.prey = victim; pirate.name = "☠ Raider"; pirate.raider = true;
+      const f = { id: flareSeq++, x, z, victim, pirate, alive: true, t: 0, seen: false, done: false };
+      victim.flare = f; pirate.flare = f;
+      flares.push(f);
+      return f;
+    }
+    function updateEvents(dt) {
+      convoyT -= dt; flareT -= dt;
+      const q = questAt(S.quest);
+      if (convoyT <= 0 || (q.kind === "convoy" && !convoys.some((c) => c.ships.some((x) => x.alive)) && convoyT < 60)) { if (spawnConvoy(q.kind === "convoy")) { convoyT = rnd(75, 120); } else convoyT = 8; }
+      if (flareT <= 0 || (q.kind === "flare" && !flares.some((f) => f.alive) && flareT < 70)) { if (spawnFlare()) flareT = rnd(100, 150); else flareT = 8; }
+      for (const c of convoys.slice()) {
+        const l = c.ships.find((x) => x.alive);
+        if (!l) { convoys.splice(convoys.indexOf(c), 1); continue; }
+        if (!c.seen && Math.hypot(l.x - me.x, l.z - me.z) < 190) { c.seen = true; pinsDirty = true; toast("🚢 A merchant convoy is in sight"); }
+        if (Math.hypot(l.x - me.x, l.z - me.z) > 460) { for (const sh of c.ships) if (sh.alive) removeShip(sh); if (c.escort && c.escort.alive) removeShip(c.escort); convoys.splice(convoys.indexOf(c), 1); }
+      }
+      for (const f of flares.slice()) {
+        if (!f.alive) { flares.splice(flares.indexOf(f), 1); continue; }
+        f.t += dt;
+        const d = Math.hypot(f.x - me.x, f.z - me.z);
+        if (!f.seen && d < 230) { f.seen = true; pinsDirty = true; toast("🆘 A distress flare, " + Math.round(d) + " m away", 2200); sfx.bell(); }
+        if (f.t < 40 && Math.random() < dt * 3) emit(2, f.victim.alive ? f.victim.x : f.x, 6 + Math.random() * 14, f.victim.alive ? f.victim.z : f.z, 1, { spread: 0.4, up: 5, size: 2.2, life: 1.2, grow: 1.5 });
+        if (f.victim.alive) { f.x = f.victim.x; f.z = f.victim.z; }
+        if (!f.pirate.alive && f.victim.alive && !f.done) {
+          f.done = true; f.alive = false;
+          const lvl = f.victim.lvl, coins = Math.round(300 * lvl + 400), gems = 2 + (lvl / 8 | 0);
+          for (let i = 0; i < 4; i++) dropLoot(f.victim.x + rnd(-6, 6), f.victim.z + rnd(-6, 6), "coins", Math.round(coins / 4));
+          for (let i = 0; i < gems; i++) dropLoot(f.victim.x + rnd(-6, 6), f.victim.z + rnd(-6, 6), "gems", 1);
+          S.life.bounty += 120; voyage.bounty += 120; S.xp += 30 + lvl * 3;
+          questProgress("flare", 1);
+          bigText("RESCUED", f.victim.name + " pays her thanks", 2200); sfx.quest(); haptic("success");
+          f.victim.ai = "convoy"; f.victim.wp = { x: 0, z: -80 }; f.victim.state = "patrol";
+          try { ctx.platform.milestone("rescue", { level: lvl }); } catch (_) {}
+        }
+        if (!f.victim.alive && f.alive) { f.alive = false; if (f.seen) toast("The flare goes dark…"); }
+        if (f.t > 150 && f.alive) { f.alive = false; }
+        if (!f.alive) pinsDirty = true;
+      }
+    }
+
+    buildWorld();
+    for (const f of world.forts) fortStats(f);
+    buildChartBase();
 
     // =====================================================================
     // 11. Treasure diving, repair, camera, frame loop.
@@ -2196,7 +2773,32 @@ window.plethoraBit = {
     }
 
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camWant = new THREE.Vector3(), lookWant = new THREE.Vector3();
-    let camInit = false, spawnT = 0, hudT = 0, scoreT = 0;
+    let camInit = false, spawnT = 0, hudT = 0, scoreT = 0, playSaveT = 0, revealT = 0, curRegion = 0;
+    const fogCol = new THREE.Color();
+    function updateRegion(dt) {
+      const reg = regionAt(me.x, me.z);
+      if (reg.id !== curRegion) {
+        curRegion = reg.id;
+        if (!S.regions[reg.id]) {
+          S.regions[reg.id] = true; const g = 3 + reg.id * 3; S.gems += g; save(); refreshWallet(); confetti(); sfx.quest(); haptic("success");
+          bigText("DISCOVERED · " + reg.name.toUpperCase(), "levels " + reg.lo + "–" + reg.hi + " · +" + g + " gems", 2600);
+          try { ctx.platform.milestone("region_discovered", { region: reg.id }); } catch (_) {}
+        } else bigText("Entering " + reg.name, "levels " + reg.lo + "–" + reg.hi, 1800);
+        questProgress("region", 0, reg.id);
+        el.miniName.textContent = reg.name;
+      }
+      fogCol.setHex(reg.fog);
+      scene.fog.color.lerp(fogCol, Math.min(1, dt * 0.7));
+      scene.background.copy(scene.fog.color);
+    }
+    function discover() {
+      let changed = false;
+      world.islands.forEach((i, idx) => { if (!i.port && !i.fort && !i.rock && S.seen.isl.indexOf(idx) < 0 && Math.hypot(i.x - me.x, i.z - me.z) < 165 + i.r) { S.seen.isl.push(idx); changed = true; } });
+      world.forts.forEach((f, idx) => { if (S.seen.fort.indexOf(idx) < 0 && Math.hypot(f.x - me.x, f.z - me.z) < 200) { S.seen.fort.push(idx); changed = true; toast("🏰 " + f.name + " sighted · level " + f.lvl, 2200); sfx.bell(); } });
+      world.wrecks.forEach((w, idx) => { if (S.seen.wreck.indexOf(idx) < 0 && Math.hypot(w.x - me.x, w.z - me.z) < 120) { S.seen.wreck.push(idx); changed = true; } });
+      for (const t of world.treasures) if (!t.seen && Math.hypot(t.x - me.x, t.z - me.z) < 150) { t.seen = true; pinsDirty = true; if (!t.marked) toast("? A treasure buoy, " + Math.round(Math.hypot(t.x - me.x, t.z - me.z)) + " m", 1800); }
+      if (changed) { pinsDirty = true; save(); }
+    }
     function update(dtMs) {
       const dt = Math.min(dtMs, 50) / 1000;
       timeNow += dt;
@@ -2240,6 +2842,13 @@ window.plethoraBit = {
         updateForts(dt);
         if (state === "sea") {
           updateTreasure(dt);
+          S.playT += dt; playSaveT += dt; if (playSaveT > 12) { playSaveT = 0; save(); }
+          updateRegion(dt);
+          revealT += dt; if (revealT > 0.6) { revealT = 0; reveal(me.x, me.z, 150); discover(); }
+          updateStops(dt);
+          updateEvents(dt);
+          updateCompass();
+          updateChart(dt);
           spawnT += dt;
           if (spawnT > 2.2) { spawnT = 0; ensureEnemies(); cullEnemies(); }
           const far = Math.hypot(me.x, me.z);
@@ -2284,6 +2893,7 @@ window.plethoraBit = {
         camera.fov += (44 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
         sun.target.position.set(me.x, 0, me.z); sun.position.set(me.x - 40, 90, me.z - 30);
         catcher.position.set(me.x, 0.02, me.z);
+        if (chartOpen) updateChart(dt);
         // slot chips ride on the deck
         for (const c of slotChips) {
           const p = slotLocal(c.slot, tier().len, tier().beam, me.mesh.userData.deckY);
@@ -2328,6 +2938,12 @@ window.plethoraBit = {
       window.__ptWarp = (x, z) => { me.x = x; me.z = z; camInit = false; };
       window.__ptTreasure = () => { const t = world.treasures[0]; me.x = t.x + 2; me.z = t.z; me.speed = 0; me.throttle = 0; camInit = false; };
       window.__ptStats = () => dbgStats;
+      window.__ptStops = () => stops.map((st) => ({ idx: st.idx, type: st.type, name: st.name, x: Math.round(st.x), z: Math.round(st.z), px: Math.round(st.px), pz: Math.round(st.pz), seen: S.seen.stop.indexOf(st.idx) >= 0 }));
+      window.__ptWarpStop = (i) => { const st = stops[i]; const a = Math.atan2(-st.pz, -st.px); me.x = st.px + Math.cos(a) * 6; me.z = st.pz + Math.sin(a) * 6; me.speed = 0; me.throttle = 0; stick = null; camInit = false; };
+      window.__ptConvoy = () => { const c = spawnConvoy(true); return c ? c.id : null; };
+      window.__ptFlare = () => { const f = spawnFlare(); return f ? f.id : null; };
+      window.__ptTarget = () => currentTarget();
+      window.__ptQuest = (i) => { S.quest = i; S.qp = 0; refreshQuest(); };
       window.__ptHurt = (amount) => { const e = ships.filter((o) => !o.player && o.alive).sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z))[0]; if (e) damage(e, amount || 1e6, me, "iron"); };
       window.__ptSpawnAt = (lvl, dx, dz) => { const e = spawnEnemy(me.x + dx, me.z + dz, lvl || 2, "hold"); e.heading = me.heading; return e.id; };
       window.__ptCollect = () => { for (const l of loot) { l.x = me.x; l.z = me.z; } };

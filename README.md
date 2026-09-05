@@ -48,7 +48,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
 | [`sled-surfers/`](sled-surfers)         | Penguin sledding runner in 3D — drag to steer, hop, ramp for air, four biomes, garage and upgrades. |
-| [`plunder-tide/`](plunder-tide)         | Top-down 3D pirate plunder — hunt weaker ships, bank the loot, buy cannons and bigger hulls. |
+| [`plunder-tide/`](plunder-tide)         | Top-down 3D pirate plunder — five regions, a fog-of-war chart, trading posts, coves, nests, convoys and flares. |
 
 ### Rakshabandhan set
 
