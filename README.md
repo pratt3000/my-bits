@@ -51,6 +51,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`plunder-tide/`](plunder-tide)         | Top-down 3D pirate plunder — five regions, a fog-of-war chart, trading posts, coves, nests, convoys and flares. |
 | [`bloop-hop/`](bloop-hop)               | Chunky 3D platformer — four worlds, twelve levels, bosses, stars, power-ups, a difficulty curve baked into the chunks. |
 | [`nullpoint/`](nullpoint)               | One-thumb arena shooter — move anywhere, but every shot goes through the dead centre and bounces back at you. |
+| [`barrel-heights/`](barrel-heights)     | The 1981 four-screen arcade climber at 224×256 — girders and barrels, conveyors and pies, elevators and springs, rivets. |
 
 ### Rakshabandhan set
 

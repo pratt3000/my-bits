@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Barrel Heights",
+  "description": "The four-screen arcade climber, rebuilt pixel for pixel at 224x256: sloped girders and rolling barrels, the pie factory's conveyors, the elevators with bouncing springs, and the rivets that bring the ape down. Jump barrels for points, grab the hammer, pull the rivets, beat the bonus timer and rescue the lady. Every level loops through all four screens faster and meaner.",
+  "tags": ["arcade", "platformer", "retro", "pixel", "score", "mobile"],
+  "permissions": ["haptics", "audio", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "High Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "height": {
+        "label": "Height Reached",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
