@@ -72,7 +72,7 @@ window.plethoraBit = {
         background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(255,255,255,.15) 70%); border:2px solid rgba(255,255,255,.55); font-size:13px; font-weight:900; letter-spacing:1px; color:#fff;
         text-shadow:0 1px 4px rgba(0,0,0,.5); transition:transform .08s; }
       .bh-jump.on { transform:scale(.92); background:radial-gradient(circle at 35% 30%, rgba(255,230,120,.8), rgba(255,180,40,.35) 70%); }
-      .bh-hint { position:absolute; left:50%; bottom:calc(${sa.bottom}px + 130px); transform:translateX(-50%); z-index:21; pointer-events:none; padding:8px 16px; border-radius:999px;
+      .bh-hint { position:absolute; left:50%; bottom:calc(${sa.bottom}px + 196px); transform:translateX(-50%); z-index:21; pointer-events:none; padding:8px 16px; border-radius:999px;
         background:rgba(10,20,40,.6); border:1px solid rgba(255,255,255,.3); font-size:13px; font-weight:800; opacity:0; transition:opacity .4s; white-space:nowrap; }
       .bh-hint.show { opacity:1; }
       .bh-coach { position:absolute; z-index:22; pointer-events:none; padding:7px 12px; border-radius:12px; background:#ffe066; color:#3a2000; font-size:13px; font-weight:900; white-space:nowrap;
