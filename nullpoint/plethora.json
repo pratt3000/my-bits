@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Nullpoint",
+  "description": "A wobbly ring of an arena, a tiny ship, and one rule: every shot goes through the dead centre. Bullets bounce off the wall and come back, and your own bullet will kill you. Red rings drift in; pop them before they touch you. Chain kills for a combo, bank shots off the wall for more, and survive the waves as seekers, big splitting rings and orbiters join in.",
+  "tags": ["arcade", "shooter", "score", "minimal", "neon", "mobile"],
+  "permissions": ["haptics", "backgroundMusic", "audio", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "High Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "kills": {
+        "label": "Rings Popped",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
