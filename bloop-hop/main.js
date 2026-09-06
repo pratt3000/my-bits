@@ -75,6 +75,13 @@ window.plethoraBit = {
       .bh-hint { position:absolute; left:50%; bottom:calc(${sa.bottom}px + 130px); transform:translateX(-50%); z-index:21; pointer-events:none; padding:8px 16px; border-radius:999px;
         background:rgba(10,20,40,.6); border:1px solid rgba(255,255,255,.3); font-size:13px; font-weight:800; opacity:0; transition:opacity .4s; white-space:nowrap; }
       .bh-hint.show { opacity:1; }
+      .bh-coach { position:absolute; z-index:22; pointer-events:none; padding:7px 12px; border-radius:12px; background:#ffe066; color:#3a2000; font-size:13px; font-weight:900; white-space:nowrap;
+        box-shadow:0 4px 12px rgba(0,0,0,.3); opacity:0; transition:opacity .3s; animation:bhCoach 1s ease-in-out infinite; }
+      .bh-coach.show { opacity:1; }
+      .bh-coach:after { content:""; position:absolute; left:50%; bottom:-7px; margin-left:-7px; border-left:7px solid transparent; border-right:7px solid transparent; border-top:8px solid #ffe066; }
+      .bh-coach.run { left:calc(${sa.left}px + 93px); bottom:calc(${sa.bottom}px + 112px); transform:translateX(-50%); }
+      .bh-coach.jump { right:calc(${sa.right}px + 20px); bottom:calc(${sa.bottom}px + 126px); }
+      @keyframes bhCoach { 0%,100% { margin-bottom:0; } 50% { margin-bottom:6px; } }
 
       .bh-toast { position:absolute; left:50%; top:26%; transform:translate(-50%,-50%) scale(.9); z-index:32; padding:8px 18px; border-radius:999px; font-size:15px; font-weight:900; white-space:nowrap;
         background:rgba(10,20,40,.7); border:1px solid rgba(255,255,255,.3); opacity:0; transition:opacity .2s, transform .2s; pointer-events:none; }
@@ -160,7 +167,9 @@ window.plethoraBit = {
       <div class="bh-ctl bh-hidden" id="ctl">
         <div class="bh-pad" id="pad"><i id="padL">◀</i><i id="padR">▶</i></div>
         <div class="bh-jump" id="jumpBtn">JUMP</div>
-        <div class="bh-hint" id="hint">◀ ▶ run · hold JUMP to jump higher</div>
+        <div class="bh-hint" id="hint">◀ ▶ run · tap JUMP to hop · hold to jump higher</div>
+        <div class="bh-coach run" id="coachRun">Touch ▶ to run</div>
+        <div class="bh-coach jump" id="coachJump">Tap to hop · hold to jump high</div>
       </div>
       <div class="bh-toast" id="toast"></div>
       <div class="bh-big" id="bigText"></div>
@@ -184,8 +193,8 @@ window.plethoraBit = {
       <div class="bh-ov bh-hidden" id="ovHow"><div class="bh-panel">
         <h2>How to hop</h2>
         <div style="text-align:left;font-size:13.5px;line-height:1.85;margin:8px 0 14px;">
-          ◀ ▶ <b>Run</b> with the pad on the left.<br>
-          🟡 <b>JUMP</b> on the right. Hold it to jump higher; tap for a short hop.<br>
+          ◀ ▶ <b>Run</b>: touch the left or right half of the pad. Slide across it to turn.<br>
+          🟡 <b>JUMP</b> on the right. Tap for a hop of about one block; hold it to jump nearly four.<br>
           👟 <b>Stomp</b> enemies from above. Bounce off them to go higher.<br>
           🧱 <b>Bonk</b> ? blocks from below for coins and power-ups. Big Bloop breaks bricks.<br>
           🍓 <b>Berry</b> makes you big (one free hit). ⭐ <b>Star</b> makes you invincible. 💖 is an extra life.<br>
@@ -205,7 +214,7 @@ window.plethoraBit = {
     const $ = (id) => ui.querySelector("#" + id);
     const el = {
       hud: $("hud"), hCoins: $("hCoins"), hCoinsMax: $("hCoinsMax"), hLives: $("hLives"), hScore: $("hScore"), hLevel: $("hLevel"), hLevelSub: $("hLevelSub"), hProg: $("hProg"), hStars: $("hStars"), hTime: $("hTime"), hTimeV: $("hTimeV"), hPower: $("hPower"),
-      ctl: $("ctl"), pad: $("pad"), padL: $("padL"), padR: $("padR"), jumpBtn: $("jumpBtn"), hint: $("hint"),
+      ctl: $("ctl"), pad: $("pad"), padL: $("padL"), padR: $("padR"), jumpBtn: $("jumpBtn"), hint: $("hint"), coachRun: $("coachRun"), coachJump: $("coachJump"),
       toast: $("toast"), big: $("bigText"), conf: $("conf"), flashHurt: $("flashHurt"), flashGood: $("flashGood"), fade: $("fade"), livesCard: $("livesCard"), livesText: $("livesText"), livesIcon: $("livesIcon"),
       menu: $("menu"), mBest: $("mBest"), mStars: $("mStars"), ovLevels: $("ovLevels"), worlds: $("worlds"), lvSub: $("lvSub"), how: $("ovHow"), pause: $("ovPause"),
       clear: $("ovClear"), clearPanel: $("clearPanel"), over: $("ovOver"), overPanel: $("overPanel"), btnMute: $("btnMute"), btnMute2: $("btnMute2")
@@ -869,29 +878,34 @@ window.plethoraBit = {
     // 9. The hero, input, physics.
     // =====================================================================
     const P = { x: 3.5, y: 3, vx: 0, vy: 0, w: 0.62, h: 0.9, face: 1, grounded: false, coyote: 0, jumpBuf: 0, jumpHeld: false, jumpT: 0, big: false, star: 0, invuln: 0, dead: false, deadT: 0, onMover: null, squash: 1, stretch: 1, runT: 0, flagT: -1, sliding: 0 };
-    const RUN = 6.6, ACC = 42, AIR = 28, FRIC = 34, GRAV = 38, JUMP = 12.2, JUMP_HOLD = 0.24, STOMP = 9, COYOTE = 0.1, BUFFER = 0.14;
+    const RUN = 6.6, ACC = 42, AIR = 28, FRIC = 34, GRAV = 38, JUMP = 13, JUMP_HOLD = 0.26, JUMP_MIN = 6.5, STOMP = 9, COYOTE = 0.12, BUFFER = 0.16;
     let bloop = null;
     const input = { left: false, right: false, jump: false, jumpPressed: false };
+    let coach = 0;   // 0 off · 1 waiting for a run · 2 waiting for a jump
     const pads = { move: null, jump: null };
     function padZone(e) { return e.offsetX < ctx.width * 0.5 ? "move" : "jump"; }
     ctx.listen(canvas, "pointerdown", (e) => {
       if (state !== "play") return;
       firstGesture();
-      if (!S.hint) { S.hint = 1; save(); el.hint.classList.remove("show"); }
       const z = padZone(e);
-      if (z === "move" && !pads.move) { pads.move = { id: e.pointerId, x0: e.clientX, x: e.clientX }; setMove(0); }
+      if (coach === 1 && z === "move") { coach = 2; el.coachRun.classList.remove("show"); el.coachJump.classList.add("show"); }
+      else if (coach === 2 && z === "jump") { coach = 0; el.coachJump.classList.remove("show"); S.hint = 1; save(); el.hint.classList.remove("show"); }
+      if (z === "move" && !pads.move) { pads.move = { id: e.pointerId, x0: e.clientX, ox: e.offsetX }; setMove(padDir(e.offsetX)); }
       else if (z === "jump" && !pads.jump) { pads.jump = { id: e.pointerId }; input.jump = true; input.jumpPressed = true; el.jumpBtn.classList.add("on"); }
     });
     ctx.listen(canvas, "pointermove", (e) => {
-      if (pads.move && e.pointerId === pads.move.id) { pads.move.x = e.clientX; const dx = e.clientX - pads.move.x0; setMove(dx > 10 ? 1 : dx < -10 ? -1 : 0); }
+      if (pads.move && e.pointerId === pads.move.id) { pads.move.ox += e.clientX - pads.move.x0; pads.move.x0 = e.clientX; setMove(padDir(pads.move.ox)); }
     });
     const up = (e) => {
       if (pads.move && e.pointerId === pads.move.id) { pads.move = null; setMove(0); }
       if (pads.jump && e.pointerId === pads.jump.id) { pads.jump = null; input.jump = false; el.jumpBtn.classList.remove("on"); }
     };
     ctx.listen(canvas, "pointerup", up); ctx.listen(canvas, "pointercancel", up);
+    // The pad's centre is where left becomes right; touching either side runs that way, sliding across flips it.
+    function padDir(ox) { const cx = sa.left + 18 + 75; return ox < cx - 6 ? -1 : ox > cx + 6 ? 1 : 0; }
     function setMove(d) { input.left = d < 0; input.right = d > 0; el.padL.classList.toggle("on", d < 0); el.padR.classList.toggle("on", d > 0); }
     function clearInput() { pads.move = null; pads.jump = null; setMove(0); input.jump = false; input.jumpPressed = false; el.jumpBtn.classList.remove("on"); }
+    function hideCoach() { coach = 0; el.coachRun.classList.remove("show"); el.coachJump.classList.remove("show"); }
     // keyboard for desktop testing
     ctx.listen(window, "keydown", (e) => { if (e.key === "ArrowLeft" || e.key === "a") setMove(-1); if (e.key === "ArrowRight" || e.key === "d") setMove(1); if (e.key === " " || e.key === "ArrowUp" || e.key === "w") { if (!input.jump) input.jumpPressed = true; input.jump = true; } });
     ctx.listen(window, "keyup", (e) => { if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ArrowRight" || e.key === "d") setMove(0); if (e.key === " " || e.key === "ArrowUp" || e.key === "w") input.jump = false; });
@@ -1002,7 +1016,7 @@ window.plethoraBit = {
       state = "play";
       refreshHud();
       el.hud.classList.remove("bh-hidden"); el.ctl.classList.remove("bh-hidden"); el.menu.classList.add("bh-hidden");
-      if (!S.hint) { el.hint.classList.add("show"); ctx.timeout(() => el.hint.classList.remove("show"), 5000); }
+      if (!S.hint) { el.hint.classList.add("show"); ctx.timeout(() => el.hint.classList.remove("show"), 6000); el.coachRun.classList.add("show"); coach = 1; }
       bed(lv.w.music, 0.22);
       try { ctx.platform.setProgress(idx / N_LEVELS); ctx.platform.interact({ type: "level_start", level: idx }); } catch (_) {}
     }
@@ -1174,10 +1188,14 @@ window.plethoraBit = {
         sfx.jump(P.big); haptic("light"); P.stretch = 1.35; P.squash = 0.8;
         emit(P.x, P.y, 4, { color: [1, 1, 1], spread: 1.2, up: 1, size: 0.3, life: 0.3, g: 4 });
       }
-      if (P.vy > 0 && input.jump && P.jumpT < JUMP_HOLD) { P.jumpT += dt; P.vy -= GRAV * 0.38 * dt; }
-      else P.vy -= GRAV * dt;
-      if (!input.jump && P.vy > 4) P.vy = 4 + (P.vy - 4) * Math.max(0, 1 - dt * 14);   // short hop on release
+      if (P.vy > 0 && input.jump && P.jumpT < JUMP_HOLD) { P.jumpT += dt; P.vy -= GRAV * 0.4 * dt; }
+      else { P.vy -= GRAV * dt; if (!P.grounded) P.jumpT = JUMP_HOLD; }
+      if (!input.jump && P.vy > JUMP_MIN && P.jumpT < JUMP_HOLD) P.vy = JUMP_MIN;   // let go early: a short hop, never a stub
       P.vy = Math.max(P.vy, -22);
+      if (P._base != null) P._apex = Math.max(P._apex || 0, P.y - P._base);
+      // scripted jumps for the harness: exact hold time in simulation seconds
+      if (P._auto && P.grounded && P._auto.pending) { P._auto.pending = false; P._base = P.y; P._apex = 0; input.jumpPressed = true; input.jump = true; P._auto.left = P._auto.hold; }
+      else if (P._auto && !P._auto.pending && P._auto.left != null) { P._auto.left -= dt; if (P._auto.left <= 0) { input.jump = false; P._auto.left = null; } }
       const wasGrounded = P.grounded, prevVy = P.vy;
       // ride movers
       if (P.onMover) { P.x += P.onMover.dx; P.y += P.onMover.dy; }
@@ -1410,7 +1428,7 @@ window.plethoraBit = {
     function showMenu() {
       state = "menu";
       el.hud.classList.add("bh-hidden"); el.ctl.classList.add("bh-hidden"); el.pause.classList.add("bh-hidden"); el.clear.classList.add("bh-hidden"); el.over.classList.add("bh-hidden");
-      el.menu.classList.remove("bh-hidden");
+      el.menu.classList.remove("bh-hidden"); hideCoach();
       clearInput(); refreshMenu();
       // a quiet showcase level behind the menu
       if (!L || curLevel !== 0) { const lv = genLevel(0); buildLevel(lv); if (!bloop) { bloop = buildBloop(); scene.add(bloop); } P.x = lv.startX; P.y = lv.startY; }
@@ -1457,6 +1475,9 @@ window.plethoraBit = {
       window.__bhRelease = () => { input.jump = false; };
       window.__bhWarp = (x) => { P.x = x; P.y = tileTop(Math.floor(x)) + 0.1; P.vy = 0; camInit = false; };
       window.__bhGrid = (x0, x1) => { const rows = []; for (let y = H - 1; y >= 0; y--) { let s = ""; for (let x = x0; x < x1; x++) s += ".#BQUP=^~.S|"[tileAt(x, y)] || "?"; rows.push(s); } return rows.join("\n"); };
+      window.__bhApex = () => { P._apex = Math.max(P._apex || 0, P.y - (P._base == null ? P.y : P._base)); return Math.round((P._apex || 0) * 100) / 100; };
+      window.__bhAutoJump = (hold) => { P._auto = { hold, pending: true, left: null }; };
+      window.__bhApexReset = () => { P._apex = 0; P._base = P.y; };
       window.__bhKill = () => die("test");
       window.__bhBossPos = () => world.boss ? { x: world.boss.x, y: world.boss.y } : null;
       window.__bhDrop = (x, y) => { P.x = x; P.y = y; P.vy = -1; P.vx = 0; camInit = false; };
