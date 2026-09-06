@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Bloop's Big Hop",
+  "description": "A chunky 3D platformer. Run, hop, stomp enemies, bonk blocks from below, ride moving platforms and reach the flag through four worlds of three levels each: Meadow, Dunes, Deep Cavern and Sky Keep. Every level is built from hand-designed chunks tuned by a difficulty number, so gaps widen, enemies thicken and platforms speed up as you go. Three stars per level, lives, checkpoints, power-ups, a boss at the end of each world, and a leaderboard for score and stars.",
+  "tags": ["3d", "platformer", "arcade", "levels", "retro", "mobile"],
+  "permissions": ["haptics", "backgroundMusic", "audio", "storage"],
+  "dependencies": ["three@0.164.1"],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "High Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "stars": {
+        "label": "Stars",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

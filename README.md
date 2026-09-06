@@ -49,6 +49,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
 | [`sled-surfers/`](sled-surfers)         | Penguin sledding runner in 3D — drag to steer, hop, ramp for air, four biomes, garage and upgrades. |
 | [`plunder-tide/`](plunder-tide)         | Top-down 3D pirate plunder — five regions, a fog-of-war chart, trading posts, coves, nests, convoys and flares. |
+| [`bloop-hop/`](bloop-hop)               | Chunky 3D platformer — four worlds, twelve levels, bosses, stars, power-ups, a difficulty curve baked into the chunks. |
 
 ### Rakshabandhan set
 
