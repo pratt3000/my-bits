@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Munch Maze",
+  "description": "The 1980 dot-eating maze chase, rebuilt at the arcade's 224x288 with the documented rules: the same maze and 244 dots, four ghosts that each hunt their own way, scatter and chase waves, per-level speed and fright tables, Cruise Elroy, the ghost-house counters, fruit and the tunnel. Swipe to steer. Clear the maze, level up, chase the high score.",
+  "tags": ["arcade", "maze", "retro", "pixel", "score", "mobile"],
+  "permissions": ["haptics", "audio", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "High Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "level": {
+        "label": "Level Reached",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}

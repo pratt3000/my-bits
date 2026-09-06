@@ -52,6 +52,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`bloop-hop/`](bloop-hop)               | Chunky 3D platformer — four worlds, twelve levels, bosses, stars, power-ups, a difficulty curve baked into the chunks. |
 | [`nullpoint/`](nullpoint)               | One-thumb arena shooter — move anywhere, but every shot goes through the dead centre and bounces back at you. |
 | [`barrel-heights/`](barrel-heights)     | The 1981 four-screen arcade climber at 224×256 — girders and barrels, conveyors and pies, elevators and springs, rivets. |
+| [`munch-maze/`](munch-maze)             | The 1980 maze chase at 224×288 — the classic maze, four ghosts with their own targeting, waves, speed tables, fruit. |
 
 ### Rakshabandhan set
 
