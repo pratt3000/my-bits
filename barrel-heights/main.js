@@ -1249,6 +1249,7 @@ window.plethoraBit = {
     window.__bhSpawn = (kind) => { if (kind === "barrel") spawnBarrel(false, false); if (kind === "blue") spawnBarrel(true, false); if (kind === "fire") spawnFire(M.x + 40, M.y, M.plat); if (kind === "spring") spawnSpring(); if (kind === "pie") spawnPie(stage.plats[10]); };
     window.__bhHammer = () => { M.hammer = 500; };
     window.__bhDie = () => die("debug");
+    window.__bhCues = () => { const goalY = stage.goal >= 0 ? stage.plats[stage.goal].y0 : -99; return { state, air: M.air, lad: !!M.onLad, my: M.y, plays, level, frames, lads: stage.ladders.filter((l) => !l.broken && Math.abs(l.yBot - M.y) <= 5).map((l) => [l.x, l.yBot, l.yTop, goalY]) }; };
     window.__bhStep = (n) => { for (let i = 0; i < n; i++) tick(); };
     window.__bhBarrelAt = (x, dir) => { const p = platAt(x, M.y, 6) || stage.plats[0]; barrels.push({ x, y: surf(p, x), dir, blue: false, wild: false, plat: p, mode: "roll", vy: 0, vx: 0, spin: 0, passed: false, speed: 1.25 + 0.08 * (diff() - 1) }); };
     window.__bhReset = () => { barrels = []; fires = []; state = "play"; stateT = 0; M.hammer = 0; resetPlayer(); };
