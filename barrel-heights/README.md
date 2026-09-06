@@ -11,9 +11,19 @@ this bit's own ape, lady and carpenter.
 
 ## How it plays
 
-- **Pad** (bottom left) walks and climbs: drag toward an arrow. **JUMP**
-  (bottom right, or a tap on the playfield) jumps. On a keyboard: arrows or
-  WASD, space or Z to jump, Enter to start.
+- **Pad** (bottom left) walks and climbs: drag toward an arrow. A diagonal
+  push walks and climbs at once, so hold up-right and the carpenter takes
+  the next ladder he passes. **JUMP** (bottom right, or a tap on the
+  playfield) jumps. A direction pressed in the first few frames of a jump, or
+  released just before it, still makes it a running jump. On a keyboard:
+  arrows or WASD, space or Z to jump, Enter to start.
+- The first three games open with a HOW TO PLAY card, and on level 1 a
+  JUMP! prompt flashes over the carpenter when a barrel is about to reach
+  him, until three barrels have been hopped.
+- A running jump toward a barrel is far more forgiving than a standing hop:
+  about half a second of leeway against a quarter. Climbing a few rungs up
+  any ladder, broken ones included, puts you out of reach of barrels on the
+  girder below.
 - Jump over a barrel, fireball, spring or pie for **100** (300 for two in one
   jump, 500 for three). Land a fall longer than your own height and you die.
 - **Hammer**: jump into it to grab it. For nine seconds it smashes anything it
@@ -38,9 +48,13 @@ After the rivets the level goes up and all four screens come round again.
 ## Difficulty
 
 An internal difficulty from 1 to 5 rises with the level and with time spent
-on a screen (one step every 38 seconds). It drives barrel speed and throw
-rate, wild-barrel odds, fireball speed and count, belt speed, pie rate,
-elevator speed, and spring rate and speed.
+on a screen (one step every 45 seconds), and level 1 never goes past 3. It
+drives barrel speed (1.1 px per frame at 1, up to 1.6 at 5) and throw rate
+(one every 3.2 s at 1, down to 1.5 s at 5), how often barrels take a ladder
+toward you, wild-barrel odds (none on level 1 until difficulty 3), fireball
+speed and count (one fireball on level 1, lit by the fourth barrel rather
+than the first), belt speed, pie rate, elevator speed, and spring rate and
+speed.
 
 ## Records
 
