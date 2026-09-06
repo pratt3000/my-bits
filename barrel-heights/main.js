@@ -556,7 +556,7 @@ window.plethoraBit = {
       fall: ["A DROP OF MORE THAN", "YOUR HEIGHT IS FATAL"],
       fire: ["FIREBALLS CLIMB LADDERS.", "THE HAMMER SMASHES THEM"],
       time: ["THE BONUS IS A CLOCK.", "KEEP CLIMBING"],
-      ape: ["STAY CLEAR OF THE APE", "ON THE TOP GIRDER"],
+      ape: ["THE APE KILLS. CLIMB THE", "SHORT LADDERS TO THE LADY"],
       pie: ["BELTS REVERSE. PIES", "DROP OFF THE ENDS"],
       spring: ["CLIMB THE LAST LADDER", "RIGHT AFTER A SPRING FALLS"],
       elevator: ["STEP OFF A CAR BEFORE", "IT REACHES THE END"]
@@ -978,11 +978,15 @@ window.plethoraBit = {
         if (drumLit || stage.kind === "conveyors") spr(Math.floor(frames / 6) % 2 ? "flameA" : "flameB", stage.drum.x, stage.drum.y - 36);
       }
       for (const l of stage.ladders) drawLadder(l);
-      if (plays <= 1 && state === "play" && !M.onLad && !M.air && frames % 16 < 12) {
+      // ladder cues: every whole ladder on the first game, and the ladders to the lady on every level-1 game
+      if (state === "play" && !M.onLad && !M.air && frames % 16 < 12) {
+        const goalY = stage.goal >= 0 ? stage.plats[stage.goal].y0 : -99;
         for (const l of stage.ladders) {
           if (l.broken || Math.abs(l.yBot - M.y) > 5) continue;
-          const ax = l.x, ay = l.yBot - 20; fb.fillStyle = "#1ce8ff";
-          fb.fillRect(ax - 1, ay, 2, 6); fb.fillRect(ax - 2, ay + 1, 4, 1); fb.fillRect(ax - 3, ay + 2, 6, 1);
+          const toLady = Math.abs(l.yTop - goalY) < 2;
+          if (!(plays <= 1 || (level === 1 && toLady))) continue;
+          const ax = l.x, ay = l.yBot - 19; fb.fillStyle = "#f8d820";
+          fb.fillRect(ax - 1, ay + 1, 2, 7); fb.fillRect(ax - 2, ay + 1, 4, 1); fb.fillRect(ax - 3, ay + 2, 6, 1); fb.fillRect(ax - 4, ay + 3, 8, 1);
         }
       }
       for (const p of stage.plats) { if (p.rivet) continue; drawGirder(p, tilt); }
@@ -1098,7 +1102,7 @@ window.plethoraBit = {
         ["ladder", "A BROKEN LADDER IS", "A SAFE PERCH"],
         ["hammer", "JUMP INTO A HAMMER", "TO SMASH BARRELS"],
         ["fall", "NEVER WALK OFF THE", "END OF A GIRDER"],
-        ["lady", "REACH THE LADY BEFORE", "THE BONUS RUNS OUT"]];
+        ["lady", "CLIMB THE SHORT LADDERS", "UNDER THE LADY TO WIN"]];
       rows.forEach((r, i) => {
         const y = 34 + i * 34;
         if (r[0] === "walk") { spr("walk", 14, y + 2, false); }

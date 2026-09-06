@@ -21,8 +21,13 @@ this bit's own ape, lady and carpenter.
   HOW TO PLAY card; on level 1 a JUMP! prompt flashes over the carpenter
   when a barrel is about to reach him, until three barrels have been
   hopped; on the first game a cyan arrow marks each whole ladder leading up
-  from the girder he is on; and each of the first eight deaths is followed
-  by a one-line tip naming what got you and how to avoid it.
+  from the girder he is on, and on every level-1 game the ladders up to the
+  lady blink once you are on the top girder; and each of the first eight
+  deaths is followed by a one-line tip naming what got you and how to avoid
+  it.
+- The ape is never the goal. On the girder, conveyor and elevator screens
+  the stage ends when you climb onto the lady's perch by its short ladders.
+  On the rivet screen it ends when the last rivet is pulled.
 - A running jump toward a barrel is far more forgiving than a standing hop:
   about half a second of leeway against a quarter. Climbing a few rungs up
   any ladder, broken ones included, puts you out of reach of barrels on the
