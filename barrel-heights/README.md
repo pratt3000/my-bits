@@ -17,9 +17,12 @@ this bit's own ape, lady and carpenter.
   playfield) jumps. A direction pressed in the first few frames of a jump, or
   released just before it, still makes it a running jump. On a keyboard:
   arrows or WASD, space or Z to jump, Enter to start.
-- The first three games open with a HOW TO PLAY card, and on level 1 a
-  JUMP! prompt flashes over the carpenter when a barrel is about to reach
-  him, until three barrels have been hopped.
+- Guidance, without softening the game: the first three games open with a
+  HOW TO PLAY card; on level 1 a JUMP! prompt flashes over the carpenter
+  when a barrel is about to reach him, until three barrels have been
+  hopped; on the first game a cyan arrow marks each whole ladder leading up
+  from the girder he is on; and each of the first eight deaths is followed
+  by a one-line tip naming what got you and how to avoid it.
 - A running jump toward a barrel is far more forgiving than a standing hop:
   about half a second of leeway against a quarter. Climbing a few rungs up
   any ladder, broken ones included, puts you out of reach of barrels on the
@@ -47,14 +50,17 @@ After the rivets the level goes up and all four screens come round again.
 
 ## Difficulty
 
-An internal difficulty from 1 to 5 rises with the level and with time spent
-on a screen (one step every 45 seconds), and level 1 never goes past 3. It
-drives barrel speed (1.1 px per frame at 1, up to 1.6 at 5) and throw rate
-(one every 3.2 s at 1, down to 1.5 s at 5), how often barrels take a ladder
-toward you, wild-barrel odds (none on level 1 until difficulty 3), fireball
-speed and count (one fireball on level 1, lit by the fourth barrel rather
-than the first), belt speed, pie rate, elevator speed, and spring rate and
-speed.
+As in the arcade, an internal difficulty from 1 to 5 starts at the level
+number and rises one step every 33 seconds on a screen. It drives barrel
+speed (1.25 px per frame at 1, up to 1.57 at 5, against the carpenter's 1),
+throw rate (one every 2.7 s at 1, down to 1.2 s at 5), how often a barrel
+takes a ladder toward you (30 % rising to 50 % when you are below it),
+wild-barrel odds from difficulty 2, fireball speed and count (the first
+barrel is always blue and lights the drum), belt speed, pie rate, elevator
+speed, and spring rate and speed. The jump arc and hitboxes were tuned so a
+standing hop over a barrel has a quarter-second window and a running jump
+toward one about half a second, measured in the harness; the arcade's
+timing is in that range and a touch pad needs no less.
 
 ## Records
 

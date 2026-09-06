@@ -432,7 +432,7 @@ window.plethoraBit = {
     let inp = { left: false, right: false, up: false, down: false, jump: false, jumpBuf: 0 };
 
     function diff() {   // internal difficulty: 1..5, ramps with time on the stage and with level
-      return clamp(level + Math.floor(stageFrames / (60 * 45)), 1, level === 1 ? 3 : 5);
+      return clamp(level + Math.floor(stageFrames / (60 * 33)), 1, 5);
     }
     function addScore(n, x, y) {
       score += n; if (x != null) pops.push({ x, y, text: String(n), t: 0 });
@@ -507,19 +507,19 @@ window.plethoraBit = {
     // ---- hazards ----------------------------------------------------------------
     function spawnBarrel(blue, wild) {
       const d = diff();
-      const b = { x: kong.x + 44, y: kong.y, dir: 1, blue: !!blue, wild: !!wild, plat: null, mode: wild ? "fall" : "roll", vy: 0, vx: 0, spin: 0, passed: false, speed: 1.1 + 0.125 * (d - 1) };
+      const b = { x: kong.x + 44, y: kong.y, dir: 1, blue: !!blue, wild: !!wild, plat: null, mode: wild ? "fall" : "roll", vy: 0, vx: 0, spin: 0, passed: false, speed: 1.25 + 0.08 * (d - 1) };
       if (wild) { b.x = kong.x + 26; b.vy = 0; b.vx = 0.55 * (M.x > b.x ? 1 : -1); b.mode = "wild"; }
       else b.plat = stage.plats[6];
       barrels.push(b); barrelsThrown++;
     }
     function spawnFire(x, y, plat) {
       const d = diff();
-      fires.push({ x, y, plat: plat || platAt(x, y, 4) || stage.plats[0], dir: chance(0.5) ? 1 : -1, mode: "roam", speed: 0.34 + 0.07 * (d - 1), t: 0, turnT: rnd(40, 160), ladder: null, ladDir: 0, frame: 0, born: 0 });
+      fires.push({ x, y, plat: plat || platAt(x, y, 4) || stage.plats[0], dir: chance(0.5) ? 1 : -1, mode: "roam", speed: 0.4 + 0.07 * (d - 1), t: 0, turnT: rnd(40, 160), ladder: null, ladDir: 0, frame: 0, born: 0 });
       sfx.fire();
     }
     function maxFires() {
       const d = diff();
-      if (stage.kind === "girders") return level === 1 ? 1 : Math.min(4, (d >= 3 ? 2 : 1) + (level >= 3 ? 1 : 0));
+      if (stage.kind === "girders") return Math.min(4, (d >= 3 ? 2 : 1) + (level >= 3 ? 1 : 0));
       if (stage.kind === "conveyors") return Math.min(4, 1 + Math.floor((level + 1) / 2));
       return 4;
     }
@@ -551,8 +551,20 @@ window.plethoraBit = {
       if (Math.sign(dx) !== Math.sign(prevDx) && prevDx !== 0 && h.y > M.y && h.y - M.y < 28) { h.passed = true; return true; }
       return false;
     }
+    const TIPS = {
+      barrel: ["JUMP TOWARD A BARREL,", "NOT STRAIGHT UP"],
+      fall: ["A DROP OF MORE THAN", "YOUR HEIGHT IS FATAL"],
+      fire: ["FIREBALLS CLIMB LADDERS.", "THE HAMMER SMASHES THEM"],
+      time: ["THE BONUS IS A CLOCK.", "KEEP CLIMBING"],
+      ape: ["STAY CLEAR OF THE APE", "ON THE TOP GIRDER"],
+      pie: ["BELTS REVERSE. PIES", "DROP OFF THE ENDS"],
+      spring: ["CLIMB THE LAST LADDER", "RIGHT AFTER A SPRING FALLS"],
+      elevator: ["STEP OFF A CAR BEFORE", "IT REACHES THE END"]
+    };
+    let lastCause = "", tipsShown = store.get("tips", 0);
     function die(cause) {
       if (state !== "play") return;
+      lastCause = cause; if (TIPS[cause] && tipsShown < 8) { tipsShown++; store.set("tips", tipsShown); }
       state = "dying"; stateT = 0; M.dead = 0; M.hammer = 0; sfx.death(); haptic("heavy"); shake = 6;
       try { ctx.platform.fail({ cause, score, level, stage: STAGE_M[stageIdx] + "m" }); } catch (_) {}
     }
@@ -665,7 +677,7 @@ window.plethoraBit = {
     function updateKong() {
       kong.t++;
       if (stage.kind === "girders") {
-        const d = diff(), interval = Math.max(70, 190 - 25 * (d - 1));
+        const d = diff(), interval = Math.max(70, 160 - 20 * (d - 1));
         if (kong.mode === "beat") {
           kong.frame = Math.floor(kong.t / 16) % 2;
           if (--throwT <= 0) { kong.mode = "grab"; kong.t = 0; }
@@ -673,8 +685,8 @@ window.plethoraBit = {
           if (kong.t > 22) { kong.mode = "throw"; kong.t = 0; }
         } else if (kong.mode === "throw") {
           if (kong.t === 6) {
-            const blue = barrelsThrown === (level === 1 ? 3 : 0) || (barrelsThrown > 3 && chance(0.12));
-            const wild = !blue && d >= (level === 1 ? 3 : 2) && chance(0.1 + 0.03 * d);
+            const blue = barrelsThrown === 0 || chance(0.12);
+            const wild = !blue && d >= 2 && chance(0.1 + 0.03 * d);
             spawnBarrel(blue, wild);
           }
           if (kong.t > 20) { kong.mode = "beat"; kong.t = 0; throwT = interval * rnd(0.85, 1.15); }
@@ -707,7 +719,7 @@ window.plethoraBit = {
               const before = b.x - b.dir * b.speed, after = b.x;
               if ((before - l.x) * (after - l.x) <= 0) {
                 const below = M.y > b.y + 4 && Math.abs(M.x - l.x) < 60, d = diff();
-                if (chance(below ? 0.18 + 0.07 * d : 0.06 + 0.03 * d)) { b.mode = "ladder"; b.x = l.x; b.lad = l; }
+                if (chance(below ? 0.3 + 0.05 * (d - 1) : 0.12)) { b.mode = "ladder"; b.x = l.x; b.lad = l; }
               }
             }
           }
@@ -836,11 +848,11 @@ window.plethoraBit = {
     // ---- state machine ----------------------------------------------------------------
     function startGame() {
       level = 1; stageIdx = 0; score = 0; lives = 3; nextLife = 7000; kills = 0; maxStage = 0;
-      loadStage(); coachJumps = 0; plays++; store.set("plays", plays);
+      loadStage(); coachJumps = 0; lastCause = ""; plays++; store.set("plays", plays);
       if (plays <= 3) { state = "howto"; stateT = 0; } else { state = "intro"; stateT = 0; sfx.start(); }
       try { ctx.platform.setScore(0); } catch (_) {}
     }
-    function beginStage() { loadStage(); state = "ready"; stateT = 0; sfx.start(); }
+    function beginStage() { loadStage(); lastCause = ""; state = "ready"; stateT = 0; sfx.start(); }
     function nextStage() {
       stageIdx++; if (stageIdx >= 4) { stageIdx = 0; level++; }
       maxStage = Math.max(maxStage, (level - 1) * 4 + stageIdx);
@@ -966,6 +978,13 @@ window.plethoraBit = {
         if (drumLit || stage.kind === "conveyors") spr(Math.floor(frames / 6) % 2 ? "flameA" : "flameB", stage.drum.x, stage.drum.y - 36);
       }
       for (const l of stage.ladders) drawLadder(l);
+      if (plays <= 1 && state === "play" && !M.onLad && !M.air && frames % 16 < 12) {
+        for (const l of stage.ladders) {
+          if (l.broken || Math.abs(l.yBot - M.y) > 5) continue;
+          const ax = l.x, ay = l.yBot - 20; fb.fillStyle = "#1ce8ff";
+          fb.fillRect(ax - 1, ay, 2, 6); fb.fillRect(ax - 2, ay + 1, 4, 1); fb.fillRect(ax - 3, ay + 2, 6, 1);
+        }
+      }
       for (const p of stage.plats) { if (p.rivet) continue; drawGirder(p, tilt); }
       for (const rv of rivets) if (!rv.gone) spr("rivet", rv.x, rv.y);
       for (const e of stage.elevators) { fb.fillStyle = GIRDER; fb.fillRect(e.x, Math.round(e.y), 16, 6); fb.fillStyle = GDOT; fb.fillRect(e.x + 2, Math.round(e.y) + 2, 2, 2); fb.fillRect(e.x + 12, Math.round(e.y) + 2, 2, 2); }
@@ -1100,6 +1119,10 @@ window.plethoraBit = {
         const tilt = state === "intro" ? clamp(Math.floor((stateT - 10) / 30) / 4, 0, 1) : 1;
         drawStage(tilt); drawHUD();
         if (state === "ready" && Math.floor(stateT / 8) % 2) textC("READY", 112, 130, "#f8d820");
+        if ((state === "dead" || (state === "ready" && lastCause)) && TIPS[lastCause] && tipsShown <= 8) {
+          fb.fillStyle = "#000"; fb.fillRect(8, 150, 208, 34); fb.strokeStyle = "#1ce8ff"; fb.strokeRect(8.5, 150.5, 207, 33);
+          textC("TIP", 112, 153, "#1ce8ff"); textC(TIPS[lastCause][0], 112, 163, "#ffffff"); textC(TIPS[lastCause][1], 112, 173, "#ffffff");
+        }
         if (state === "gameover") drawGameOver();
       }
     }
@@ -1223,7 +1246,7 @@ window.plethoraBit = {
     window.__bhHammer = () => { M.hammer = 500; };
     window.__bhDie = () => die("debug");
     window.__bhStep = (n) => { for (let i = 0; i < n; i++) tick(); };
-    window.__bhBarrelAt = (x, dir) => { const p = platAt(x, M.y, 6) || stage.plats[0]; barrels.push({ x, y: surf(p, x), dir, blue: false, wild: false, plat: p, mode: "roll", vy: 0, vx: 0, spin: 0, passed: false, speed: 1.1 + 0.125 * (diff() - 1) }); };
+    window.__bhBarrelAt = (x, dir) => { const p = platAt(x, M.y, 6) || stage.plats[0]; barrels.push({ x, y: surf(p, x), dir, blue: false, wild: false, plat: p, mode: "roll", vy: 0, vx: 0, spin: 0, passed: false, speed: 1.25 + 0.08 * (diff() - 1) }); };
     window.__bhReset = () => { barrels = []; fires = []; state = "play"; stateT = 0; M.hammer = 0; resetPlayer(); };
     window.__bhClear = () => { state = "clear"; stateT = 0; clearPhase = 0; heart = 0; };
 
