@@ -55,60 +55,64 @@ window.plethoraBit = {
     function rng(seed) { let a = seed >>> 0; return () => { a += 0x6D2B79F5; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
     const rand = rng(20260907);
     const rr = (a, b) => a + rand() * (b - a);
-    const polys = [], ledges = [], hazards = [], feathers = [];
-    const N = 34;   // ledges above the ground
-    // ground
-    ledges.push({ x0: 6, x1: LW - 6, y: 0, w: LW - 12 });
-    polys.push([[-10, 0], [LW + 10, 0], [LW + 10, 60], [-10, 60]]);
-    // side walls first: jagged bands that narrow the channel as you go up
-    const EST_TOP = -(N * 54 + 60), knots = [];
-    for (let y = 60; y >= EST_TOP - 200; y -= 34) {
-      const t = clamp((0 - y) / (0 - EST_TOP), 0, 1);
-      knots.push({ y: y + rr(-6, 6), l: lerp(4, 20, t) + rr(-3, 9), r: lerp(4, 20, t) + rr(-3, 9) });
+    const ledges = [], hazards = [], feathers = [];
+    // ---- the pixel mask is built as the level is generated, so the jump simulator sees real rock ----
+    const Y_TOP = -2700, LH = 60 - Y_TOP + 1;
+    const mask = new Uint8Array(LW * LH);   // 0 sky, 1 rock, 2 grass
+    const mi = (x, y) => (y - Y_TOP) * LW + x;
+    function rasterPoly(p, v) {
+      let y0 = Infinity, y1 = -Infinity; for (const [, y] of p) { y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      for (let y = Math.max(Y_TOP, Math.floor(y0)); y <= Math.min(60, Math.ceil(y1)); y++) {
+        const sy = y + 0.5, xs = [];
+        for (let i = 0; i < p.length; i++) {
+          const [ax, ay] = p[i], [bx, by] = p[(i + 1) % p.length];
+          if ((ay <= sy && by > sy) || (by <= sy && ay > sy)) xs.push(ax + (sy - ay) * (bx - ax) / (by - ay));
+        }
+        xs.sort((a, b) => a - b);
+        for (let k = 0; k + 1 < xs.length; k += 2) for (let x = Math.max(0, Math.round(xs[k])); x < Math.min(LW, Math.round(xs[k + 1])); x++) mask[mi(x, y)] = v;
+      }
     }
-    polys.push([[-20, 60], ...knots.map((k) => [k.l, k.y]), [-20, EST_TOP - 240]]);
-    polys.push([[LW + 20, 60], ...knots.map((k) => [LW - k.r, k.y]), [LW + 20, EST_TOP - 240]]);
-    // per-row wall insets for fast queries
-    const WY0 = EST_TOP - 240, wallL = new Float32Array(60 - WY0 + 1), wallR = new Float32Array(60 - WY0 + 1);
-    for (let y = WY0; y <= 60; y++) {
-      let a = knots[0], b = knots[knots.length - 1];
-      for (let i = 0; i + 1 < knots.length; i++) if (knots[i].y >= y && knots[i + 1].y <= y) { a = knots[i]; b = knots[i + 1]; break; }
-      const f = a.y === b.y ? 0 : (a.y - y) / (a.y - b.y);
-      wallL[y - WY0] = lerp(a.l, b.l, f); wallR[y - WY0] = LW - lerp(a.r, b.r, f);
+    const fill = (p) => rasterPoly(p, 1), carve = (p) => rasterPoly(p, 0);
+    const fillRect = (x0, y0, x1, y1) => fill([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+    function circlePoly(cx, cy, r) { const p = []; for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; p.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } return p; }
+    function carveSeg(x0, y0, x1, y1, w) {
+      const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1, nx = -dy / len * w / 2, ny = dx / len * w / 2;
+      carve([[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]]);
+      carve(circlePoly(x0, y0, w / 2)); carve(circlePoly(x1, y1, w / 2));
     }
-    function channel(y) {   // widest wall intrusion within 40 px of y
-      let l = 0, r = LW; for (let yy = y - 40; yy <= y + 40; yy += 4) { const i = clamp(Math.round(yy) - WY0, 0, wallL.length - 1); l = Math.max(l, wallL[i]); r = Math.min(r, wallR[i]); }
-      return { l: l + 3, r: r - 3 };
+    const solidM = (x, y) => (x < 0 || x >= LW) ? true : (y < Y_TOP || y > 60) ? (y > 60) : mask[mi(x, y)] > 0;
+    function freeSpan(y, nearX) {   // the free run of a row containing nearX (or the widest run)
+      let best = null, near = null, s = -1;
+      for (let x = 0; x <= LW; x++) {
+        const free = x < LW && !solidM(x, y);
+        if (free && s < 0) s = x;
+        if (!free && s >= 0) { const run = { l: s, r: x - 1 }; if (nearX != null && nearX >= s && nearX <= x - 1) near = run; if (!best || run.r - run.l > best.r - best.l) best = run; s = -1; }
+      }
+      if (near && near.r - near.l >= 40) return near;
+      return best || { l: 0, r: LW - 1 };
     }
-    const islands = [];   // { poly, bx0, bx1, by0, by1 }
-    function bboxOf(poly) { let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity; for (const [x, y] of poly) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); } return { poly, bx0, bx1, by0, by1 }; }
-    function addIsland(poly) { const it = bboxOf(poly); islands.push(it); polys.push(poly); return it; }
     function inPoly(p, x, y) {
       let inside = false;
-      for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
-        const [xi, yi] = p[i], [xj, yj] = p[j];
-        if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
-      }
+      for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside; }
       return inside;
     }
+    function bboxOf(poly) { let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity; for (const [x, y] of poly) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); } return { poly, bx0, bx1, by0, by1 }; }
     function blocked(x, y, extra) {
       if (y >= 0) return true;
-      const i = clamp(Math.round(y) - WY0, 0, wallL.length - 1);
-      if (x < wallL[i] || x > wallR[i]) return true;
-      for (let k = Math.max(0, islands.length - 5); k < islands.length; k++) { const it = islands[k]; if (x >= it.bx0 && x <= it.bx1 && y >= it.by0 && y <= it.by1 && inPoly(it.poly, x, y)) return true; }
-      if (extra && x >= extra.bx0 && x <= extra.bx1 && y >= extra.by0 && y <= extra.by1 && inPoly(extra.poly, x, y)) return true;
-      return false;
+      if (solidM(Math.floor(x), Math.floor(y))) return true;
+      return !!(extra && x >= extra.bx0 && x <= extra.bx1 && y >= extra.by0 && y <= extra.by1 && inPoly(extra.poly, x, y));
     }
-    const bodyBlocked = (x, y, extra) => blocked(x + R, y, extra) || blocked(x - R, y, extra) || blocked(x, y - R, extra) || blocked(x, y + R, extra);
+    const bodyBlocked = (x, y, extra) => blocked(x + R, y, extra) || blocked(x - R, y, extra) || blocked(x, y - R, extra) || blocked(x, y + R, extra) || blocked(x + 3.2, y + 3.2, extra) || blocked(x - 3.2, y + 3.2, extra) || blocked(x + 3.2, y - 3.2, extra) || blocked(x - 3.2, y - 3.2, extra);
     // simulate jumps from (px,py) and report whether one lands on ledge B without clipping rock
-    function reachable(px, py, B, extra) {
-      const dirs = [-1, 0, 1], charges = [0.35, 0.55, 0.75, 1], flapPlans = [[], [0.3], [0.5], [0.3, 0.6], [0.45, 0.8]];
+    function reachable(px, py, B, extra, bounces) {
+      const dirs = [-1, -0.5, 0, 0.5, 1], charges = [0.35, 0.55, 0.75, 1], flapPlans = [[], [0.3], [0.5], [0.3, 0.6], [0.45, 0.8], [0.25, 0.5, 0.75]];
       const cy = B.y - R;
       for (const d of dirs) for (const c of charges) for (const fp of flapPlans) {
         let { vx, vy } = launch(d, c); let x = px, y = py - 1, t = 0, fi = 0, apexY = py, apexX = px, ok = false;
-        for (let i = 0; i < 150; i++) {
+        const sd = Math.sign(d) || (fp.length ? (B.x0 + B.w / 2 > px ? 1 : -1) : 0);
+        for (let i = 0; i < 160; i++) {
           const dt = 1 / 60; t += dt;
-          if (fi < fp.length && t >= fp[fi]) { vy = Math.min(vy, 40) - FLAP_VY; vx = flapVx(vx, d); fi++; }
+          if (fi < fp.length && t >= fp[fi]) { vy = Math.min(vy, 40) - FLAP_VY; vx = flapVx(vx, sd); fi++; }
           const py0 = y; x += vx * dt; y += vy * dt; vy += GRAV * dt;
           if (y < apexY) { apexY = y; apexX = x; }
           if (x < R || x > LW - R) break;
@@ -118,7 +122,7 @@ window.plethoraBit = {
         }
         if (ok) return { apexX, apexY };
       }
-      return null;
+      void bounces; return null;
     }
     function ledgeReachable(A, B, extra) {
       const pts = [A.x0 + A.w * 0.25, A.x0 + A.w * 0.5, A.x0 + A.w * 0.75];
@@ -126,77 +130,182 @@ window.plethoraBit = {
       for (const px of pts) { const r = reachable(px, A.y - R, B, extra); if (r) { ok++; apex = apex || r; } }
       return ok >= 2 ? apex : null;
     }
-    function islandPoly(x0, x1, y, depth, ch) {
+    function islandPoly(x0, x1, y, depth, span) {
       const w = x1 - x0, cx = (x0 + x1) / 2, kind = rand();
-      if (x0 - ch.l < 10) return [[-20, y], [x1, y], [x1 + 4, y + 6], [x1 - 3, y + depth], [-20, y + depth + 12]];
-      if (ch.r - x1 < 10) return [[x0, y], [LW + 20, y], [LW + 20, y + depth + 12], [x0 + 3, y + depth], [x0 - 4, y + 6]];
-      if (kind < 0.45) { const b = Math.max(6, w * rr(0.3, 0.55)); return [[x0, y], [x1, y], [cx + b / 2, y + depth], [cx - b / 2, y + depth]]; }
-      if (kind < 0.75) return [[x0, y], [x1, y], [cx + rr(-4, 4), y + depth * 1.2]];
+      if (span && x0 - span.l < 10) return [[-20, y], [x1, y], [x1 + 4, y + 6], [x1 - 3, y + depth], [-20, y + depth + 12]];
+      if (span && span.r - x1 < 10) return [[x0, y], [LW + 20, y], [LW + 20, y + depth + 12], [x0 + 3, y + depth], [x0 - 4, y + 6]];
+      if (kind < 0.4) { const b = Math.max(6, w * rr(0.3, 0.55)); return [[x0, y], [x1, y], [cx + b / 2, y + depth], [cx - b / 2, y + depth]]; }
+      if (kind < 0.7) return [[x0, y], [x1, y], [cx + rr(-4, 4), y + depth * 1.2]];
       return [[x0, y], [x1, y], [x1 + 4, y + 6], [x1 - 2, y + depth], [x0 + 2, y + depth], [x0 - 4, y + 6]];
     }
-    let prev = ledges[0], topY = 0;
-    function place(i, w, dyBase, summitFlag) {
-      const t = i / (N - 1);
-      let dy = dyBase, placed = null, tries = 0;
-      const minDx = lerp(6, 34, t);
-      while (!placed && tries++ < 70) {
-        if (tries % 20 === 0) dy -= 6;
-        const y = Math.round(prev.y - dy), ch = channel(y);
-        if (ch.r - ch.l < w + 4) { dy -= 4; continue; }
-        const cx = summitFlag ? LW / 2 + rr(-10, 10) : rr(ch.l + w / 2, ch.r - w / 2);
-        const pc = (prev.x0 + prev.x1) / 2;
-        if (!summitFlag && Math.abs(cx - pc) < minDx && rand() < 0.8) continue;
-        const B = { x0: Math.round(cx - w / 2), x1: Math.round(cx + w / 2), y, w, summit: !!summitFlag };
-        const depth = Math.round(lerp(12, 24, rand()) + w * 0.3);
-        const poly = summitFlag ? [[B.x0, y], [B.x1, y], [B.x1 + 6, y + 10], [B.x1 - 6, y + 34], [B.x0 + 6, y + 34], [B.x0 - 6, y + 10]] : islandPoly(B.x0, B.x1, y, depth, ch);
-        const apex = ledgeReachable(prev, B, bboxOf(poly));
-        if (apex) { placed = B; B.apex = apex; addIsland(poly); }
-      }
-      if (!placed) {   // fall back to a small hop beside the last ledge
-        const y = Math.round(prev.y - 30), ch = channel(y), cx = clamp((prev.x0 + prev.x1) / 2 + (rand() < 0.5 ? -22 : 22), ch.l + w / 2, ch.r - w / 2);
-        placed = { x0: Math.round(cx - w / 2), x1: Math.round(cx + w / 2), y, w, apex: null, summit: !!summitFlag };
-        addIsland(islandPoly(placed.x0, placed.x1, y, 14, ch));
+    // place one ledge reachable from `from`, within a horizontal range, at roughly dy above; fills its island at once
+    function placeLedge(from, w, dy, opts) {
+      opts = opts || {};
+      let placed = null, tries = 0;
+      while (!placed && tries++ < 60) {
+        if (tries % 15 === 0) dy -= 6;
+        const y = Math.round(from.y - dy);
+        const span = opts.span ? opts.span(y) : freeSpan(y, (from.x0 + from.x1) / 2);
+        if (span.r - span.l < w + 6) { dy -= 4; continue; }
+        const lo = span.l + 3 + w / 2, hi = span.r - 3 - w / 2;
+        const cx = opts.cx != null ? clamp(opts.cx, lo, hi) : rr(lo, hi);
+        const pc = (from.x0 + from.x1) / 2;
+        if (opts.minDx && Math.abs(cx - pc) < opts.minDx && rand() < 0.8) continue;
+        const B = { x0: Math.round(cx - w / 2), x1: Math.round(cx + w / 2), y, w };
+        const poly = opts.poly ? opts.poly(B, span) : islandPoly(B.x0, B.x1, y, Math.round(lerp(12, 24, rand()) + w * 0.3), span);
+        const apex = ledgeReachable(from, B, bboxOf(poly));
+        if (apex) { placed = B; B.apex = apex; fill(poly); ledges.push(B); }
       }
       return placed;
     }
-    for (let i = 0; i < N; i++) {
-      const t = i / (N - 1);
-      const w = Math.max(11, Math.round(lerp(42, 13, Math.pow(t, 0.85)) + rr(-3, 3)));
-      const placed = place(i, w, lerp(38, 66, t) + rr(-6, 6), false);
-      ledges.push(placed);
-      if (placed.apex && rand() < 0.7) feathers.push({ x: clamp(Math.round(placed.apex.apexX), 8, LW - 8), y: Math.round(placed.apex.apexY) - 4, taken: false, t: rand() * 6 });
-      if (i >= 7 && rand() < lerp(0.15, 0.6, t)) {
-        const hy = Math.round((prev.y + placed.y) / 2 + rr(-8, 8));
-        const ch = channel(hy), span = Math.max(16, Math.min(rr(26, 60), ch.r - ch.l - 16)), hx = clamp(rr(ch.l + 8, ch.r - 8), ch.l + 8 + span / 2, ch.r - 8 - span / 2);
-        hazards.push({ x: hx, y: hy, x0: hx - span / 2, x1: hx + span / 2, sp: lerp(18, 46, t) * (rand() < 0.5 ? -1 : 1), t: rand() * 6 });
-      }
-      prev = placed; topY = placed.y;
+    function addFeather(x, y) { feathers.push({ x: clamp(Math.round(x), 6, LW - 6), y: Math.round(y), taken: false, t: rand() * 6 }); }
+    function addHazard(y, t) {
+      const span = freeSpan(y), width = Math.max(16, Math.min(rr(26, 60), span.r - span.l - 16));
+      if (span.r - span.l < 40) return;
+      const hx = clamp(rr(span.l + 8, span.r - 8), span.l + 8 + width / 2, span.r - 8 - width / 2);
+      hazards.push({ x: hx, y, x0: hx - width / 2, x1: hx + width / 2, sp: lerp(18, 48, t) * (rand() < 0.5 ? -1 : 1), t: rand() * 6 });
     }
-    const summit = place(N - 1, 60, 44, true);
-    ledges.push(summit); topY = summit.y;
+    // ---- section builders. Each starts from the ledge `from` and returns the topmost ledge ----------
+    const ledgeW = (t) => Math.max(11, Math.round(lerp(42, 13, Math.pow(t, 0.85)) + rr(-3, 3)));
+    function walls(yBot, yTop, inset, jag) {
+      carve([[-20, yBot - 30], [LW + 20, yBot - 30], [LW + 20, yTop - 40], [-20, yTop - 40]]);
+      const L = [], Rr = [];
+      for (let y = yBot - 30; y >= yTop - 40; y -= 30) { L.push([inset + rr(-3, jag), y + rr(-5, 5)]); Rr.push([LW - inset - rr(-3, jag), y + rr(-5, 5)]); }
+      fill([[-20, yBot - 30], ...L, [-20, yTop - 40]]); fill([[LW + 20, yBot - 30], ...Rr, [LW + 20, yTop - 40]]);
+    }
+    function cavern(from, h, t, opts) {
+      opts = opts || {};
+      const yBot = from.y, yTop = yBot - h;
+      walls(yBot, yTop, opts.inset != null ? opts.inset : lerp(6, 22, t), opts.jag || 10);
+      let prev = from; const step = opts.step || lerp(44, 62, t);
+      for (let y = yBot - step; y > yTop; y -= step) {
+        const w = opts.wide ? Math.round(rr(36, 64)) : ledgeW(t);
+        const L = placeLedge(prev, w, prev.y - y, { minDx: lerp(6, 34, t) });
+        if (!L) break;
+        if (L.apex && rand() < 0.65) addFeather(L.apex.apexX, L.apex.apexY - 4);
+        if (opts.hazards && rand() < lerp(0.2, 0.6, t)) addHazard(Math.round((prev.y + L.y) / 2 + rr(-8, 8)), t);
+        prev = L;
+      }
+      return prev;
+    }
+    function tunnel(from, h, t) {
+      const yBot = from.y, yTop = yBot - h, w = lerp(52, 36, t);
+      const blockBottom = Math.min(yBot - 44, from.apex ? from.apex.apexY - 12 : yBot - 44);
+      fillRect(-20, yTop - 40, LW + 20, blockBottom);
+      carve(circlePoly((from.x0 + from.x1) / 2, from.y - 14, 30));   // the entry chamber
+      let px = (from.x0 + from.x1) / 2, py = from.y - 14, prev = from, side = px < LW / 2 ? 1 : -1;
+      for (let y = yBot - lerp(48, 62, t); y > yTop; y -= lerp(44, 60, t)) {
+        let nx = clamp(px + side * rr(34, 70), 24, LW - 24);
+        carveSeg(px, py, nx, y, w);
+        carve(circlePoly(nx, y, w * 0.62));
+        // a ledge sits low in the bend
+        const lw = ledgeW(t) + 2;
+        const L = placeLedge(prev, lw, prev.y - (y + 8), { cx: nx, span: () => ({ l: nx - w * 0.6, r: nx + w * 0.6 }), poly: (B) => [[B.x0, B.y], [B.x1, B.y], [B.x1 + 3, B.y + 8], [(B.x0 + B.x1) / 2, B.y + 16], [B.x0 - 3, B.y + 8]] });
+        if (L) { if (rand() < 0.5) addFeather((px + nx) / 2, (py + y) / 2 - 8); prev = L; }
+        px = nx; py = y; side = -side;
+      }
+      carveSeg(px, py, px, yTop - 46, w * 0.9);   // the exit opens upward into the next section
+      return prev;
+    }
+    function split(from, h, t) {
+      const yBot = from.y, yTop = yBot - h;
+      walls(yBot, yTop, 4, 4);
+      // a central pillar, jagged, with a cap
+      const fc = (from.x0 + from.x1) / 2, under = Math.abs(fc - LW / 2) < 34, pb = under ? yBot - 70 : yBot - 20;
+      const pts = []; for (let y = pb - 6; y >= yTop + 26; y -= 26) pts.push([LW / 2 + 15 + rr(-4, 4), y + rr(-4, 4)]);
+      const left = []; for (let y = yTop + 26; y <= pb - 6; y += 26) left.push([LW / 2 - 15 + rr(-4, 4), y + rr(-4, 4)]);
+      fill([[LW / 2, pb], ...pts, [LW / 2, yTop + 18], ...left]);
+      let pl = from, pr = from; const step = lerp(48, 62, t);
+      const merge = { y: yTop };
+      const dbgRow = Math.round(yBot - step); let rowStr = ""; for (let x = 0; x < LW; x += 2) rowStr += solidM(x, dbgRow) ? "#" : "."; splitDbg.push("from=" + from.x0 + "-" + from.x1 + "@" + from.y + " row=" + dbgRow + " " + rowStr + " above=" + (solidM(Math.round((from.x0 + from.x1) / 2), from.y - 12) ? "ROCK" : "air") + "/" + (solidM(Math.round((from.x0 + from.x1) / 2), from.y - 24) ? "ROCK" : "air"));
+      for (let y = yBot - step; y > yTop + 20; y -= step) {
+        // safe side: wider ledges; risky side: narrow ledges with feathers
+        const safeLeft = rand() < 0.5 || y === yBot - step ? true : false;
+        const base = clamp(Math.round(ledgeW(t) * 0.7), 11, 26);
+        const wL = safeLeft ? base + 6 : Math.max(11, base - 5), wR = safeLeft ? Math.max(11, base - 5) : base + 6;
+        const L = placeLedge(pl, wL, pl.y - y, { span: (yy) => { const s = freeSpan(yy, LW / 4); return { l: s.l, r: Math.min(s.r, LW / 2 - 18) }; } });
+        const Rl = placeLedge(pr, wR, pr.y - y, { span: (yy) => { const s = freeSpan(yy, LW * 3 / 4); return { l: Math.max(s.l, LW / 2 + 18), r: s.r }; } });
+        if (L) { pl = L; if (!safeLeft && L.apex) addFeather(L.apex.apexX, L.apex.apexY - 4); }
+        if (Rl) { pr = Rl; if (safeLeft && Rl.apex) addFeather(Rl.apex.apexX, Rl.apex.apexY - 4); }
+      }
+      // merge ledge above the pillar, reachable from both chains
+      let top = null, tries = 0;
+      while (!top && tries++ < 40) {
+        const w = 40, y = merge.y - Math.round(rr(4, 16)), cx = LW / 2 + rr(-16, 16);
+        const B = { x0: Math.round(cx - w / 2), x1: Math.round(cx + w / 2), y, w };
+        const poly = [[B.x0, y], [B.x1, y], [B.x1 + 6, y + 10], [B.x1 - 4, y + 30], [B.x0 + 4, y + 30], [B.x0 - 6, y + 10]];
+        const a = ledgeReachable(pl, B, bboxOf(poly)), b = ledgeReachable(pr, B, bboxOf(poly));
+        if (a || b) { top = B; B.apex = a || b; fill(poly); ledges.push(B); }
+        else merge.y += 6;
+      }
+      return top || (pl.y < pr.y ? pl : pr);
+    }
+    function overhangs(from, h, t) {
+      const yBot = from.y, yTop = yBot - h;
+      walls(yBot, yTop, lerp(4, 10, t), 6);
+      let prev = from, side = (from.x0 + from.x1) / 2 > LW / 2 ? -1 : 1;   // first shelf on the far side
+      for (let y = yBot - lerp(50, 64, t); y > yTop; y -= lerp(50, 64, t)) {
+        let ext = lerp(0.62, 0.72, t), placed = null, tries = 0;
+        ext = Math.min(ext, side < 0 ? (prev.x0 - 8) / LW : 1 - (prev.x1 + 8) / LW);   // never roof over the ledge we jump from
+        ext = Math.max(ext, 0.28);
+        while (!placed && tries++ < 6) {
+          const xe = side < 0 ? Math.round(LW * ext) : Math.round(LW * (1 - ext));
+          const w = Math.round(LW * ext) - 10;
+          const shelf = (B) => side < 0 ? [[-20, B.y], [xe, B.y], [xe + 6, B.y + 9], [xe - 6, B.y + 30], [-20, B.y + 36]] : [[xe, B.y], [LW + 20, B.y], [LW + 20, B.y + 36], [xe + 6, B.y + 30], [xe - 6, B.y + 9]];
+          placed = placeLedge(prev, w, prev.y - y, { cx: side < 0 ? xe - w / 2 - 2 : xe + w / 2 + 2, span: () => ({ l: side < 0 ? 0 : xe - 2, r: side < 0 ? xe + 2 : LW - 1 }), poly: shelf });
+          if (!placed) ext -= 0.06;
+        }
+        if (!placed) break;
+        if (rand() < lerp(0.3, 0.7, t)) addHazard(Math.round(placed.y + 14), t);
+        if (placed.apex && rand() < 0.6) addFeather(placed.apex.apexX, placed.apex.apexY - 4);
+        prev = placed; side = -side;
+      }
+      return prev;
+    }
+    // ---- assemble the mountain ---------------------------------------------------------------------
+    ledges.push({ x0: 6, x1: LW - 6, y: 0, w: LW - 12 });
+    fillRect(-20, 0, LW + 20, 60);
+    const plan = [
+      ["cavern", 180, { inset: 6, jag: 8 }], ["slabs", 150], ["tunnel", 220], ["cavern", 200, { hazards: true }], ["split", 240],
+      ["overhangs", 220], ["tunnel", 240], ["cavern", 200, { hazards: true }], ["split", 240], ["overhangs", 240], ["cavern", 200, { hazards: true, inset: 22 }]
+    ];
+    let prev = ledges[0], topY = 0; const secLog = [], splitDbg = [];
+    plan.forEach((sec, i) => {
+      const t = i / (plan.length - 1), kind = sec[0], h = sec[1], opts = sec[2] || {};
+      const before = ledges.length, y0 = prev.y;
+      if (kind === "cavern") prev = cavern(prev, h, t, opts);
+      else if (kind === "slabs") prev = cavern(prev, h, t, { wide: true, step: 66, inset: 4, jag: 6 });
+      else if (kind === "tunnel") prev = tunnel(prev, h, t);
+      else if (kind === "split") prev = split(prev, h, t);
+      else if (kind === "overhangs") prev = overhangs(prev, h, t);
+      topY = prev.y; secLog.push(kind + ":" + (ledges.length - before) + "/" + (y0 - prev.y));
+    });
+    window.__ccSecs = secLog; window.__ccSplit = splitDbg;
+    // the summit: a wide nest ledge, reachable from wherever the last section ended
+    let summit = null, tries = 0;
+    while (!summit && tries++ < 40) {
+      const w = 60, y = prev.y - Math.round(rr(36, 46)) + tries * 2, cx = LW / 2 + rr(-10, 10);
+      const B = { x0: Math.round(cx - w / 2), x1: Math.round(cx + w / 2), y, w, summit: true };
+      const poly = [[B.x0, y], [B.x1, y], [B.x1 + 6, y + 10], [B.x1 - 6, y + 34], [B.x0 + 6, y + 34], [B.x0 - 6, y + 10]];
+      if (ledgeReachable(prev, B, bboxOf(poly))) { summit = B; fill(poly); ledges.push(B); }
+    }
+    if (!summit) { const w = 60, y = prev.y - 30, cx = LW / 2; summit = { x0: cx - 30, x1: cx + 30, y, w, summit: true }; fill([[summit.x0, y], [summit.x1, y], [summit.x1, y + 30], [summit.x0, y + 30]]); ledges.push(summit); }
+    topY = summit.y;
+    walls(topY, topY - 120, 6, 8);
+    // sweep away slivers left between carved shapes
+    for (let pass = 0; pass < 3; pass++) for (let y = Y_TOP + 1; y < 60; y++) for (let x = 1; x < LW - 1; x++) {
+      if (!mask[mi(x, y)]) continue; let n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && mask[mi(x + dx, y + dy)]) n++;
+      if (n <= 4) mask[mi(x, y)] = 0;
+    }
+    // grass on every ledge top
+    for (const L of ledges) for (let y = L.y; y < L.y + 3; y++) for (let x = L.x0; x <= L.x1; x++) { if (x >= 0 && x < LW && mask[mi(x, y)]) mask[mi(x, y)] = 2; }
     // clouds for the sky (parallax)
     const clouds = [];
     for (let y = 40; y > topY - 200; y -= rr(28, 60)) clouds.push({ x: rr(-10, LW + 10), y, w: rr(18, 44), h: rr(7, 12), k: rand() });
     const TOTAL_FEATHERS = feathers.length;
 
-    // ---- rasterise the level into a pixel mask and a colour canvas ---------------------------------
-    const Y_TOP = topY - 140, LH = 60 - Y_TOP + 1;
-    const mask = new Uint8Array(LW * LH);   // 0 sky, 1 rock, 2 grass
-    const mi = (x, y) => (y - Y_TOP) * LW + x;
-    function fillPoly(p) {
-      let y0 = Infinity, y1 = -Infinity; for (const [, y] of p) { y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-      for (let y = Math.max(Y_TOP, Math.floor(y0)); y <= Math.min(60, Math.ceil(y1)); y++) {
-        const sy = y + 0.5, xs = [];
-        for (let i = 0; i < p.length; i++) {
-          const [ax, ay] = p[i], [bx, by] = p[(i + 1) % p.length];
-          if ((ay <= sy && by > sy) || (by <= sy && ay > sy)) xs.push(ax + (sy - ay) * (bx - ax) / (by - ay));
-        }
-        xs.sort((a, b) => a - b);
-        for (let k = 0; k + 1 < xs.length; k += 2) for (let x = Math.max(0, Math.round(xs[k])); x < Math.min(LW, Math.round(xs[k + 1])); x++) mask[mi(x, y)] = 1;
-      }
-    }
-    for (const p of polys) fillPoly(p);
-    for (const L of ledges) for (let y = L.y; y < L.y + 3; y++) for (let x = L.x0; x <= L.x1; x++) { if (x >= 0 && x < LW && mask[mi(x, y)]) mask[mi(x, y)] = 2; }
+    // ---- colour the mask ---------------------------------------------------------------------------
     const solid = (x, y) => (x < 0 || x >= LW) ? true : (y < Y_TOP || y > 60) ? false : mask[mi(x, y)] > 0;
     const grassAt = (x, y) => x >= 0 && x < LW && y >= Y_TOP && y <= 60 && mask[mi(x, y)] === 2;
     const levelC = new OffscreenCanvas(LW, LH), lc = levelC.getContext("2d");

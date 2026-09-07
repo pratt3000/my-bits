@@ -38,17 +38,30 @@ timer top left and a percent top right.
 ## The mountain
 
 The level is generated at load from a fixed seed, so every player climbs
-the same one. Thirty-four ledges lead from the ground to the summit. For each
-ledge the generator simulates real jumps from three points on the ledge
-below, over three aim directions, four charges and five flap timings, with
-collision against the rock placed so far, and only keeps a ledge that at
-least two of the three starting points can reach. The channel narrows and
-the ledges shrink from about forty pixels wide to thirteen as you rise, the
-gaps grow, and hazards appear from the eighth ledge on and get faster.
+the same one. It is a stack of eleven sections of five kinds, each built on
+top of the last:
+
+- **Caverns**: an open channel with jagged walls, hanging islands and
+  shelves off the walls. Later caverns have drifting hazards.
+- **Slabs**: a breather of wide flat-topped platforms.
+- **Tunnels**: a winding passage carved through solid rock, with small
+  ledges tucked into the bends. You ricochet off the tunnel walls.
+- **Splits**: a central pillar divides the way into two routes, one with
+  wider ledges, the other narrower and lined with feathers, merging on a
+  wide ledge above the pillar.
+- **Overhangs**: thick shelves jut from alternating walls, so you zigzag and
+  have to clear the lip of each one.
+
+The rock is built as a pixel mask while generating, and every ledge is kept
+only if the jump simulator, using the real physics against that mask, lands
+on it from at least two of three starting points on the ledge below, over
+five aim strengths, four charges and six flap timings. Ledges shrink from
+about forty pixels wide to thirteen as you rise, hazards start around a
+third of the way up and get faster, and there are forty ledges to the nest.
 
 Physics: gravity 430 px/s², jump speed 105 to 230 px/s by charge, sideways
-jumps at a fixed angle, a flap worth 95 px/s of lift, a bounce that keeps a
-third of the impact speed.
+aim up to a 0.58 horizontal share, a flap worth 95 px/s of lift that also
+steers hard, a bounce that keeps a third of the impact speed.
 
 ## Records
 
