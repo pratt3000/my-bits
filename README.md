@@ -53,6 +53,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`nullpoint/`](nullpoint)               | One-thumb arena shooter — move anywhere, but every shot goes through the dead centre and bounces back at you. |
 | [`barrel-heights/`](barrel-heights)     | The 1981 four-screen arcade climber at 224×256 — girders and barrels, conveyors and pies, elevators and springs, rivets. |
 | [`munch-maze/`](munch-maze)             | The 1980 maze chase at 224×288 — the classic maze, four ghosts with their own targeting, waves, speed tables, fruit. |
+| [`cluck-climb/`](cluck-climb)           | One-thumb precision climber — charge, aim, flap twice, land only on green; a seeded mountain with every ledge proven reachable. |
 
 ### Rakshabandhan set
 

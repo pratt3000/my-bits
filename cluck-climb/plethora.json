@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Cluck Climb",
+  "description": "A precision climber for one thumb: hold to charge, release to jump, tap in the air to flap, and land only on the green ledges. Miss one and you tumble back down the mountain. One mountain, the same for everyone, with a timer, a percent, feathers to collect, and drifting hazards on the way up. Reach the nest at the top and post your time.",
+  "tags": ["platformer", "precision", "climb", "pixel", "speedrun", "mobile"],
+  "permissions": ["haptics", "audio", "storage"],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "time": {
+        "label": "Fastest Climb",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "height": {
+        "label": "Height Reached",
+        "valueType": "percent",
+        "order": "desc",
+        "format": "percent",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      },
+      "feathers": {
+        "label": "Feathers",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": ["daily", "weekly", "all_time"],
+        "scopes": ["global", "following"],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
