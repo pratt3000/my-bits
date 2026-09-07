@@ -47,8 +47,9 @@ window.plethoraBit = {
 
     // ---- physics constants (world px, seconds) ---------------------------------------------------
     const LW = 160, GRAV = 430, R = 4.5;
-    const JUMP_MIN = 105, JUMP_RANGE = 125, SIDE_X = 0.58, SIDE_Y = 0.84, FLAP_VY = 95, FLAP_VX = 28, MAX_FLAPS = 2, CHARGE_T = 0.75;
-    function launch(dir, c) { const v = JUMP_MIN + JUMP_RANGE * c; return dir === 0 ? { vx: 0, vy: -v } : { vx: dir * v * SIDE_X, vy: -v * SIDE_Y }; }
+    const JUMP_MIN = 105, JUMP_RANGE = 125, SIDE_X = 0.58, SIDE_Y = 0.84, FLAP_VY = 95, FLAP_VX = 62, MAX_FLAPS = 3, CHARGE_T = 0.75;
+    function launch(dir, c) { const v = JUMP_MIN + JUMP_RANGE * c, a = Math.abs(dir); return { vx: dir * v * SIDE_X, vy: -v * lerp(1, SIDE_Y, a) }; }
+    function flapVx(vx, dir) { return dir ? vx * 0.55 + dir * FLAP_VX : vx * 0.8; }
 
     // ---- deterministic level --------------------------------------------------------------------
     function rng(seed) { let a = seed >>> 0; return () => { a += 0x6D2B79F5; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -107,7 +108,7 @@ window.plethoraBit = {
         let { vx, vy } = launch(d, c); let x = px, y = py - 1, t = 0, fi = 0, apexY = py, apexX = px, ok = false;
         for (let i = 0; i < 150; i++) {
           const dt = 1 / 60; t += dt;
-          if (fi < fp.length && t >= fp[fi]) { vy = Math.min(vy, 40) - FLAP_VY; vx += d * FLAP_VX; fi++; }
+          if (fi < fp.length && t >= fp[fi]) { vy = Math.min(vy, 40) - FLAP_VY; vx = flapVx(vx, d); fi++; }
           const py0 = y; x += vx * dt; y += vy * dt; vy += GRAV * dt;
           if (y < apexY) { apexY = y; apexX = x; }
           if (x < R || x > LW - R) break;
@@ -252,16 +253,16 @@ window.plethoraBit = {
     // ---- state -------------------------------------------------------------------------------------
     let state = "title";   // title | play | won
     let frames = 0, started = false, runT = 0, runStarted = false, bestT = store.get("bestT", 0), bestH = store.get("bestH", 0);
-    const P = { x: LW / 2, y: -R, vx: 0, vy: 0, grounded: true, flaps: MAX_FLAPS, dir: 1, face: 1, charging: false, charge: 0, aim: 0, stun: 0, hurt: 0, fallFrom: 0, wing: 0, wingT: 0, land: 0 };
+    const P = { x: LW / 2, y: -R, vx: 0, vy: 0, grounded: true, flaps: MAX_FLAPS, dir: 1, face: 1, charging: false, charge: 0, aim: 0, stun: 0, hurt: 0, fallFrom: 0, wing: 0, wingT: 0, land: 0, noFlap: 0 };
     let progress = 0, feathersGot = 0, falls = 0, bigFall = 0, camY = 0, shake = 0, stars = [], puffs = [], lastSubmitH = 0;
-    let coachT = 0, plays = store.get("plays", 0);
+    let coachT = 0, plays = store.get("plays", 0), freeFlight = !!store.get("free", false);
     const fmtT = (ms) => { const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60, c = Math.floor(ms / 10) % 100; return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(c).padStart(2, "0"); };
 
     function reset() {
       P.x = LW / 2; P.y = -R; P.vx = 0; P.vy = 0; P.grounded = true; P.flaps = MAX_FLAPS; P.charging = false; P.charge = 0; P.aim = 0; P.stun = 0; P.hurt = 0; P.face = 1; P.fallFrom = -R;
       progress = 0; feathersGot = 0; falls = 0; runT = 0; runStarted = false; stars = []; puffs = []; lastSubmitH = 0;
       for (const f of feathers) f.taken = false;
-      camY = P.y - viewH * 0.6;
+      camY = clamp(P.y - viewH * 0.6, Y_TOP + 8, 60 - viewH);
     }
 
     // ---- collision against the pixel mask ------------------------------------------------------------
@@ -320,7 +321,7 @@ window.plethoraBit = {
       for (let k = 0; k < 8 && contact(P.x, P.y); k++) P.y -= 0.5;
       P.y = Math.round(P.y + R) - R - 0.01;
       // a ledge is only home if the feet are on grass
-      if (fall > 90) { P.stun = 0.9; falls++; bigFall = fall; sfx.thud(); haptic("heavy"); shake = 5; for (let i = 0; i < 6; i++) stars.push({ x: P.x + rr(-6, 6), y: P.y - 8 - rr(0, 6), t: 0 }); }
+      if (fall > 90) { P.stun = 0.6; falls++; bigFall = fall; sfx.thud(); haptic("heavy"); shake = 5; for (let i = 0; i < 6; i++) stars.push({ x: P.x + rr(-6, 6), y: P.y - 8 - rr(0, 6), t: 0 }); }
       else { sfx.land(); haptic("light"); for (let i = 0; i < 4; i++) puffs.push({ x: P.x + rr(-5, 5), y: P.y + 3, vx: rr(-14, 14), t: 0 }); }
       const ledge = ledges.find((L) => Math.abs(L.y - (P.y + R)) < 3 && P.x >= L.x0 - 2 && P.x <= L.x1 + 2);
       if (ledge && ledge.summit && state === "play") win();
@@ -334,21 +335,22 @@ window.plethoraBit = {
       sfx.jump(c); haptic("medium"); for (let i = 0; i < 3; i++) puffs.push({ x: P.x + rr(-4, 4), y: P.y + 4, vx: rr(-10, 10), t: 0 });
     }
     function doFlap(dir) {
-      if (P.grounded || P.flaps <= 0 || P.stun > 0) return;
-      P.flaps--; P.vy = Math.min(P.vy, 40) - FLAP_VY; P.vx += dir * FLAP_VX; if (dir) P.face = dir;
+      if (P.grounded || P.stun > 0) return;
+      if (P.flaps <= 0) { P.noFlap = 0.3; sfx.ui(); return; }
+      if (!freeFlight) P.flaps--; P.vy = Math.min(P.vy, 40) - FLAP_VY; P.vx = flapVx(P.vx, dir); if (dir) P.face = dir;
       P.fallFrom = Math.min(P.fallFrom, P.y); P.wing = 0.22; sfx.flap(); haptic("light");
     }
     function win() {
       state = "won"; stateT = 0; sfx.win(); haptic("success"); shake = 4;
       const ms = Math.round(runT * 1000);
-      if (!bestT || ms < bestT) { bestT = ms; store.set("bestT", bestT); }
+      if (!freeFlight && (!bestT || ms < bestT)) { bestT = ms; store.set("bestT", bestT); }
       bestH = 100; store.set("bestH", 100);
       try {
-        ctx.memory.record("time").submit(ms, { label: fmtT(ms) }).catch(() => {});
+        if (!freeFlight) ctx.memory.record("time").submit(ms, { label: fmtT(ms) }).catch(() => {});
         ctx.memory.record("height").submit(100, { label: "100%" }).catch(() => {});
         ctx.memory.record("feathers").submit(feathersGot, { label: feathersGot + "/" + TOTAL_FEATHERS }).catch(() => {});
         ctx.platform.milestone("summit", { timeMs: ms, falls, feathers: feathersGot });
-        ctx.platform.complete({ timeMs: ms, falls, feathers: feathersGot, height: 100 });
+        ctx.platform.complete({ timeMs: ms, falls, feathers: feathersGot, height: 100, mode: freeFlight ? "free" : "classic" });
       } catch (_) {}
     }
     let stateT = 0;
@@ -387,10 +389,11 @@ window.plethoraBit = {
     }
     const SPR = {};
     function def(name, rows) { SPR[name] = raster(rows, false); SPR[name + "_f"] = raster(rows, true); }
-    def("idle", [".....RR.....", "....RRR.....", "....WWWW....", "...WWKWWWO..", "...WWWWWWO..", "..WWWWWWWW..", ".WWWWWWWWW..", ".WSWWWWWWW..", "..WWWWWWW...", "...WWWWW....", "....O..O....", "...OO..OO..."]);
-    def("up", [".....RR.....", "....RRR.....", "WW..WWWW..WW", ".WWWWKWWWO..", "..WWWWWWWO..", "..WWWWWWWW..", ".WWWWWWWWW..", ".WSWWWWWWW..", "..WWWWWWW...", "...WWWWW....", "....O..O....", "...OO..OO..."]);
-    def("down", [".....RR.....", "....RRR.....", "....WWWW....", "...WWKWWWO..", "...WWWWWWO..", "..WWWWWWWW..", "WWWWWWWWWWW.", ".WSWWWWWWWW.", "..WWWWWWW...", "...WWWWW....", "....O..O....", "...OO..OO..."]);
-    def("dizzy", [".....RR.....", "....RRR.....", "....WWWW....", "...WWSWWWO..", "...WWKWWWO..", "..WWWWWWWW..", ".WWWWWWWWW..", ".WSWWWWWWW..", "..WWWWWWW...", "...WWWWW....", "....O..O....", "...OO..OO..."]);
+    // 14x14 with a plum outline and yellow wings so it reads against clouds
+    def("idle", ["......DRD.....", ".....DRRRD....", ".....DWWWWD...", "....DWWKWWWDD.", "....DWWWWWWDOD", "...DWWWWWWWWD.", "..DWYYYWWWWWD.", "..DWYYYYWWWWD.", "..DWWYYWWWWD..", "...DWWWWWWD...", "....DDDDDD....", ".....DOD.DOD..", "....DOODDOOD..", ".....DDD.DDD.."]);
+    def("up", ["......DRD.....", ".....DRRRD....", ".DYD.DWWWWD.DD", "..DYDWWKWWWDYD", "...DYWWWWWWDOD", "...DWWWWWWWWD.", "..DWWWWWWWWWD.", "..DWWWWWWWWWD.", "..DWWYYWWWWD..", "...DWWWWWWD...", "....DDDDDD....", ".....DOD.DOD..", "....DOODDOOD..", ".....DDD.DDD.."]);
+    def("down", ["......DRD.....", ".....DRRRD....", ".....DWWWWD...", "....DWWKWWWDD.", "....DWWWWWWDOD", "...DWWWWWWWWD.", "DDDDWWWWWWWWDD", "DYYYYWWWWWWYYD", ".DDDDWYYWWWDDD", "...DWWWWWWD...", "....DDDDDD....", ".....DOD.DOD..", "....DOODDOOD..", ".....DDD.DDD.."]);
+    def("dizzy", ["......DRD.....", ".....DRRRD....", ".....DWWWWD...", "....DWWSWWWDD.", "....DWWKWWWDOD", "...DWWWWWWWWD.", "..DWYYYWWWWWD.", "..DWYYYYWWWWD.", "..DWWYYWWWWD..", "...DWWWWWWD...", "....DDDDDD....", ".....DOD.DOD..", "....DOODDOOD..", ".....DDD.DDD.."]);
     def("cup", ["G........G", "GYYYYYYYYG", "GYYYYYYYYG", ".GYYYYYYG.", "..GYYYYG..", "...GYYG...", "....YY....", "....YY....", "..YYYYYY..", ".YYYYYYYY."]);
     def("nest", ["..EEEEEEEEEE..", ".EDEDEDEDEDEDE", "DEDEDEDEDEDEDED", ".DDDDDDDDDDDDD.", "..DDDDDDDDDDD.."]);
     def("star", ["..Y..", ".YYY.", "YYYYY", ".YYY.", "..Y.."]);
@@ -443,6 +446,7 @@ window.plethoraBit = {
       }
       // rock
       fb.drawImage(levelC, 0, cy - Y_TOP, LW, viewH, sx, 0, LW, viewH);
+      if (cy + viewH > 60) { fb.fillStyle = C.rock; fb.fillRect(0, 61 - cy, LW, viewH); }
       // nest + cup at the summit
       fb.drawImage(SPR.nest, Math.round(LW / 2 - 7) + sx, summit.y - 4 - cy); fb.drawImage(SPR.cup, Math.round(LW / 2 - 5) + sx, summit.y - 13 - cy);
       // feathers
@@ -464,15 +468,21 @@ window.plethoraBit = {
         for (let i = 0; i < 40; i++) { const dt = 1 / 60; x += vx * dt; y += vy * dt; vy += GRAV * dt; if (i % 5 === 4) fb.fillRect(Math.round(x) - 1 + sx, Math.round(y - cy) - 1, 2, 2); if (solid(Math.floor(x), Math.floor(y))) break; }
       }
       // the chicken
-      const px = Math.round(P.x) - 6 + sx, py = Math.round(P.y) - 7 - cy, flip = P.face < 0;
+      const px = Math.round(P.x) - 7 + sx, py = Math.round(P.y) - 8 - cy, flip = P.face < 0;
       const name = P.stun > 0 ? "dizzy" : P.wing > 0.1 ? "up" : P.wing > 0 ? "down" : (!P.grounded && P.vy > 60) ? "down" : "idle";
       const sp = SPR[flip ? name + "_f" : name];
       if (P.hurt > 0 && Math.floor(frames / 3) % 2) { /* blink */ }
-      else if (P.charging) { const sq = 1 - P.charge * 0.35; fb.drawImage(sp, px, py + Math.round(12 * (1 - sq)), 12, Math.round(12 * sq)); }
-      else if (P.land > 0) { fb.drawImage(sp, px - 1, py + 2, 14, 10); }
+      else if (P.charging) { const sq = 1 - P.charge * 0.35; fb.drawImage(sp, px, py + Math.round(14 * (1 - sq)), 14, Math.round(14 * sq)); }
+      else if (P.land > 0) { fb.drawImage(sp, px - 1, py + 2, 16, 12); }
       else fb.drawImage(sp, px, py);
-      // flap pips under the chicken (only in the air)
-      if (!P.grounded) for (let i = 0; i < P.flaps; i++) fb.drawImage(SPR.flapdot, Math.round(P.x) - 2 + (i - (P.flaps - 1) / 2) * 6 + sx, py + 14);
+      // aim arrow while charging
+      if (P.charging && P.aim) { const ax = Math.round(P.x + Math.sign(P.aim) * 11) + sx, ay = py + 5; fb.fillStyle = C.white; fb.fillRect(ax - 2, ay, 4, 2); fb.fillRect(ax + Math.sign(P.aim) * 2, ay - 1, 1, 4); fb.fillRect(ax + Math.sign(P.aim) * 3, ay - 2, 1, 6); }
+      // flap pips under the chicken: what is left of this jump
+      if (state === "play") {
+        const n = freeFlight ? 3 : P.flaps;
+        for (let i = 0; i < (freeFlight ? 3 : MAX_FLAPS); i++) { const on = i < n; fb.globalAlpha = on ? 1 : 0.3; fb.drawImage(SPR.flapdot, Math.round(P.x) - 2 + (i - (MAX_FLAPS - 1) / 2) * 6 + sx, py + 16); fb.globalAlpha = 1; }
+        if (P.noFlap > 0) { P.noFlap -= 1 / 60; otextC("NO FLAPS", Math.round(P.x), py - 10, C.edge); }
+      }
       if (P.stun > 0) for (let i = 0; i < 3; i++) { const a = frames * 0.15 + i * 2.1; fb.drawImage(SPR.star2, px + 6 + Math.round(Math.cos(a) * 7) - 2, py - 3 + Math.round(Math.sin(a) * 2) - 2); }
     }
     function drawHUD() {
@@ -482,9 +492,9 @@ window.plethoraBit = {
       if (feathersGot > 0) { fb.drawImage(SPR.star, 3, top + 11); otext(String(feathersGot), 10, top + 10, C.gold); }
       if (state === "play" && plays <= 2) {
         const bottom = viewH - Math.ceil(sa.bottom * dpr / S) - 14;
-        if (P.grounded && !P.charging && !runStarted) otextC("HOLD TO CHARGE A JUMP", LW / 2, bottom, C.white);
-        else if (P.charging) otextC("DRAG LEFT OR RIGHT TO AIM", LW / 2, bottom, C.white);
-        else if (!P.grounded && P.flaps === MAX_FLAPS && runT < 30) otextC("TAP IN THE AIR TO FLAP", LW / 2, bottom, C.white);
+        if (P.grounded && !P.charging && !runStarted) { otextC("HOLD TO CHARGE A JUMP", LW / 2, bottom - 12, C.white); otextC("DRAG SIDEWAYS TO AIM", LW / 2, bottom, C.white); }
+        else if (P.charging) otextC("DRAG FURTHER TO AIM WIDER", LW / 2, bottom, C.white);
+        else if (!P.grounded && P.flaps === MAX_FLAPS && runT < 30) { otextC("TAP TO FLAP. TAP LEFT OR", LW / 2, bottom - 12, C.white); otextC("RIGHT OF IT TO STEER", LW / 2, bottom, C.white); }
         else if (P.grounded && falls === 0 && runT < 40 && runStarted) otextC("ONLY GREEN LEDGES HOLD", LW / 2, bottom, C.white);
       }
     }
@@ -492,16 +502,23 @@ window.plethoraBit = {
       const top = Math.ceil(sa.top * dpr / S) + 14;
       otextC("CLUCK", LW / 2, top + 8, C.gold, 3); otextC("CLIMB", LW / 2, top + 34, C.white, 3);
       otextC("A PRECISION CLIMB", LW / 2, top + 64, C.cloud);
-      const y = Math.round(viewH * 0.5);
-      otextC("HOLD TO CHARGE", LW / 2, y, C.white); otextC("RELEASE TO JUMP", LW / 2, y + 12, C.white); otextC("TAP IN THE AIR TO FLAP", LW / 2, y + 24, C.white);
-      otextC("ONLY GREEN LEDGES HOLD", LW / 2, y + 40, C.grassHi); otextC("MISS AND YOU FALL", LW / 2, y + 52, C.edge);
-      if (bestT) otextC("BEST " + fmtT(bestT), LW / 2, y + 72, C.gold); else if (bestH) otextC("BEST HEIGHT " + bestH + "%", LW / 2, y + 72, C.gold);
-      if (Math.floor(frames / 25) % 2) otextC("TAP TO START", LW / 2, viewH - Math.ceil(sa.bottom * dpr / S) - 40, C.gold);
+      const y = Math.round(viewH * 0.42);
+      otextC("HOLD TO CHARGE A JUMP", LW / 2, y - 12, C.white); otextC("DRAG SIDEWAYS TO AIM", LW / 2, y, C.white); otextC("RELEASE TO JUMP", LW / 2, y + 12, C.white);
+      otextC("TAP IN THE AIR TO FLAP", LW / 2, y + 28, C.white); otextC("TAP LEFT OR RIGHT OF IT", LW / 2, y + 40, C.white); otextC("TO STEER THE FLAP", LW / 2, y + 52, C.white);
+      otextC("ONLY GREEN LEDGES HOLD", LW / 2, y + 68, C.grassHi); otextC("MISS AND YOU FALL", LW / 2, y + 80, C.edge);
+      if (bestT) otextC("BEST " + fmtT(bestT), LW / 2, y + 96, C.gold); else if (bestH) otextC("BEST HEIGHT " + bestH + "%", LW / 2, y + 96, C.gold);
+      // mode toggle
+      modeBox.y = viewH - Math.ceil(sa.bottom * dpr / S) - 62; modeBox.h = 22;
+      fb.fillStyle = "rgba(20,10,30,0.55)"; fb.fillRect(14, modeBox.y, LW - 28, modeBox.h);
+      otextC(freeFlight ? "MODE: FREE FLIGHT" : "MODE: CLASSIC", LW / 2, modeBox.y + 3, freeFlight ? C.gold : C.grassHi);
+      otextC(freeFlight ? "UNLIMITED FLAPS. NOT RANKED" : "3 FLAPS A JUMP. RANKED", LW / 2, modeBox.y + 13, C.cloud);
+      if (Math.floor(frames / 25) % 2) otextC("TAP TO START", LW / 2, viewH - Math.ceil(sa.bottom * dpr / S) - 32, C.gold);
     }
+    const modeBox = { y: 0, h: 22 };
     function drawWon() {
       const y = Math.round(viewH * 0.3);
       fb.fillStyle = "rgba(20,10,30,0.7)"; fb.fillRect(10, y - 10, LW - 20, 84);
-      otextC("BRAVEST!", LW / 2, y, C.gold, 2);
+      otextC(freeFlight ? "FREE FLIGHT" : "BRAVEST!", LW / 2, y, C.gold, 2);
       otextC("TIME " + fmtT(Math.round(runT * 1000)), LW / 2, y + 24, C.white);
       otextC("FALLS " + falls + "   FEATHERS " + feathersGot + "/" + TOTAL_FEATHERS, LW / 2, y + 36, C.white);
       if (bestT) otextC("BEST " + fmtT(bestT), LW / 2, y + 48, C.gold);
@@ -521,7 +538,7 @@ window.plethoraBit = {
       S = Math.max(1, Math.floor(canvas.width / LW)); viewH = Math.ceil(canvas.height / S); ox = Math.floor((canvas.width - LW * S) / 2);
       fbc = new OffscreenCanvas(LW, viewH); fb = fbc.getContext("2d"); fb.imageSmoothingEnabled = false;
     }
-    layout(); camY = P.y - viewH * 0.6;
+    layout(); camY = clamp(P.y - viewH * 0.6, Y_TOP + 8, 60 - viewH);
     function present() {
       g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = "#12203a"; g.fillRect(0, 0, canvas.width, canvas.height);
       g.imageSmoothingEnabled = false; g.drawImage(fbc, ox, 0, LW * S, viewH * S);
@@ -547,6 +564,7 @@ window.plethoraBit = {
     }
     ctx.listen(canvas, "pointerdown", (e) => {
       if (e.clientX > W - sa.right - 44 && e.clientY < sa.top + 34) { muted = !muted; store.set("muted", muted); applyMute(); sfx.ui(); return; }
+      if (state === "title") { const wy = e.clientY * dpr / S; if (wy >= modeBox.y - 4 && wy <= modeBox.y + modeBox.h + 4) { freeFlight = !freeFlight; store.set("free", freeFlight); sfx.ui(); haptic("light"); return; } }
       if (anyStart()) return;
       if (touch) return;
       touch = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -554,7 +572,7 @@ window.plethoraBit = {
     });
     ctx.listen(canvas, "pointermove", (e) => {
       if (!touch || e.pointerId !== touch.id || !P.charging) return;
-      const dx = e.clientX - touch.x; P.aim = dx > 14 ? 1 : dx < -14 ? -1 : 0; if (P.aim) P.face = P.aim;
+      const dx = e.clientX - touch.x; P.aim = Math.abs(dx) < 8 ? 0 : clamp(dx / 44, -1, 1); if (P.aim) P.face = Math.sign(P.aim);
     });
     const up = (e) => { if (!touch || e.pointerId !== touch.id) return; touch = null; if (P.charging && P.grounded) doJump(); P.charging = false; };
     ctx.listen(canvas, "pointerup", up); ctx.listen(canvas, "pointercancel", up);
@@ -584,13 +602,14 @@ window.plethoraBit = {
     });
 
     // debug hooks for the headless harness
-    window.__ccInfo = () => ({ state, x: Math.round(P.x * 10) / 10, y: Math.round(P.y * 10) / 10, vx: Math.round(P.vx), vy: Math.round(P.vy), grounded: P.grounded, flaps: P.flaps, charging: P.charging, progress: Math.round(progress * 1000) / 10, runT: Math.round(runT * 10) / 10, falls, feathers: feathersGot, total: TOTAL_FEATHERS, ledges: ledges.length, topY, hazards: hazards.length, S, viewH, camY: Math.round(camY) });
+    window.__ccInfo = () => ({ state, free: freeFlight, x: Math.round(P.x * 10) / 10, y: Math.round(P.y * 10) / 10, vx: Math.round(P.vx), vy: Math.round(P.vy), grounded: P.grounded, flaps: P.flaps, charging: P.charging, progress: Math.round(progress * 1000) / 10, runT: Math.round(runT * 10) / 10, falls, feathers: feathersGot, total: TOTAL_FEATHERS, ledges: ledges.length, topY, hazards: hazards.length, S, viewH, camY: Math.round(camY) });
     window.__ccStart = () => anyStart();
     window.__ccJump = (dir, c) => { if (!P.grounded) return false; P.aim = dir; P.charge = c; P.charging = true; doJump(); return true; };
     window.__ccFlap = (dir) => doFlap(dir);
     window.__ccStep = (n) => { for (let i = 0; i < n; i++) tick(1 / 60); };
     window.__ccWarp = (x, y) => { P.x = x; P.y = y; P.vx = 0; P.vy = 0; P.grounded = true; P.flaps = MAX_FLAPS; camY = P.y - viewH * 0.58; };
     window.__ccLedge = (i) => { const L = ledges[i]; return L ? { x0: L.x0, x1: L.x1, y: L.y, w: L.w } : null; };
+    window.__ccFree = (on) => { freeFlight = !!on; };
     window.__ccHold = (on) => { if (on) { P.charging = true; P.charge = 0.6; P.aim = 1; } else { P.charging = false; } };
 
     drawFrame(); present();

@@ -14,10 +14,17 @@ timer top left and a percent top right.
 ## How it plays
 
 - **Hold** anywhere to charge a jump. The chicken squats and a dotted arc
-  previews the flight. **Drag left or right** while holding to aim; keep the
-  finger still to jump straight up. **Release** to jump.
-- **Tap in the air to flap.** Two flaps per jump, shown as pips under the
-  chicken. A flap adds lift and nudges you toward the side you tapped.
+  previews the flight. **Drag left or right** while holding to aim: the
+  further you drag, the flatter and wider the jump, up to about 44 px of
+  drag for a full sideways launch; keep the finger still to jump straight
+  up. A small arrow beside the chicken shows the aim. **Release** to jump.
+- **Tap in the air to flap.** Three flaps per jump in Classic mode, shown
+  as pips under the chicken. A flap adds lift and steers hard toward the
+  side you tapped, so a tap left of the chicken pulls it left. Tapping with
+  no flaps left flashes NO FLAPS.
+- **Modes.** The title has a toggle. Classic gives three flaps a jump and
+  posts times to the ranked board. Free Flight gives unlimited flaps for a
+  relaxed climb; its height and feathers still count, its times do not.
 - **Only green ledges hold.** Bare rock bounces you off and slopes shed you.
   A long fall lands with a stun and a count on the results card.
 - **Hazards** are orange diamonds drifting across gaps in the upper half.
