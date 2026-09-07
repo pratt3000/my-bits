@@ -33,12 +33,12 @@ window.plethoraBit = {
     const canStore = !!(ctx.capabilities && ctx.capabilities.storage);
     const memStore = {};
     const store = {
-      get(k, d) { try { const v = canStore ? ctx.storage.get("cc_" + k) : memStore[k]; return v == null ? d : v; } catch (_) { return d; } },
+      async get(k, d) { try { let v = canStore ? ctx.storage.get("cc_" + k) : memStore[k]; if (v && typeof v.then === "function") v = await v; return v == null ? d : v; } catch (_) { return d; } },
       set(k, v) { try { if (canStore) ctx.storage.set("cc_" + k, v); else memStore[k] = v; } catch (_) {} }
     };
     const canAudio = !!(ctx.capabilities && ctx.capabilities.audio);
     const canHaptic = !!(ctx.capabilities && ctx.capabilities.haptics);
-    let muted = !!store.get("muted", false);
+    let muted = !!(await store.get("muted", false));
     function haptic(k) { if (canHaptic) { try { ctx.platform.haptic(k); } catch (_) {} } }
 
     // ---- palette ---------------------------------------------------------------------------------
@@ -139,6 +139,7 @@ window.plethoraBit = {
       return [[x0, y], [x1, y], [x1 + 4, y + 6], [x1 - 2, y + depth], [x0 + 2, y + depth], [x0 - 4, y + 6]];
     }
     // place one ledge reachable from `from`, within a horizontal range, at roughly dy above; fills its island at once
+    let fallbacks = 0;
     function placeLedge(from, w, dy, opts) {
       opts = opts || {};
       let placed = null, tries = 0;
@@ -155,6 +156,14 @@ window.plethoraBit = {
         const poly = opts.poly ? opts.poly(B, span) : islandPoly(B.x0, B.x1, y, Math.round(lerp(12, 24, rand()) + w * 0.3), span);
         const apex = ledgeReachable(from, B, bboxOf(poly));
         if (apex) { placed = B; B.apex = apex; fill(poly); ledges.push(B); }
+      }
+      if (!placed && !opts.noFallback) {
+        // guaranteed hop: a short island straight above the previous ledge, clear of rock
+        const fw = Math.max(w, 24), fy = Math.round(from.y - 34), fc = clamp((from.x0 + from.x1) / 2, 4 + fw / 2, LW - 4 - fw / 2);
+        const B = { x0: Math.round(fc - fw / 2), x1: Math.round(fc + fw / 2), y: fy, w: fw, apex: { apexX: fc, apexY: fy - 20 }, fallback: true };
+        carve([[B.x0 - 12, fy + 14], [B.x1 + 12, fy + 14], [B.x1 + 12, fy - 50], [B.x0 - 12, fy - 50]]);
+        fill([[B.x0, fy], [B.x1, fy], [fc + 5, fy + 12], [fc - 5, fy + 12]]);
+        ledges.push(B); placed = B; fallbacks++;
       }
       return placed;
     }
@@ -223,8 +232,8 @@ window.plethoraBit = {
         const safeLeft = rand() < 0.5 || y === yBot - step ? true : false;
         const base = clamp(Math.round(ledgeW(t) * 0.7), 11, 26);
         const wL = safeLeft ? base + 6 : Math.max(11, base - 5), wR = safeLeft ? Math.max(11, base - 5) : base + 6;
-        const L = placeLedge(pl, wL, pl.y - y, { span: (yy) => { const s = freeSpan(yy, LW / 4); return { l: s.l, r: Math.min(s.r, LW / 2 - 18) }; } });
-        const Rl = placeLedge(pr, wR, pr.y - y, { span: (yy) => { const s = freeSpan(yy, LW * 3 / 4); return { l: Math.max(s.l, LW / 2 + 18), r: s.r }; } });
+        const L = placeLedge(pl, wL, pl.y - y, { noFallback: true, span: (yy) => { const s = freeSpan(yy, LW / 4); return { l: s.l, r: Math.min(s.r, LW / 2 - 18) }; } });
+        const Rl = placeLedge(pr, wR, pr.y - y, { noFallback: true, span: (yy) => { const s = freeSpan(yy, LW * 3 / 4); return { l: Math.max(s.l, LW / 2 + 18), r: s.r }; } });
         if (L) { pl = L; if (!safeLeft && L.apex) addFeather(L.apex.apexX, L.apex.apexY - 4); }
         if (Rl) { pr = Rl; if (safeLeft && Rl.apex) addFeather(Rl.apex.apexX, Rl.apex.apexY - 4); }
       }
@@ -269,7 +278,7 @@ window.plethoraBit = {
       ["cavern", 180, { inset: 6, jag: 8 }], ["slabs", 150], ["tunnel", 220], ["cavern", 200, { hazards: true }], ["split", 240],
       ["overhangs", 220], ["tunnel", 240], ["cavern", 200, { hazards: true }], ["split", 240], ["overhangs", 240], ["cavern", 200, { hazards: true, inset: 22 }]
     ];
-    let prev = ledges[0], topY = 0; const secLog = [], splitDbg = [];
+    let prev = ledges[0], topY = 0; const secLog = [], splitDbg = []; const genT0 = performance.now();
     plan.forEach((sec, i) => {
       const t = i / (plan.length - 1), kind = sec[0], h = sec[1], opts = sec[2] || {};
       const before = ledges.length, y0 = prev.y;
@@ -281,6 +290,7 @@ window.plethoraBit = {
       topY = prev.y; secLog.push(kind + ":" + (ledges.length - before) + "/" + (y0 - prev.y));
     });
     window.__ccSecs = secLog; window.__ccSplit = splitDbg;
+    const genMs = Math.round(performance.now() - genT0);
     // the summit: a wide nest ledge, reachable from wherever the last section ended
     let summit = null, tries = 0;
     while (!summit && tries++ < 40) {
@@ -361,10 +371,10 @@ window.plethoraBit = {
 
     // ---- state -------------------------------------------------------------------------------------
     let state = "title";   // title | play | won
-    let frames = 0, started = false, runT = 0, runStarted = false, bestT = store.get("bestT", 0), bestH = store.get("bestH", 0);
+    let frames = 0, started = false, runT = 0, runStarted = false, bestT = Number(await store.get("bestT", 0)) || 0, bestH = Number(await store.get("bestH", 0)) || 0;
     const P = { x: LW / 2, y: -R, vx: 0, vy: 0, grounded: true, flaps: MAX_FLAPS, dir: 1, face: 1, charging: false, charge: 0, aim: 0, stun: 0, hurt: 0, fallFrom: 0, wing: 0, wingT: 0, land: 0, noFlap: 0 };
     let progress = 0, feathersGot = 0, falls = 0, bigFall = 0, camY = 0, shake = 0, stars = [], puffs = [], lastSubmitH = 0;
-    let coachT = 0, plays = store.get("plays", 0), freeFlight = !!store.get("free", false);
+    let coachT = 0, plays = Number(await store.get("plays", 0)) || 0, freeFlight = !!(await store.get("free", false));
     const fmtT = (ms) => { const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60, c = Math.floor(ms / 10) % 100; return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(c).padStart(2, "0"); };
 
     function reset() {
@@ -622,6 +632,7 @@ window.plethoraBit = {
       otextC(freeFlight ? "MODE: FREE FLIGHT" : "MODE: CLASSIC", LW / 2, modeBox.y + 3, freeFlight ? C.gold : C.grassHi);
       otextC(freeFlight ? "UNLIMITED FLAPS. NOT RANKED" : "3 FLAPS A JUMP. RANKED", LW / 2, modeBox.y + 13, C.cloud);
       if (Math.floor(frames / 25) % 2) otextC("TAP TO START", LW / 2, viewH - Math.ceil(sa.bottom * dpr / S) - 32, C.gold);
+      otext("L" + ledges.length + " H" + (-topY) + " F" + TOTAL_FEATHERS + " X" + fallbacks + " " + genMs + "MS", 2, viewH - Math.ceil(sa.bottom * dpr / S) - 10, C.cloud);
     }
     const modeBox = { y: 0, h: 22 };
     function drawWon() {
@@ -711,7 +722,7 @@ window.plethoraBit = {
     });
 
     // debug hooks for the headless harness
-    window.__ccInfo = () => ({ state, free: freeFlight, x: Math.round(P.x * 10) / 10, y: Math.round(P.y * 10) / 10, vx: Math.round(P.vx), vy: Math.round(P.vy), grounded: P.grounded, flaps: P.flaps, charging: P.charging, progress: Math.round(progress * 1000) / 10, runT: Math.round(runT * 10) / 10, falls, feathers: feathersGot, total: TOTAL_FEATHERS, ledges: ledges.length, topY, hazards: hazards.length, S, viewH, camY: Math.round(camY) });
+    window.__ccInfo = () => ({ state, free: freeFlight, genMs, fallbacks, x: Math.round(P.x * 10) / 10, y: Math.round(P.y * 10) / 10, vx: Math.round(P.vx), vy: Math.round(P.vy), grounded: P.grounded, flaps: P.flaps, charging: P.charging, progress: Math.round(progress * 1000) / 10, runT: Math.round(runT * 10) / 10, falls, feathers: feathersGot, total: TOTAL_FEATHERS, ledges: ledges.length, topY, hazards: hazards.length, S, viewH, camY: Math.round(camY) });
     window.__ccStart = () => anyStart();
     window.__ccJump = (dir, c) => { if (!P.grounded) return false; P.aim = dir; P.charge = c; P.charging = true; doJump(); return true; };
     window.__ccFlap = (dir) => doFlap(dir);
