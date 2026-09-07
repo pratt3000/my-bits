@@ -303,10 +303,14 @@ window.plethoraBit = {
     topY = summit.y;
     walls(topY, topY - 120, 6, 8);
     // sweep away slivers left between carved shapes
-    for (let pass = 0; pass < 3; pass++) for (let y = Y_TOP + 1; y < 60; y++) for (let x = 1; x < LW - 1; x++) {
-      if (!mask[mi(x, y)]) continue; let n = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && mask[mi(x + dx, y + dy)]) n++;
-      if (n <= 4) mask[mi(x, y)] = 0;
+    // (computed against a snapshot so removals cannot cascade along an edge)
+    for (let pass = 0; pass < 2; pass++) {
+      const snap = mask.slice();
+      for (let y = Y_TOP + 1; y < 60; y++) for (let x = 1; x < LW - 1; x++) {
+        if (!snap[mi(x, y)]) continue; let n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && snap[mi(x + dx, y + dy)]) n++;
+        if (n <= 2) mask[mi(x, y)] = 0;
+      }
     }
     // grass on every ledge top
     for (const L of ledges) for (let y = L.y; y < L.y + 3; y++) for (let x = L.x0; x <= L.x1; x++) { if (x >= 0 && x < LW && mask[mi(x, y)]) mask[mi(x, y)] = 2; }
@@ -724,6 +728,7 @@ window.plethoraBit = {
     // debug hooks for the headless harness
     window.__ccInfo = () => ({ state, free: freeFlight, genMs, fallbacks, x: Math.round(P.x * 10) / 10, y: Math.round(P.y * 10) / 10, vx: Math.round(P.vx), vy: Math.round(P.vy), grounded: P.grounded, flaps: P.flaps, charging: P.charging, progress: Math.round(progress * 1000) / 10, runT: Math.round(runT * 10) / 10, falls, feathers: feathersGot, total: TOTAL_FEATHERS, ledges: ledges.length, topY, hazards: hazards.length, S, viewH, camY: Math.round(camY) });
     window.__ccStart = () => anyStart();
+    window.__ccRow = (y) => { let r = ""; for (let x = 0; x < LW; x += 2) r += mask[mi(x, y)] === 2 ? "g" : mask[mi(x, y)] ? "#" : "."; return r; };
     window.__ccJump = (dir, c) => { if (!P.grounded) return false; P.aim = dir; P.charge = c; P.charging = true; doJump(); return true; };
     window.__ccFlap = (dir) => doFlap(dir);
     window.__ccStep = (n) => { for (let i = 0; i < n; i++) tick(1 / 60); };
