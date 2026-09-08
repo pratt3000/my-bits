@@ -132,3 +132,15 @@ constraint is the easy half; not quietly routing around it is the point.
   Sandboxes block those hosts, and a failed library load can abort the page's
   init, leaving a blank screen that looks like a failed recovery when the
   recovery was fine.
+
+## The upload API times out on healthy bits, and says so
+
+`POST /v1/agent/bits/drafts` sits behind a gateway with a budget of about
+three seconds, and the validator runs right at it. When the service is cold or
+busy the response is an HTTP 504 with `{ code: "deadline_exceeded",
+retryable: true }` — for any bit. A 75 KB bit that had uploaded fine before
+failed alongside a 119 KB one, and both went through on a later attempt at the
+same ~2.9 s. It is not a validation failure and not a size problem, and the
+first upload that "timed out" had in fact landed (the retry came back
+`updated`, not `created`). `upload.py` now retries with a pause; if you are
+posting by hand, do the same before you bisect anything.

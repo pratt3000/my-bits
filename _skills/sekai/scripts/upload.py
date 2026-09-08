@@ -112,11 +112,26 @@ def upload(dirs):
         m = json.load(open(os.path.join(d, "plethora.json")))
         source = open(os.path.join(d, m.get("entry", "main.js")), encoding="utf-8").read()
         known = ledger().get(m["title"], [])
-        r = post("/bits/drafts", {
+        name = os.path.basename(d)
+        body = {
             "title": m["title"], "description": m.get("description", ""),
             "tags": m.get("tags", []), "source": source, "manifest": m, "generated": True,
-        }, token)
-        name = os.path.basename(d)
+        }
+        # The API keeps a ~3 s gateway budget in front of its validator, and the
+        # validator sits right at it: a healthy bit of any size gets an HTTP 504
+        # {code: "deadline_exceeded", retryable: true} when the service is cold or
+        # busy, and the very same body goes through a moment later. It is not a
+        # validation failure and not a size problem — a 75 KB bit that had
+        # uploaded fine before failed alongside a 119 KB one, and both then
+        # passed. So retry, with a pause, before telling anyone to bisect.
+        r = None
+        for attempt, pause in enumerate([0, 3, 8, 15]):
+            if pause:
+                print("%-16s deadline exceeded — retrying in %ds" % (name, pause))
+                time.sleep(pause)
+            r = post("/bits/drafts", body, token)
+            if r.get("ok") or (r.get("error") or {}).get("code") != "deadline_exceeded":
+                break
         if r.get("ok"):
             data = r["data"]
             bit_id = (data.get("bit") or {}).get("id", "?")
