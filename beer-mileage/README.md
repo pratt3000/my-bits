@@ -92,28 +92,45 @@ richer than a transmissive beer would have anyway. The bubbles are opaque for
 the same reason; the condensation is outside the wall, so it can stay
 transparent.
 
-## Three acts
+## Three acts, in one place
 
 The first version was a dashboard — chips and a form — and it felt like data
-entry. It is a moment now, and the interface gets out of the way for it.
+entry. Then it was three DOM sheets over a render. Now it is one bar you are
+standing at, and the interface gets out of the way for it.
 
-1. **Ask.** One question at a time. *What did you do today?* Five big cards,
-   plus one that counts steps live off the motion sensor. *How far did you
-   run?* A number the size of the screen that you scrub with your thumb across
-   a ruler — a tick and a haptic on every step — with presets and nudges under
-   it, and a live line that says what it is worth: *= 327 kcal · 1.74 pints of
-   lager*. Then **POUR IT**.
-2. **Pour.** The controls fade. A brass tap lowers in over the glass, the
-   stream starts, the level rises at the pace the pour would take, splash
-   comes up off the surface, the head surges, and the number rolls up in step.
-   Every time the glass fills it holds at the brim for a beat, clinks, and
-   goes to the row while a fresh one takes its place under the stream. The
-   pour's pitch climbs as the glass fills, because the air column shortens.
-   Then a punchline, matched to how much you earned.
+1. **Ask.** *What did you do today?* The answers are on the bar: a pair of
+   trainers, a stopwatch, a bicycle wheel, swim goggles, a dumbbell, and your
+   phone for walking with it live — all built from primitives, nothing loaded,
+   bobbing a little, with their captions projected onto them every frame (the
+   captions are buttons too). Tap one and it lifts off the bar and spins while
+   the camera pushes toward it and the sheet slides up: *How far did you run?*
+   A number the size of the screen that you scrub across a ruler with a tick
+   and a haptic on every step, presets and nudges under it, and a live line
+   that says what it is worth. Then **POUR IT**, and the thing drops back.
+2. **Pour.** A brass tap lowers in over the glass, the stream starts, the
+   level rises at the pace the pour would take, splash comes up off the
+   surface, the head surges, and the number rolls up in step. Every time the
+   glass fills it holds at the brim for a beat, clinks, and goes to the row
+   while a fresh one takes its place under the stream. The pour's pitch
+   climbs as the glass fills, because the air column shortens. Then a
+   punchline, matched to what you earned.
 3. **Play.** Tap the glass and it rings — lower the fuller it is, because the
    beer loads the wall — with a pulse, a slosh and a burst of bubbles. Swipe
    up and it tips to your mouth and drains with two gulps, then the tap tops
    it back up to what is still yours. Drag to tilt; the beer stays level.
+
+**The camera is a character.** A wide, high 52° lens looking down the bar for
+choosing; a push toward the thing you picked; the tight 30° push-in for the
+pour; the settled shot for play. Position, target and focal length all ease
+between goals, so the cuts are moves.
+
+**Your tab is chalked on the wall.** A board behind the bar carries tally
+marks — four strokes and a diagonal — one per pint earned today, the ones you
+have drunk rubbed dim.
+
+The props are two rows rather than one because a portrait frustum is narrow
+even at 52°: three at the front, three behind, and the high camera stacks the
+back row above the front on screen.
 
 ## Chrome
 
@@ -154,12 +171,25 @@ and a 2.5 s cap on waiting.
 
 Headless Chromium against the strict mock `ctx`, driving the whole flow through
 the DOM with `eval` steps and synthetic pointer events: pick steps, preset,
-scrub the ruler, pour and watch the reveal; log a 10 km run whose pour fills
-two glasses on the way; swipe up on the glass to drink one; tap the glass;
+scrub the ruler, pour and watch the reveal; log a run whose pour fills a
+second glass on the way; swipe up on the glass to drink one; tap the glass;
 switch to stout; read the about sheet; open the live-steps card where motion is
 unavailable; resize. No console or page errors; `ready`, `markVisualReady`,
 `start`, `interact`, `milestone`, `setProgress` and both `loadFont` calls fire,
 and the `milestone`s are exactly the glasses the model predicts.
+
+Two things the harness taught, both about time rather than code:
+
+- **It renders the reveal at well under one frame a second**, so a scenario
+  cannot wait a fixed number of milliseconds for a pour to finish. The pour
+  phase is exposed as `data-phase` on the stage element and the scenario waits
+  for DOM state instead; the pour and drink timelines also clamp their step at
+  0.1 s rather than the physics' 0.05 so a slow device keeps real time.
+- **A pointer event is acknowledged only after the frame in front of it**, so
+  the three events of a swipe arrived over two seconds and no velocity gate
+  survived. The drink swipe is distance-only now; that is fine, because
+  "swipe" mode is only entered when the first movement was upward on the
+  glass, so a slow deliberate drag up it is a drink too.
 
 The harness reports the GL canvas as `kind: "err"` because it cannot sample a
 WebGL2 surface for its colour check; the visuals were reviewed from screenshots

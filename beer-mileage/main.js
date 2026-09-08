@@ -557,6 +557,50 @@ window.plethoraBit = {
       scene.add(shelf);
     }
 
+    // ---- your tab, chalked on the wall: four strokes and a diagonal per
+    // ---- pint earned today, the ones you have drunk rubbed dim
+    const TAB_MAX = 40;
+    const tabMarks = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.009, 0.072, 0.004),
+      new THREE.MeshStandardMaterial({ roughness: 0.95 }), TAB_MAX);
+    tabMarks.count = 0;
+    {
+      const board = new THREE.Group();
+      board.position.set(0.2, 0.6, -1.07);
+      board.rotation.y = -0.08;
+      board.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, 0.018),
+        new THREE.MeshStandardMaterial({ color: "#182521", roughness: 0.96 })));
+      const wood = new THREE.MeshStandardMaterial({ color: "#5a3a22", roughness: 0.7 });
+      for (const f of [[0.54, 0.028, 0, 0.184], [0.54, 0.028, 0, -0.184], [0.028, 0.34, -0.256, 0], [0.028, 0.34, 0.256, 0]]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(f[0], f[1], 0.03), wood);
+        m.position.set(f[2], f[3], 0.005);
+        board.add(m);
+      }
+      board.add(tabMarks);
+      scene.add(board);
+    }
+    const _zAxis = new THREE.Vector3(0, 0, 1);
+    function updateTab() {
+      const total = Math.min(TAB_MAX, Math.floor(derived.earned + 1e-9));
+      const chalk = new THREE.Color("#f3eee2"), dim = new THREE.Color("#5b665f");
+      let k = 0;
+      for (let i = 0; i < total; i++) {
+        const grp = Math.floor(i / 5), inG = i % 5, row = Math.floor(grp / 4), col = grp % 4;
+        const x0 = -0.185 + col * 0.118, y0 = 0.075 - row * 0.15;
+        _pos.set(x0 + (inG < 4 ? inG * 0.02 : 0.03), y0, 0.012);
+        const jit = ((i * 7919) % 13) / 13 - 0.5;
+        _q.setFromAxisAngle(_zAxis, inG < 4 ? jit * 0.16 : 0.78);
+        _scl.set(1, inG < 4 ? 1 + jit * 0.08 : 1.55, 1);
+        _m4.compose(_pos, _q, _scl);
+        tabMarks.setMatrixAt(k, _m4);
+        tabMarks.setColorAt(k, i < day.poured ? dim : chalk);
+        k++;
+      }
+      tabMarks.count = k;
+      tabMarks.instanceMatrix.needsUpdate = true;
+      if (tabMarks.instanceColor) tabMarks.instanceColor.needsUpdate = true;
+    }
+
     // ---- bokeh: soft discs of pub light, additive, drifting
     const BOKEH_N = 72;
     const bokeh = new THREE.InstancedMesh(
@@ -1021,7 +1065,21 @@ window.plethoraBit = {
 
     // ---- camera
     let W = ctx.width, H = ctx.height;
-    const cam = { dist: 0.5, look: 0.08, tdist: 0.5, tlook: 0.08, zoom: 1, tzoom: 1, lookUp: 0, tlookUp: 0 };
+    const cam = { tdist: 0.5, tlook: 0.08 };
+    // The camera is a character: a wide high lens down the bar for choosing, a
+    // push toward the thing you picked, a tight push for the pour, and the
+    // settled shot for play. Position, target and focal length all ease.
+    const camPos = new THREE.Vector3(0, 0.34, 1.2), camLook = new THREE.Vector3(0, 0.08, 0);
+    const camGoalPos = new THREE.Vector3(), camGoalLook = new THREE.Vector3();
+    let camFov = 30, camGoalFov = 30;
+    function camGoals() {
+      const D = cam.tdist, Hg = G.spec ? G.spec.H : 0.15;
+      const st = (typeof UI !== "undefined") ? UI.state : "result";
+      if (st === "pick") { camGoalPos.set(0, 0.37, 0.8); camGoalLook.set(0, 0.02, 0.1); camGoalFov = 52; }
+      else if (st === "amount" || st === "live") { camGoalPos.set(0, 0.25, 0.58); camGoalLook.set(0, 0.04, 0.12); camGoalFov = 40; }
+      else if (st === "reveal") { camGoalPos.set(0, Hg * 0.6 + D * 0.17, D * 0.86); camGoalLook.set(0, Hg * 0.6, 0); camGoalFov = 30; }
+      else { camGoalPos.set(0, Hg * 0.5 + D * 0.2, D); camGoalLook.set(0, Hg * 0.5, 0); camGoalFov = 30; }
+    }
     function fitCamera() {
       const Hg = G.spec ? G.spec.H : 0.15;
       const vfov = camera.fov * Math.PI / 180;
@@ -1031,15 +1089,17 @@ window.plethoraBit = {
       cam.tdist = Math.max(dv, dh);
       cam.tlook = Hg * 0.5 - 0.004;
     }
-    function placeCamera(t) {
-      cam.dist += (cam.tdist - cam.dist) * 0.06;
-      cam.look += (cam.tlook - cam.look) * 0.06;
-      cam.zoom += (cam.tzoom - cam.zoom) * 0.05;
-      cam.lookUp += (cam.tlookUp - cam.lookUp) * 0.05;
-      const d = cam.dist * cam.zoom;
+    function placeCamera(t, dt) {
+      camGoals();
+      const k = 1 - Math.exp(-(dt || 0.016) * 3.0);
+      camPos.lerp(camGoalPos, k);
+      camLook.lerp(camGoalLook, k);
+      camFov += (camGoalFov - camFov) * k;
+      if (Math.abs(camera.fov - camFov) > 0.02) { camera.fov = camFov; camera.updateProjectionMatrix(); }
       const sway = Math.sin(t * 0.23) * 0.012;
-      camera.position.set(sway + G.shownTiltX * 0.04, cam.look + cam.lookUp + d * 0.2 + G.shownTiltY * 0.02, d);
-      camera.lookAt(0, cam.look + cam.lookUp, 0);
+      camera.position.set(camPos.x + sway + G.shownTiltX * 0.04, camPos.y + G.shownTiltY * 0.02, camPos.z);
+      camera.lookAt(camLook);
+      camera.updateMatrixWorld();
     }
 
 
@@ -1074,6 +1134,15 @@ window.plethoraBit = {
       "background:linear-gradient(180deg,rgba(12,6,4,0),rgba(12,6,4,.86) 18%,rgba(12,6,4,.96) 40%)}",
       ".bm-q{font-family:" + SERIF + ";font-style:italic;font-size:30px;color:#ffe9c4;text-align:center;",
       "line-height:1.12;margin:0 0 16px}",
+      ".bm-pickq{position:absolute;left:0;right:0;text-align:center;pointer-events:none;padding:0 18px}",
+      ".bm-pickq .bm-sub{font-size:10.5px;letter-spacing:.22em;font-weight:700;opacity:.5;margin-top:-8px}",
+      ".bm-labels{position:absolute;inset:0;pointer-events:none}",
+      ".bm-lbl{position:absolute;transform:translate(-50%,0);pointer-events:auto;border:1px solid rgba(255,220,160,.18);",
+      "background:rgba(18,9,5,.74);border-radius:12px;padding:5px 10px 4px;color:#ffe9c4;font-family:" + DISPLAY + ";",
+      "font-size:14px;letter-spacing:.12em;white-space:nowrap;text-align:center;transition:opacity .25s;line-height:1.05}",
+      ".bm-lbl i{display:block;font-style:normal;font-family:" + BODY + ";font-size:9.5px;opacity:.6;letter-spacing:.02em;min-height:11px}",
+      ".bm-pickfoot{position:absolute;left:0;right:0;bottom:0;text-align:center;padding:12px 18px 0;pointer-events:auto;",
+      "background:linear-gradient(180deg,rgba(12,6,4,0),rgba(12,6,4,.85) 50%)}",
       ".bm-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}",
       ".bm-card{border:1px solid rgba(255,220,160,.16);border-radius:20px;padding:15px 8px 12px;",
       "background:rgba(34,17,9,.85);color:#fff;display:flex;flex-direction:column;align-items:center;gap:5px}",
@@ -1225,9 +1294,11 @@ window.plethoraBit = {
         s.style.paddingBottom = (ctx.safeArea.bottom + 30) + "px";
       }
       for (const c of ui.querySelectorAll("[data-close]")) c.style.top = (ctx.safeArea.top + 14) + "px";
-      for (const a of ui.querySelectorAll(".bm-ask,.bm-result,.bm-reveal")) {
+      for (const a of ui.querySelectorAll(".bm-ask,.bm-result,.bm-reveal,.bm-pickfoot")) {
         a.style.paddingBottom = (ctx.safeArea.bottom + 18) + "px";
       }
+      const pq = q("[data-pickq]");
+      if (pq) pq.style.top = (ctx.safeArea.top + 112) + "px";
       elTop.classList.toggle("small", UI.state === "pick" || UI.state === "amount" || H < 700);
     }
 
@@ -1288,6 +1359,7 @@ window.plethoraBit = {
     }
 
     function renderTop() {
+      updateTab();
       const s = MODEL.STYLES[profile.style];
       elUnit.textContent = viz.remaining >= 0.95 && viz.remaining < 1.05 ? "PINT" : "PINTS";
       elStyle.textContent = "of " + s.name.toLowerCase() + " · " + Math.round(MODEL.beerKcal(profile.style)) + " kcal a pint";
@@ -1314,16 +1386,18 @@ window.plethoraBit = {
     function renderStage() {
       let html = "";
       if (UI.state === "pick") {
-        html = '<div class="bm-ask"><h1 class="bm-q">' + (derived.kcal > 0 ? "What else did you do?" : "What did you do today?") + "</h1>"
-          + '<div class="bm-cards">'
-          + MODEL.ACT_KEYS.map((k) => {
-              const a = MODEL.ACTS[k], v = day.log[k] || 0;
-              return '<button class="bm-card" type="button" data-card="' + k + '"><span>' + a.emoji + "</span><b>"
-                + a.label.toUpperCase() + "</b><i>" + (v > 0 ? fmtVal(v, k) + " today" : "") + "</i></button>";
+        // the choices are on the bar; these are their captions, projected each frame
+        html = '<div class="bm-pickq" data-pickq><h1 class="bm-q">' + (derived.kcal > 0 ? "What else did you do?" : "What did you do today?") + "</h1>"
+          + '<div class="bm-sub">tap something on the bar</div></div>'
+          + '<div class="bm-labels" data-labels>'
+          + PROP_ORDER.map((k) => {
+              const v = k === "walk" ? 0 : (day.log[k] || 0);
+              const attr = k === "walk" ? "data-live-card" : 'data-card="' + k + '"';
+              const sub = k === "walk" ? "count live" : (v > 0 ? fmtVal(v, k) + " today" : "");
+              return '<button class="bm-lbl" type="button" data-prop="' + k + '" ' + attr + "><b>" + PROP_LABEL[k] + "</b><i>" + sub + "</i></button>";
             }).join("")
-          + '<button class="bm-card" type="button" data-live-card><span>📱</span><b>WALK</b><i>count steps live</i></button>'
           + "</div>"
-          + '<div class="bm-tally">' + tallyText() + "</div>"
+          + '<div class="bm-pickfoot" data-pickfoot><div class="bm-tally">' + tallyText() + "</div>"
           + (derived.kcal > 0 ? '<button class="bm-back" type="button" data-more-done>SHOW MY BEER ›</button>' : "")
           + "</div>";
       } else if (UI.state === "amount") {
@@ -1530,6 +1604,153 @@ window.plethoraBit = {
     }
 
     // ===================================================================
+    // The props: what you did today, as things on the bar you can pick up.
+    // Two rows, because a portrait lens is narrow even at 52 degrees.
+    // ===================================================================
+    const PROP_ORDER = ["steps", "run", "ride", "swim", "gym", "walk"];
+    const PROP_HOME = { steps: [-0.125, 0.235], ride: [0, 0.25], gym: [0.125, 0.235],
+                        run: [-0.075, 0.13], swim: [0, 0.14], walk: [0.075, 0.13] };
+    const PROP_HERO = new THREE.Vector3(0, 0.125, 0.14);
+    const PROP_LABEL = { steps: "STEPS", run: "RUN", ride: "RIDE", swim: "SWIM", gym: "GYM", walk: "WALK" };
+    const PM = {
+      white: new THREE.MeshStandardMaterial({ color: "#f2ede4", roughness: 0.6 }),
+      red: new THREE.MeshStandardMaterial({ color: "#d8402c", roughness: 0.55 }),
+      dark: new THREE.MeshStandardMaterial({ color: "#1e1a1c", roughness: 0.7 }),
+      steel: new THREE.MeshStandardMaterial({ color: "#c9ccd2", metalness: 0.9, roughness: 0.3 }),
+      rubber: new THREE.MeshStandardMaterial({ color: "#262626", roughness: 0.95 }),
+      blue: new THREE.MeshStandardMaterial({ color: "#2b6fd6", roughness: 0.5 }),
+      lens: new THREE.MeshPhysicalMaterial({ color: "#8fd6ff", roughness: 0.05, transparent: true, opacity: 0.55, clearcoat: 1 }),
+      iron: new THREE.MeshStandardMaterial({ color: "#2a2b2e", metalness: 0.6, roughness: 0.45 }),
+      screen: new THREE.MeshBasicMaterial({ color: "#3fd18a" }),
+      face: new THREE.MeshStandardMaterial({ color: "#f6f2e8", roughness: 0.4 })
+    };
+    function pm(geo, mat, x, y, z, rx, ry, rz) {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x || 0, y || 0, z || 0);
+      m.rotation.set(rx || 0, ry || 0, rz || 0);
+      m.castShadow = true;
+      return m;
+    }
+    function buildProp(act) {
+      const g = new THREE.Group();
+      if (act === "steps") {                       // a pair of trainers
+        for (const side of [-1, 1]) {
+          const shoe = new THREE.Group();
+          shoe.add(pm(new THREE.BoxGeometry(0.052, 0.01, 0.022), PM.red, 0, 0.005, 0));
+          shoe.add(pm(new THREE.CapsuleGeometry(0.0105, 0.03, 4, 10), PM.white, 0.004, 0.019, 0, 0, 0, Math.PI / 2));
+          for (let i = 0; i < 3; i++) {
+            shoe.add(pm(new THREE.CylinderGeometry(0.0012, 0.0012, 0.02, 6), PM.dark, -0.004 + i * 0.007, 0.03, 0, Math.PI / 2, 0, 0));
+          }
+          shoe.position.set(side * 0.016, 0, side * 0.004);
+          shoe.rotation.y = side * 0.18;
+          g.add(shoe);
+        }
+      } else if (act === "run") {                  // a stopwatch
+        g.add(pm(new THREE.CylinderGeometry(0.03, 0.03, 0.009, 36), PM.steel, 0, 0.035, 0, Math.PI / 2, 0, 0));
+        g.add(pm(new THREE.CylinderGeometry(0.026, 0.026, 0.0095, 36), PM.face, 0, 0.035, 0.0005, Math.PI / 2, 0, 0));
+        g.add(pm(new THREE.BoxGeometry(0.0022, 0.022, 0.002), PM.red, 0, 0.044, 0.006));
+        g.add(pm(new THREE.BoxGeometry(0.0022, 0.016, 0.002), PM.dark, 0.006, 0.039, 0.006, 0, 0, -0.9));
+        g.add(pm(new THREE.CylinderGeometry(0.005, 0.005, 0.01, 12), PM.steel, 0, 0.069, 0));
+        g.add(pm(new THREE.TorusGeometry(0.0075, 0.0018, 8, 20), PM.steel, 0, 0.078, 0));
+        g.add(pm(new THREE.CylinderGeometry(0.0035, 0.0035, 0.008, 10), PM.steel, 0.022, 0.062, 0, 0, 0, -0.8));
+      } else if (act === "ride") {                 // a bicycle wheel
+        const wheel = new THREE.Group();
+        wheel.add(pm(new THREE.TorusGeometry(0.034, 0.0045, 10, 40), PM.rubber));
+        wheel.add(pm(new THREE.TorusGeometry(0.029, 0.0016, 8, 40), PM.steel));
+        wheel.add(pm(new THREE.CylinderGeometry(0.005, 0.005, 0.012, 14), PM.steel, 0, 0, 0, Math.PI / 2, 0, 0));
+        for (let i = 0; i < 14; i++) {
+          const a = (i / 14) * Math.PI * 2;
+          wheel.add(pm(new THREE.CylinderGeometry(0.0006, 0.0006, 0.056, 4), PM.steel,
+            Math.cos(a) * 0.0145, Math.sin(a) * 0.0145, i % 2 ? 0.002 : -0.002, 0, 0, a + Math.PI / 2));
+        }
+        wheel.position.y = 0.0385;
+        wheel.rotation.y = 0.35;
+        g.add(wheel);
+        g.userData.spin = wheel;
+      } else if (act === "swim") {                 // goggles
+        for (const side of [-1, 1]) {
+          g.add(pm(new THREE.TorusGeometry(0.0125, 0.0032, 10, 24), PM.blue, side * 0.016, 0.03, 0));
+          g.add(pm(new THREE.CylinderGeometry(0.011, 0.011, 0.003, 24), PM.lens, side * 0.016, 0.03, 0, Math.PI / 2, 0, 0));
+        }
+        g.add(pm(new THREE.BoxGeometry(0.008, 0.004, 0.004), PM.blue, 0, 0.03, 0));
+        g.add(pm(new THREE.TorusGeometry(0.03, 0.0022, 6, 30, Math.PI), PM.dark, 0, 0.03, -0.004, -Math.PI / 2, 0, 0));
+        g.rotation.x = 0.25;
+      } else if (act === "gym") {                  // a dumbbell
+        g.add(pm(new THREE.CylinderGeometry(0.0045, 0.0045, 0.078, 12), PM.steel, 0, 0.018, 0, 0, 0, Math.PI / 2));
+        for (const side of [-1, 1]) {
+          g.add(pm(new THREE.CylinderGeometry(0.018, 0.018, 0.009, 24), PM.iron, side * 0.03, 0.018, 0, 0, 0, Math.PI / 2));
+          g.add(pm(new THREE.CylinderGeometry(0.013, 0.013, 0.007, 24), PM.iron, side * 0.022, 0.018, 0, 0, 0, Math.PI / 2));
+        }
+      } else {                                     // the phone, for walking with it
+        g.add(pm(new THREE.BoxGeometry(0.032, 0.064, 0.005), PM.dark, 0, 0.033, 0, -0.35, 0, 0));
+        const scr = pm(new THREE.PlaneGeometry(0.028, 0.056), PM.screen, 0, 0.033, 0.0028, -0.35, 0, 0);
+        scr.castShadow = false;
+        g.add(scr);
+      }
+      g.userData.act = act;
+      return g;
+    }
+    const props = {};
+    for (const k of PROP_ORDER) {
+      const grp = buildProp(k);
+      const home = PROP_HOME[k];
+      props[k] = { group: grp, home: new THREE.Vector3(home[0], 0, home[1]), sunk: 1, lift: 0,
+                   phase: rrange(0, 6.3), spinY: rrange(-0.4, 0.4) };
+      grp.position.set(home[0], -0.1, home[1]);
+      grp.visible = false;
+      scene.add(grp);
+    }
+    let heroAct = null;
+    const _pv = new THREE.Vector3();
+    function stepProps(dt, t) {
+      const st = UI.state;
+      for (const k of PROP_ORDER) {
+        const p = props[k];
+        const wantSunk = (st === "pick" || ((st === "amount" || st === "live") && k === heroAct)) ? 0 : 1;
+        const wantLift = ((st === "amount" || st === "live") && k === heroAct) ? 1 : 0;
+        p.sunk += (wantSunk - p.sunk) * Math.min(1, dt * 4.5);
+        p.lift += (wantLift - p.lift) * Math.min(1, dt * 4);
+        const lift = easeInOut(clamp(p.lift, 0, 1));
+        const g = p.group;
+        g.visible = p.sunk < 0.985;
+        const bob = Math.sin(t * 2 + p.phase) * 0.003 * (1 - p.sunk);
+        g.position.set(lerp(p.home.x, PROP_HERO.x, lift), lerp(0, PROP_HERO.y, lift) - 0.11 * p.sunk + bob,
+                       lerp(p.home.z, PROP_HERO.z, lift));
+        p.spinY += dt * (0.35 + 1.4 * lift);
+        g.rotation.y = p.spinY;
+        const sc = 1 + 0.5 * lift;
+        g.scale.set(sc, sc, sc);
+        if (g.userData.spin) g.userData.spin.rotation.z += dt * (0.8 + 4 * lift);
+      }
+    }
+    function hitProp(px, py) {
+      ndc.set((px / W) * 2 - 1, -(py / H) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      const groups = PROP_ORDER.filter((k) => props[k].group.visible).map((k) => props[k].group);
+      const hits = ray.intersectObjects(groups, true);
+      for (const h of hits) {
+        let o = h.object;
+        while (o && !o.userData.act) o = o.parent;
+        if (o) return o.userData.act;
+      }
+      return null;
+    }
+    function syncLabels() {
+      const box = q("[data-labels]");
+      if (!box) return;
+      for (const k of PROP_ORDER) {
+        const el = box.querySelector('[data-prop="' + k + '"]');
+        if (!el) continue;
+        const p = props[k];
+        if (p.sunk > 0.6) { el.style.opacity = "0"; continue; }
+        _pv.set(p.home.x, -0.012, p.home.z + 0.03).project(camera);
+        el.style.left = ((_pv.x + 1) / 2 * W) + "px";
+        el.style.top = ((1 - _pv.y) / 2 * H) + "px";
+        el.style.opacity = String(clamp(1 - p.sunk * 1.6, 0, 1));
+      }
+    }
+
+    // ===================================================================
     // The pour: a timeline that drags the shown number and the level from
     // the old truth to the new, filling and swapping glasses on the way.
     // ===================================================================
@@ -1542,7 +1763,6 @@ window.plethoraBit = {
       tapRise = 0.3;
       if (!mini) {
         setState("reveal");
-        cam.tzoom = 0.86; cam.tlookUp = G.spec.H * 0.12;
         haptic("medium");
         ctx.platform.setProgress(0);
       }
@@ -1624,7 +1844,6 @@ window.plethoraBit = {
           G.targetFrac = derived.frac;
           G.levelFrac = Math.max(G.levelFrac, derived.frac > 0 ? 0.002 : 0);
           syncRowCount(derived.full, true);
-          cam.tzoom = 1; cam.tlookUp = 0;
           if (!P.mini) {
             setState("result");
             const punch = q("[data-punch]");
@@ -1668,6 +1887,7 @@ window.plethoraBit = {
         const rem0 = derived.remaining;
         day = next; recompute(); saveDay();
         syncViz();
+        syncRowCount(derived.full, true);     // the one you drank leaves the row now, not after the top-up
         renderTop();
         toast("DOWN THE HATCH", derived.full ? derived.full + " LEFT" : "LAST ONE");
         ctx.platform.interact({ type: "pour", poured: day.poured });
@@ -1694,6 +1914,14 @@ window.plethoraBit = {
       ctx.platform.start();
     }
 
+    function chooseAct(k) {
+      if (!MODEL.ACTS[k]) return;
+      heroAct = k;
+      UI.act = k; UI.value = 0; UI.scrub.ticks = 0;
+      sfxPop(); haptic("light");
+      setState("amount");
+    }
+
     function commitAmount() {
       if (!UI.act || !(UI.value > 0) || P.on || D.on) return;
       const before = derived.remaining, kcalBefore = derived.kcal;
@@ -1703,6 +1931,7 @@ window.plethoraBit = {
       ctx.platform.interact({ type: "add", act: UI.act, amount: UI.value });
       P.kcalFrom = kcalBefore; P.kcalTo = derived.kcal;
       sfxPop();
+      heroAct = null;
       startPour(before, derived.remaining, false);
       UI.value = 0;
     }
@@ -1817,10 +2046,9 @@ window.plethoraBit = {
       e.preventDefault(); e.stopPropagation();
       firstGesture();
       if (t.hasAttribute("data-card")) {
-        UI.act = t.getAttribute("data-card"); UI.value = 0; UI.scrub.ticks = 0;
-        sfxPop(); haptic("light"); setState("amount");
+        chooseAct(t.getAttribute("data-card"));
       } else if (t.hasAttribute("data-live-card")) {
-        sfxPop(); haptic("light"); setLive(true);
+        heroAct = "walk"; sfxPop(); haptic("light"); setLive(true);
       } else if (t.hasAttribute("data-live-stop")) {
         sfxPop(); setLive(false);
       } else if (t.hasAttribute("data-pre")) {
@@ -1874,7 +2102,7 @@ window.plethoraBit = {
     // ---- the glass: tap it, swipe up to drink it, drag to tilt it
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
-    const ptr = { down: false, id: null, x0: 0, y0: 0, ox: 0, oy: 0, tx0: 0, ty0: 0, t0: 0, onGlass: false, mode: null };
+    const ptr = { down: false, id: null, x0: 0, y0: 0, ox: 0, oy: 0, tx0: 0, ty0: 0, t0: 0, onGlass: false, mode: null, prop: null };
     function hitGlass(px, py) {
       if (!G.glass) return false;
       ndc.set((px / W) * 2 - 1, -(py / H) * 2 + 1);
@@ -1899,6 +2127,7 @@ window.plethoraBit = {
       const ox = typeof e.offsetX === "number" ? e.offsetX : e.clientX;
       const oy = typeof e.offsetY === "number" ? e.offsetY : e.clientY;
       ptr.onGlass = !P.on && !D.on && hitGlass(ox, oy);
+      ptr.prop = UI.state === "pick" ? hitProp(ox, oy) : null;
       firstGesture();
     }, { passive: false });
     ctx.listen(window, "pointermove", (e) => {
@@ -1924,7 +2153,8 @@ window.plethoraBit = {
       ptr.down = false;
       const quick = performance.now() - ptr.t0 < 350;
       if (!ptr.mode && quick) {
-        if (ptr.onGlass) tapGlass();
+        if (ptr.prop) { if (ptr.prop === "walk") { heroAct = "walk"; sfxPop(); haptic("light"); setLive(true); } else chooseAct(ptr.prop); }
+        else if (ptr.onGlass) tapGlass();
         else { elSettings.hidden = true; elAbout.hidden = true; }
       }
     }
@@ -1972,7 +2202,9 @@ window.plethoraBit = {
         bokeh.setMatrixAt(i, _m4);
       }
       bokeh.instanceMatrix.needsUpdate = true;
-      placeCamera(t);
+      stepProps(dt, t);
+      placeCamera(t, dt);
+      syncLabels();
       renderer.render(scene, camera);
       tweenNumber(Math.min(0.12, dtMs / 1000));
     });
@@ -1994,7 +2226,10 @@ window.plethoraBit = {
     setState(derived.kcal > 0 ? "result" : "pick");
     glassGroup.updateMatrixWorld();
     stepLiquid(0.016, 0);
-    placeCamera(0);
+    camGoals(); camPos.copy(camGoalPos); camLook.copy(camGoalLook); camFov = camGoalFov;
+    placeCamera(0, 0.016);
+    stepProps(0.016, 0); syncLabels();
+    updateTab();
     renderer.render(scene, camera);
     ctx.markVisualReady("first frame");
     ctx.platform.ready();
