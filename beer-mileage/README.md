@@ -92,26 +92,46 @@ richer than a transmissive beer would have anyway. The bubbles are opaque for
 the same reason; the condensation is outside the wall, so it can stay
 transparent.
 
+## Three acts
+
+The first version was a dashboard — chips and a form — and it felt like data
+entry. It is a moment now, and the interface gets out of the way for it.
+
+1. **Ask.** One question at a time. *What did you do today?* Five big cards,
+   plus one that counts steps live off the motion sensor. *How far did you
+   run?* A number the size of the screen that you scrub with your thumb across
+   a ruler — a tick and a haptic on every step — with presets and nudges under
+   it, and a live line that says what it is worth: *= 327 kcal · 1.74 pints of
+   lager*. Then **POUR IT**.
+2. **Pour.** The controls fade. A brass tap lowers in over the glass, the
+   stream starts, the level rises at the pace the pour would take, splash
+   comes up off the surface, the head surges, and the number rolls up in step.
+   Every time the glass fills it holds at the brim for a beat, clinks, and
+   goes to the row while a fresh one takes its place under the stream. The
+   pour's pitch climbs as the glass fills, because the air column shortens.
+   Then a punchline, matched to how much you earned.
+3. **Play.** Tap the glass and it rings — lower the fuller it is, because the
+   beer loads the wall — with a pulse, a slosh and a burst of bubbles. Swipe
+   up and it tips to your mouth and drains with two gulps, then the tap tops
+   it back up to what is still yours. Drag to tilt; the beer stays level.
+
 ## Chrome
 
 DOM over the GL canvas, with the root at `pointer-events: none` and only the
 controls opting back in. No `backdrop-filter`: over a WebGL canvas it went
-stale in the compositor and left blank squares where chips had been toggled,
-and it is not a risk worth a blur. Type is Bebas Neue for the numbers and DM Serif
-Display italic for the beer, both from the Plethora font registry via
-`ctx.loadFont`, with the system stack underneath and a 2.5 s cap on waiting.
+stale in the compositor and left blank squares where controls had been
+toggled, and it is not a risk worth a blur. Type is Bebas Neue for the numbers
+and DM Serif Display italic for the questions and the beer, both from the
+Plethora font registry via `ctx.loadFont`, with the system stack underneath
+and a 2.5 s cap on waiting.
 
-- Five activity chips down the right edge, in the thumb. Each opens a card of
-  four quick-add amounts, an undo of the last add, and clear.
-- The steps card can **count steps live** from the motion sensor while the bit
-  is open — a threshold crossing on the high-passed acceleration magnitude with
-  a refractory period, committed twenty at a time so the glass rises as you
-  walk. It says plainly when motion is not available.
-- **Pour one** appears when a full pint is earned. Below it, the line says how
-  much more of whatever you did most today finishes the glass.
+- The **live steps** card runs a threshold crossing on the high-passed
+  acceleration magnitude with a refractory period, ticking on every step and
+  committing twenty at a time so the glass rises as you walk; stopping pours
+  whatever is left. It says plainly when motion is not available.
 - Settings: weight, what you drink, tilt with the phone (drag always works),
-  reset today. About: the formulas, with the numbers filled in.
-- A seven-day strip under the readout, from the archived history.
+  reset today. About: the formulas with the numbers filled in.
+- A seven-day strip on the result screen, from the archived history.
 
 ## Contract notes
 
@@ -132,14 +152,14 @@ Display italic for the beer, both from the Plethora font registry via
 
 `node test-model.js beer-mileage/main.js` — 44 passed.
 
-Headless Chromium against the strict mock `ctx`, driving every control through
-the DOM with `eval` steps: add steps twice (the second overflows two glasses),
-add a run, pour one, open settings, change weight and style to stout, read the
-about sheet, drag to tilt, toggle live steps where motion is unavailable, undo,
-clear, reset onto wheat, resize. No console or page errors; `ready`,
-`markVisualReady`, `start`, `interact`, `milestone`, `setProgress` and both
-`loadFont` calls fire, and the two `milestone`s are exactly the two pints the
-model predicts for 15,000 steps at 72 kg.
+Headless Chromium against the strict mock `ctx`, driving the whole flow through
+the DOM with `eval` steps and synthetic pointer events: pick steps, preset,
+scrub the ruler, pour and watch the reveal; log a 10 km run whose pour fills
+two glasses on the way; swipe up on the glass to drink one; tap the glass;
+switch to stout; read the about sheet; open the live-steps card where motion is
+unavailable; resize. No console or page errors; `ready`, `markVisualReady`,
+`start`, `interact`, `milestone`, `setProgress` and both `loadFont` calls fire,
+and the `milestone`s are exactly the glasses the model predicts.
 
 The harness reports the GL canvas as `kind: "err"` because it cannot sample a
 WebGL2 surface for its colour check; the visuals were reviewed from screenshots

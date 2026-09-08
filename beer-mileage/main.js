@@ -286,6 +286,77 @@ window.plethoraBit = {
         });
       } catch (err) { musicHandle = null; }
     }
+    function sfxTick(i) {
+      if (!audioOn) return;
+      const at = ac.currentTime + 0.003;
+      noise(at, 0.012, "highpass", 3400, 1, 0.08);
+      const o = ac.createOscillator();
+      o.type = "square";
+      o.frequency.value = 780 + ((i % 9) * 21);
+      env(o, at, 0.025, 0.002, 0.016);
+      o.start(at); o.stop(at + 0.04);
+    }
+    function sfxPop() {
+      if (!audioOn) return;
+      const at = ac.currentTime + 0.005;
+      const o = ac.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(640, at);
+      o.frequency.exponentialRampToValueAtTime(300, at + 0.07);
+      env(o, at, 0.16, 0.004, 0.08);
+      o.start(at); o.stop(at + 0.12);
+    }
+    // A glass rings lower as it fills: the beer loads the wall. Real, and the
+    // reason a tapped pint sounds different at the top and the bottom.
+    function sfxTing(frac) {
+      if (!audioOn) return;
+      const at = ac.currentTime + 0.005;
+      const f0 = (2350 - 900 * clamp(frac, 0, 1)) * (0.985 + Math.random() * 0.03);
+      const parts = [[1, 0.14, 1.5], [2.32, 0.05, 0.9], [3.9, 0.02, 0.5]];
+      for (const p of parts) {
+        const o = ac.createOscillator();
+        o.type = "sine";
+        o.frequency.value = f0 * p[0];
+        env(o, at, p[1], 0.003, p[2]);
+        o.start(at); o.stop(at + p[2] + 0.1);
+      }
+      noise(at, 0.02, "highpass", 5000, 1, 0.05);
+    }
+    const pourSnd = { on: false, g: null, bp: null, sine: null, sg: null, src: null, lfo: null, lg: null };
+    function pourStart() {
+      if (!audioOn || pourSnd.on) return;
+      const at = ac.currentTime;
+      const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 520; bp.Q.value = 1.1;
+      const g = ac.createGain(); g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(0.16, at + 0.25);
+      const lfo = ac.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 6.5;
+      const lg = ac.createGain(); lg.gain.value = 0.09;
+      lfo.connect(lg); lg.connect(g.gain);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      // the air column: its pitch climbs as the glass fills
+      const sine = ac.createOscillator(); sine.type = "sine"; sine.frequency.value = 380;
+      const sg = ac.createGain(); sg.gain.setValueAtTime(0.0001, at); sg.gain.linearRampToValueAtTime(0.035, at + 0.3);
+      sine.connect(sg); sg.connect(master);
+      src.start(at); lfo.start(at); sine.start(at);
+      Object.assign(pourSnd, { on: true, g, bp, sine, sg, src, lfo, lg });
+    }
+    function pourUpdate(frac, strength) {
+      if (!pourSnd.on) return;
+      const now = ac.currentTime;
+      pourSnd.bp.frequency.setTargetAtTime(480 + 700 * frac, now, 0.05);
+      pourSnd.sine.frequency.setTargetAtTime(360 + 1700 * frac * frac, now, 0.05);
+      pourSnd.g.gain.setTargetAtTime(0.16 * strength, now, 0.08);
+      pourSnd.sg.gain.setTargetAtTime(0.035 * strength, now, 0.08);
+    }
+    function pourStop() {
+      if (!pourSnd.on) return;
+      const now = ac.currentTime;
+      pourSnd.g.gain.setTargetAtTime(0.0001, now, 0.08);
+      pourSnd.sg.gain.setTargetAtTime(0.0001, now, 0.08);
+      const s = pourSnd;
+      try { s.src.stop(now + 0.5); s.lfo.stop(now + 0.5); s.sine.stop(now + 0.5); } catch (err) { /* already */ }
+      pourSnd.on = false;
+    }
     function haptic(kind) { try { ctx.platform.haptic(kind); } catch (err) { /* none */ } }
 
     // ===================================================================
@@ -657,7 +728,8 @@ window.plethoraBit = {
       spec: null, glass: null, liquid: null, cap: null, foam: null,
       levelFrac: 0, targetFrac: 0, head: 0, headRest: 0.012, look: LOOK.lager,
       sloshX: 0, sloshVX: 0, sloshZ: 0, sloshVZ: 0, tiltX: 0, tiltY: 0, shownTiltX: 0, shownTiltY: 0,
-      nucl: [], overflowT: -1
+      nucl: [], overflowT: -1,
+      driven: false, drinkTip: 0, pulse: 0
     };
 
     function disposeMesh(m) {
@@ -817,9 +889,11 @@ window.plethoraBit = {
         if (G.overflowT < 0.55) target = 1;
         else if (G.overflowT > 1.3) G.overflowT = -1;
       }
-      const rate = target > G.levelFrac ? 3.6 : 4.2;
-      G.levelFrac += (target - G.levelFrac) * Math.min(1, dt * rate);
-      if (Math.abs(target - G.levelFrac) < 0.0004) G.levelFrac = target;
+      if (!G.driven) {
+        const rate = target > G.levelFrac ? 3.6 : 4.2;
+        G.levelFrac += (target - G.levelFrac) * Math.min(1, dt * rate);
+        if (Math.abs(target - G.levelFrac) < 0.0004) G.levelFrac = target;
+      }
 
       // head: kicked by pouring, always settling toward its resting height
       const rest = G.levelFrac > 0.005 ? G.headRest : 0;
@@ -835,7 +909,10 @@ window.plethoraBit = {
       G.sloshX += G.sloshVX * dt;
       G.sloshZ += G.sloshVZ * dt;
       glassGroup.rotation.z = -G.shownTiltX * 0.34;
-      glassGroup.rotation.x = G.shownTiltY * 0.30;
+      glassGroup.rotation.x = G.shownTiltY * 0.30 + G.drinkTip;
+      G.pulse = Math.max(0, G.pulse - dt * 4);
+      const pk = 1 + Math.sin(G.pulse * Math.PI) * 0.035;
+      glassGroup.scale.set(pk, 1, pk);
 
       const levelY = G.levelFrac > 0.002 ? spec.levelFor(G.levelFrac) : -1;
       _n.set(clamp(G.sloshX, -0.35, 0.35), 1, clamp(G.sloshZ, -0.35, 0.35)).normalize();
@@ -944,7 +1021,7 @@ window.plethoraBit = {
 
     // ---- camera
     let W = ctx.width, H = ctx.height;
-    const cam = { dist: 0.5, look: 0.08, tdist: 0.5, tlook: 0.08 };
+    const cam = { dist: 0.5, look: 0.08, tdist: 0.5, tlook: 0.08, zoom: 1, tzoom: 1, lookUp: 0, tlookUp: 0 };
     function fitCamera() {
       const Hg = G.spec ? G.spec.H : 0.15;
       const vfov = camera.fov * Math.PI / 180;
@@ -957,14 +1034,18 @@ window.plethoraBit = {
     function placeCamera(t) {
       cam.dist += (cam.tdist - cam.dist) * 0.06;
       cam.look += (cam.tlook - cam.look) * 0.06;
+      cam.zoom += (cam.tzoom - cam.zoom) * 0.05;
+      cam.lookUp += (cam.tlookUp - cam.lookUp) * 0.05;
+      const d = cam.dist * cam.zoom;
       const sway = Math.sin(t * 0.23) * 0.012;
-      camera.position.set(sway + G.shownTiltX * 0.04, cam.look + cam.dist * 0.2 + G.shownTiltY * 0.02, cam.dist);
-      camera.lookAt(0, cam.look, 0);
+      camera.position.set(sway + G.shownTiltX * 0.04, cam.look + cam.lookUp + d * 0.2 + G.shownTiltY * 0.02, d);
+      camera.lookAt(0, cam.look + cam.lookUp, 0);
     }
 
+
     // ===================================================================
-    // Chrome. DOM over the GL canvas; the root is invisible to the finger and
-    // only the controls opt back in.
+    // Chrome. Three acts — ask, pour, play — as DOM over the GL canvas. The
+    // root is invisible to the finger and only the controls opt back in.
     // ===================================================================
     const ui = ctx.createRoot({ touchAction: "none" });
     ui.style.pointerEvents = "none";
@@ -976,72 +1057,84 @@ window.plethoraBit = {
       ".bm{position:absolute;inset:0;pointer-events:none;color:#fff;font-family:" + BODY + ";",
       "-webkit-user-select:none;user-select:none;overflow:hidden}",
       ".bm *{box-sizing:border-box}",
-      ".bm-top{position:absolute;left:0;right:0;top:0;padding:0 18px;text-align:center;",
-      "background:linear-gradient(180deg,rgba(12,6,4,.9),rgba(12,6,4,.55) 60%,rgba(12,6,4,0))}",
+      ".bm button{font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}",
+      ".bm-top{position:absolute;left:0;right:0;top:0;padding:0 18px;text-align:center;transition:opacity .4s;",
+      "background:linear-gradient(180deg,rgba(12,6,4,.92),rgba(12,6,4,.6) 60%,rgba(12,6,4,0))}",
       ".bm-brand{font-family:" + DISPLAY + ";font-size:15px;letter-spacing:.34em;color:#e9b95a;opacity:.92}",
       ".bm-num{display:flex;align-items:baseline;justify-content:center;gap:10px;margin-top:2px;line-height:1}",
       ".bm-big{font-family:" + DISPLAY + ";font-size:92px;color:#fff;letter-spacing:.01em;",
-      "text-shadow:0 2px 24px rgba(255,180,80,.25)}",
+      "text-shadow:0 2px 24px rgba(255,180,80,.25);transition:font-size .3s}",
       ".bm-unit{font-family:" + DISPLAY + ";font-size:30px;color:#e9b95a;letter-spacing:.06em}",
       ".bm-style{font-family:" + SERIF + ";font-style:italic;font-size:17px;color:#ffe2b3;opacity:.9;margin-top:-4px}",
       ".bm-kcal{font-size:11.5px;font-weight:600;opacity:.62;margin-top:6px;letter-spacing:.04em}",
-      ".bm-week{display:flex;justify-content:center;gap:9px;margin-top:10px;height:34px;align-items:flex-end}",
+      ".bm-top.small .bm-big{font-size:44px}.bm-top.small .bm-unit{font-size:18px}",
+      ".bm-top.small .bm-style{font-size:14px}.bm-top.small .bm-kcal{display:none}",
+      ".bm-stage{position:absolute;inset:0;pointer-events:none}",
+      ".bm-ask{position:absolute;left:0;right:0;bottom:0;pointer-events:auto;padding:0 18px;",
+      "background:linear-gradient(180deg,rgba(12,6,4,0),rgba(12,6,4,.86) 18%,rgba(12,6,4,.96) 40%)}",
+      ".bm-q{font-family:" + SERIF + ";font-style:italic;font-size:30px;color:#ffe9c4;text-align:center;",
+      "line-height:1.12;margin:0 0 16px}",
+      ".bm-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}",
+      ".bm-card{border:1px solid rgba(255,220,160,.16);border-radius:20px;padding:15px 8px 12px;",
+      "background:rgba(34,17,9,.85);color:#fff;display:flex;flex-direction:column;align-items:center;gap:5px}",
+      ".bm-card:active{background:rgba(233,185,90,.92);color:#2a1408}",
+      ".bm-card span{font-size:38px;line-height:1}",
+      ".bm-card b{font-family:" + DISPLAY + ";font-size:21px;letter-spacing:.12em;font-weight:400}",
+      ".bm-card i{font-style:normal;font-size:10.5px;opacity:.55;min-height:13px}",
+      ".bm-tally{text-align:center;font-size:12px;opacity:.62;margin-top:12px;font-weight:600;letter-spacing:.03em}",
+      ".bm-amt{display:flex;align-items:baseline;justify-content:center;gap:10px;margin:2px 0 0;line-height:1}",
+      ".bm-amtv{font-family:" + DISPLAY + ";font-size:98px;color:#fff;text-shadow:0 2px 28px rgba(255,180,80,.3)}",
+      ".bm-amtu{font-family:" + DISPLAY + ";font-size:28px;color:#e9b95a;letter-spacing:.08em}",
+      ".bm-prev{font-family:" + SERIF + ";font-style:italic;font-size:17px;color:#ffe2b3;text-align:center;",
+      "opacity:.9;min-height:22px}",
+      ".bm-scrub{position:relative;height:64px;margin:8px -18px 8px;overflow:hidden;pointer-events:auto;touch-action:none}",
+      ".bm-ruler{position:absolute;left:50%;top:14px;bottom:14px;width:4000px;margin-left:-2000px;",
+      "background:repeating-linear-gradient(90deg,rgba(255,220,160,.34) 0 2px,transparent 2px 16px)}",
+      ".bm-ruler::after{content:'';position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;",
+      "background:rgba(255,220,160,.12)}",
+      ".bm-mark{position:absolute;left:50%;top:6px;bottom:6px;width:3px;margin-left:-1.5px;background:#e9b95a;",
+      "border-radius:2px;box-shadow:0 0 14px rgba(233,185,90,.9)}",
+      ".bm-fade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(12,6,4,1),rgba(12,6,4,0) 22%,",
+      "rgba(12,6,4,0) 78%,rgba(12,6,4,1));pointer-events:none}",
+      ".bm-scrubhint{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:9.5px;letter-spacing:.2em;",
+      "opacity:.5;font-weight:700;pointer-events:none}",
+      ".bm-presets{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}",
+      ".bm-pre{border:1px solid rgba(255,220,160,.18);border-radius:14px;padding:9px 13px;",
+      "background:rgba(255,225,170,.08);color:#ffe9c4;font-family:" + DISPLAY + ";font-size:17px;letter-spacing:.06em}",
+      ".bm-pre.on{background:rgba(233,185,90,.9);color:#2a1408;border-color:#ffe0a8}",
+      ".bm-pm{display:flex;justify-content:center;gap:12px;margin-top:10px}",
+      ".bm-pm button{width:50px;height:44px;border-radius:14px;border:0;background:rgba(255,225,170,.12);",
+      "color:#fff;font-size:24px}",
+      ".bm-cta{border:0;border-radius:30px;padding:16px 28px;width:100%;margin-top:12px;",
+      "background:linear-gradient(180deg,#ffd98a,#e9a83a);color:#2a1408;font-family:" + DISPLAY + ";",
+      "font-size:27px;letter-spacing:.12em;box-shadow:0 10px 30px rgba(233,168,58,.35),inset 0 1px 0 rgba(255,255,255,.5)}",
+      ".bm-cta:active{transform:scale(.98)}.bm-cta:disabled{opacity:.35;box-shadow:none}",
+      ".bm-ghost{border:1px solid rgba(255,220,160,.22);background:rgba(255,255,255,.05);color:#ffe9c4;",
+      "border-radius:30px;padding:13px 22px;font-family:" + DISPLAY + ";font-size:19px;letter-spacing:.1em}",
+      ".bm-back{border:0;background:none;color:#e9b95a;font-family:" + DISPLAY + ";font-size:16px;letter-spacing:.16em;",
+      "padding:12px 0 0;width:100%;text-align:center;opacity:.8}",
+      ".bm-result{position:absolute;left:0;right:0;bottom:0;padding:0 18px;pointer-events:none;display:flex;",
+      "flex-direction:column;align-items:center;gap:10px;",
+      "background:linear-gradient(180deg,rgba(12,6,4,0),rgba(12,6,4,.9) 46%)}",
+      ".bm-punch{font-family:" + SERIF + ";font-style:italic;font-size:22px;color:#ffe9c4;text-align:center;",
+      "line-height:1.25;padding:0 8px;text-shadow:0 2px 12px rgba(0,0,0,.7);transition:opacity .6s}",
+      ".bm-rowbtns{display:flex;gap:10px;width:100%;pointer-events:auto}",
+      ".bm-rowbtns>*{flex:1;margin-top:0}",
+      ".bm-hint{font-size:12.5px;font-weight:600;color:#ffe2b3;opacity:.78;text-align:center}",
+      ".bm-gest{font-size:10.5px;opacity:.5;letter-spacing:.12em;font-weight:700;text-align:center}",
+      ".bm-week{display:flex;justify-content:center;gap:9px;height:34px;align-items:flex-end}",
       ".bm-day{width:14px;display:flex;flex-direction:column;align-items:center;gap:3px}",
-      ".bm-bar{width:9px;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,#ffe9b8,#e9a83a);",
-      "min-height:2px;opacity:.85}",
+      ".bm-bar{width:9px;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,#ffe9b8,#e9a83a);min-height:2px}",
       ".bm-day.today .bm-bar{box-shadow:0 0 10px rgba(255,200,90,.6)}",
       ".bm-dl{font-size:8.5px;font-weight:700;opacity:.5;letter-spacing:.05em}",
-      ".bm-side{position:absolute;right:10px;top:50%;transform:translateY(-46%);display:flex;",
-      "flex-direction:column;gap:9px;pointer-events:auto}",
-      ".bm-chip{width:54px;height:54px;border-radius:18px;border:1px solid rgba(255,220,160,.16);",
-      "background:rgba(22,11,6,.8);",
-      "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;",
-      "color:#fff;font-family:" + BODY + ";padding:0}",
-      ".bm-chip span{font-size:20px;line-height:1}",
-      ".bm-chip small{font-family:" + DISPLAY + ";font-size:10.5px;letter-spacing:.1em;opacity:.75}",
-      ".bm-chip.on{background:rgba(233,185,90,.92);color:#2a1408;border-color:#ffe0a8}",
-      ".bm-chip.on small{opacity:.9}",
-      ".bm-chip .bm-tot{position:absolute;left:-2px;top:-6px;font-size:9px;font-weight:800;",
-      "background:#e9b95a;color:#2a1408;border-radius:8px;padding:1px 5px;display:none}",
-      ".bm-chip{position:relative}",
-      ".bm-panel{position:absolute;right:72px;top:50%;transform:translateY(-46%);width:min(64vw,250px);",
-      "border-radius:20px;padding:14px 14px 12px;background:rgba(18,9,5,.92);",
-      "border:1px solid rgba(255,220,160,.14);",
-      "pointer-events:auto;box-shadow:0 12px 40px rgba(0,0,0,.45)}",
-      ".bm-ph{display:flex;align-items:baseline;justify-content:space-between}",
-      ".bm-pt{font-family:" + DISPLAY + ";font-size:22px;letter-spacing:.06em;color:#e9b95a}",
-      ".bm-pv{font-family:" + DISPLAY + ";font-size:20px;color:#fff}",
-      ".bm-pv small{font-size:12px;opacity:.6;letter-spacing:.08em;margin-left:3px}",
-      ".bm-pk{font-size:11px;opacity:.6;margin-top:-2px;font-weight:600}",
-      ".bm-quick{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px}",
-      ".bm-q{border:0;border-radius:12px;padding:10px 4px;background:rgba(255,225,170,.12);color:#ffe9c4;",
-      "font-family:" + DISPLAY + ";font-size:18px;letter-spacing:.06em}",
-      ".bm-q:active{background:rgba(233,185,90,.9);color:#2a1408}",
-      ".bm-row{display:flex;gap:7px;margin-top:9px}",
-      ".bm-x{flex:1;border:0;border-radius:10px;padding:7px 4px;background:rgba(255,255,255,.07);color:#fff;",
-      "font-size:11.5px;font-weight:700;letter-spacing:.06em}",
-      ".bm-x:disabled{opacity:.3}",
-      ".bm-live{margin-top:9px;display:flex;align-items:center;justify-content:space-between;gap:8px;",
-      "font-size:11.5px;font-weight:600;opacity:.9}",
-      ".bm-tog{width:40px;height:24px;border-radius:12px;background:rgba(255,255,255,.15);border:0;position:relative;padding:0}",
-      ".bm-tog::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:9px;background:#fff;transition:left .15s}",
-      ".bm-tog.on{background:#e9b95a}.bm-tog.on::after{left:19px}",
-      ".bm-livenote{font-size:10.5px;opacity:.55;margin-top:5px;line-height:1.35}",
-      ".bm-bottom{position:absolute;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:8px;",
-      "pointer-events:none}",
-      ".bm-pour{pointer-events:auto;border:0;border-radius:30px;padding:15px 34px;",
-      "background:linear-gradient(180deg,#ffd98a,#e9a83a);color:#2a1408;font-family:" + DISPLAY + ";",
-      "font-size:24px;letter-spacing:.1em;box-shadow:0 10px 30px rgba(233,168,58,.35),inset 0 1px 0 rgba(255,255,255,.5)}",
-      ".bm-pour:active{transform:scale(.97)}",
-      ".bm-hint{font-family:" + SERIF + ";font-style:italic;font-size:15px;color:#ffe2b3;opacity:.86;",
-      "text-align:center;padding:0 24px;text-shadow:0 1px 8px rgba(0,0,0,.6)}",
+      ".bm-reveal{position:absolute;left:0;right:0;bottom:0;padding:0 18px;text-align:center;pointer-events:none}",
       ".bm-icon{position:absolute;width:36px;height:36px;border-radius:12px;border:1px solid rgba(255,220,160,.14);",
       "background:rgba(22,11,6,.78);color:#fff;font-size:17px;font-weight:700;pointer-events:auto;",
-      "display:flex;align-items:center;justify-content:center;font-family:" + BODY + "}",
-      ".bm-sheet{position:absolute;inset:0;background:rgba(10,5,3,.95);",
-      "pointer-events:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;",
-      "padding:0 22px}",
-      ".bm-sheet h2{font-family:" + DISPLAY + ";font-size:27px;letter-spacing:.12em;color:#e9b95a;margin:0 0 14px;text-align:center;padding:0 48px}",
+      "display:flex;align-items:center;justify-content:center;transition:opacity .3s}",
+      ".bm-sheet{position:absolute;inset:0;background:rgba(10,5,3,.95);pointer-events:auto;overflow-y:auto;",
+      "-webkit-overflow-scrolling:touch;padding:0 22px}",
+      ".bm-sheet h2{font-family:" + DISPLAY + ";font-size:28px;letter-spacing:.12em;color:#e9b95a;margin:0 0 14px;",
+      "text-align:center;padding:0 48px}",
       ".bm-sheet h3{font-family:" + DISPLAY + ";font-size:15px;letter-spacing:.2em;color:#e9b95a;opacity:.8;margin:18px 0 8px}",
       ".bm-sheet p{font-size:13px;line-height:1.5;opacity:.85;margin:0 0 10px}",
       ".bm-sheet code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(255,255,255,.06);",
@@ -1059,33 +1152,31 @@ window.plethoraBit = {
       ".bm-st em{font-family:" + DISPLAY + ";font-style:normal;font-size:19px;color:#e9b95a;white-space:nowrap}",
       ".bm-st em small{font-size:11px;letter-spacing:.1em;opacity:.7}",
       ".bm-line{display:flex;align-items:center;justify-content:space-between;padding:10px 0;font-size:13.5px;font-weight:600}",
+      ".bm-tog{width:40px;height:24px;border-radius:12px;background:rgba(255,255,255,.15);border:0;position:relative;padding:0}",
+      ".bm-tog::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:9px;background:#fff;transition:left .15s}",
+      ".bm-tog.on{background:#e9b95a}.bm-tog.on::after{left:19px}",
       ".bm-danger{width:100%;border:1px solid rgba(255,110,90,.4);background:rgba(255,80,60,.1);color:#ffb0a0;",
       "border-radius:14px;padding:12px;font-weight:700;letter-spacing:.06em;margin-top:16px}",
       ".bm-close{position:absolute;right:14px;width:40px;height:40px;border-radius:14px;border:0;",
       "background:rgba(255,255,255,.1);color:#fff;font-size:22px}",
       ".bm-toast{position:absolute;left:50%;transform:translateX(-50%);padding:9px 16px;border-radius:14px;",
-      "background:rgba(18,9,5,.88);border:1px solid rgba(255,220,160,.18);font-family:" + DISPLAY + ";",
+      "background:rgba(18,9,5,.9);border:1px solid rgba(255,220,160,.18);font-family:" + DISPLAY + ";",
       "font-size:19px;letter-spacing:.06em;color:#ffe9c4;opacity:0;transition:opacity .2s;white-space:nowrap}",
       ".bm-toast small{font-size:12px;opacity:.6;margin-left:8px;letter-spacing:.1em}",
-      ".bm-plus{position:absolute;font-family:" + DISPLAY + ";font-size:14px;letter-spacing:.1em;color:#e9b95a;",
+      ".bm-plus{position:absolute;left:14px;font-family:" + DISPLAY + ";font-size:14px;letter-spacing:.1em;color:#e9b95a;",
       "background:rgba(18,9,5,.8);border:1px solid rgba(255,220,160,.2);border-radius:10px;padding:3px 8px;display:none}",
       ".bm-dis{font-size:10.5px;opacity:.45;line-height:1.4;margin-top:14px}",
+      ".bm-livenote{font-size:10.5px;opacity:.55;margin-top:6px;line-height:1.35;text-align:center}",
       "</style>",
       '<div class="bm">',
-      '<div class="bm-top">',
+      '<div class="bm-top" data-top>',
       '<div class="bm-brand">BEER MILEAGE</div>',
       '<div class="bm-num"><span class="bm-big" data-big>0.0</span><span class="bm-unit" data-unit>PINTS</span></div>',
       '<div class="bm-style" data-style></div>',
       '<div class="bm-kcal" data-kcal></div>',
-      '<div class="bm-week" data-week></div>',
       "</div>",
-      '<div class="bm-side" data-side></div>',
-      '<div class="bm-panel" data-panel hidden></div>',
+      '<div class="bm-stage" data-stage></div>',
       '<div class="bm-plus" data-plus></div>',
-      '<div class="bm-bottom" data-bottom>',
-      '<button class="bm-pour" type="button" data-pour>POUR ONE</button>',
-      '<div class="bm-hint" data-hint></div>',
-      "</div>",
       '<button class="bm-icon" type="button" data-gear aria-label="Settings">⚙</button>',
       '<button class="bm-icon" type="button" data-info aria-label="About">i</button>',
       '<div class="bm-sheet" data-settings hidden></div>',
@@ -1095,54 +1186,49 @@ window.plethoraBit = {
     ].join("");
 
     const q = (sel) => ui.querySelector(sel);
-    const elBig = q("[data-big]"), elUnit = q("[data-unit]"), elStyle = q("[data-style]");
-    const elKcal = q("[data-kcal]"), elWeek = q("[data-week]"), elSide = q("[data-side]");
-    const elPanel = q("[data-panel]"), elPlus = q("[data-plus]"), elBottom = q("[data-bottom]");
-    const elPour = q("[data-pour]"), elHint = q("[data-hint]"), elGear = q("[data-gear]");
-    const elInfo = q("[data-info]"), elSettings = q("[data-settings]"), elAbout = q("[data-about]");
-    const elToast = q("[data-toast]"), elTop = q(".bm-top");
+    const elTop = q("[data-top]"), elBig = q("[data-big]"), elUnit = q("[data-unit]");
+    const elStyle = q("[data-style]"), elKcal = q("[data-kcal]"), elStage = q("[data-stage]");
+    const elPlus = q("[data-plus]"), elGear = q("[data-gear]"), elInfo = q("[data-info]");
+    const elSettings = q("[data-settings]"), elAbout = q("[data-about]"), elToast = q("[data-toast]");
 
-    // activity chips
-    for (const k of MODEL.ACT_KEYS) {
-      const a = MODEL.ACTS[k];
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "bm-chip";
-      b.setAttribute("data-act", k);
-      b.innerHTML = "<span>" + a.emoji + "</span><small>" + a.label.toUpperCase() + "</small><i class=\"bm-tot\" data-tot></i>";
-      elSide.appendChild(b);
+    // What the screen shows; the pour drags it from the old truth to the new.
+    const viz = { remaining: 0, full: 0, frac: 0, kcal: 0 };
+    function syncViz() {
+      viz.remaining = derived.remaining; viz.full = derived.full;
+      viz.frac = derived.frac; viz.kcal = derived.kcal;
     }
 
-    const fmtNum = (n, act) => {
-      if (act === "run" || act === "ride") return (Math.round(n * 10) / 10).toString();
-      return Math.round(n).toLocaleString();
+    const AMOUNT = {
+      steps: { q: "How many steps?", unit: "STEPS", step: 250, max: 40000, presets: [3000, 5000, 8000, 10000, 15000], px: 5 },
+      run:   { q: "How far did you run?", unit: "KM", step: 0.1, max: 60, presets: [3, 5, 10, 21.1], px: 6 },
+      ride:  { q: "How far did you ride?", unit: "KM", step: 0.5, max: 250, presets: [10, 20, 40, 80], px: 6 },
+      swim:  { q: "How far did you swim?", unit: "M", step: 50, max: 6000, presets: [500, 1000, 1500, 2000], px: 6 },
+      gym:   { q: "How long in the gym?", unit: "MIN", step: 5, max: 300, presets: [30, 45, 60, 90], px: 7 }
     };
-    const fmtPints = (p) => (p >= 10 ? Math.round(p).toString() : (Math.round(p * 10) / 10).toFixed(1));
+    const UI = { state: "pick", act: null, value: 0, scrub: { on: false, id: null, x0: 0, v0: 0, ticks: 0 } };
 
-    let openAct = null, toastT = null;
-    let shownPints = 0;
+    const fmtVal = (v, act) => (act === "run" || act === "ride")
+      ? (Math.round(v * 10) / 10).toFixed(1) : Math.round(v).toLocaleString();
+    const fmtPints = (p) => (p >= 10 ? Math.round(p).toString() : (Math.round(p * 10) / 10).toFixed(1));
+    let shownPints = 0, toastT = null;
     const pedo = { on: false, live: 0, pending: 0, mean: 9.81, prev: 0, last: 0, off: null, available: null };
 
     function layoutHud() {
       elTop.style.paddingTop = (ctx.safeArea.top + 14) + "px";
       elTop.style.paddingBottom = "26px";
-      elGear.style.top = (ctx.safeArea.top + 12) + "px";
-      elGear.style.right = "12px";
-      elInfo.style.top = (ctx.safeArea.top + 12) + "px";
-      elInfo.style.left = "12px";
-      elBottom.style.bottom = (ctx.safeArea.bottom + 26) + "px";
-      elToast.style.top = (ctx.safeArea.top + 238) + "px";
+      elGear.style.top = (ctx.safeArea.top + 12) + "px"; elGear.style.right = "12px";
+      elInfo.style.top = (ctx.safeArea.top + 12) + "px"; elInfo.style.left = "12px";
+      elToast.style.top = (ctx.safeArea.top + 190) + "px";
+      elPlus.style.top = (H * 0.5 + 10) + "px";
       for (const s of [elSettings, elAbout]) {
         s.style.paddingTop = (ctx.safeArea.top + 22) + "px";
         s.style.paddingBottom = (ctx.safeArea.bottom + 30) + "px";
       }
-      const closes = ui.querySelectorAll("[data-close]");
-      for (const c of closes) c.style.top = (ctx.safeArea.top + 14) + "px";
-      // keep the big number off the glass rim on short screens
-      const compact = H < 700;
-      elBig.style.fontSize = compact ? "68px" : "92px";
-      elUnit.style.fontSize = compact ? "22px" : "30px";
-      elWeek.style.display = compact ? "none" : "flex";
+      for (const c of ui.querySelectorAll("[data-close]")) c.style.top = (ctx.safeArea.top + 14) + "px";
+      for (const a of ui.querySelectorAll(".bm-ask,.bm-result,.bm-reveal")) {
+        a.style.paddingBottom = (ctx.safeArea.bottom + 18) + "px";
+      }
+      elTop.classList.toggle("small", UI.state === "pick" || UI.state === "amount" || H < 700);
     }
 
     function toast(main, sub) {
@@ -1154,30 +1240,19 @@ window.plethoraBit = {
       ctx.timeout(() => { if (alive) elToast.style.opacity = "0"; }, 1500);
     }
 
-    function renderWeek() {
-      const days = [];
-      const byDate = {};
-      for (const h of history) byDate[h.date] = h;
-      const now = new Date();
-      let max = 0.01;
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const key = MODEL.localDate(d);
-        const pints = i === 0 ? derived.earned : (byDate[key] ? byDate[key].pints : 0);
-        max = Math.max(max, pints);
-        days.push({ key, pints, label: ["S", "M", "T", "W", "T", "F", "S"][d.getDay()], today: i === 0 });
-      }
-      elWeek.innerHTML = days.map((d) =>
-        '<div class="bm-day' + (d.today ? " today" : "") + '"><div class="bm-bar" style="height:' +
-        Math.max(2, Math.round((d.pints / max) * 22)) + 'px;opacity:' + (d.pints > 0 ? 0.85 : 0.25) +
-        '"></div><div class="bm-dl">' + d.label + "</div></div>").join("");
+    function punchline(rem) {
+      const s = MODEL.STYLES[profile.style].name.toLowerCase();
+      if (rem < 0.01) return "Nothing yet. The bar is patient.";
+      if (rem < 0.25) return "That's a sip. Keep walking.";
+      if (rem < 0.6) return "A short glass of " + s + ". Don't stop now.";
+      if (rem < 0.98) return "Nearly a pint. The next thousand steps are on you.";
+      if (rem < 1.5) return "One pint of " + s + ", fairly earned.";
+      if (rem < 2.5) return "Two pints. That was a proper day.";
+      if (rem < 4) return "You've earned a round. Choose your friends carefully.";
+      return "Someone's had a day. Pace yourself.";
     }
 
     function hintText() {
-      if (derived.full >= 1) {
-        return "You have earned " + derived.full + (derived.full > 1 ? " pints" : " pint") + ". Pour one.";
-      }
-      // whichever activity you have done most of today, else steps
       let act = "steps", best = -1;
       for (const k of MODEL.ACT_KEYS) {
         const kc = MODEL.actKcal(day.log, k, profile.kg);
@@ -1185,61 +1260,133 @@ window.plethoraBit = {
       }
       if (best <= 0) act = "steps";
       const need = MODEL.toNextPint(day, profile.kg, profile.style, act);
-      const a = MODEL.ACTS[act];
       const shown = act === "steps" ? Math.ceil(need).toLocaleString() + " steps"
         : act === "swim" ? Math.ceil(need / 50) * 50 + " m"
         : act === "gym" ? Math.ceil(need) + " min"
         : (Math.ceil(need * 10) / 10).toFixed(1) + " km";
       const verb = { steps: "", run: " of running", ride: " on the bike", swim: " in the pool", gym: " in the gym" }[act];
-      return shown + verb + " to your " + (derived.earned - day.poured >= 1 || day.poured > 0 ? "next" : "first") + " pint";
+      return shown + verb + " to the next pint";
     }
 
-    function renderHud() {
-      const s = MODEL.STYLES[profile.style];
-      elUnit.textContent = derived.remaining >= 0.95 && derived.remaining < 1.05 ? "PINT" : "PINTS";
-      elStyle.textContent = "of " + s.name.toLowerCase() + " · " + Math.round(MODEL.beerKcal(profile.style)) + " kcal a pint";
-      elKcal.textContent = Math.round(derived.kcal).toLocaleString() + " KCAL EARNED TODAY"
-        + (day.poured ? " · " + day.poured + " POURED" : "");
-      elPour.style.display = derived.full >= 1 ? "block" : "none";
-      elHint.textContent = hintText();
-      for (const k of MODEL.ACT_KEYS) {
-        const chip = elSide.querySelector('[data-act="' + k + '"]');
-        const tot = chip.querySelector("[data-tot]");
-        const v = day.log[k] || 0;
-        tot.style.display = v > 0 ? "block" : "none";
-        tot.textContent = fmtNum(v, k);
-        chip.classList.toggle("on", openAct === k);
+    function renderWeek() {
+      const byDate = {};
+      for (const h of history) byDate[h.date] = h;
+      const now = new Date();
+      const days = [];
+      let max = 0.01;
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const key = MODEL.localDate(d);
+        const pints = i === 0 ? derived.earned : (byDate[key] ? byDate[key].pints : 0);
+        max = Math.max(max, pints);
+        days.push({ pints, label: ["S", "M", "T", "W", "T", "F", "S"][d.getDay()], today: i === 0 });
       }
-      const extra = derived.full - ROW_MAX;
+      return '<div class="bm-week">' + days.map((d) =>
+        '<div class="bm-day' + (d.today ? " today" : "") + '"><div class="bm-bar" style="height:' +
+        Math.max(2, Math.round((d.pints / max) * 22)) + 'px;opacity:' + (d.pints > 0 ? 0.85 : 0.25) +
+        '"></div><div class="bm-dl">' + d.label + "</div></div>").join("") + "</div>";
+    }
+
+    function renderTop() {
+      const s = MODEL.STYLES[profile.style];
+      elUnit.textContent = viz.remaining >= 0.95 && viz.remaining < 1.05 ? "PINT" : "PINTS";
+      elStyle.textContent = "of " + s.name.toLowerCase() + " · " + Math.round(MODEL.beerKcal(profile.style)) + " kcal a pint";
+      elKcal.textContent = Math.round(viz.kcal).toLocaleString() + " KCAL EARNED TODAY"
+        + (day.poured ? " · " + day.poured + " POURED" : "");
+      const extra = viz.full - ROW_MAX;
       elPlus.style.display = extra > 0 ? "block" : "none";
       elPlus.textContent = "+" + extra + " MORE";
-      elPlus.style.right = "82px";
-      elPlus.style.top = "50%";
-      renderWeek();
+      elTop.classList.toggle("small", UI.state === "pick" || UI.state === "amount" || H < 700);
+      const busy = UI.state === "reveal";
+      elGear.style.opacity = busy ? "0" : "1"; elInfo.style.opacity = busy ? "0" : "1";
+      elGear.style.pointerEvents = busy ? "none" : "auto"; elInfo.style.pointerEvents = busy ? "none" : "auto";
     }
 
-    function renderPanel() {
-      if (!openAct) { elPanel.hidden = true; return; }
-      const a = MODEL.ACTS[openAct];
-      const v = day.log[openAct] || 0;
-      const kc = MODEL.actKcal(day.log, openAct, profile.kg);
-      const canUndo = day.adds.length && day.adds[day.adds.length - 1].act === openAct;
-      let html = '<div class="bm-ph"><div class="bm-pt">' + a.emoji + " " + a.label.toUpperCase() + "</div>"
-        + '<div class="bm-pv">' + fmtNum(v, openAct) + "<small>" + a.unit.toUpperCase() + "</small></div></div>"
-        + '<div class="bm-pk">' + Math.round(kc) + " kcal · " + (Math.round(MODEL.pintsFor(kc, profile.style) * 100) / 100) + " pints</div>"
-        + '<div class="bm-quick">' + a.quick.map((n) => '<button class="bm-q" type="button" data-add="' + n + '">+' + fmtNum(n, openAct) + "</button>").join("") + "</div>"
-        + '<div class="bm-row"><button class="bm-x" type="button" data-undo' + (canUndo ? "" : " disabled") + ">UNDO LAST</button>"
-        + '<button class="bm-x" type="button" data-clear' + (v > 0 ? "" : " disabled") + ">CLEAR</button></div>";
-      if (openAct === "steps") {
-        html += '<div class="bm-live"><span>Count my steps live</span><button class="bm-tog' + (pedo.on ? " on" : "") + '" type="button" data-live aria-label="Count steps live"></button></div>'
-          + '<div class="bm-livenote" data-livenote>' + liveNote() + "</div>";
+    function tallyText() {
+      const parts = [];
+      for (const k of MODEL.ACT_KEYS) {
+        const v = day.log[k] || 0;
+        if (v > 0) parts.push(fmtVal(v, k) + " " + (k === "steps" ? "steps" : MODEL.ACTS[k].unit) + (k === "steps" ? "" : " " + MODEL.ACTS[k].label.toLowerCase()));
       }
-      elPanel.innerHTML = html;
-      elPanel.hidden = false;
+      return parts.length ? "Today so far: " + parts.join(" · ") : "";
     }
+
+    function renderStage() {
+      let html = "";
+      if (UI.state === "pick") {
+        html = '<div class="bm-ask"><h1 class="bm-q">' + (derived.kcal > 0 ? "What else did you do?" : "What did you do today?") + "</h1>"
+          + '<div class="bm-cards">'
+          + MODEL.ACT_KEYS.map((k) => {
+              const a = MODEL.ACTS[k], v = day.log[k] || 0;
+              return '<button class="bm-card" type="button" data-card="' + k + '"><span>' + a.emoji + "</span><b>"
+                + a.label.toUpperCase() + "</b><i>" + (v > 0 ? fmtVal(v, k) + " today" : "") + "</i></button>";
+            }).join("")
+          + '<button class="bm-card" type="button" data-live-card><span>📱</span><b>WALK</b><i>count steps live</i></button>'
+          + "</div>"
+          + '<div class="bm-tally">' + tallyText() + "</div>"
+          + (derived.kcal > 0 ? '<button class="bm-back" type="button" data-more-done>SHOW MY BEER ›</button>' : "")
+          + "</div>";
+      } else if (UI.state === "amount") {
+        const A = AMOUNT[UI.act], a = MODEL.ACTS[UI.act];
+        html = '<div class="bm-ask"><h1 class="bm-q">' + A.q + "</h1>"
+          + '<div class="bm-amt"><span class="bm-amtv" data-val>' + fmtVal(UI.value, UI.act) + '</span><span class="bm-amtu">' + A.unit + "</span></div>"
+          + '<div class="bm-prev" data-prev></div>'
+          + '<div class="bm-scrub" data-scrub><div class="bm-ruler" data-ruler></div><div class="bm-fade"></div>'
+          + '<div class="bm-mark"></div><div class="bm-scrubhint">DRAG TO SET</div></div>'
+          + '<div class="bm-presets">' + A.presets.map((n) => '<button class="bm-pre" type="button" data-pre="' + n + '">'
+              + fmtVal(n, UI.act) + "</button>").join("") + "</div>"
+          + '<div class="bm-pm"><button type="button" data-nudge="-1">−</button><button type="button" data-nudge="1">+</button></div>'
+          + '<button class="bm-cta" type="button" data-pour' + (UI.value > 0 ? "" : " disabled") + ">POUR IT</button>"
+          + '<button class="bm-back" type="button" data-back>‹ SOMETHING ELSE</button>'
+          + "</div>";
+      } else if (UI.state === "reveal") {
+        html = '<div class="bm-reveal"><div class="bm-punch" data-punch style="opacity:0"></div></div>';
+      } else if (UI.state === "live") {
+        html = '<div class="bm-ask"><h1 class="bm-q">Walk with me.</h1>'
+          + '<div class="bm-amt"><span class="bm-amtv" data-live-count>' + pedo.live.toLocaleString() + '</span><span class="bm-amtu">STEPS</span></div>'
+          + '<div class="bm-prev" data-livenote>' + liveNote() + "</div>"
+          + '<div class="bm-rowbtns" style="margin-top:14px"><button class="bm-ghost" type="button" data-live-stop>' + (pedo.on ? "STOP AND POUR" : "BACK") + "</button></div>"
+          + "</div>";
+      } else {
+        const canDrink = derived.full >= 1;
+        html = '<div class="bm-result">'
+          + '<div class="bm-punch" data-punch>' + punchline(derived.remaining) + "</div>"
+          + renderWeek()
+          + '<div class="bm-hint">' + (canDrink ? "" : hintText()) + "</div>"
+          + '<div class="bm-rowbtns">'
+          + (canDrink ? '<button class="bm-cta" type="button" data-drink>DRINK ONE</button>' : "")
+          + '<button class="' + (canDrink ? "bm-ghost" : "bm-cta") + '" type="button" data-more>' + (derived.kcal > 0 ? "LOG MORE" : "LOG SOMETHING") + "</button>"
+          + "</div>"
+          + '<div class="bm-gest">TAP THE GLASS · SWIPE UP TO DRINK · DRAG TO TILT</div>'
+          + "</div>";
+      }
+      elStage.innerHTML = html;
+      layoutHud();
+      renderTop();
+      if (UI.state === "amount") renderAmount();
+    }
+
+    function renderAmount() {
+      const v = q("[data-val]"), pv = q("[data-prev]"), cta = q("[data-pour]");
+      if (!v) return;
+      v.textContent = fmtVal(UI.value, UI.act);
+      const kcal = MODEL.ACTS[UI.act].kcal(UI.value, profile.kg);
+      const p = MODEL.pintsFor(kcal, profile.style);
+      pv.textContent = UI.value > 0
+        ? "= " + Math.round(kcal) + " kcal · " + (Math.round(p * 100) / 100) + " pints of " + MODEL.STYLES[profile.style].name.toLowerCase()
+        : "";
+      if (cta) cta.disabled = !(UI.value > 0);
+      for (const b of ui.querySelectorAll("[data-pre]")) {
+        b.classList.toggle("on", Math.abs(parseFloat(b.getAttribute("data-pre")) - UI.value) < 1e-6);
+      }
+      const ruler = q("[data-ruler]");
+      if (ruler) ruler.style.transform = "translateX(" + (-(UI.value / AMOUNT[UI.act].step) * AMOUNT[UI.act].px % 16) + "px)";
+    }
+
+    function setState(s) { UI.state = s; renderStage(); }
     function liveNote() {
-      if (pedo.available === false) return "Not available here. Add your steps with the buttons above.";
-      if (pedo.on) return "Walking with the phone counts. " + pedo.live.toLocaleString() + " so far this session.";
+      if (pedo.available === false) return "Motion is not available here. Log your steps by hand instead.";
+      if (pedo.on) return "Keep the phone on you. Every twenty steps goes in the glass.";
       return "Uses the phone's motion sensor while this is open.";
     }
 
@@ -1274,17 +1421,264 @@ window.plethoraBit = {
         + "<h3>BEER</h3>"
         + "<p>Alcohol is 7 kcal a gram at 0.789 g/ml; what is left of the malt is 4 kcal a gram.</p>"
         + "<p><code>ml × ABV × 0.789 × 7 + ml × carbs × 4</code></p>"
-        + "<p>A US pint of 5% lager comes out at " + Math.round(MODEL.beerKcal("lager")) + " kcal, which is within a few percent of the number on the can. Ten thousand steps at 70 kg is "
+        + "<p>A US pint of 5% lager comes out at " + Math.round(MODEL.beerKcal("lager")) + " kcal, within a few percent of the number on the can. Ten thousand steps at 70 kg is "
         + Math.round(MODEL.actKcal({ steps: 10000 }, "steps", 70)) + " kcal. Do the division and try not to be sad.</p>"
+        + "<h3>THE GLASS</h3>"
+        + "<p>The pour's pitch climbs as the glass fills, and a tapped glass rings lower the fuller it is. Both are real: the air column shortens, and the beer loads the wall.</p>"
         + '<p class="bm-dis">Beer Mileage is a game about arithmetic. Pints are a fictional fitness metric, not a recommendation to drink anything, and burning it off first does not make it health food.</p>';
     }
 
-    // ---- the number, tweened so a big add rolls up rather than snapping
     function tweenNumber(dt) {
-      const target = derived.remaining;
+      const target = viz.remaining;
       if (Math.abs(target - shownPints) < 0.004) shownPints = target;
       else shownPints += (target - shownPints) * Math.min(1, dt * 9);
       elBig.textContent = fmtPints(shownPints);
+    }
+
+    // ===================================================================
+    // The tap, the stream and the splash — the pour is the moment.
+    // ===================================================================
+    const tapGroup = new THREE.Group();
+    scene.add(tapGroup);
+    {
+      const brass = new THREE.MeshStandardMaterial({ color: "#d3a64d", metalness: 1, roughness: 0.2 });
+      const dark = new THREE.MeshPhysicalMaterial({ color: "#3a2214", roughness: 0.5, clearcoat: 0.6 });
+      // the spout tip is the group's origin; the body stands behind and above it
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.013, 0.12, 18), brass);
+      body.position.set(0.034, 0.075, -0.02);
+      body.castShadow = true;
+      tapGroup.add(body);
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, 0.04, 12), brass);
+      arm.rotation.z = Math.PI / 2;
+      arm.rotation.y = -0.5;
+      arm.position.set(0.017, 0.028, -0.01);
+      tapGroup.add(arm);
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.0062, 0.0074, 0.03, 12), brass);
+      nozzle.position.set(0, 0.014, 0);
+      tapGroup.add(nozzle);
+      const handle = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.05, 4, 10), dark);
+      handle.position.set(0.034, 0.16, -0.02);
+      handle.rotation.z = -0.35;
+      tapGroup.add(handle);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.003, 8, 24), brass);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0.034, 0.128, -0.02);
+      tapGroup.add(ring);
+    }
+    const streamMat = new THREE.MeshPhysicalMaterial({ roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.1,
+      emissiveIntensity: 0.25, envMapIntensity: 0.9 });
+    const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1, 1, 12, 1, true), streamMat);
+    stream.visible = false;
+    scene.add(stream);
+    const SPLASH_N = 56;
+    const splashMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 5), streamMat, SPLASH_N);
+    splashMesh.frustumCulled = false;
+    splashMesh.count = 0;
+    scene.add(splashMesh);
+    const splash = [];
+    for (let i = 0; i < SPLASH_N; i++) splash.push({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, s: 0.001, t: 0 });
+
+    let tapRise = 0.3;                // metres above its pouring position
+    function tapTipY() { return G.spec.H + 0.07 + tapRise; }
+    function placeTap() {
+      tapGroup.position.set(0.004, tapTipY(), 0.004);
+      tapGroup.visible = tapRise < 0.29;
+    }
+    function spawnSplash(levelY, n, drip) {
+      for (let i = 0; i < n; i++) {
+        const p = splash.find((x) => !x.alive);
+        if (!p) return;
+        p.alive = true; p.t = 0;
+        const a = rrange(0, 6.283), sp = drip ? rrange(0.02, 0.08) : rrange(0.08, 0.26);
+        p.x = 0.004 + rrange(-0.003, 0.003); p.z = 0.004 + rrange(-0.003, 0.003);
+        p.y = drip ? tapTipY() - 0.01 : levelY + 0.002;
+        p.vx = Math.cos(a) * sp; p.vz = Math.sin(a) * sp;
+        p.vy = drip ? -0.1 : rrange(0.12, 0.42);
+        p.s = rrange(0.0006, drip ? 0.0016 : 0.0013);
+      }
+    }
+    function stepSplash(dt, levelY) {
+      let n = 0;
+      for (const p of splash) {
+        if (!p.alive) continue;
+        p.t += dt;
+        p.vy -= 9.81 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+        if (p.t > 0.7 || (p.vy < 0 && p.y < levelY - 0.002) || p.y < 0.002) { p.alive = false; continue; }
+        _pos.set(p.x, p.y, p.z);
+        _scl.setScalar(p.s);
+        _m4.compose(_pos, _idq, _scl);
+        splashMesh.setMatrixAt(n++, _m4);
+      }
+      splashMesh.count = n;
+      splashMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    function bubbleBurst(n) {
+      const spec = G.spec, look = G.look;
+      const levelY = G.levelFrac > 0.002 ? spec.levelFor(G.levelFrac) : -1;
+      if (levelY <= 0) return;
+      for (let i = 0; i < n; i++) {
+        const b = bubbles.find((x) => !x.alive);
+        if (!b) return;
+        const site = G.nucl[(rnd() * G.nucl.length) | 0];
+        b.alive = true; b.wall = false;
+        b.x = Math.sin(site.th) * site.r; b.z = Math.cos(site.th) * site.r; b.y = site.y + rrange(0, 0.01);
+        b.s = rrange(0.0008, 0.002); b.vy = 0.05 + b.s * 40; b.ph = rrange(0, 6.283);
+        if (look.surge) b.s *= 0.6;
+      }
+    }
+
+    // ===================================================================
+    // The pour: a timeline that drags the shown number and the level from
+    // the old truth to the new, filling and swapping glasses on the way.
+    // ===================================================================
+    const P = { on: false, mini: false, t: 0, phase: "", from: 0, to: 0, rem: 0, dur: 0, pause: 0, hold: false, lift: 0 };
+    function startPour(fromRem, toRem, mini) {
+      P.on = true; P.mini = !!mini; P.t = 0; P.phase = "lower";
+      P.from = fromRem; P.to = toRem; P.rem = fromRem; P.pause = 0; P.hold = false; P.lift = 0;
+      P.dur = mini ? 0.9 : clamp(1.3 + 1.15 * (toRem - fromRem), 1.7, 5.2);
+      G.driven = true;
+      tapRise = 0.3;
+      if (!mini) {
+        setState("reveal");
+        cam.tzoom = 0.86; cam.tlookUp = G.spec.H * 0.12;
+        haptic("medium");
+        ctx.platform.setProgress(0);
+      }
+    }
+    function stepPour(dt) {
+      const spec = G.spec, look = G.look;
+      P.t += dt;
+      if (elStage.getAttribute("data-phase") !== P.phase) elStage.setAttribute("data-phase", P.phase);
+      if (P.phase === "lower") {
+        tapRise = 0.3 * (1 - easeOut(clamp(P.t / 0.55, 0, 1)));
+        if (P.t >= 0.55) { P.phase = "pour"; P.t = 0; pourStart(); sfxGlug(true); }
+        placeTap();
+        stream.visible = false;
+        return;
+      }
+      if (P.phase === "pour") {
+        tapRise = 0;
+        placeTap();
+        if (P.pause > 0) {
+          P.pause -= dt;
+          stream.visible = false;
+          pourUpdate(1, 0.15);
+          if (P.pause <= 0 && P.hold) {
+            // the full glass goes to the row; a fresh one takes its place
+            P.hold = false;
+            G.levelFrac = 0.002;
+            G.head = 0;
+            syncRowCount(Math.min(ROW_MAX, Math.floor(P.rem + 1e-9)), true);
+            viz.full = Math.floor(P.rem + 1e-9);
+            renderTop();
+          }
+          return;
+        }
+        const prev = P.rem;
+        P.rem = Math.min(P.to, P.rem + ((P.to - P.from) / P.dur) * dt);
+        const crossed = Math.floor(P.rem + 1e-9) > Math.floor(prev + 1e-9);
+        if (!P.mini) {      // a top-up after a drink animates the glass, not the number
+          viz.remaining = P.rem;
+          viz.kcal = lerp(P.kcalFrom, P.kcalTo, (P.rem - P.from) / Math.max(1e-9, P.to - P.from));
+        }
+        if (crossed) {
+          // the glass is full: hold it at the brim for a beat, clink, then swap
+          G.levelFrac = 1;
+          G.head = Math.min(spec.H * 0.17, G.head + spec.H * 0.05);
+          P.pause = 0.6; P.hold = true;
+          sfxClink(); haptic("success");
+          try { ctx.music.sting("success"); } catch (err) { /* no bed */ }
+          ctx.platform.milestone("pint_earned", { pints: Math.floor(P.rem + 1e-9), kcal: Math.round(viz.kcal) });
+          stream.visible = false;
+          return;
+        }
+        const frac = P.rem - Math.floor(P.rem + 1e-9);
+        G.levelFrac = Math.max(0.002, frac);
+        G.head = Math.min(spec.H * 0.17, G.head + dt * look.foamK * spec.H * 0.09 * (0.4 + 0.6 * (1 - frac)));
+        const levelY = spec.levelFor(G.levelFrac);
+        // the stream: spout tip down to the surface, wobbling a little
+        const tipY = tapTipY(), len = Math.max(0.005, tipY - levelY - 0.002);
+        const r = 0.0034 * (1 + 0.12 * Math.sin(P.t * 41));
+        stream.visible = true;
+        stream.scale.set(r, len, r);
+        stream.position.set(0.004, levelY + 0.002 + len / 2, 0.004);
+        spawnSplash(levelY, 4, false);
+        G.sloshVX += (rnd() - 0.5) * 0.4 * dt; G.sloshVZ += (rnd() - 0.5) * 0.4 * dt;
+        pourUpdate(G.levelFrac, 1);
+        ctx.platform.setProgress(clamp((P.rem - P.from) / Math.max(1e-9, P.to - P.from), 0, 1));
+        if (P.rem >= P.to - 1e-9) { P.phase = "lift"; P.t = 0; pourStop(); }
+        return;
+      }
+      if (P.phase === "lift") {
+        stream.visible = false;
+        if (P.t < 0.25) spawnSplash(spec.levelFor(Math.max(0.002, G.levelFrac)), 1, true);
+        tapRise = 0.3 * easeInOut(clamp(P.t / 0.6, 0, 1));
+        placeTap();
+        if (P.t >= 0.6) {
+          P.on = false;
+          G.driven = false;
+          elStage.removeAttribute("data-phase");
+          syncViz();
+          G.targetFrac = derived.frac;
+          G.levelFrac = Math.max(G.levelFrac, derived.frac > 0 ? 0.002 : 0);
+          syncRowCount(derived.full, true);
+          cam.tzoom = 1; cam.tlookUp = 0;
+          if (!P.mini) {
+            setState("result");
+            const punch = q("[data-punch]");
+            if (punch) { punch.style.opacity = "0"; ctx.timeout(() => { punch.style.opacity = "1"; }, 60); }
+            if (derived.full >= 1) { try { ctx.music.sting("win"); } catch (err) { /* no bed */ } }
+            haptic("light");
+          }
+          renderTop();
+        }
+      }
+    }
+
+    // ---- the drink: tip it to your mouth, drain it, and the tap tops you up
+    const D = { on: false, t: 0, from: 0 };
+    function startDrink() {
+      if (P.on || D.on) return;
+      if (!MODEL.canPour(day, profile.kg, profile.style)) {
+        G.sloshVX += 1.2; G.pulse = 1;
+        sfxTing(G.levelFrac);
+        haptic("warning");
+        toast("NOT YET", hintText().toUpperCase());
+        return;
+      }
+      D.on = true; D.t = 0; D.from = G.levelFrac;
+      G.driven = true;
+      haptic("medium");
+      ctx.timeout(sfxGulp, 300);
+      ctx.timeout(sfxGulp, 850);
+    }
+    function stepDrink(dt) {
+      D.t += dt;
+      const k = D.t / 1.5;
+      G.drinkTip = -0.95 * easeInOut(clamp(k * 1.7, 0, 1));
+      G.levelFrac = Math.max(0, D.from * (1 - clamp((k - 0.18) / 0.62, 0, 1)));
+      if (G.levelFrac < 0.05) G.head = Math.max(0, G.head - dt * 0.05);
+      if (k >= 1) {
+        D.on = false;
+        G.drinkTip = 0;
+        G.driven = false;
+        const next = MODEL.pour(day, profile.kg, profile.style);
+        const rem0 = derived.remaining;
+        day = next; recompute(); saveDay();
+        syncViz();
+        renderTop();
+        toast("DOWN THE HATCH", derived.full ? derived.full + " LEFT" : "LAST ONE");
+        ctx.platform.interact({ type: "pour", poured: day.poured });
+        // the tap tops the glass back up to what is still yours
+        G.levelFrac = 0.002;
+        P.kcalFrom = derived.kcal; P.kcalTo = derived.kcal;
+        startPour(Math.floor(rem0 - 1 + 1e-9), derived.remaining, true);
+        setState("result");
+      } else {
+        G.drinkTip += 0;   // the easing above owns it
+      }
     }
 
     // ===================================================================
@@ -1300,102 +1694,62 @@ window.plethoraBit = {
       ctx.platform.start();
     }
 
-    function applyDay(next, why) {
-      const beforeFull = derived.full, beforeFrac = derived.frac, beforeRem = derived.remaining;
-      day = next;
-      recompute();
-      saveDay();
-      const dRem = derived.remaining - beforeRem;
-      if (derived.full > beforeFull) {
-        // a glass has filled: hold it at the brim, then it joins the row
-        G.overflowT = 0;
-        G.targetFrac = derived.frac;
-        pourIn(1 - beforeFrac + derived.frac);
-        sfxGlug(true);
-        ctx.timeout(() => { sfxClink(); haptic("success"); syncRowCount(derived.full, true); }, 520);
-        ctx.platform.milestone("pint_earned", { pints: derived.full, kcal: Math.round(derived.kcal) });
-      } else if (derived.full < beforeFull) {
-        G.overflowT = -1;                 // a pour cancels any brim-hold in progress
-        G.targetFrac = derived.frac;
-        syncRowCount(derived.full, true);
-      } else {
-        G.targetFrac = derived.frac;
-        if (dRem > 0.0005) { pourIn(dRem); sfxGlug(dRem > 0.25); }
-      }
-      ctx.platform.setProgress(clamp(derived.frac, 0, 1));
-      renderHud();
-      renderPanel();
-    }
-
-    function addAmount(act, amount) {
-      firstGesture();
-      const next = MODEL.add(day, act, amount);
+    function commitAmount() {
+      if (!UI.act || !(UI.value > 0) || P.on || D.on) return;
+      const before = derived.remaining, kcalBefore = derived.kcal;
+      const next = MODEL.add(day, UI.act, UI.value);
       if (next === day) return;
-      const kcal = MODEL.actKcal(next.log, act, profile.kg) - MODEL.actKcal(day.log, act, profile.kg);
-      applyDay(next, "add");
-      haptic("light");
-      toast("+" + fmtNum(amount, act) + " " + MODEL.ACTS[act].unit.toUpperCase(), Math.round(kcal) + " KCAL");
-      ctx.platform.interact({ type: "add", act: act, amount: amount });
-    }
-
-    function pourOne() {
-      firstGesture();
-      const next = MODEL.pour(day, profile.kg, profile.style);
-      if (next === day) return;
-      applyDay(next, "pour");
-      sfxGulp();
-      haptic("medium");
-      toast("POURED", (derived.full ? derived.full + " LEFT" : "LAST ONE"));
-      ctx.platform.interact({ type: "pour", poured: day.poured });
+      day = next; recompute(); saveDay();
+      ctx.platform.interact({ type: "add", act: UI.act, amount: UI.value });
+      P.kcalFrom = kcalBefore; P.kcalTo = derived.kcal;
+      sfxPop();
+      startPour(before, derived.remaining, false);
+      UI.value = 0;
     }
 
     function setStyle(k) {
-      if (!MODEL.STYLES[k] || k === profile.style) return;
+      if (!MODEL.STYLES[k] || k === profile.style || P.on || D.on) return;
       profile.style = k;
       saveProfile();
-      recompute();
+      recompute(); syncViz();
       buildGlass(k);
-      G.levelFrac = 0;
+      G.levelFrac = 0.002;
       G.targetFrac = derived.frac;
       G.head = derived.frac > 0 ? G.headRest : 0;
       rebuildRow();
-      renderHud(); renderSettings(); renderPanel();
-      sfxTick();
+      renderSettings(); renderStage();
+      sfxTick(3);
       ctx.platform.interact({ type: "style", style: k });
     }
-
     function setKg(delta) {
       profile.kg = clamp(profile.kg + delta, 35, 200);
       saveProfile();
-      recompute();
+      recompute(); syncViz();
       G.targetFrac = derived.frac;
       syncRowCount(derived.full, true);
       const kgv = elSettings.querySelector("[data-kgv]");
       if (kgv) kgv.innerHTML = profile.kg + " <small>KG</small>";
-      renderHud(); renderPanel();
-      sfxTick();
+      renderTop();
+      sfxTick(delta > 0 ? 5 : 1);
     }
-
     function resetToday() {
-      applyDay(MODEL.newDay(MODEL.localDate()), "reset");
-      G.levelFrac = 0; G.head = 0;
+      if (P.on || D.on) return;
+      day = MODEL.newDay(MODEL.localDate()); recompute(); saveDay(); syncViz();
+      G.levelFrac = 0; G.head = 0; G.targetFrac = 0;
       rebuildRow();
       toast("RESET", "A FRESH GLASS");
+      setState("pick");
       ctx.platform.interact({ type: "reset" });
     }
 
-    // ---- live steps from the motion sensor, while this is open.
-    // Threshold crossing on the high-passed magnitude with a refractory period:
-    // crude, honest, and it counts a walk.
+    // ---- live steps from the motion sensor, while this is open
     async function setLive(on) {
       if (on) {
-        if (!ctx.capabilities.motion) { pedo.available = false; pedo.on = false; renderPanel(); return; }
+        if (!ctx.capabilities.motion) { pedo.available = false; pedo.on = false; setState("live"); return; }
         let okay = false;
         try { okay = await ctx.sensors.start(); } catch (err) { okay = false; }
-        if (!okay) { pedo.available = false; pedo.on = false; renderPanel(); return; }
-        pedo.available = true;
-        pedo.on = true;
-        pedo.live = 0; pedo.pending = 0;
+        if (!okay) { pedo.available = false; pedo.on = false; setState("live"); return; }
+        pedo.available = true; pedo.on = true; pedo.live = 0; pedo.pending = 0;
         try {
           pedo.off = ctx.sensors.onChange(() => {
             const a = ctx.sensors.accelerationIncludingGravity || ctx.sensors.accelerometer;
@@ -1405,24 +1759,33 @@ window.plethoraBit = {
             const hp = mag - pedo.mean;
             const now = performance.now();
             if (hp > 1.1 && pedo.prev <= 1.1 && now - pedo.last > 280) {
-              pedo.last = now;
-              pedo.live++;
-              pedo.pending++;
-              if (pedo.pending >= 20) { const n = pedo.pending; pedo.pending = 0; addAmount("steps", n); }
-              const note = elPanel.querySelector("[data-livenote]");
-              if (note) note.textContent = liveNote();
+              pedo.last = now; pedo.live++; pedo.pending++;
+              sfxTick(pedo.live);
+              const c = q("[data-live-count]");
+              if (c) c.textContent = pedo.live.toLocaleString();
+              if (pedo.pending >= 20) {
+                const n = pedo.pending; pedo.pending = 0;
+                day = MODEL.add(day, "steps", n); recompute(); saveDay(); syncViz();
+                G.targetFrac = derived.frac; syncRowCount(derived.full, true); renderTop();
+              }
             }
             pedo.prev = hp;
           });
         } catch (err) { pedo.off = null; }
+        setState("live");
       } else {
+        const wasOn = pedo.on;
         pedo.on = false;
         if (pedo.off) { try { pedo.off(); } catch (err) { /* already */ } pedo.off = null; }
-        if (pedo.pending > 0) { const n = pedo.pending; pedo.pending = 0; addAmount("steps", n); }
+        if (wasOn && pedo.live > 0) {
+          const before = derived.remaining, kcalBefore = derived.kcal;
+          if (pedo.pending > 0) { const n = pedo.pending; pedo.pending = 0; day = MODEL.add(day, "steps", n); recompute(); saveDay(); }
+          P.kcalFrom = kcalBefore; P.kcalTo = derived.kcal;
+          ctx.platform.interact({ type: "add", act: "steps", amount: pedo.live, live: true });
+          startPour(before, derived.remaining, false);
+        } else setState(derived.kcal > 0 ? "result" : "pick");
       }
-      renderPanel();
     }
-
     async function setTilt(on) {
       if (on) {
         let okay = false;
@@ -1436,69 +1799,133 @@ window.plethoraBit = {
       if (tog) tog.classList.toggle("on", profile.tilt);
     }
 
-    // ---- clicks, delegated off the root so rebuilt panels keep working
+    // ---- the amount: scrub, presets, nudges
+    function setValue(v, tick) {
+      const A = AMOUNT[UI.act];
+      const snapped = Math.round(clamp(v, 0, A.max) / A.step) * A.step;
+      if (Math.abs(snapped - UI.value) < 1e-9) return;
+      const dir = snapped > UI.value ? 1 : -1;
+      UI.value = Math.round(snapped * 1000) / 1000;
+      if (tick) { UI.scrub.ticks += dir; sfxTick(Math.abs(UI.scrub.ticks)); haptic("light"); }
+      renderAmount();
+    }
+
     ctx.listen(ui, "click", (e) => {
-      const t = e.target.closest ? e.target.closest("[data-act],[data-add],[data-undo],[data-clear],[data-pour],[data-gear],[data-info],[data-close],[data-style],[data-kg],[data-reset],[data-live],[data-tilt]") : null;
+      const sel = "[data-card],[data-live-card],[data-pre],[data-nudge],[data-pour],[data-back],[data-more],[data-more-done],[data-drink],[data-live-stop],[data-gear],[data-info],[data-close],[data-style],[data-kg],[data-reset],[data-tilt]";
+      const t = e.target.closest ? e.target.closest(sel) : null;
       if (!t) return;
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       firstGesture();
-      if (t.hasAttribute("data-act")) {
-        const k = t.getAttribute("data-act");
-        openAct = openAct === k ? null : k;
-        sfxTick(); haptic("light");
-        renderHud(); renderPanel();
-      } else if (t.hasAttribute("data-add")) {
-        addAmount(openAct, parseFloat(t.getAttribute("data-add")));
-      } else if (t.hasAttribute("data-undo")) {
-        const next = MODEL.undo(day);
-        if (next !== day) { applyDay(next, "undo"); sfxTick(); haptic("light"); toast("UNDONE"); }
-      } else if (t.hasAttribute("data-clear")) {
-        const next = MODEL.clearAct(day, openAct);
-        if (next !== day) { applyDay(next, "clear"); sfxTick(); toast("CLEARED", MODEL.ACTS[openAct].label.toUpperCase()); }
+      if (t.hasAttribute("data-card")) {
+        UI.act = t.getAttribute("data-card"); UI.value = 0; UI.scrub.ticks = 0;
+        sfxPop(); haptic("light"); setState("amount");
+      } else if (t.hasAttribute("data-live-card")) {
+        sfxPop(); haptic("light"); setLive(true);
+      } else if (t.hasAttribute("data-live-stop")) {
+        sfxPop(); setLive(false);
+      } else if (t.hasAttribute("data-pre")) {
+        setValue(parseFloat(t.getAttribute("data-pre")), false); sfxPop(); haptic("light");
+      } else if (t.hasAttribute("data-nudge")) {
+        setValue(UI.value + parseInt(t.getAttribute("data-nudge"), 10) * AMOUNT[UI.act].step, true);
       } else if (t.hasAttribute("data-pour")) {
-        pourOne();
+        commitAmount();
+      } else if (t.hasAttribute("data-back")) {
+        sfxTick(1); setState("pick");
+      } else if (t.hasAttribute("data-more")) {
+        sfxPop(); setState("pick");
+      } else if (t.hasAttribute("data-more-done")) {
+        sfxPop(); setState("result");
+      } else if (t.hasAttribute("data-drink")) {
+        startDrink();
       } else if (t.hasAttribute("data-gear")) {
-        renderSettings(); elSettings.hidden = false; elAbout.hidden = true; openAct = null; renderHud(); renderPanel(); sfxTick();
+        renderSettings(); elSettings.hidden = false; elAbout.hidden = true; sfxTick(2);
       } else if (t.hasAttribute("data-info")) {
-        renderAbout(); elAbout.hidden = false; elSettings.hidden = true; openAct = null; renderHud(); renderPanel(); sfxTick();
+        renderAbout(); elAbout.hidden = false; elSettings.hidden = true; sfxTick(2);
       } else if (t.hasAttribute("data-close")) {
-        elSettings.hidden = true; elAbout.hidden = true; sfxTick();
+        elSettings.hidden = true; elAbout.hidden = true; sfxTick(1);
       } else if (t.hasAttribute("data-style")) {
         setStyle(t.getAttribute("data-style"));
       } else if (t.hasAttribute("data-kg")) {
         setKg(parseInt(t.getAttribute("data-kg"), 10));
       } else if (t.hasAttribute("data-reset")) {
-        resetToday(); elSettings.hidden = true;
-      } else if (t.hasAttribute("data-live")) {
-        setLive(!pedo.on);
+        elSettings.hidden = true; resetToday();
       } else if (t.hasAttribute("data-tilt")) {
         setTilt(!profile.tilt);
       }
     });
 
-    // ---- the canvas: drag tilts the glass; a tap closes what is open
-    const ptr = { down: false, id: null, x0: 0, y0: 0, tx0: 0, ty0: 0, moved: false };
+    // scrub: a horizontal drag across the ruler sets the amount
+    ctx.listen(ui, "pointerdown", (e) => {
+      const z = e.target.closest ? e.target.closest("[data-scrub]") : null;
+      if (!z || UI.state !== "amount") return;
+      e.preventDefault();
+      firstGesture();
+      UI.scrub.on = true; UI.scrub.id = e.pointerId; UI.scrub.x0 = e.clientX; UI.scrub.v0 = UI.value;
+    }, { passive: false });
+    ctx.listen(window, "pointermove", (e) => {
+      if (!UI.scrub.on || e.pointerId !== UI.scrub.id) return;
+      const A = AMOUNT[UI.act];
+      setValue(UI.scrub.v0 + ((e.clientX - UI.scrub.x0) / A.px) * A.step, true);
+    }, { passive: false });
+    const endScrub = (e) => { if (UI.scrub.on && (!e || e.pointerId === UI.scrub.id)) UI.scrub.on = false; };
+    ctx.listen(window, "pointerup", endScrub);
+    ctx.listen(window, "pointercancel", endScrub);
+
+    // ---- the glass: tap it, swipe up to drink it, drag to tilt it
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    const ptr = { down: false, id: null, x0: 0, y0: 0, ox: 0, oy: 0, tx0: 0, ty0: 0, t0: 0, onGlass: false, mode: null };
+    function hitGlass(px, py) {
+      if (!G.glass) return false;
+      ndc.set((px / W) * 2 - 1, -(py / H) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      return ray.intersectObject(G.glass, false).length > 0;
+    }
+    function tapGlass() {
+      sfxTing(G.levelFrac);
+      haptic("light");
+      G.pulse = 1;
+      G.sloshVX += (rnd() < 0.5 ? -1 : 1) * 0.5;
+      bubbleBurst(26);
+      G.head = Math.min(G.spec.H * 0.17, G.head + 0.0025);
+      ctx.platform.interact({ type: "cheers" });
+    }
     ctx.listen(canvas, "pointerdown", (e) => {
       e.preventDefault();
       if (ptr.down) return;
-      ptr.down = true; ptr.id = e.pointerId; ptr.moved = false;
-      ptr.x0 = e.clientX; ptr.y0 = e.clientY; ptr.tx0 = G.tiltX; ptr.ty0 = G.tiltY;
+      ptr.down = true; ptr.id = e.pointerId; ptr.mode = null;
+      ptr.x0 = e.clientX; ptr.y0 = e.clientY; ptr.t0 = performance.now();
+      ptr.tx0 = G.tiltX; ptr.ty0 = G.tiltY;
+      const ox = typeof e.offsetX === "number" ? e.offsetX : e.clientX;
+      const oy = typeof e.offsetY === "number" ? e.offsetY : e.clientY;
+      ptr.onGlass = !P.on && !D.on && hitGlass(ox, oy);
       firstGesture();
     }, { passive: false });
     ctx.listen(window, "pointermove", (e) => {
       if (!ptr.down || e.pointerId !== ptr.id) return;
       const dx = e.clientX - ptr.x0, dy = e.clientY - ptr.y0;
-      if (Math.abs(dx) + Math.abs(dy) > 6) ptr.moved = true;
-      G.tiltX = clamp(ptr.tx0 + dx / (W * 0.55), -1, 1);
-      G.tiltY = clamp(ptr.ty0 + dy / (H * 0.7), -1, 1);
+      if (!ptr.mode) {
+        if (Math.abs(dx) + Math.abs(dy) < 12) return;
+        ptr.mode = (ptr.onGlass && -dy > Math.abs(dx) * 1.4) ? "swipe" : "tilt";
+      }
+      if (ptr.mode === "swipe") {
+        // No time gate: "swipe" is only entered when the first movement was
+        // upward on the glass, so a slow, deliberate drag up it is a drink too.
+        if (-dy > 70) { ptr.mode = "done"; startDrink(); }
+        return;
+      }
+      if (ptr.mode === "tilt") {
+        G.tiltX = clamp(ptr.tx0 + dx / (W * 0.55), -1, 1);
+        G.tiltY = clamp(ptr.ty0 + dy / (H * 0.7), -1, 1);
+      }
     }, { passive: false });
     function endPtr(e) {
       if (!ptr.down || (e && e.pointerId !== ptr.id)) return;
       ptr.down = false;
-      if (!ptr.moved) {
-        if (openAct) { openAct = null; renderHud(); renderPanel(); }
-        elSettings.hidden = true; elAbout.hidden = true;
+      const quick = performance.now() - ptr.t0 < 350;
+      if (!ptr.mode && quick) {
+        if (ptr.onGlass) tapGlass();
+        else { elSettings.hidden = true; elAbout.hidden = true; }
       }
     }
     ctx.listen(window, "pointerup", endPtr);
@@ -1521,17 +1948,20 @@ window.plethoraBit = {
       const t = timeMs / 1000;
       if (ctx.width !== lastW || ctx.height !== lastH) { lastW = ctx.width; lastH = ctx.height; resize(); }
 
-      // tilt: the phone if allowed, otherwise the drag; when nobody is touching it settles
       if (profile.tilt && ctx.sensors && ctx.sensors.active && ctx.sensors.tilt && !ptr.down) {
         G.tiltX = clamp(ctx.sensors.tilt.x || 0, -1, 1);
         G.tiltY = clamp(ctx.sensors.tilt.y || 0, -1, 1);
-      } else if (!ptr.down) {
+      } else if (!ptr.down || ptr.mode !== "tilt") {
         G.tiltX += (0 - G.tiltX) * Math.min(1, dt * 2.2);
         G.tiltY += (0 - G.tiltY) * Math.min(1, dt * 2.2);
       }
+      const tdt = Math.min(0.1, Math.max(0.001, dtMs / 1000));
+      if (P.on) stepPour(tdt); else { tapRise = Math.min(0.3, tapRise + dt * 0.5); placeTap(); stream.visible = false; }
+      if (D.on) stepDrink(tdt);
 
       glassGroup.updateMatrixWorld();
       stepLiquid(dt, t);
+      stepSplash(dt, G.levelFrac > 0.002 ? G.spec.levelFor(G.levelFrac) : 0);
       stepRow(dt);
       for (let i = 0; i < BOKEH_N; i++) {
         const b = bokehSeeds[i];
@@ -1552,14 +1982,16 @@ window.plethoraBit = {
     // ===================================================================
     await Promise.race([fontsReady, new Promise((res) => ctx.timeout(res, 2500))]);
     await loadState();
-    recompute();
+    recompute(); syncViz();
     W = ctx.width; H = ctx.height; lastW = W; lastH = H;
     resize();
     buildGlass(profile.style);
+    streamMat.color.set(G.look.color); streamMat.emissive.set(G.look.attn);
     G.levelFrac = derived.frac; G.targetFrac = derived.frac; G.head = derived.frac > 0 ? G.headRest : 0;
     shownPints = derived.remaining;
     rebuildRow();
-    renderHud(); renderPanel();
+    placeTap();
+    setState(derived.kcal > 0 ? "result" : "pick");
     glassGroup.updateMatrixWorld();
     stepLiquid(0.016, 0);
     placeCamera(0);
