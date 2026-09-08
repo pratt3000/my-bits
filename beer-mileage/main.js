@@ -559,21 +559,23 @@ window.plethoraBit = {
 
     // ---- your tab, chalked on the wall: four strokes and a diagonal per
     // ---- pint earned today, the ones you have drunk rubbed dim
-    const TAB_MAX = 40;
+    const TAB_MAX = 30;
     // From the settled camera the only clear wall is a narrow band just above
     // the rail, right of the earned glasses; the board is a strip that fits it.
     const tabMarks = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.0055, 0.052, 0.004),
-      new THREE.MeshStandardMaterial({ roughness: 0.95, emissive: "#d9d2c2", emissiveIntensity: 0.45 }), TAB_MAX);
+      new THREE.BoxGeometry(0.0065, 0.05, 0.004),
+      new THREE.MeshStandardMaterial({ roughness: 0.95, emissive: "#d9d2c2", emissiveIntensity: 0.55 }), TAB_MAX);
     tabMarks.count = 0;
     {
       const board = new THREE.Group();
-      board.position.set(0.25, 0.012, -1.07);
+      // The glass hides the wall to about x = 0.09 and the frame edge is near
+      // 0.29, so the board lives in that twenty centimetres, two short rows.
+      board.position.set(0.19, 0.012, -1.07);
       board.rotation.y = -0.1;
-      board.add(new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.15, 0.018),
+      board.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.018),
         new THREE.MeshStandardMaterial({ color: "#182521", roughness: 0.96 })));
       const wood = new THREE.MeshStandardMaterial({ color: "#5a3a22", roughness: 0.7 });
-      for (const f of [[0.48, 0.022, 0, 0.086], [0.48, 0.022, 0, -0.086], [0.022, 0.15, -0.229, 0], [0.022, 0.15, 0.229, 0]]) {
+      for (const f of [[0.24, 0.02, 0, 0.085], [0.24, 0.02, 0, -0.085], [0.02, 0.15, -0.11, 0], [0.02, 0.15, 0.11, 0]]) {
         const m = new THREE.Mesh(new THREE.BoxGeometry(f[0], f[1], 0.03), wood);
         m.position.set(f[2], f[3], 0.005);
         board.add(m);
@@ -587,9 +589,9 @@ window.plethoraBit = {
       const chalk = new THREE.Color("#f3eee2"), dim = new THREE.Color("#5b665f");
       let k = 0;
       for (let i = 0; i < total; i++) {
-        const grp = Math.floor(i / 5), inG = i % 5;
-        const x0 = -0.19 + grp * 0.052;
-        _pos.set(x0 + (inG < 4 ? inG * 0.0095 : 0.0145), 0, 0.012);
+        const grp = Math.floor(i / 5), inG = i % 5, row = Math.floor(grp / 3), col = grp % 3;
+        const x0 = -0.07 + col * 0.055, y0 = 0.034 - row * 0.068;
+        _pos.set(x0 + (inG < 4 ? inG * 0.0095 : 0.0145), y0, 0.012);
         const jit = ((i * 7919) % 13) / 13 - 0.5;
         _q.setFromAxisAngle(_zAxis, inG < 4 ? jit * 0.16 : 0.8);
         _scl.set(1, inG < 4 ? 1 + jit * 0.08 : 1.45, 1);
