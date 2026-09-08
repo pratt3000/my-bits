@@ -64,52 +64,101 @@ window.plethoraBit = {
     const SAFE_B = Math.max(ctx.safeArea && ctx.safeArea.bottom || 0, 0);
     const SAFE_T = Math.max(ctx.safeArea && ctx.safeArea.top || 0, 0);
 
-    const HAND = "'Patrick Hand','Bradley Hand','Segoe Print','Marker Felt','Comic Sans MS','Chalkboard SE',cursive";
-    const STAMP = "'Anton','Impact','Arial Narrow','Helvetica Neue',sans-serif";
-    const INK = "#24428f", RED = "#bf3b2b", PAPER = "#e9e2cf", PAPER_HI = "#f4efe0", TIN = "#c4691a", CHALK = "#f3ede0";
+    const HAND = "'Patrick Hand','Chalkboard SE','Marker Felt','Bradley Hand','Segoe Print','Comic Sans MS',cursive";
+    const STAMP = "'Bebas Neue','Anton','Impact','Futura-CondensedExtraBold','AvenirNextCondensed-Heavy','Arial Narrow',sans-serif";
+    const INK = "#24428f", RED = "#c8402f", PAPER = "#efe8d6", PAPER_HI = "#f6f1e3", TIN = "#c4691a", CHALK = "#f3ede0";
+    try { await ctx.loadFont("Bebas Neue", "bebas-neue", "1.0.0"); } catch (_) { /* system condensed fallback */ }
+    // a torn-edge polygon for the paper sheets
+    const TORN = (function () { const pts = []; const n = 22; for (let i = 0; i <= n; i++) pts.push((i / n * 100).toFixed(1) + "% " + (i % 2 ? "0%" : "1.1%")); for (let i = n; i >= 0; i--) pts.push((i / n * 100).toFixed(1) + "% " + (i % 2 ? "100%" : "98.9%")); return "polygon(" + pts.join(",") + ")"; })();
 
     ui.innerHTML = `
 <style>
   .pf * { box-sizing: border-box; }
   .pf { position:absolute; inset:0; overflow:hidden; pointer-events:none; font-family:${HAND}; color:${INK};
         -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
-  .pf .board { position:absolute; left:10px; right:10px; top:${SAFE_T + 8}px; pointer-events:none; opacity:0; transition:opacity .4s;
-        background:linear-gradient(180deg,#1f3a2e,#183028); border:6px solid #6b4423; border-radius:4px;
-        box-shadow:0 6px 18px rgba(0,0,0,.45), inset 0 0 40px rgba(0,0,0,.35); padding:6px 10px 8px; color:${CHALK}; }
-  .pf .board .row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .pf .board .name { font-size:19px; letter-spacing:.02em; text-shadow:0 0 2px rgba(243,237,224,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:44%; }
-  .pf .board .name.turn { text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:4px; }
-  .pf .board .tally { font-size:22px; letter-spacing:.06em; min-width:60px; text-align:center; }
-  .pf .board .mid { font-size:13px; opacity:.78; text-align:center; }
-  .pf .board .note { font-size:14px; opacity:.85; text-align:center; margin-top:2px; min-height:18px; }
+  .pf .board { display:none; }
   .pf .slip { position:absolute; left:50%; transform:translate(-50%,0) rotate(-1.2deg); top:40%; width:min(84vw,340px);
         background:${PAPER}; color:${INK}; padding:12px 16px 14px 24px; font-size:19px; line-height:1.35; text-align:center;
-        border-left:2px solid rgba(191,59,43,.55);
+        border-left:2px solid rgba(200,64,47,.55);
         background-image:repeating-linear-gradient(180deg, transparent 0 25px, rgba(96,126,190,.22) 25px 26px);
         box-shadow:0 10px 26px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.6) inset; opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; }
   .pf .slip.show { opacity:1; transform:translate(-50%,-8px) rotate(-1.2deg); }
   .pf .slip b { color:${RED}; font-weight:400; }
-  .pf .hint { position:absolute; left:16px; right:16px; bottom:${SAFE_B + 14}px; text-align:center; font-size:17px; color:rgba(243,237,224,.85);
+  .pf .hint { position:absolute; left:16px; right:16px; bottom:${SAFE_B + 14}px; text-align:center; font-size:17px; color:rgba(243,237,224,.9);
         text-shadow:0 1px 3px rgba(0,0,0,.7); pointer-events:none; opacity:0; transition:opacity .3s; }
-  .pf .page { position:absolute; inset:0; overflow-y:auto; overflow-x:hidden; pointer-events:auto; padding:${SAFE_T + 14}px 14px ${SAFE_B + 20}px;
-        background:${PAPER}; background-image:repeating-linear-gradient(180deg, transparent 0 27px, rgba(96,126,190,.17) 27px 28px);
-        display:none; }
+  .pf .page { position:absolute; inset:0; overflow-y:auto; overflow-x:hidden; pointer-events:auto; padding:${SAFE_T + 10}px 8px ${SAFE_B + 18}px;
+        background:rgba(18,22,16,.42); display:none; }
   .pf .page.show { display:block; }
-  .pf .page::before { content:""; position:absolute; top:0; bottom:0; left:34px; width:2px; background:rgba(191,59,43,.45); pointer-events:none; }
-  .pf .inner { position:relative; max-width:420px; margin:0 auto; padding-left:26px; }
-  .pf h1 { font-family:${STAMP}; font-weight:400; font-size:clamp(46px,15vw,70px); line-height:.92; letter-spacing:.02em; color:${TIN};
-        text-transform:uppercase; margin:6px 0 4px; transform:rotate(-1.5deg); text-shadow:2px 2px 0 rgba(36,66,143,.12); }
-  .pf h2 { font-family:${STAMP}; font-weight:400; font-size:26px; letter-spacing:.04em; text-transform:uppercase; color:${RED}; margin:12px 0 4px; }
-  .pf p { margin:4px 0; font-size:19px; line-height:1.4; }
+  .pf .inner { position:relative; max-width:440px; margin:0 auto; }
+  .pf .sheet { position:relative; background:${PAPER}; color:${INK}; padding:26px 18px 30px 38px; margin:0 0 10px;
+        background-image:repeating-linear-gradient(180deg, transparent 0 27px, rgba(96,126,190,.2) 27px 28px);
+        clip-path:${TORN}; box-shadow:0 12px 30px rgba(0,0,0,.4); }
+  .pf .sheet::before { content:""; position:absolute; top:0; bottom:0; left:26px; width:2px; background:rgba(200,64,47,.5); pointer-events:none; }
+  .pf .sheet.plain { padding-left:18px; } .pf .sheet.plain::before { display:none; }
+  .pf h1 { font-family:${STAMP}; font-weight:400; font-size:clamp(40px,12vw,56px); line-height:1; letter-spacing:.03em; color:${INK};
+        text-transform:uppercase; margin:8px 0 10px; text-align:center; }
+  .pf h1.hand { font-family:${HAND}; letter-spacing:.06em; }
+  .pf h2 { font-family:${HAND}; font-weight:400; font-size:26px; letter-spacing:.14em; text-transform:uppercase; color:${INK}; margin:14px 0 6px; text-align:center; }
+  .pf p { margin:5px 0; font-size:19px; line-height:1.4; }
+  .pf .ctr { text-align:center; }
   .pf .quiet { opacity:.72; font-size:16px; }
-  .pf .stampbtn { display:inline-block; font-family:${STAMP}; font-size:20px; letter-spacing:.08em; text-transform:uppercase; color:${RED};
-        border:3px solid ${RED}; border-radius:6px; padding:8px 16px; margin:10px 8px 6px 0; transform:rotate(-1.6deg); background:rgba(191,59,43,.06);
-        box-shadow:0 2px 0 rgba(191,59,43,.25); cursor:pointer; pointer-events:auto; }
-  .pf .stampbtn:active { transform:rotate(-1.6deg) scale(.97); background:rgba(191,59,43,.16); }
+  .pf .label { font-family:${STAMP}; font-size:15px; letter-spacing:.16em; text-transform:uppercase; color:${RED}; }
+  .pf .label.ink { color:${INK}; opacity:.85; }
+  .pf .hdr { display:flex; align-items:center; justify-content:center; gap:10px; font-family:${STAMP}; font-size:30px; letter-spacing:.1em; color:${INK}; padding-bottom:8px; border-bottom:3px solid ${INK}; margin-bottom:10px; }
+  .pf .btn { display:block; font-family:${STAMP}; font-size:27px; letter-spacing:.1em; text-transform:uppercase; color:#fff; background:${RED}; text-align:center;
+        padding:15px 12px 13px; margin:14px 0 8px; box-shadow:0 7px 0 #952c1f, 0 10px 18px rgba(0,0,0,.25); cursor:pointer; pointer-events:auto; transform:rotate(-.6deg); }
+  .pf .btn:active { transform:rotate(-.6deg) translateY(4px); box-shadow:0 3px 0 #952c1f; }
+  .pf .btn.ghost { background:transparent; color:${INK}; border:3px double ${INK}; box-shadow:none; }
+  .pf .btn.ghost:active { background:rgba(36,66,143,.08); }
+  .pf .btn.dim { opacity:.4; pointer-events:none; }
+  .pf .stampbtn { display:inline-block; font-family:${STAMP}; font-size:22px; letter-spacing:.1em; text-transform:uppercase; color:${RED};
+        border:3px solid ${RED}; border-radius:6px; padding:8px 16px 6px; margin:10px 8px 6px 0; transform:rotate(-1.6deg); background:rgba(200,64,47,.06);
+        box-shadow:0 2px 0 rgba(200,64,47,.25); cursor:pointer; pointer-events:auto; }
+  .pf .stampbtn:active { transform:rotate(-1.6deg) scale(.97); background:rgba(200,64,47,.16); }
   .pf .stampbtn.tin { color:${TIN}; border-color:${TIN}; background:rgba(196,105,26,.08); box-shadow:0 2px 0 rgba(196,105,26,.25); }
   .pf .stampbtn.ink { color:${INK}; border-color:${INK}; background:rgba(36,66,143,.06); box-shadow:0 2px 0 rgba(36,66,143,.25); }
   .pf .stampbtn.dim { opacity:.4; pointer-events:none; }
-  .pf .link { color:${INK}; text-decoration:underline; text-underline-offset:3px; cursor:pointer; pointer-events:auto; font-size:18px; margin-right:14px; }
+  .pf .link { color:${INK}; text-decoration:underline; text-underline-offset:3px; cursor:pointer; pointer-events:auto; font-size:18px; }
+  .pf .back { position:absolute; left:40px; top:22px; width:38px; height:38px; border:3px solid ${INK}; border-radius:4px; display:flex; align-items:center; justify-content:center;
+        font-family:${STAMP}; font-size:26px; line-height:1; cursor:pointer; pointer-events:auto; }
+  .pf .card { position:relative; background:${PAPER_HI}; border:1px solid rgba(36,66,143,.15); padding:16px 14px 14px; margin:22px 0 10px; box-shadow:0 8px 20px rgba(0,0,0,.18); transform:rotate(-.4deg); }
+  .pf .tape { position:absolute; left:50%; top:-12px; width:110px; height:22px; margin-left:-55px; background:rgba(236,214,120,.7); transform:rotate(-1deg); }
+  .pf .rowb { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .pf .counter { border:2px solid ${INK}; padding:6px 10px 4px; text-align:center; font-family:${STAMP}; letter-spacing:.06em; line-height:1; }
+  .pf .counter b { font-size:28px; font-weight:400; color:${RED}; }
+  .pf .counter small { font-size:12px; letter-spacing:.14em; display:block; margin-top:3px; }
+  .pf .ttl { font-family:${HAND}; font-size:32px; letter-spacing:.06em; text-transform:uppercase; margin:8px 0 2px; line-height:1.05; }
+  .pf .prize { display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid rgba(36,66,143,.25); padding:10px 12px; margin:10px 0; background:rgba(255,255,255,.35); }
+  .pf .prize .pr { text-align:right; font-family:${HAND}; font-size:19px; letter-spacing:.06em; text-transform:uppercase; }
+  .pf .dots { display:flex; align-items:center; justify-content:space-between; margin:10px 2px 4px; }
+  .pf .dot { width:14px; height:14px; border:2px solid rgba(36,66,143,.55); border-radius:50%; background:transparent; }
+  .pf .dot.done { background:${INK}; border-color:${INK}; }
+  .pf .dot.now { border-color:${RED}; border-width:3px; }
+  .pf .dot.cup { width:auto; height:auto; border:0; color:${RED}; font-size:18px; line-height:1; }
+  .pf .sec { display:flex; align-items:center; gap:12px; font-family:${HAND}; font-size:26px; letter-spacing:.12em; text-transform:uppercase; margin:22px 0 4px; }
+  .pf .sec::after { content:""; flex:1; height:2px; background:rgba(36,66,143,.35); }
+  .pf .mode { display:flex; align-items:center; gap:14px; padding:14px 4px; border-bottom:2px solid rgba(36,66,143,.25); cursor:pointer; pointer-events:auto; }
+  .pf .mode:active { background:rgba(36,66,143,.06); }
+  .pf .mode .ico { width:44px; text-align:center; font-size:30px; line-height:1; }
+  .pf .mode .mt { font-family:${HAND}; font-size:26px; letter-spacing:.1em; text-transform:uppercase; line-height:1.1; }
+  .pf .mode .ms { font-size:16px; opacity:.75; }
+  .pf .mode .arr { margin-left:auto; color:${RED}; font-size:26px; }
+  .pf .badge { display:inline-block; font-family:${STAMP}; font-size:13px; letter-spacing:.1em; background:#f3d23c; color:#1d1d1d; padding:3px 6px 1px; margin-left:6px; vertical-align:middle; transform:rotate(-2deg); }
+  .pf .sq { display:flex; justify-content:center; gap:6px; margin:8px 0 14px; }
+  .pf .sq span { width:26px; height:14px; background:rgba(36,66,143,.2); border-radius:2px; }
+  .pf .sq span.done { background:${INK}; } .pf .sq span.now { background:${RED}; }
+  .pf .vs { display:flex; align-items:center; justify-content:space-between; gap:6px; margin:6px 0 10px; }
+  .pf .vs .side { flex:1; text-align:center; }
+  .pf .vs .nm { font-family:${HAND}; font-size:20px; letter-spacing:.1em; text-transform:uppercase; }
+  .pf .vs .pn { font-size:19px; margin-top:4px; }
+  .pf .vs .v { font-family:${STAMP}; font-size:28px; color:${RED}; padding:0 4px; border-left:1px solid rgba(36,66,143,.25); align-self:stretch; display:flex; align-items:center; }
+  .pf .pic { display:block; margin:6px auto; pointer-events:auto; }
+  .pf .line { display:flex; justify-content:space-between; font-size:20px; padding:8px 4px 10px; border-bottom:2px dashed rgba(36,66,143,.35); margin-bottom:8px; }
+  .pf .line b { font-family:${HAND}; font-weight:400; font-size:24px; }
+  .pf .howto { position:relative; height:120px; background:linear-gradient(180deg,#c48b4b,#b27a3e); border:3px solid ${INK}; margin:8px 0 10px; overflow:hidden; }
+  .pf .howto .hp { position:absolute; left:14%; width:72%; }
+  .pf .howto .ring { position:absolute; width:26px; height:26px; border:4px solid ${RED}; border-radius:50%; background:rgba(255,255,255,.7); }
+  .pf .howto .pull { position:absolute; border-top:3px dashed rgba(200,64,47,.9); width:60px; transform-origin:0 0; }
   .pf .chit { position:relative; background:${PAPER_HI}; border:1px solid rgba(36,66,143,.18); border-radius:3px; padding:10px 12px 10px 14px; margin:10px 0;
         box-shadow:0 3px 8px rgba(0,0,0,.12); transform:rotate(-.4deg); }
   .pf .chit:nth-child(even) { transform:rotate(.5deg); }
@@ -117,16 +166,26 @@ window.plethoraBit = {
   .pf .chit .who small { font-size:15px; opacity:.7; margin-left:6px; }
   .pf .chit .pen { font-size:17px; color:${RED}; }
   .pf .chit .intro { font-size:16px; opacity:.85; margin-top:2px; }
-  .pf .chit .state { position:absolute; right:10px; top:8px; font-family:${STAMP}; font-size:14px; letter-spacing:.08em; text-transform:uppercase; padding:2px 6px; border:2px solid; border-radius:4px; transform:rotate(6deg); }
+  .pf .chit .state { position:absolute; right:10px; top:8px; font-family:${STAMP}; font-size:14px; letter-spacing:.08em; text-transform:uppercase; padding:3px 6px 1px; border:2px solid; border-radius:4px; transform:rotate(6deg); }
   .pf .chit .state.beaten { color:#2f7a3a; border-color:#2f7a3a; }
   .pf .chit .state.next { color:${RED}; border-color:${RED}; }
   .pf .chit .state.locked { color:rgba(36,66,143,.45); border-color:rgba(36,66,143,.35); }
-  .pf .chit.pick { cursor:pointer; pointer-events:auto; }
+  .pf .chit.pick { cursor:pointer; pointer-events:auto; display:flex; align-items:center; gap:10px; }
   .pf .chit.pick.sel { outline:3px solid ${RED}; outline-offset:-3px; }
-  .pf .swatch { display:inline-block; width:64px; height:9px; border-radius:5px; vertical-align:middle; margin-right:8px; border:1px solid rgba(0,0,0,.25); }
-  .pf .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .pf .topbar { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
-  .pf .mute { position:absolute; right:${12}px; top:${SAFE_T + 8}px; pointer-events:auto; font-size:18px; opacity:.7; z-index:9; }
+  .pf .tin { position:relative; margin:0 -2px 0; }
+  .pf .lid { position:relative; height:176px; background:radial-gradient(ellipse at 50% 40%, #d8792f, #b95a22 70%, #8f4419); border:7px solid #8a4a1c; border-bottom-width:4px; border-radius:18px 18px 4px 4px;
+        box-shadow:inset 0 0 40px rgba(60,20,0,.55), inset 0 0 6px rgba(255,200,150,.25), 0 6px 14px rgba(0,0,0,.4); overflow:hidden; }
+  .pf .lid .stencil { position:absolute; left:0; right:0; top:22px; text-align:center; font-family:${STAMP}; font-size:min(78px,17vw); line-height:1; letter-spacing:.04em; color:#1e2a4a; opacity:.92; white-space:nowrap; }
+  .pf .lid .lidpens { position:absolute; left:50%; top:108px; width:240px; margin-left:-120px; }
+  .pf .lid .rust { position:absolute; border-radius:50%; background:rgba(70,30,10,.35); filter:blur(3px); }
+  .pf .hinge { height:8px; background:linear-gradient(180deg,#5a2f12,#3d1f0b); margin:0 8px; }
+  .pf .base { background:#262628; border:7px solid #8a4a1c; border-top-width:4px; border-radius:4px 4px 18px 18px; padding:12px 14px 16px; box-shadow:inset 0 0 40px rgba(0,0,0,.7), 0 8px 18px rgba(0,0,0,.45); }
+  .pf .slot { background:#141416; border-radius:14px; height:30px; margin:8px 0; box-shadow:inset 0 3px 6px rgba(0,0,0,.9), inset 0 -1px 0 rgba(255,255,255,.05); display:flex; align-items:center; justify-content:center; }
+  .pf .slot svg { width:96%; height:24px; }
+  .pf .tag { display:inline-block; font-family:${STAMP}; font-size:16px; letter-spacing:.14em; color:#fff; background:${RED}; padding:6px 12px 4px; transform:rotate(-2deg); box-shadow:0 3px 0 #952c1f; }
+  .pf .links { display:flex; justify-content:center; gap:22px; margin-top:12px; }
+  .pf .mute { position:absolute; right:12px; top:${SAFE_T + 8}px; pointer-events:auto; font-size:18px; opacity:.7; z-index:9; }
 </style>
 <div class="pf">
   <div class="board" data-el="board"></div>
@@ -167,10 +226,10 @@ window.plethoraBit = {
     // these numbers lands on the ten-or-so grams a school pen weighs. Friction
     // is pen-on-desk; restitution is how lively it is when struck.
     const PENS = {
-      pinpoint:   { name: "Cello Pinpoint",     short: "Pinpoint",   flavour: "the one everybody had. writes, fights, gets lost.",              r: 0.0050, L: 0.145, dens: 1180, mu: 0.33, e: 0.36, shape: "round",
-                    paint: { body: "#e8e6df", clear: true, cap: "#1c4fb8", ink: "#1c4fb8", text: "CELLO PINPOINT", textColor: "#1c4fb8", grip: null } },
-      octane:     { name: "Classmate Octane",   short: "Octane",     flavour: "light and quick, and it will not sit still for anybody.",       r: 0.00521, L: 0.143, dens: 940, mu: 0.26, e: 0.50, shape: "round",
-                    paint: { body: "#f36a1c", cap: "#1a1a1e", text: "OCTANE", textColor: "#ffffff", grip: { from: 0.12, to: 0.32, color: "#2a2a2e" } } },
+      r045:       { name: "Reynolds 045",       short: "045",        flavour: "the one everybody had. writes, fights, gets lost.",              r: 0.0050, L: 0.148, dens: 1160, mu: 0.33, e: 0.36, shape: "round",
+                    paint: { body: "#f2f0ea", cap: "#1b52c9", capLen: 0.4, text: "045 REYNOLDS FINE CARBURE", textColor: "#c8322a", grip: null } },
+      v5:         { name: "Pilot V5",           short: "V5",         flavour: "light and quick, and it will not sit still for anybody.",       r: 0.00531, L: 0.140, dens: 1010, mu: 0.27, e: 0.48, shape: "round",
+                    paint: { body: "#2b6ee0", clear: true, cap: "#2b6ee0", text: "V5 HI-TECPOINT", textColor: "#ffffff", clipMetal: true, grip: { from: 0.1, to: 0.3, color: "#1a1a1e" }, bands: [{ at: 0.52, w: 0.014, color: "#d9dde3" }] } },
       writometer: { name: "Flair Writometer",   short: "Writometer", flavour: "long and thin; it slides further than you meant it to.",        r: 0.0053, L: 0.152, dens: 825, mu: 0.20, e: 0.40, shape: "round",
                     paint: { body: "#f4f1e8", cap: "#2a6fd6", text: "FLAIR WRITOMETER", textColor: "#2a6fd6", bands: [{ at: 0.5, w: 0.02, color: "#2a6fd6" }] } },
       gripper:    { name: "Cello Gripper",      short: "Gripper",    flavour: "the rubber grip parks it exactly where you put it.",            r: 0.00487, L: 0.145, dens: 1409, mu: 0.55, e: 0.30, shape: "round",
@@ -193,11 +252,11 @@ window.plethoraBit = {
                     paint: { body: "#f6f1e0", cap: "#2458b8", text: "REYNOLDS TRIMAX", textColor: "#2458b8", grip: { from: 0.1, to: 0.3, color: "#2458b8" } } }
     };
     for (const id in PENS) PENS[id].id = id;
-    const STARTER = "pinpoint";
+    const STARTER = "r045";
 
     // The bench: eleven kids in the order you meet them, each with the pen at stake.
     const BENCH = [
-      { name: "Bunty",   section: "9B",  pen: "octane",     intro: "back bench, same as you. flicks before he has finished looking." },
+      { name: "Bunty",   section: "9B",  pen: "v5",         intro: "back bench, same as you. flicks before he has finished looking." },
       { name: "Priya",   section: "9C",  pen: "writometer", intro: "keeps the Writometer in a geometry box. says it is lucky." },
       { name: "Rohan",   section: "8A",  pen: "gripper",    intro: "a year below, and already nobody in 8A will play him." },
       { name: "Meher",   section: "9D",  pen: "ocean",      intro: "aims at the corner of the desk, not at your pen. it works." },
@@ -492,6 +551,22 @@ window.plethoraBit = {
       if (vol > 0.22 && ctx.capabilities.haptics) { try { ctx.platform.haptic(vol > 0.6 ? "medium" : "light"); } catch (_) {} }
       if (lastHitAt) sparkAt(lastHitAt, vol);
     }
+    let ambOn = false;
+    /** The classroom around you: a ceiling fan, and the rest of the school somewhere down the corridor. */
+    function startAmbience() {
+      if (ambOn || !buildAudio()) return; ambOn = true; const t = ac.currentTime;
+      const fan = ac.createOscillator(); fan.type = "triangle"; fan.frequency.value = 47;
+      const fl = ac.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = 150;
+      const fg = ac.createGain(); fg.gain.setValueAtTime(0, t); fg.gain.linearRampToValueAtTime(0.03, t + 3);
+      const wob = ac.createOscillator(); wob.frequency.value = 0.85; const wg = ac.createGain(); wg.gain.value = 0.01; wob.connect(wg); wg.connect(fg.gain);
+      fan.connect(fl); fl.connect(fg); fg.connect(master); fan.start(t); wob.start(t);
+      const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 640; bp.Q.value = 1.2;
+      const cg = ac.createGain(); cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.016, t + 4);
+      const lfo = ac.createOscillator(); lfo.frequency.value = 0.21; const lg = ac.createGain(); lg.gain.value = 0.01; lfo.connect(lg); lg.connect(cg.gain);
+      const lfo2 = ac.createOscillator(); lfo2.frequency.value = 2.7; const lg2 = ac.createGain(); lg2.gain.value = 180; lfo2.connect(lg2); lg2.connect(bp.frequency);
+      src.connect(bp); bp.connect(cg); cg.connect(master); src.start(t); lfo.start(t); lfo2.start(t);
+    }
     async function startMusic() {
       if (!ctx.capabilities.backgroundMusic || musicHandle) return;
       try { await ctx.music.unlock(); musicHandle = await ctx.music.play({ preset: "lofi", volume: 0.22, intensity: 0.3, density: 0.35, tempo: 74, fadeInMs: 1600 }); } catch (_) {}
@@ -506,29 +581,47 @@ window.plethoraBit = {
     function deskTexture() {
       const W = 512, H = 800, c = surface(W, H), g = c.getContext("2d");
       const base = g.createLinearGradient(0, 0, W, H);
-      base.addColorStop(0, "#8f5a2b"); base.addColorStop(0.5, "#a06a34"); base.addColorStop(1, "#8a5528");
+      base.addColorStop(0, "#b07a3c"); base.addColorStop(0.5, "#c08a46"); base.addColorStop(1, "#a97438");
       g.fillStyle = base; g.fillRect(0, 0, W, H);
-      for (let i = 0; i < 160; i++) {
+      for (let i = 0; i < 170; i++) {
         const y0 = Math.random() * H, amp = rnd(2, 9), freq = rnd(0.005, 0.02), ph = Math.random() * TAU;
-        g.strokeStyle = Math.random() < 0.5 ? "rgba(70,38,14," + rnd(0.05, 0.14).toFixed(3) + ")" : "rgba(214,160,96," + rnd(0.04, 0.1).toFixed(3) + ")";
+        g.strokeStyle = Math.random() < 0.5 ? "rgba(90,50,18," + rnd(0.05, 0.13).toFixed(3) + ")" : "rgba(230,185,120," + rnd(0.04, 0.1).toFixed(3) + ")";
         g.lineWidth = rnd(0.6, 2.2); g.beginPath();
         for (let x = 0; x <= W; x += 6) { const y = y0 + Math.sin(x * freq + ph) * amp; if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); }
         g.stroke();
       }
-      // worn patches where elbows lived
       for (let k = 0; k < 6; k++) {
         const px = rnd(40, W - 40), py = rnd(60, H - 60), r = rnd(50, 120);
-        const gr = g.createRadialGradient(px, py, 0, px, py, r); gr.addColorStop(0, "rgba(232,196,140,.22)"); gr.addColorStop(1, "rgba(232,196,140,0)");
+        const gr = g.createRadialGradient(px, py, 0, px, py, r); gr.addColorStop(0, "rgba(240,205,150,.2)"); gr.addColorStop(1, "rgba(240,205,150,0)");
         g.fillStyle = gr; g.fillRect(px - r, py - r, r * 2, r * 2);
       }
-      // scratches, compass holes, an ink blot, initials
-      g.strokeStyle = "rgba(60,32,12,.35)"; g.lineWidth = 1;
-      for (let i = 0; i < 70; i++) { const x = Math.random() * W, y = Math.random() * H, l = rnd(6, 60), a = rnd(0, TAU); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+      // years of compass scratches, pale where the varnish came off
+      for (let i = 0; i < 260; i++) {
+        g.strokeStyle = Math.random() < 0.7 ? "rgba(245,225,190," + rnd(0.18, 0.5).toFixed(2) + ")" : "rgba(70,38,12," + rnd(0.15, 0.35).toFixed(2) + ")";
+        g.lineWidth = rnd(0.6, 1.6); const x = Math.random() * W, y = Math.random() * H, l = rnd(8, 90), a = rnd(0, TAU);
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+      }
       g.fillStyle = "rgba(40,20,8,.5)"; for (let i = 0; i < 40; i++) g.fillRect(Math.random() * W, Math.random() * H, 2, 2);
-      g.fillStyle = "rgba(30,50,120,.32)"; g.beginPath(); g.ellipse(rnd(80, W - 80), rnd(100, H - 100), rnd(8, 18), rnd(5, 10), rnd(0, 3), 0, TAU); g.fill();
-      g.font = "26px " + HAND; g.fillStyle = "rgba(50,28,12,.42)";
-      g.save(); g.translate(rnd(60, W - 120), rnd(120, H - 120)); g.rotate(rnd(-0.4, 0.4)); g.fillText("R + S", 0, 0); g.restore();
-      g.save(); g.translate(rnd(60, W - 120), rnd(120, H - 120)); g.rotate(rnd(-0.4, 0.4)); g.fillText("9B", 0, 0); g.restore();
+      // carvings and ink, the way a last-bench desk ends up
+      const carve = (txt, x, y, rot, size) => { g.save(); g.translate(x, y); g.rotate(rot); g.font = size + "px " + HAND; g.lineWidth = 1.2; g.strokeStyle = "rgba(60,30,10,.55)"; g.strokeText(txt, 0, 0); g.fillStyle = "rgba(245,225,190,.35)"; g.fillText(txt, 1, 1); g.restore(); };
+      carve("LAST BENCH", W - 40, 300, -Math.PI / 2, 26);
+      carve("golu", 46, 380, Math.PI / 2, 22);
+      carve("Raju", 72, 640, -Math.PI / 2, 24);
+      carve("AJ", W - 110, H - 80, -0.2, 34);
+      carve("9B", 150, 470, 0.15, 24);
+      // a tally of wins
+      g.strokeStyle = "rgba(60,30,10,.6)"; g.lineWidth = 2;
+      for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(120 + i * 9, 60); g.lineTo(122 + i * 9, 92); g.stroke(); }
+      g.beginPath(); g.moveTo(114, 86); g.lineTo(158, 64); g.stroke();
+      // a cup ring, a heart, an arrow, an ink blot
+      g.strokeStyle = "rgba(70,40,15,.28)"; g.lineWidth = 5; g.beginPath(); g.ellipse(300, 130, 34, 30, 0.2, 0, TAU); g.stroke();
+      g.strokeStyle = "rgba(60,30,10,.5)"; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(360, 700); g.bezierCurveTo(360, 690, 375, 686, 376, 698); g.bezierCurveTo(377, 686, 392, 690, 392, 700); g.bezierCurveTo(392, 712, 376, 720, 376, 724); g.bezierCurveTo(376, 720, 360, 712, 360, 700); g.stroke();
+      g.beginPath(); g.moveTo(400, 300); g.lineTo(430, 270); g.moveTo(418, 270); g.lineTo(430, 270); g.lineTo(430, 282); g.stroke();
+      g.beginPath(); g.moveTo(240, 560); g.lineTo(262, 548); g.lineTo(250, 570); g.closePath(); g.stroke();
+      g.fillStyle = "rgba(30,50,120,.3)"; g.beginPath(); g.ellipse(390, 520, 12, 8, 0.6, 0, TAU); g.fill();
+      for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(390 + rnd(-24, 24), 520 + rnd(-18, 18), rnd(1, 3.5), 0, TAU); g.fill(); }
+      g.fillStyle = "rgba(20,12,6,.45)"; g.beginPath(); g.ellipse(160, 720, 9, 6, 0.3, 0, TAU); g.fill();
       for (let i = 0; i < 4000; i++) { g.fillStyle = Math.random() < 0.5 ? "rgba(240,205,165,.03)" : "rgba(14,7,3,.05)"; g.fillRect(Math.random() * W, Math.random() * H, 1, rnd(1, 2.5)); }
       return tex2d(c);
     }
@@ -599,12 +692,12 @@ window.plethoraBit = {
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x2a2620);
-    scene.fog = new THREE.Fog(0x2a2620, 1.5, 3.2);
+    scene.background = new THREE.Color(0x4a5344);
+    scene.fog = new THREE.Fog(0x4a5344, 2.4, 5.5);
     scene.environment = envTexture();
     const camera = new THREE.PerspectiveCamera(46, ctx.width / Math.max(1, ctx.height), 0.05, 12);
     const camTarget = new THREE.Vector3(0, 0, 0), camBase = new THREE.Vector3();
-    const CAM_TILT = 0.95, FIT_X = 0.93, FIT_Y = 0.8;
+    const CAM_TILT = 0.8, FIT_X = 0.94, FIT_Y = 0.56;
     const fitPts = [];
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) { fitPts.push(new THREE.Vector3(sx * TABLE_HX, TABLE_TOP, sz * TABLE_HY)); fitPts.push(new THREE.Vector3(sx * TABLE_HX, TABLE_TOP - TABLE_THICK, sz * TABLE_HY)); }
     function fitCamera() {
@@ -621,8 +714,8 @@ window.plethoraBit = {
         dist = clamp(dist * need, 0.4, 4);
       }
       camBase.set(0, Math.sin(CAM_TILT) * dist, Math.cos(CAM_TILT) * dist); camera.position.copy(camBase); camera.lookAt(camTarget);
-      // sit the desk a little low in the frame, leaving room for the board
-      camera.setViewOffset(VW, VH, 0, -(cy - 0.12) * VH / 2, VW, VH);
+      // the desk sits in the lower part of the frame; the wall and the blackboard fill the top
+      camera.setViewOffset(VW, VH, 0, -(cy + 0.4) * VH / 2, VW, VH);
     }
     fitCamera();
     scene.add(new THREE.HemisphereLight(0xfff2dc, 0x3a2e22, 0.7));
@@ -634,7 +727,7 @@ window.plethoraBit = {
     const fallLight = new THREE.PointLight(0xffe2b8, 0, 0.75, 2); fallLight.visible = false; scene.add(fallLight);
 
     const deskGroup = new THREE.Group(); scene.add(deskGroup);
-    const topMat = new THREE.MeshStandardMaterial({ map: deskTexture(), roughnessMap: deskRoughness(), roughness: 0.66, metalness: 0.03, envMapIntensity: 0.22 });
+    const topMat = new THREE.MeshStandardMaterial({ map: deskTexture(), roughnessMap: deskRoughness(), roughness: 0.68, metalness: 0.03, envMapIntensity: 0.12 });
     const edgeMat = new THREE.MeshStandardMaterial({ color: 0x6b3f1c, roughness: 0.7, metalness: 0.03 });
     const topMesh = new THREE.Mesh(new THREE.BoxGeometry(TABLE_HX * 2, TABLE_THICK, TABLE_HY * 2), [edgeMat, edgeMat, topMat, edgeMat, edgeMat, edgeMat]);
     topMesh.position.y = TABLE_TOP - TABLE_THICK / 2; topMesh.receiveShadow = true; deskGroup.add(topMesh);
@@ -652,11 +745,41 @@ window.plethoraBit = {
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const leg = new THREE.Mesh(legGeo, steel); leg.position.set(sx * (TABLE_HX - 0.03), legTop - legLen / 2, sz * (TABLE_HY - 0.03)); leg.castShadow = true; deskGroup.add(leg); }
     })();
     (function floor() {
-      const c = surface(256, 256), g = c.getContext("2d"); g.fillStyle = "#6d6862"; g.fillRect(0, 0, 256, 256);
-      for (let i = 0; i < 4000; i++) { g.fillStyle = Math.random() < 0.5 ? "rgba(0,0,0,.12)" : "rgba(255,255,255,.07)"; g.fillRect(Math.random() * 256, Math.random() * 256, rnd(1, 3), rnd(1, 3)); }
-      const t = tex2d(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 6);
-      const gm = new THREE.PlaneGeometry(4, 4); gm.rotateX(-Math.PI / 2);
-      const f = new THREE.Mesh(gm, new THREE.MeshStandardMaterial({ map: t, roughness: 0.95, metalness: 0.02 })); f.position.y = FLOOR_Y; f.receiveShadow = true; scene.add(f);
+      // the tiled classroom floor: two tones of speckled beige, dark grout
+      const T = 128, c = surface(T * 2, T * 2), g = c.getContext("2d");
+      for (let ty = 0; ty < 2; ty++) for (let tx = 0; tx < 2; tx++) {
+        g.fillStyle = (tx + ty) % 2 ? "#c9bea6" : "#b5a98f"; g.fillRect(tx * T, ty * T, T, T);
+        for (let i = 0; i < 700; i++) { g.fillStyle = Math.random() < 0.5 ? "rgba(60,50,40,.16)" : "rgba(255,255,255,.14)"; g.fillRect(tx * T + Math.random() * T, ty * T + Math.random() * T, rnd(1, 2.5), rnd(1, 2.5)); }
+        g.strokeStyle = "#6a6358"; g.lineWidth = 2.5; g.strokeRect(tx * T + 1, ty * T + 1, T - 2, T - 2);
+      }
+      const t = tex2d(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(15, 15);
+      const gm = new THREE.PlaneGeometry(4.5, 4.5); gm.rotateX(-Math.PI / 2);
+      const f = new THREE.Mesh(gm, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, metalness: 0.02 })); f.position.y = FLOOR_Y; f.receiveShadow = true; scene.add(f);
+    })();
+    // ---- the classroom behind the desk: a green wall, the blackboard, the teacher's table with a note pinned to it
+    const WALL_Z = -0.72;
+    (function wall() {
+      const c = surface(256, 256), g = c.getContext("2d"); g.fillStyle = "#57624f"; g.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 3000; i++) { g.fillStyle = Math.random() < 0.5 ? "rgba(0,0,0,.08)" : "rgba(255,255,255,.05)"; g.fillRect(Math.random() * 256, Math.random() * 256, rnd(1, 3), rnd(1, 3)); }
+      const t = tex2d(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 3);
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(5, 2.6), new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 })); w.position.set(0, FLOOR_Y + 1.3, WALL_Z); w.receiveShadow = true; scene.add(w);
+      const dado = new THREE.Mesh(new THREE.BoxGeometry(5, 0.09, 0.012), new THREE.MeshStandardMaterial({ color: 0x3f4a3a, roughness: 0.9 })); dado.position.set(0, FLOOR_Y + 0.045, WALL_Z + 0.006); scene.add(dado);
+    })();
+    const BOARD_W = 1024, BOARD_H = 480;
+    const boardC = surface(BOARD_W, BOARD_H), boardG = boardC.getContext("2d"), boardTex = tex2d(boardC);
+    const noteC = surface(512, 176), noteG = noteC.getContext("2d"), noteTex = tex2d(noteC); noteTex.premultiplyAlpha = true;
+    (function blackboard() {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.36, 0.03), new THREE.MeshStandardMaterial({ color: 0x4a3120, roughness: 0.8 })); frame.position.set(0, 0.245, WALL_Z + 0.015); scene.add(frame);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.3), new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.95 })); face.position.set(0, 0.245, WALL_Z + 0.031); scene.add(face);
+      const ledge = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.016, 0.05), new THREE.MeshStandardMaterial({ color: 0x4a3120, roughness: 0.8 })); ledge.position.set(0, 0.066, WALL_Z + 0.04); scene.add(ledge);
+      const chalkM = new THREE.MeshStandardMaterial({ color: 0xf2eee4, roughness: 0.9 });
+      for (const [x, rot] of [[-0.06, 0.3], [0.02, -0.15], [0.1, 0.5]]) { const ck = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.036, 8), chalkM); ck.rotation.z = Math.PI / 2; ck.rotation.y = rot; ck.position.set(x, 0.0775, WALL_Z + 0.048); scene.add(ck); }
+      const duster = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.018, 0.026), new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 0.9 })); duster.position.set(0.24, 0.083, WALL_Z + 0.048); scene.add(duster);
+      // the teacher's table, and the note pinned to its front
+      const tbl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.36, 0.16), new THREE.MeshStandardMaterial({ color: 0x8a5a2c, roughness: 0.75 })); tbl.position.set(0, FLOOR_Y + 0.18, WALL_Z + 0.09); tbl.castShadow = true; tbl.receiveShadow = true; scene.add(tbl);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.018, 0.18), new THREE.MeshStandardMaterial({ color: 0xa06a34, roughness: 0.7 })); top.position.set(0, FLOOR_Y + 0.365, WALL_Z + 0.09); scene.add(top);
+      const note = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.069), new THREE.MeshBasicMaterial({ map: noteTex, transparent: true })); note.position.set(0, -0.055, WALL_Z + 0.1715); scene.add(note);
+      const pin = new THREE.Mesh(new THREE.SphereGeometry(0.006, 10, 8), new THREE.MeshStandardMaterial({ color: 0xc8402f, roughness: 0.4 })); pin.position.set(0, -0.026, WALL_Z + 0.175); scene.add(pin);
     })();
 
     // ===================================================================== //
@@ -709,7 +832,7 @@ window.plethoraBit = {
       m.scale.set(0.072, 1, 0.072); m.renderOrder = 2; scene.add(m); return m;
     }
     you.glow = makeRing("rgba(255,214,120,1)"); cpu.glow = makeRing("rgba(170,196,240,1)"); cpu.glow.material.opacity = 0.42;
-    equip(you, PENS[STARTER]); equip(cpu, PENS.octane);
+    equip(you, PENS[STARTER]); equip(cpu, PENS.v5);
 
     // ===================================================================== //
     // 10. Aim guide, sparks, edge warning                                   //
@@ -762,7 +885,7 @@ window.plethoraBit = {
     // 12. Pages, the board and the slips                                    //
     // ===================================================================== //
     let screen = "home";
-    function showPage(html) { elInner.innerHTML = html; elPage.classList.add("show"); elPage.scrollTop = 0; sfxPaper(); }
+    function showPage(html, quiet) { elInner.innerHTML = html; elPage.classList.add("show"); elPage.scrollTop = 0; if (!quiet) sfxPaper(); }
     function hidePage() { elPage.classList.remove("show"); }
     function on(sel, fn) { elInner.querySelectorAll(sel).forEach((el) => ctx.listen(el, "pointerdown", (e) => { if (e.cancelable) e.preventDefault(); firstTouch(); fn(el, e); })); }
     const swatch = (spec) => '<span class="swatch" style="background:linear-gradient(90deg,' + (spec.paint.cap || spec.paint.body) + ' 0 26%,' + spec.paint.body + ' 26%)"></span>';
@@ -777,86 +900,207 @@ window.plethoraBit = {
     const TARGET = 3;
     let scoreYou = 0, scoreCpu = 0, streak = 0;
     let names = { you: "you", cpu: "rival" };
-    function tally(n) { let s = ""; for (let i = 0; i < n; i++) s += '<span style="display:inline-block;transform:rotate(' + ((i * 7) % 5 - 2) + 'deg)">|</span>'; return s || '<span style="opacity:.4">-</span>'; }
+    let roundLog = [];   // "w" / "l" per finished round, from your side
+    let noteText = "";
+    function chalk(txt, x, y, size, align, alpha) {
+      const g = boardG; g.font = size + "px " + HAND; g.textAlign = align || "left"; g.textBaseline = "alphabetic";
+      g.fillStyle = "rgba(243,237,224," + (alpha == null ? 0.9 : alpha) + ")"; g.shadowColor = "rgba(243,237,224,.35)"; g.shadowBlur = 2; g.fillText(txt, x, y); g.shadowBlur = 0;
+    }
+    function chalkLine(x0, y0, x1, y1, w, alpha) { const g = boardG; g.strokeStyle = "rgba(243,237,224," + (alpha == null ? 0.8 : alpha) + ")"; g.lineWidth = w || 2; g.lineCap = "round"; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+    function drawBoard(turn) {
+      const g = boardG, W = BOARD_W, H = BOARD_H;
+      const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, "#2f3f36"); bg.addColorStop(1, "#243329"); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+      // old chalk smears from the duster
+      for (let k = 0; k < 14; k++) { const x = (k * 173) % W, y = (k * 97) % H, r = 60 + (k * 37) % 90; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, "rgba(220,220,210,.07)"); gr.addColorStop(1, "rgba(220,220,210,0)"); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
+      chalk("Std. 9 - A", 36, 62, 26); chalk("Sub : Maths", 36, 98, 24, "left", 0.8);
+      chalk("Thought for the Day :", 500, 64, 26, "center"); chalk('" Practice makes a man perfect "', 500, 102, 26, "center", 0.85);
+      chalk("PEN FIGHT", 36, 196, 44); chalkLine(36, 206, 268, 208, 3, 0.7); chalk("36", 292, 186, 20, "left", 0.45);
+      chalk("best of 5", 36, 236, 20, "left", 0.65); chalk("3 = 120", 150, 236, 18, "left", 0.35); chalkLine(36, 244, 210, 246, 1.5, 0.35);
+      const n1 = names.you, n2 = names.cpu;
+      chalk(n1, 60, 296, 32); chalk(String(scoreYou), 400, 298, 40, "center");
+      chalk(n2, 60, 352, 32); chalk(String(scoreCpu), 400, 354, 40, "center");
+      if (turn === "you") chalk(">", 30, 294, 30, "left", 0.9); else if (turn === "cpu") chalk(">", 30, 350, 30, "left", 0.9);
+      // a sun doodle by the bottom name
+      const g2 = g; g2.strokeStyle = "rgba(243,237,224,.7)"; g2.lineWidth = 2; g2.beginPath(); g2.arc(22, 400, 9, 0, TAU); g2.stroke();
+      for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; chalkLine(22 + Math.cos(a) * 13, 400 + Math.sin(a) * 13, 22 + Math.cos(a) * 18, 400 + Math.sin(a) * 18, 2, 0.7); }
+      // the five round boxes: a tick for a round you won, a cross for one you dropped
+      for (let i = 0; i < TARGET * 2 - 1; i++) {
+        const x = 462 + i * 34, y = 318; g.strokeStyle = "rgba(243,237,224,.85)"; g.lineWidth = 2.5; g.strokeRect(x, y - 13, 26, 26);
+        const r = roundLog[i];
+        if (r === "w") { chalkLine(x + 5, y + 1, x + 11, y + 8, 3); chalkLine(x + 11, y + 8, x + 22, y - 8, 3); }
+        else if (r === "l") { chalkLine(x + 5, y - 8, x + 21, y + 8, 3); chalkLine(x + 21, y - 8, x + 5, y + 8, 3); }
+      }
+      // geometry left over from the last period
+      chalkLine(560, 268, 700, 268, 2, 0.55); chalkLine(560, 268, 630, 178, 2, 0.55); chalkLine(630, 178, 700, 268, 2, 0.55);
+      g.setLineDash([6, 6]); chalkLine(630, 178, 630, 268, 1.5, 0.4); g.setLineDash([]);
+      g.strokeStyle = "rgba(243,237,224,.6)"; g.lineWidth = 2; g.beginPath(); g.moveTo(640, 400); g.bezierCurveTo(640, 388, 656, 384, 658, 396); g.bezierCurveTo(660, 384, 676, 388, 676, 400); g.bezierCurveTo(676, 412, 658, 420, 658, 424); g.bezierCurveTo(658, 420, 640, 412, 640, 400); g.stroke();
+      // the homework column
+      chalkLine(742, 150, 744, 456, 2.5, 0.75);
+      chalk("H.W.", 770, 196, 30); chalkLine(770, 206, 830, 207, 2.5, 0.7);
+      chalk("Ch. 4  Q. 1 - 5", 770, 240, 24, "left", 0.85); chalk("Map of India", 770, 278, 24, "left", 0.85);
+      chalk("Essay - rain", 770, 316, 24, "left", 0.7); chalkLine(766, 308, 910, 306, 2.5, 0.75);
+      chalk("Monitor : Pinky", 770, 446, 19, "left", 0.55);
+      boardTex.needsUpdate = true;
+    }
+    function drawNote(text) {
+      const g = noteG, W = 512, H = 176; g.clearRect(0, 0, W, H);
+      if (!text) { noteTex.needsUpdate = true; return; }
+      // a torn strip of ruled paper
+      g.fillStyle = "#f3eee0"; g.beginPath(); g.moveTo(0, 14);
+      for (let x = 0; x <= W; x += 24) g.lineTo(x + 12, x % 48 ? 4 : 16);
+      g.lineTo(W, H - 14); for (let x = W; x >= 0; x -= 24) g.lineTo(x - 12, x % 48 ? H - 4 : H - 16); g.closePath(); g.fill();
+      g.strokeStyle = "rgba(96,126,190,.35)"; g.lineWidth = 2; for (let y = 52; y < H - 20; y += 40) { g.beginPath(); g.moveTo(12, y); g.lineTo(W - 12, y); g.stroke(); }
+      const bang = text.startsWith("!");
+      g.font = "62px " + HAND; g.textAlign = "center"; g.textBaseline = "middle";
+      const body = bang ? text.slice(1).trim() : text;
+      g.fillStyle = INK; g.fillText(body, W / 2 + (bang ? 22 : 0), H / 2 + 4);
+      if (bang) { const tw = g.measureText(body).width; g.fillStyle = RED; g.font = "70px " + HAND; g.fillText("!", W / 2 + 22 - tw / 2 - 40, H / 2 + 2); }
+      noteTex.needsUpdate = true;
+    }
     function renderBoard(note, turn) {
-      elBoard.innerHTML =
-        '<div class="row"><div class="name' + (turn === "you" ? " turn" : "") + '">' + esc(names.you) + '</div>' +
-        '<div class="tally">' + tally(scoreYou) + '<span style="opacity:.5;margin:0 6px">v</span>' + tally(scoreCpu) + '</div>' +
-        '<div class="name' + (turn === "cpu" ? " turn" : "") + '" style="text-align:right">' + esc(names.cpu) + '</div></div>' +
-        '<div class="row"><div class="mid" style="width:100%">best of 5 &middot; first to three</div></div>' +
-        '<div class="note">' + (note || "") + '</div>';
-      elBoard.style.opacity = "1";
+      drawBoard(turn);
+      const mp = screen === "match" && (scoreYou === TARGET - 1 || scoreCpu === TARGET - 1) && !(scoreYou >= TARGET || scoreCpu >= TARGET);
+      noteText = note || (mp ? "! match point" : "");
+      drawNote(mp && note ? "! match point" : noteText);
     }
 
+    // A pen drawn flat, as inline SVG, from the same paint the 3D livery uses. Cap on the left, nib on the right.
+    let svgSeq = 0;
+    function penSVG(spec, w, h, opts) {
+      opts = opts || {}; const P = spec.paint, dark = !!opts.dark, flat = opts.flat;
+      const id = "pg" + (svgSeq++);
+      const x0 = w * 0.03, nibL = w * 0.065, L = w * 0.86, cy = h / 2, r = Math.min(h * 0.27, w * 0.036), d = r * 2;
+      const col = (c, dk) => flat ? flat : dark ? dk : c;
+      const body = col(P.body, "#2c2c2f"), cap = col(P.cap || P.body, "#212124"), tc = col(P.textColor || "#333", "#3d3d41");
+      let g = "";
+      if (spec.pencil) {
+        g += '<polygon points="' + (x0 + L) + ',' + (cy - r) + ' ' + (x0 + L + nibL * 1.7) + ',' + cy + ' ' + (x0 + L) + ',' + (cy + r) + '" fill="' + col("#dcbf8e", "#3a3a3d") + '"/>';
+        g += '<polygon points="' + (x0 + L + nibL * 1.15) + ',' + (cy - r * 0.32) + ' ' + (x0 + L + nibL * 1.7) + ',' + cy + ' ' + (x0 + L + nibL * 1.15) + ',' + (cy + r * 0.32) + '" fill="' + col("#26262a", "#2a2a2d") + '"/>';
+      } else {
+        g += '<polygon points="' + (x0 + L) + ',' + (cy - r * 0.78) + ' ' + (x0 + L + nibL) + ',' + (cy - r * 0.2) + ' ' + (x0 + L + nibL + 1.5) + ',' + cy + ' ' + (x0 + L + nibL) + ',' + (cy + r * 0.2) + ' ' + (x0 + L) + ',' + (cy + r * 0.78) + '" fill="' + col("#b5b9bf", "#36363a") + '"/>';
+      }
+      g += '<rect x="' + x0 + '" y="' + (cy - r) + '" width="' + L + '" height="' + d + '" rx="' + (spec.pencil ? r * 0.3 : r) + '" fill="' + body + '"/>';
+      if (spec.pencil && P.alt && !dark && !flat) g += '<rect x="' + x0 + '" y="' + (cy - r * 0.22) + '" width="' + L + '" height="' + (r * 0.44) + '" fill="' + P.alt + '"/>';
+      if (P.grip && !flat) g += '<rect x="' + (x0 + L * (1 - P.grip.to)) + '" y="' + (cy - r * 1.04) + '" width="' + (L * (P.grip.to - P.grip.from)) + '" height="' + (d * 1.04) + '" rx="' + (r * 0.45) + '" fill="' + col(P.grip.color, "#242426") + '"/>';
+      if (P.bands && !flat) for (const b of P.bands) g += '<rect x="' + (x0 + L * (1 - b.at) - L * b.w / 2) + '" y="' + (cy - r) + '" width="' + Math.max(2, L * b.w) + '" height="' + d + '" fill="' + col(b.color, "#3a3a3e") + '"/>';
+      const capLen = L * (P.capLen ? Math.min(P.capLen, 0.5) : 0.28), capR = r * (P.capR || 1.08);
+      if (!spec.pencil) {
+        g += '<rect x="' + (x0 - 1) + '" y="' + (cy - capR) + '" width="' + capLen + '" height="' + (capR * 2) + '" rx="' + capR + '" fill="' + cap + '"/>';
+        g += '<rect x="' + (x0 + capLen * 0.3) + '" y="' + (cy - capR - r * 0.5) + '" width="' + (capLen * 0.62) + '" height="' + (r * 0.55) + '" rx="' + (r * 0.25) + '" fill="' + col(P.clipMetal ? "#c9ced4" : (P.cap || P.body), "#2a2a2d") + '" stroke="rgba(0,0,0,.28)" stroke-width=".6"/>';
+      } else if (P.dip) g += '<rect x="' + (x0 - 1) + '" y="' + (cy - r) + '" width="' + (L * 0.07) + '" height="' + d + '" rx="' + (r * 0.3) + '" fill="' + col(P.dip, "#212124") + '"/>';
+      if (P.text && !flat) {
+        const tx0 = x0 + (spec.pencil ? L * 0.1 : capLen) + L * 0.04, tx1 = x0 + L * (1 - (P.grip ? P.grip.to : 0.14));
+        const fs = Math.min(h * 0.36, (tx1 - tx0) / Math.max(6, P.text.length) * 1.75);
+        g += '<text x="' + ((tx0 + tx1) / 2) + '" y="' + (cy + fs * 0.34) + '" text-anchor="middle" font-family="' + STAMP.replace(/"/g, "'") + '" font-size="' + fs + '" letter-spacing="' + (fs * 0.05) + '" fill="' + tc + '" opacity=".92">' + esc(P.text) + '</text>';
+      }
+      if (!flat) g += '<rect x="' + (x0 - 1) + '" y="' + (cy - capR) + '" width="' + (L + nibL * 1.7 + 2) + '" height="' + (capR * 2) + '" rx="' + capR + '" fill="url(#' + id + ')"/>';
+      const style = opts.fluid ? "width:100%;height:auto;display:block;overflow:visible" : "width:" + w + "px;height:" + h + "px;display:block;overflow:visible";
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" style="' + style + (opts.rot ? ";transform:rotate(" + opts.rot + "deg)" : "") + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".42"/></linearGradient></defs>' + g + '</svg>';
+    }
+    const HOWTO = '<div class="howto">' +
+      '<div class="hp" style="top:20px">' + penSVG(PENS.v5, 260, 32, { fluid: true, rot: 2 }) + '</div>' +
+      '<div class="hp" style="top:64px">' + penSVG(PENS.r045, 260, 32, { fluid: true, rot: -3 }) + '</div>' +
+      '<div class="pull" style="left:64%;top:80px;transform:rotate(38deg)"></div>' +
+      '<div class="ring" style="left:59%;top:67px"></div></div>';
+    const HDR = '<div class="hdr">' + penSVG(PENS.parker, 46, 12, { flat: INK }) + '<span>PEN FIGHT</span>' + penSVG(PENS.racer, 34, 10, { flat: RED, rot: 30 }) + '</div>';
+
     function homePage() {
-      screen = "home"; hint(""); elBoard.style.opacity = "0"; hideSlip();
-      const n = nextRival(), held = save.tin.length;
-      showPage(
-        '<h1>Pen<br>Fight</h1>' +
-        '<p>the game from the back bench. two pens, one desk.</p>' +
-        '<p>flick yours. knock theirs off. <b style="color:' + RED + ';font-weight:400">keep it.</b></p>' +
-        '<p class="quiet">tin: ' + held + (held === 1 ? " pen" : " pens") + ' &middot; bench: ' + save.beaten.length + ' of ' + BENCH.length + (save.champion ? ' &middot; champion of the class' : '') + '</p>' +
-        '<div><span class="stampbtn" data-go="bench">' + (n < 0 ? 'the bench again' : (save.beaten.length ? 'back to the bench' : 'play the bench')) + '</span></div>' +
-        '<div><span class="stampbtn ink" data-go="friends">pass the phone</span> <span class="stampbtn tin" data-go="tin">open the tin</span></div>' +
-        '<h2>how it goes</h2>' +
-        '<p>touch your pen, drag the way you want it to go, let go. the middle drives it straight; the end spins it.</p>' +
-        '<p>a match is best of five. lose it and the other kid keeps the pen you played with. win it and theirs goes in your tin.</p>' +
-        '<p>eleven kids between you and the Trimax.</p>' +
-        '<p class="quiet">tap the speaker at the top right to mute.</p>');
-      on("[data-go]", (el) => { const go = el.getAttribute("data-go"); if (go === "bench") benchPage(); else if (go === "friends") friendsPickPage(1); else tinPage(); });
+      screen = "home"; hint(""); hideSlip();
+      const n = nextRival(), done = save.beaten.length;
+      let dots = ''; for (let k = 0; k < BENCH.length; k++) dots += '<span class="dot' + (save.beaten.includes(k) ? ' done' : k === n ? ' now' : '') + '"></span>';
+      dots += '<span class="dot cup">&#127942;</span>';
+      showPage('<div class="sheet plain">' + HDR +
+        '<h1 class="hand">pick your fight</h1>' +
+        '<div class="card"><div class="tape"></div>' +
+          '<div class="rowb"><div class="label">solo</div><div class="counter"><b>' + done + '</b>/' + BENCH.length + '<small>beaten</small></div></div>' +
+          '<div class="ttl">class championship</div><p>Beat ' + BENCH.length + ' rivals. Win the Trimax.</p>' +
+          '<div class="prize">' + penSVG(PENS.trimax, 170, 36, { rot: -3 }) + '<div class="pr"><div class="label">the prize</div>' + esc(PENS.trimax.name) + '</div></div>' +
+          '<div class="dots">' + dots + '</div>' +
+          '<div class="btn" data-go="solo">' + (n < 0 ? 'play the bench again' : done ? 'continue solo' : 'start solo') + '</div>' +
+        '</div>' +
+        '<div class="sec">play with people</div>' +
+        '<div class="mode" data-go="friends"><div class="ico">&#128101;</div><div><div class="mt">local <span class="badge">pass &amp; play</span></div><div class="ms">2 players &middot; one screen</div></div><div class="arr">&rarr;</div></div>' +
+        '<div class="sec">your things</div>' +
+        '<div class="mode" data-go="tin"><div class="ico">&#129520;</div><div><div class="mt">the tin</div><div class="ms">' + save.tin.length + (save.tin.length === 1 ? ' pen' : ' pens') + (save.champion ? ' &middot; champion of the class' : '') + '</div></div><div class="arr">&rarr;</div></div>' +
+        '<div class="mode" data-go="bench"><div class="ico">&#127891;</div><div><div class="mt">the bench</div><div class="ms">' + done + ' of ' + BENCH.length + ' beaten</div></div><div class="arr">&rarr;</div></div>' +
+        '<p class="quiet ctr" style="margin-top:14px">pull your pen back and let go. knock theirs off the desk. keep it.</p>' +
+        '</div>');
+      on("[data-go]", (el) => { const go = el.getAttribute("data-go"); if (go === "solo") { const k = nextRival(); if (k >= 0) stakePage(k); else benchPage(); } else if (go === "bench") benchPage(); else if (go === "friends") friendsPickPage(1); else tinPage(); });
     }
     function benchPage() {
       screen = "bench";
       const n = nextRival();
-      let html = '<div class="topbar"><h2>the bench</h2><span class="link" data-go="home">home</span></div>';
-      if (n < 0) html += '<p>every pen on the bench is in your tin. you are the champion of the class. play anyone again for the walk over.</p>';
-      else html += '<p>one at a time, in order. the winner keeps the pen.</p>';
+      let html = '<div class="sheet"><div class="back" data-go="home">&lsaquo;</div><h2 style="margin-top:6px">the bench</h2>';
+      if (n < 0) html += '<p class="ctr">every pen on the bench is in your tin. play anyone again for the walk over.</p>';
+      else html += '<p class="ctr">one at a time, in order. the winner keeps the pen.</p>';
       BENCH.forEach((r, i) => {
         const beaten = save.beaten.includes(i), isNext = i === n, locked = !beaten && !isNext;
         const held = save.lost[i] ? ' &middot; holds your ' + esc(PENS[save.lost[i]].short) : '';
-        html += '<div class="chit"' + (locked ? ' style="opacity:.55"' : '') + '>' +
+        html += '<div class="chit"' + (locked ? ' style="opacity:.55"' : (locked ? '' : ' data-fight="' + i + '"')) + (locked ? '' : ' style="cursor:pointer;pointer-events:auto"') + '>' +
           '<div class="state ' + (beaten ? "beaten" : isNext ? "next" : "locked") + '">' + (beaten ? "beaten" : isNext ? "next" : "#" + (i + 1)) + '</div>' +
           '<div class="who">' + esc(r.name) + '<small>' + esc(r.section) + '</small></div>' +
           '<div class="pen">plays for the ' + esc(PENS[r.pen].name) + held + '</div>' +
-          '<div class="intro">' + esc(r.intro) + '</div>' +
-          (locked ? '' : '<div><span class="stampbtn' + (beaten ? ' ink' : '') + '" data-fight="' + i + '">' + (beaten ? 'play again' : 'fight') + '</span></div>') +
-          '</div>';
+          '<div class="intro">' + esc(r.intro) + '</div></div>';
       });
+      html += '</div>';
       showPage(html);
       on("[data-go]", () => homePage());
       on("[data-fight]", (el) => stakePage(parseInt(el.getAttribute("data-fight"), 10)));
     }
     function stakePage(i) {
       screen = "pick"; const r = BENCH[i], beaten = save.beaten.includes(i);
-      let html = '<div class="topbar"><h2>' + esc(r.name) + ' &middot; ' + esc(r.section) + '</h2><span class="link" data-go="bench">back</span></div>' +
-        '<p>' + esc(r.intro) + '</p>' +
-        (beaten ? '<p>a friendly. nothing changes hands.</p>' : '<p>they put up the <b style="color:' + RED + ';font-weight:400">' + esc(PENS[r.pen].name) + '</b>. you put up one of yours. lose and it is theirs.</p>') +
-        '<h2>pick your pen</h2>';
-      save.tin.forEach((id, k) => { const s = PENS[id]; html += '<div class="chit pick' + (k === 0 ? ' sel' : '') + '" data-pen="' + id + '"><div class="who">' + swatch(s) + esc(s.name) + '</div><div class="intro">' + esc(s.flavour) + '</div></div>'; });
-      html += '<div><span class="stampbtn" data-go="fight">fight</span></div>';
-      showPage(html);
-      let chosen = save.tin[0];
-      on(".chit.pick", (el) => { elInner.querySelectorAll(".chit.pick").forEach((c) => c.classList.remove("sel")); el.classList.add("sel"); chosen = el.getAttribute("data-pen"); sfxPaper(); });
-      on("[data-go]", (el) => { if (el.getAttribute("data-go") === "bench") benchPage(); else startBenchMatch(i, chosen); });
+      let chosen = (save.lastWon && penHeld(save.lastWon)) ? save.lastWon : save.tin[0];
+      let first = true;
+      const render = () => {
+        const mine = PENS[chosen], theirs = PENS[r.pen];
+        let sq = ''; for (let k = 0; k < BENCH.length; k++) sq += '<span class="' + (save.beaten.includes(k) ? 'done' : k === i ? 'now' : '') + '"></span>';
+        showPage('<div class="sheet"><div class="back" data-go="bench">&lsaquo;</div>' +
+          '<h2 style="margin-top:6px">best of 5</h2>' +
+          '<div class="label ctr">classmate ' + (i + 1) + ' of ' + BENCH.length + '</div><div class="sq">' + sq + '</div>' +
+          '<div class="vs"><div class="side"><div class="nm">you</div><div class="pic" data-go="cycle">' + penSVG(mine, 150, 38, { rot: -8 }) + '</div><div class="pn">' + esc(mine.name) + '</div>' + (save.tin.length > 1 ? '<div class="quiet" style="font-size:14px">tap the pen to change</div>' : '') + '</div>' +
+          '<div class="v">VS</div>' +
+          '<div class="side"><div class="nm">' + esc(r.name) + '</div><div class="pic">' + penSVG(theirs, 150, 38, { rot: 8 }) + '</div><div class="pn">' + esc(theirs.name) + '</div></div></div>' +
+          '<p class="ctr">' + esc(r.intro) + '</p>' +
+          (beaten ? '<div class="line"><span>a friendly</span><span>nothing at stake</span></div>' : '<div class="line"><span>take their pen</span><b>+20</b></div>') +
+          '<h2>how to play</h2>' + HOWTO +
+          '<p class="ctr">pull it back, then let go.</p><p class="ctr quiet">the further you pull, the further it goes.</p>' +
+          '<div class="btn" data-go="fight">start</div></div>', !first);
+        first = false;
+        on("[data-go]", (el) => { const go = el.getAttribute("data-go"); if (go === "bench") benchPage(); else if (go === "cycle") { if (save.tin.length < 2) return; const k = save.tin.indexOf(chosen); chosen = save.tin[(k + 1) % save.tin.length]; sfxPaper(); render(); } else startBenchMatch(i, chosen); });
+      };
+      render();
     }
-    function tinPage() {
+    const STENCIL_PENS = penSVG(PENS.parker, 150, 18, { flat: "#1e2a4a" }) + '<div style="height:6px"></div>' + penSVG(PENS.racer, 80, 12, { flat: "#8a2a1e", rot: -25 });
+    function tinPage(justWon) {
       screen = "tin";
-      let html = '<div class="topbar"><h2>the tin</h2><span class="link" data-go="home">home</span></div><p class="quiet">' + save.tin.length + ' in the tin</p>';
-      for (const id of save.tin) { const s = PENS[id]; html += '<div class="chit"><div class="who">' + swatch(s) + esc(s.name) + '</div><div class="intro">' + esc(s.flavour) + '</div>' +
-        '<div class="quiet">' + Math.round(s.dens * s.r * s.r * s.L * 1000 * 10) / 10 + ' g &middot; ' + Math.round(s.L * 1000) + ' mm &middot; ' + (s.shape === "tri" ? "triangular" : s.shape === "hex" ? "hexagonal" : "round") + '</div></div>'; }
-      const out = Object.keys(PENS).filter((id) => !penHeld(id));
-      if (out.length) { html += '<h2>still out there</h2>'; for (const id of out) { const s = PENS[id]; const holder = BENCH.find((r) => r.pen === id); const lostTo = Object.keys(save.lost).find((k) => save.lost[k] === id); html += '<div class="chit" style="opacity:.75"><div class="who">' + swatch(s) + esc(s.name) + '</div><div class="intro">' + (lostTo != null ? 'lost to ' + esc(BENCH[lostTo].name) : holder ? esc(holder.name) + ' has it' : 'lost and found') + '</div></div>'; } }
-      showPage(html);
-      on("[data-go]", () => homePage());
+      let slots = '';
+      for (const id in PENS) { const held = penHeld(id); slots += '<div class="slot">' + penSVG(PENS[id], 320, 24, { dark: !held, fluid: true }) + '</div>'; }
+      const lid = '<div class="lid"><div class="rust" style="left:-20px;top:-14px;width:130px;height:70px"></div><div class="rust" style="right:-16px;bottom:8px;width:110px;height:56px"></div><div class="stencil">PEN FIGHT</div><div class="lidpens">' + STENCIL_PENS + '</div></div>';
+      let paper;
+      if (justWon) {
+        const w = PENS[justWon.pen];
+        paper = '<div class="sheet plain ctr"><div class="tag">just won</div><h2 style="font-size:30px;margin:14px 0 4px;letter-spacing:.1em">' + esc(w.name) + '</h2>' +
+          '<p class="label ink">won from: ' + esc(justWon.from) + '</p><p class="label">playing this next match</p>' +
+          '<div class="btn ghost" data-go="next">shut the box</div></div>';
+      } else {
+        const out = Object.keys(PENS).filter((id) => !penHeld(id));
+        let list = '';
+        for (const id of save.tin) { const s = PENS[id]; list += '<p style="margin:2px 0">' + esc(s.name) + ' <span class="quiet">&middot; ' + Math.round(s.dens * s.r * s.r * s.L * 1000 * 10) / 10 + ' g &middot; ' + esc(s.flavour) + '</span></p>'; }
+        let outList = '';
+        if (out.length) { outList = '<p class="label ink" style="margin-top:12px">still out there</p>'; for (const id of out) { const s = PENS[id]; const holder = BENCH.find((r) => r.pen === id); const lostTo = Object.keys(save.lost).find((k) => save.lost[k] === id); outList += '<p style="margin:2px 0" class="quiet">' + esc(s.name) + ' &middot; ' + (lostTo != null ? 'lost to ' + esc(BENCH[lostTo].name) : holder ? esc(holder.name) + ' has it' : 'lost and found') + '</p>'; } }
+        paper = '<div class="sheet plain ctr"><div class="label ink">' + save.tin.length + ' in the tin</div>' + list + outList + '<div class="btn ghost" data-go="home">shut the box</div></div>';
+      }
+      showPage('<div class="tin">' + lid + '<div class="hinge"></div><div class="base">' + slots + '</div></div>' + paper);
+      on("[data-go]", (el) => { const go = el.getAttribute("data-go"); if (go === "next") { const k = nextRival(); if (k >= 0) stakePage(k); else homePage(); } else homePage(); });
     }
-    let friendPens = { you: STARTER, cpu: "octane" };
+    let friendPens = { you: STARTER, cpu: "v5" };
     function friendsPickPage(who) {
       screen = "pick";
-      let html = '<div class="topbar"><h2>' + (who === 1 ? "player one" : "player two") + '</h2><span class="link" data-go="home">home</span></div>' +
-        '<p>' + (who === 1 ? "you flick from the near edge." : "you flick from the far edge. pass the phone after each flick.") + ' pick a pen.</p>';
+      let html = '<div class="sheet"><div class="back" data-go="home">&lsaquo;</div><h2 style="margin-top:6px">' + (who === 1 ? "player one" : "player two") + '</h2>' +
+        '<p class="ctr">' + (who === 1 ? "you flick from the near edge." : "you flick from the far edge. pass the phone after each flick.") + ' pick a pen.</p>';
       const ids = Object.keys(PENS);
-      ids.forEach((id, k) => { const s = PENS[id]; html += '<div class="chit pick' + (k === 0 ? ' sel' : '') + '" data-pen="' + id + '"><div class="who">' + swatch(s) + esc(s.name) + '</div><div class="intro">' + esc(s.flavour) + '</div></div>'; });
-      html += '<div><span class="stampbtn" data-go="next">' + (who === 1 ? "next: player two" : "fight") + '</span></div>';
+      ids.forEach((id, k) => { const s = PENS[id]; html += '<div class="chit pick' + (k === 0 ? ' sel' : '') + '" data-pen="' + id + '">' + penSVG(s, 110, 26, {}) + '<div><div class="who" style="font-size:20px">' + esc(s.name) + '</div><div class="intro">' + esc(s.flavour) + '</div></div></div>'; });
+      html += '<div class="btn" data-go="next">' + (who === 1 ? "next: player two" : "fight") + '</div></div>';
       showPage(html);
       let chosen = ids[0];
       on(".chit.pick", (el) => { elInner.querySelectorAll(".chit.pick").forEach((c) => c.classList.remove("sel")); el.classList.add("sel"); chosen = el.getAttribute("data-pen"); sfxPaper(); });
@@ -888,13 +1132,13 @@ window.plethoraBit = {
       const near = nearestOnPen(current, q);
       if (near.dist > GRAB_R) { hint(current === you ? "touch your pen to flick it" : "touch the far pen to flick it"); return; }
       drag = { s: near.s, grab: near.pt, dir: { x: 0, y: 0 }, power: 0, lastQ: q, lastT: performance.now(), swipe: 0 };
-      aim.visible = true; hint("drag the way you want it to go, then let go");
+      aim.visible = true; hint("pull back. the further you pull, the further it goes");
       if (ctx.capabilities.haptics) { try { ctx.platform.haptic("light"); } catch (_) {} }
     }
     function onMove(e) {
       if (!drag) return; const q = screenToPlane(e.clientX, e.clientY); if (!q) return; if (e.cancelable) e.preventDefault();
       const dx = q.x - drag.grab.x, dy = q.y - drag.grab.y, len = Math.hypot(dx, dy);
-      if (len > 1e-5) drag.dir = { x: dx / len, y: dy / len };
+      if (len > 1e-5) drag.dir = { x: -dx / len, y: -dy / len };   // a catapult: pull back, it goes the other way
       drag.power = clamp(len / MAX_DRAG, 0, 1);
       const now = performance.now(), dt = Math.max(1, now - drag.lastT) / 1000, sp = Math.hypot(q.x - drag.lastQ.x, q.y - drag.lastQ.y) / dt;
       drag.swipe = Math.max(drag.swipe * 0.86, clamp(sp / 3.2, 0, 1)); drag.lastQ = q; drag.lastT = now;
@@ -961,7 +1205,7 @@ window.plethoraBit = {
     // 15. Match flow                                                        //
     // ===================================================================== //
     let state = "idle", settleT = 0, thinkT = 0, cpuMove = null, slowmo = 0, mode = "bench", rivalIdx = 0, stakePen = STARTER, friendly = false;
-    const HINT_AIM = "touch your pen. the middle drives it, the end spins it";
+    const HINT_AIM = "touch your pen, pull it back, let go";
     function layout() {
       you.x = rnd(-0.05, 0.05); you.y = -0.23; you.a = rnd(-0.22, 0.22);
       cpu.x = rnd(-0.05, 0.05); cpu.y = 0.23; cpu.a = Math.PI + rnd(-0.22, 0.22);
@@ -978,15 +1222,14 @@ window.plethoraBit = {
     }
     function onKnockOff(p) { slowmo = 0.95; try { ctx.music.duck(0.55, 1100); } catch (_) {} if (ctx.capabilities.haptics) { try { ctx.platform.haptic(p === cpu ? "success" : "error"); } catch (_) {} } }
     function endRound() {
-      const lost = fellThisTurn; if (!lost) return;
+      const lost = fellThisTurn; if (!lost || state === "over" || state === "idle") return;
       const youWon = lost === cpu;
       if (youWon) { scoreYou++; streak++; if (mode === "bench") { save.bestStreak = Math.max(save.bestStreak, streak); } }
       else { scoreCpu++; streak = 0; }
-      sfxChalk(2);
-      slip(youWon ? '<b>off the desk.</b> round to ' + esc(names.you) + '.' : (mode === "friends" ? '<b>off the desk.</b> round to ' + esc(names.cpu) + '.' : '<b>yours went over.</b> round to ' + esc(names.cpu) + '.'), 1500);
+      sfxChalk(2); roundLog.push(youWon ? "w" : "l");
       try { ctx.music.sting(youWon ? "success" : "fail"); } catch (_) {}
-      renderBoard("", null);
-      try { ctx.platform.setScore(save.beaten.length * 10 + scoreYou); } catch (_) {}
+      renderBoard(youWon ? "round to " + names.you : "round to " + names.cpu, null);
+      try { ctx.platform.setScore(save.beaten.length * 20 + scoreYou); } catch (_) {}
       state = "over";
       if (scoreYou >= TARGET || scoreCpu >= TARGET) ctx.timeout(() => matchOver(scoreYou >= TARGET), 1600);
       else ctx.timeout(() => newRound(youWon ? "cpu" : "you"), 1700);   // the loser of the round flicks first
@@ -1005,18 +1248,17 @@ window.plethoraBit = {
     }
     function beginMatch(introHtml) {
       hidePage(); screen = "match"; scoreYou = 0; scoreCpu = 0; streak = 0; save.plays++; persist();
-      firstTouch(); startMusic(); sfxBell();
-      layout(); state = "idle"; renderBoard("", null);
-      slip(introHtml + '<br>best of five. you flick first.', 2600);
-      ctx.timeout(() => newRound("you"), 2400);
+      firstTouch(); startMusic(); startAmbience(); sfxBell();
+      layout(); state = "idle"; roundLog = []; renderBoard("best of 5 . you flick first", null);
+      ctx.timeout(() => newRound("you"), 1500);
     }
     function matchOver(won) {
       state = "idle"; hint(""); aim.visible = false; drag = null; sfxCrowd(won);
       save.matches++;
-      let html = '';
+      let html = '', after = null;
+      const btns = (a, b) => '<div class="btn" data-go="' + a[0] + '">' + a[1] + '</div>' + (b ? '<div class="btn ghost" data-go="' + b[0] + '">' + b[1] + '</div>' : '');
       if (mode === "friends") {
-        html = '<h1>' + (won ? "player one" : "player two") + '<br>wins</h1><p>' + (won ? scoreYou + "&ndash;" + scoreCpu : scoreCpu + "&ndash;" + scoreYou) + '. the pen stays on the desk; you are friends.</p>' +
-          '<div><span class="stampbtn" data-go="again">again</span> <span class="stampbtn ink" data-go="home">home</span></div>';
+        html = '<div class="sheet ctr"><h1>' + (won ? "player one" : "player two") + '<br>wins</h1><p>' + (won ? scoreYou + "&ndash;" + scoreCpu : scoreCpu + "&ndash;" + scoreYou) + '. the pen stays on the desk; you are friends.</p>' + btns(["again", "again"], ["home", "home"]) + '</div>';
         try { ctx.platform.complete({ mode: "friends", winner: won ? 1 : 2 }); } catch (_) {}
       } else {
         const r = BENCH[rivalIdx], their = PENS[r.pen], mine = PENS[stakePen];
@@ -1024,34 +1266,34 @@ window.plethoraBit = {
           save.wins++;
           if (!friendly) {
             if (!penHeld(r.pen)) save.tin.push(r.pen);
+            save.lastWon = r.pen;
             if (save.lost[rivalIdx]) { if (!penHeld(save.lost[rivalIdx])) save.tin.push(save.lost[rivalIdx]); delete save.lost[rivalIdx]; }
             if (!save.beaten.includes(rivalIdx)) save.beaten.push(rivalIdx);
           }
           const champion = nextRival() < 0 && !save.champion;
           if (champion) save.champion = true;
-          html = '<h1>' + (champion ? "champion<br>of the class" : "you win") + '</h1>' +
-            '<p>' + scoreYou + '&ndash;' + scoreCpu + ' against ' + esc(r.name) + '.' + (friendly ? ' a friendly, so nothing changes hands.' : ' <b style="color:' + RED + ';font-weight:400">the ' + esc(their.name) + ' is yours.</b>') + '</p>' +
-            (champion ? '<p>the Trimax is in the tin and there is nobody left on the bench. ' + save.tin.length + ' pens. champion of the class.</p>' : '') +
-            '<div>' + (nextRival() >= 0 ? '<span class="stampbtn" data-go="bench">next on the bench</span> ' : '') + '<span class="stampbtn tin" data-go="tin">open the tin</span> <span class="stampbtn ink" data-go="home">home</span></div>';
+          if (champion) html = '<div class="sheet ctr"><div class="tag">class champion</div><h1 style="margin-top:14px">the trimax<br>is yours</h1><p>' + scoreYou + '&ndash;' + scoreCpu + ' against ' + esc(r.name) + '. nobody left on the bench. ' + save.tin.length + ' pens in the tin.</p>' + btns(["tin", "open the tin"], ["home", "home"]) + '</div>';
+          else if (friendly) html = '<div class="sheet ctr"><h1>you win</h1><p>' + scoreYou + '&ndash;' + scoreCpu + ' against ' + esc(r.name) + '. a friendly, so nothing changes hands.</p>' + btns(["bench", "the bench"], ["home", "home"]) + '</div>';
+          else after = () => tinPage({ pen: r.pen, from: r.name });
           try { ctx.platform.milestone(champion ? "champion" : "rival_beaten", { rival: r.name, tin: save.tin.length }); ctx.platform.complete({ mode: "bench", rival: r.name, score: scoreYou + "-" + scoreCpu, tin: save.tin.length, champion: save.champion }); } catch (_) {}
         } else {
           let lossNote = '';
           if (!friendly) {
             save.tin = save.tin.filter((id) => id !== stakePen); save.lost[rivalIdx] = stakePen;
             lossNote = ' <b style="color:' + RED + ';font-weight:400">' + esc(r.name) + ' keeps your ' + esc(mine.name) + '.</b>';
-            if (!save.tin.length) { save.tin = [STARTER]; lossNote += ' the tin is empty. the class monitor finds you a Pinpoint from lost and found.'; }
+            if (!save.tin.length) { save.tin = [STARTER]; lossNote += ' the tin is empty. the class monitor finds you a 045 from lost and found.'; }
           }
-          html = '<h1>you lose</h1><p>' + scoreCpu + '&ndash;' + scoreYou + ' to ' + esc(r.name) + '.' + lossNote + '</p>' +
-            '<div><span class="stampbtn" data-go="retry">again</span> <span class="stampbtn tin" data-go="tin">open the tin</span> <span class="stampbtn ink" data-go="home">home</span></div>';
+          html = '<div class="sheet ctr"><h1>you lose</h1><p>' + scoreCpu + '&ndash;' + scoreYou + ' to ' + esc(r.name) + '.' + lossNote + '</p>' + btns(["retry", "again"], ["home", "home"]) + '</div>';
           try { ctx.platform.fail({ mode: "bench", rival: r.name, score: scoreYou + "-" + scoreCpu }); } catch (_) {}
         }
         persist(); submitRecords();
       }
-      elBoard.style.opacity = "0"; hideSlip();
+      hideSlip(); renderBoard(won ? (mode === "friends" ? "game to " + names.you : "you win") : "game to " + names.cpu, null);
       ctx.timeout(() => {
+        if (after) return after();
         showPage(html);
         on("[data-go]", (el) => { const go = el.getAttribute("data-go"); if (go === "home") homePage(); else if (go === "tin") tinPage(); else if (go === "bench") benchPage(); else if (go === "retry") stakePage(rivalIdx); else if (go === "again") startFriendsMatch(); });
-      }, 900);
+      }, 1400);
     }
 
     // ===================================================================== //
@@ -1138,7 +1380,7 @@ window.plethoraBit = {
     window.__pfKnock = (side) => { const p = side === "cpu" ? cpu : you; if (p.alive) { p.x = TABLE_HX + 0.02; if (state === "aim" || state === "cpuThink") { state = "sim"; settleT = 0; fellThisTurn = null; } } };
     window.__pfSkipIntro = () => { if (state === "idle" && screen === "match") newRound("you"); };
     window.__pfStep = (n) => { for (let i = 0; i < (n || 1); i++) frame(16.7, true); };
-    window.__pfReset = () => { save.tin = [STARTER]; save.beaten = []; save.lost = {}; save.champion = false; persist(); };
+    window.__pfReset = () => { save.tin = [STARTER]; save.beaten = []; save.lost = {}; save.champion = false; save.lastWon = null; persist(); };
 
     ctx.onDestroy(() => {
       try { if (musicHandle) musicHandle.stop({ fadeOutMs: 500 }); } catch (_) {}

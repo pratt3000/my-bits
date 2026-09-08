@@ -1,23 +1,26 @@
 # Pen Fight
 
 The Indian school-bench game, rebuilt in 3D. Two pens on a scratched wooden
-desk: flick yours to shove your rival's over the edge before they do it to you.
-Best of five rounds, scored in chalk on the blackboard. Winner keeps the pen.
+desk in a classroom: pull yours back and let go to shove your rival's pen over
+the edge before they do it to you. Best of five rounds, scored in chalk on the
+blackboard behind the teacher's table. Winner keeps the pen.
 
 ## Files
 
 | File            | What it is                                                                 |
 | --------------- | -------------------------------------------------------------------------- |
-| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, three leaderboards.           |
+| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, `bebas-neue@1.0.0`, three leaderboards. |
 | `main.js`       | Entry source defining `window.plethoraBit`. Everything is generated in-file. |
 
 ## How it plays
 
-Touch your pen, drag the way you want it to go, let go. Direction and length of
-the drag set the power; **where on the pen you touched it** sets the spin. Catch
-it at the tip and it spins; catch it at the balance point and it drives straight.
-A pen is out when its centre of mass crosses the desk edge. First to three
-rounds takes the match.
+Touch your pen, pull it back like a catapult, let go. The further you pull, the
+further it goes; **where on the pen you touched it** sets the spin. Catch it at
+the tip and it spins; catch it at the balance point and it drives straight. A
+pen is out when its centre of mass crosses the desk edge. First to three rounds
+takes the match. The score goes up on the blackboard in chalk, with a tick for
+every round you win and a cross for every one you drop, and the note pinned to
+the teacher's table says whose flick it is, or "match point".
 
 **The bench.** Eleven rivals sit between you and the title, from Bunty on the
 back bench of 9B up to Vikram in twelfth standard. Each rival plays with their
@@ -39,8 +42,8 @@ density, friction and bounce, so they behave differently on the desk:
 
 | Pen                  | Character                                            |
 | -------------------- | ---------------------------------------------------- |
-| Cello Pinpoint       | the starter; average in every way                    |
-| Classmate Octane     | light and quick, will not sit still                  |
+| Reynolds 045         | the starter; the one everybody had                   |
+| Pilot V5             | light and quick, will not sit still                  |
 | Flair Writometer     | long and low-friction, slides further than you meant |
 | Cello Gripper        | rubber grip; parks where you put it                  |
 | Linc Ocean           | bouncy; hits ricochet sideways                       |
@@ -53,7 +56,11 @@ density, friction and bounce, so they behave differently on the desk:
 | Reynolds Trimax      | triangular, so it does not roll                      |
 
 Bodies, caps, grips, bands and side text are baked into a livery texture per pen
-at runtime; no image assets are shipped.
+at runtime, and the same paint spec draws the flat pens on the paper pages as
+inline SVG; no image assets are shipped. The classroom (wall, chalkboard,
+teacher's table, tiled floor) and the desk carvings are all drawn in code too.
+Buttons use Bebas Neue from the Plethora font registry; the handwriting is the
+phone's own handwriting face.
 
 ## The physics
 
