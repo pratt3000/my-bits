@@ -440,7 +440,7 @@ window.plethoraBit = {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#120a08");
-    scene.fog = new THREE.Fog("#120a08", 1.35, 3.6);
+    scene.fog = new THREE.Fog("#120a08", 1.8, 4.6);
     const camera = new THREE.PerspectiveCamera(30, 1, 0.04, 6);
 
     // ---- an environment to reflect: a small room of warm panels, baked to a
@@ -546,14 +546,14 @@ window.plethoraBit = {
       for (let i = 0; i < 18; i++) {
         const h = rrange(0.22, 0.34), r = rrange(0.028, 0.04);
         const bt = new THREE.Mesh(new THREE.CapsuleGeometry(r, h - 2 * r, 3, 10), bottleMat);
-        bt.position.set(-1.0 + i * 0.118 + rrange(-0.02, 0.02), 0.42 + h / 2, -1.0);
+        bt.position.set(0.08 + i * 0.056 + rrange(-0.01, 0.01), 0.31 + h / 2, -1.0);
         bt.material = bottleMat.clone();
         bt.material.color.set(["#3b1f14", "#1e3a22", "#4a2a12", "#2c2c3a", "#5a3a1a"][i % 5]);
         scene.add(bt);
       }
-      const shelf = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.02, 0.16),
+      const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.02, 0.16),
         new THREE.MeshStandardMaterial({ color: "#2e1a10", roughness: 0.6 }));
-      shelf.position.set(0, 0.41, -1.0);
+      shelf.position.set(0.58, 0.3, -1.0);
       scene.add(shelf);
     }
 
@@ -561,17 +561,17 @@ window.plethoraBit = {
     // ---- pint earned today, the ones you have drunk rubbed dim
     const TAB_MAX = 40;
     const tabMarks = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.009, 0.072, 0.004),
+      new THREE.BoxGeometry(0.008, 0.062, 0.004),
       new THREE.MeshStandardMaterial({ roughness: 0.95 }), TAB_MAX);
     tabMarks.count = 0;
     {
       const board = new THREE.Group();
-      board.position.set(0.2, 0.6, -1.07);
-      board.rotation.y = -0.08;
-      board.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, 0.018),
+      board.position.set(-0.25, 0.25, -1.07);
+      board.rotation.y = 0.1;
+      board.add(new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.3, 0.018),
         new THREE.MeshStandardMaterial({ color: "#182521", roughness: 0.96 })));
       const wood = new THREE.MeshStandardMaterial({ color: "#5a3a22", roughness: 0.7 });
-      for (const f of [[0.54, 0.028, 0, 0.184], [0.54, 0.028, 0, -0.184], [0.028, 0.34, -0.256, 0], [0.028, 0.34, 0.256, 0]]) {
+      for (const f of [[0.48, 0.026, 0, 0.163], [0.48, 0.026, 0, -0.163], [0.026, 0.3, -0.227, 0], [0.026, 0.3, 0.227, 0]]) {
         const m = new THREE.Mesh(new THREE.BoxGeometry(f[0], f[1], 0.03), wood);
         m.position.set(f[2], f[3], 0.005);
         board.add(m);
@@ -586,7 +586,7 @@ window.plethoraBit = {
       let k = 0;
       for (let i = 0; i < total; i++) {
         const grp = Math.floor(i / 5), inG = i % 5, row = Math.floor(grp / 4), col = grp % 4;
-        const x0 = -0.185 + col * 0.118, y0 = 0.075 - row * 0.15;
+        const x0 = -0.16 + col * 0.1, y0 = 0.06 - row * 0.125;
         _pos.set(x0 + (inG < 4 ? inG * 0.02 : 0.03), y0, 0.012);
         const jit = ((i * 7919) % 13) / 13 - 0.5;
         _q.setFromAxisAngle(_zAxis, inG < 4 ? jit * 0.16 : 0.78);
@@ -1075,8 +1075,8 @@ window.plethoraBit = {
     function camGoals() {
       const D = cam.tdist, Hg = G.spec ? G.spec.H : 0.15;
       const st = (typeof UI !== "undefined") ? UI.state : "result";
-      if (st === "pick") { camGoalPos.set(0, 0.37, 0.8); camGoalLook.set(0, 0.02, 0.1); camGoalFov = 52; }
-      else if (st === "amount" || st === "live") { camGoalPos.set(0, 0.25, 0.58); camGoalLook.set(0, 0.04, 0.12); camGoalFov = 40; }
+      if (st === "pick") { camGoalPos.set(0, 0.46, 0.94); camGoalLook.set(0, 0.0, 0.12); camGoalFov = 50; }
+      else if (st === "amount" || st === "live") { camGoalPos.set(0, 0.28, 0.62); camGoalLook.set(0, 0.06, 0.12); camGoalFov = 40; }
       else if (st === "reveal") { camGoalPos.set(0, Hg * 0.6 + D * 0.17, D * 0.86); camGoalLook.set(0, Hg * 0.6, 0); camGoalFov = 30; }
       else { camGoalPos.set(0, Hg * 0.5 + D * 0.2, D); camGoalLook.set(0, Hg * 0.5, 0); camGoalFov = 30; }
     }
@@ -1608,9 +1608,9 @@ window.plethoraBit = {
     // Two rows, because a portrait lens is narrow even at 52 degrees.
     // ===================================================================
     const PROP_ORDER = ["steps", "run", "ride", "swim", "gym", "walk"];
-    const PROP_HOME = { steps: [-0.125, 0.235], ride: [0, 0.25], gym: [0.125, 0.235],
-                        run: [-0.075, 0.13], swim: [0, 0.14], walk: [0.075, 0.13] };
-    const PROP_HERO = new THREE.Vector3(0, 0.125, 0.14);
+    const PROP_HOME = { run: [-0.15, 0.07], ride: [-0.05, 0.075], swim: [0.05, 0.075], walk: [0.15, 0.07],
+                        steps: [-0.08, 0.245], gym: [0.08, 0.245] };
+    const PROP_HERO = new THREE.Vector3(0, 0.165, 0.16);
     const PROP_LABEL = { steps: "STEPS", run: "RUN", ride: "RIDE", swim: "SWIM", gym: "GYM", walk: "WALK" };
     const PM = {
       white: new THREE.MeshStandardMaterial({ color: "#f2ede4", roughness: 0.6 }),
@@ -1718,7 +1718,7 @@ window.plethoraBit = {
                        lerp(p.home.z, PROP_HERO.z, lift));
         p.spinY += dt * (0.35 + 1.4 * lift);
         g.rotation.y = p.spinY;
-        const sc = 1 + 0.5 * lift;
+        const sc = 0.85 + 0.65 * lift;
         g.scale.set(sc, sc, sc);
         if (g.userData.spin) g.userData.spin.rotation.z += dt * (0.8 + 4 * lift);
       }
