@@ -9,7 +9,7 @@ blackboard behind the teacher's table. Winner keeps the pen.
 
 | File            | What it is                                                                 |
 | --------------- | -------------------------------------------------------------------------- |
-| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, `bebas-neue@1.0.0`, three leaderboards. |
+| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, three leaderboards. |
 | `main.js`       | Entry source defining `window.plethoraBit`. Everything is generated in-file. |
 
 ## How it plays
