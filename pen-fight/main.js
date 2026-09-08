@@ -270,13 +270,14 @@ window.plethoraBit = {
     ];
     // Skill climbs the bench: aim spread in degrees, power misjudgement, and how
     // many candidate flicks the rival thinks through before choosing.
-    const rivalTier = (i) => ({ skill: 0.38 + i * 0.052, aimDeg: 12 - i * 0.85, powerNoise: 0.16 - i * 0.01, breadth: 2 + Math.floor(i / 2), edgeSense: 0.3 + i * 0.06 });
+    const rivalTier = (i) => ({ skill: 0.35 + i * 0.05, aimDeg: 12 - i * 0.7, powerNoise: 0.16 - i * 0.01, breadth: 2 + Math.floor(i / 2), edgeSense: 0.3 + i * 0.06 });
 
     const G = 9.81;
     const MU_PEN = 0.22;            // pen on pen
     const TABLE_HX = 0.215, TABLE_HY = 0.36, TABLE_TOP = 0, TABLE_THICK = 0.026;
     const FLOOR_Y = -0.34;
-    const V_MAX = 1.85;
+    const V_MAX = 1.45;
+    const FRIC_K = 1.2;             // the desk is varnished plywood, not a snooker table
     const REF_MASS = 0.0092;        // flick strength is tuned around a 9 g pen
     const J_MAX = REF_MASS * V_MAX;
     // a light pen still leaves faster than a heavy one, but by the square root, so a mid-power flick stays on the desk
@@ -327,7 +328,7 @@ window.plethoraBit = {
     const FRIC_N = 9;
     function tableFriction(p, dt) {
       const ax = p.ax, ay = p.ay, share = p.m / FRIC_N;
-      let mu = p.mu;
+      let mu = p.mu * FRIC_K;
       if (p.shape === "round") {
         const sp = p.speed();
         if (sp > 1e-4) { const perp = Math.abs(-ay * p.vx + ax * p.vy) / sp; mu *= 1 - 0.42 * perp * perp; }
@@ -697,7 +698,7 @@ window.plethoraBit = {
     scene.environment = envTexture();
     const camera = new THREE.PerspectiveCamera(46, ctx.width / Math.max(1, ctx.height), 0.05, 12);
     const camTarget = new THREE.Vector3(0, 0, 0), camBase = new THREE.Vector3();
-    const CAM_TILT = 0.8, FIT_X = 0.94, FIT_Y = 0.56;
+    const CAM_TILT = 0.9, FIT_X = 0.9, FIT_Y = 0.42;
     const fitPts = [];
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) { fitPts.push(new THREE.Vector3(sx * TABLE_HX, TABLE_TOP, sz * TABLE_HY)); fitPts.push(new THREE.Vector3(sx * TABLE_HX, TABLE_TOP - TABLE_THICK, sz * TABLE_HY)); }
     function fitCamera() {
@@ -715,7 +716,7 @@ window.plethoraBit = {
       }
       camBase.set(0, Math.sin(CAM_TILT) * dist, Math.cos(CAM_TILT) * dist); camera.position.copy(camBase); camera.lookAt(camTarget);
       // the desk sits in the lower part of the frame; the wall and the blackboard fill the top
-      camera.setViewOffset(VW, VH, 0, -(cy + 0.4) * VH / 2, VW, VH);
+      camera.setViewOffset(VW, VH, 0, -(cy + 0.2) * VH / 2, VW, VH);
     }
     fitCamera();
     scene.add(new THREE.HemisphereLight(0xfff2dc, 0x3a2e22, 0.7));
@@ -757,7 +758,7 @@ window.plethoraBit = {
       const f = new THREE.Mesh(gm, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, metalness: 0.02 })); f.position.y = FLOOR_Y; f.receiveShadow = true; scene.add(f);
     })();
     // ---- the classroom behind the desk: a green wall, the blackboard, the teacher's table with a note pinned to it
-    const WALL_Z = -0.72;
+    const WALL_Z = -0.62;
     (function wall() {
       const c = surface(256, 256), g = c.getContext("2d"); g.fillStyle = "#57624f"; g.fillRect(0, 0, 256, 256);
       for (let i = 0; i < 3000; i++) { g.fillStyle = Math.random() < 0.5 ? "rgba(0,0,0,.08)" : "rgba(255,255,255,.05)"; g.fillRect(Math.random() * 256, Math.random() * 256, rnd(1, 3), rnd(1, 3)); }
@@ -951,10 +952,11 @@ window.plethoraBit = {
       g.lineTo(W, H - 14); for (let x = W; x >= 0; x -= 24) g.lineTo(x - 12, x % 48 ? H - 4 : H - 16); g.closePath(); g.fill();
       g.strokeStyle = "rgba(96,126,190,.35)"; g.lineWidth = 2; for (let y = 52; y < H - 20; y += 40) { g.beginPath(); g.moveTo(12, y); g.lineTo(W - 12, y); g.stroke(); }
       const bang = text.startsWith("!");
-      g.font = "62px " + HAND; g.textAlign = "center"; g.textBaseline = "middle";
       const body = bang ? text.slice(1).trim() : text;
+      let fs = 62; g.textAlign = "center"; g.textBaseline = "middle";
+      for (;;) { g.font = fs + "px " + HAND; if (g.measureText(body).width <= W - 80 - (bang ? 50 : 0) || fs <= 26) break; fs -= 3; }
       g.fillStyle = INK; g.fillText(body, W / 2 + (bang ? 22 : 0), H / 2 + 4);
-      if (bang) { const tw = g.measureText(body).width; g.fillStyle = RED; g.font = "70px " + HAND; g.fillText("!", W / 2 + 22 - tw / 2 - 40, H / 2 + 2); }
+      if (bang) { const tw = g.measureText(body).width; g.fillStyle = RED; g.font = (fs + 8) + "px " + HAND; g.fillText("!", W / 2 + 22 - tw / 2 - 34, H / 2 + 2); }
       noteTex.needsUpdate = true;
     }
     function renderBoard(note, turn) {
@@ -1117,7 +1119,7 @@ window.plethoraBit = {
       if (!raycaster.ray.intersectPlane(planeMath, hitPoint)) return null;
       return { x: hitPoint.x, y: -hitPoint.z };
     }
-    const MAX_DRAG = 0.135, GRAB_R = 0.05;
+    const MAX_DRAG = 0.155, GRAB_R = 0.05;
     let drag = null, current = you;   // whose flick it is
     function nearestOnPen(p, q) { const dx = q.x - p.x, dy = q.y - p.y, s = clamp(dx * p.ax + dy * p.ay, -p.L / 2, p.L / 2), pt = p.pointAt(s); return { s, pt, dist: Math.hypot(q.x - pt.x, q.y - pt.y) }; }
     let started = false;
@@ -1146,7 +1148,7 @@ window.plethoraBit = {
     }
     function onUp() {
       if (!drag) return;
-      const power = clamp(Math.max(drag.power, drag.swipe * 0.92), 0, 1), d = drag; drag = null; aim.visible = false;
+      const power = clamp(drag.power, 0, 1), d = drag; drag = null; aim.visible = false;
       if (power < 0.06 || (d.dir.x === 0 && d.dir.y === 0)) { hint(HINT_AIM); return; }
       flick(current, d.grab, d.dir, power);
       state = "sim"; settleT = 0; fellThisTurn = null; hint(""); renderBoard("", null);
@@ -1160,7 +1162,7 @@ window.plethoraBit = {
       if (!drag) return; const p = drag.power, gx = drag.grab.x, gz = -drag.grab.y, ang = Math.atan2(drag.dir.y, drag.dir.x);
       grabDot.position.set(gx, AIM_Y, gz); const dotS = 0.026 + p * 0.014; grabDot.scale.set(dotS, 1, dotS);
       arrowMesh.position.set(gx, AIM_Y, gz); arrowMesh.rotation.y = ang; arrowMesh.scale.set(0.045 + p * 0.115, 1, 0.026 + p * 0.016); arrowMesh.material.opacity = 0.55 + p * 0.45;
-      const v = V_MAX * p * Math.sqrt(REF_MASS / current.m), travel = (v * v) / (2 * current.mu * G);
+      const v = V_MAX * p * Math.sqrt(REF_MASS / current.m), travel = (v * v) / (2 * current.mu * FRIC_K * G);
       dashMesh.position.set(gx, AIM_Y - 0.0002, gz); dashMesh.rotation.y = ang; dashMesh.scale.set(Math.min(travel, 0.75), 1, 0.012); dashMat.map.repeat.x = Math.max(1, Math.min(travel, 0.75) / 0.026); dashMat.opacity = 0.16 + p * 0.34;
       const torque = drag.s * (drag.dir.y * Math.cos(current.a) - drag.dir.x * Math.sin(current.a)), wPred = Math.abs(torque * flickJ(current, p) / current.I * SPIN_TRANSFER), spinAmt = clamp(wPred / 26, 0, 1);
       spinMesh.material.opacity = spinAmt * 0.85; spinMesh.position.set(gx, AIM_Y + 0.0004, gz); const ss = 0.03 + spinAmt * 0.03; spinMesh.scale.set(ss, 1, ss); spinMesh.rotation.y = torque > 0 ? 0 : Math.PI;
@@ -1180,24 +1182,31 @@ window.plethoraBit = {
       const me = cpu, foe = you;
       const dx = foe.x - me.x, dy = foe.y - me.y, dist = Math.hypot(dx, dy) || 1, base = Math.atan2(dy, dx);
       const eFoe0 = edgeDist(foe), eMe0 = edgeDist(me);
-      let best = null, bestScore = -Infinity;
+      let best = null, bestScore = -Infinity; const cands = [];
       const n = Math.max(1, tier.breadth) * 3;
       for (let k = 0; k < n; k++) {
         const ang = base + (k === 0 ? 0 : gauss() * 0.55), dir = { x: Math.cos(ang), y: Math.sin(ang) };
-        const vNeed = Math.sqrt(2 * me.mu * G * Math.max(0.05, dist)) * Math.sqrt(me.m / REF_MASS);
-        const power = clamp((vNeed / V_MAX) * rnd(0.9, 1.6) + (k % 3 === 2 ? rnd(-0.2, 0.3) : 0), 0.2, 1);
+        const vNeed = Math.sqrt(2 * me.mu * FRIC_K * G * Math.max(0.05, dist)) * Math.sqrt(me.m / REF_MASS);
+        const power = clamp((vNeed / V_MAX) * rnd(0.9, 1.6) + (k % 3 === 2 ? rnd(-0.2, 0.3) : 0) + (k % 3 === 1 ? rnd(0, 0.5) : 0), 0.2, 0.65 + tier.skill * 0.35);
         const s = (k % 3 === 0 ? 0 : gauss() * 0.3) * me.L;
         const at = me.pointAt(s), r = rehearse(me, foe, at, dir, power, 2.6);
         let score;
         if (r.bOff) score = 1000 - r.t * 50;
         else if (r.aOff) score = -1000;
         else score = (eFoe0 - edgeDist(r.B)) * 60 + (edgeDist(r.A) - eMe0) * 25 * tier.edgeSense - Math.hypot(r.A.x - r.B.x, r.A.y - r.B.y) * 6 + (edgeDist(r.A) < 0.05 ? -30 : 0);
+        cands.push({ at, dir, power, score });
         if (score > bestScore) { bestScore = score; best = { at, dir, power }; }
       }
-      // execution error
-      const err = gauss() * tier.aimDeg * Math.PI / 180, ca = Math.cos(err), sa = Math.sin(err);
+      // a weaker kid sees the good flick less often: the rest of the time they play something merely sensible
+      if (Math.random() > tier.skill) {
+        const safe = cands.filter((c) => c.score > -900).sort((a, b) => b.score - a.score);
+        const pick = safe.length ? safe[Math.min(safe.length - 1, 1 + Math.floor(Math.random() * Math.max(1, Math.ceil(safe.length / 2))))] : cands[0];
+        best = { at: pick.at, dir: pick.dir, power: pick.power };
+      }
+      // execution error: gauss() is about a third of a degree per degree, so scale it up to something human
+      const err = gauss() * tier.aimDeg * 2.4 * Math.PI / 180, ca = Math.cos(err), sa = Math.sin(err);
       best.dir = { x: best.dir.x * ca - best.dir.y * sa, y: best.dir.x * sa + best.dir.y * ca };
-      best.power = clamp(best.power * (1 + gauss() * tier.powerNoise), 0.15, 1);
+      best.power = clamp(best.power * (1 + gauss() * tier.powerNoise * 1.6), 0.15, 1);
       return best;
     }
 
@@ -1207,8 +1216,8 @@ window.plethoraBit = {
     let state = "idle", settleT = 0, thinkT = 0, cpuMove = null, slowmo = 0, mode = "bench", rivalIdx = 0, stakePen = STARTER, friendly = false;
     const HINT_AIM = "touch your pen, pull it back, let go";
     function layout() {
-      you.x = rnd(-0.05, 0.05); you.y = -0.23; you.a = rnd(-0.22, 0.22);
-      cpu.x = rnd(-0.05, 0.05); cpu.y = 0.23; cpu.a = Math.PI + rnd(-0.22, 0.22);
+      you.x = rnd(-0.05, 0.05); you.y = -0.17; you.a = rnd(-0.22, 0.22);
+      cpu.x = rnd(-0.05, 0.05); cpu.y = 0.17; cpu.a = Math.PI + rnd(-0.22, 0.22);
       for (const p of pens) { p.vx = p.vy = p.w = 0; p.alive = true; p.fall = null; p.mesh.visible = true; p.glow.visible = true; }
       fellThisTurn = null; slowmo = 0; edgeGlowMat.opacity = 0;
     }
@@ -1379,6 +1388,7 @@ window.plethoraBit = {
     window.__pfFlick = (dx, dy, power, s) => { if (state !== "aim") return false; const at = current.pointAt(s || 0); const l = Math.hypot(dx, dy) || 1; flick(current, at, { x: dx / l, y: dy / l }, power); state = "sim"; settleT = 0; fellThisTurn = null; return true; };
     window.__pfKnock = (side) => { const p = side === "cpu" ? cpu : you; if (p.alive) { p.x = TABLE_HX + 0.02; if (state === "aim" || state === "cpuThink") { state = "sim"; settleT = 0; fellThisTurn = null; } } };
     window.__pfSkipIntro = () => { if (state === "idle" && screen === "match") newRound("you"); };
+    window.__pfAiRate = (i, n) => { const keep = tier; tier = rivalTier(i); let off = 0, self = 0; for (let k = 0; k < n; k++) { layout(); const pl = aiPlan(); const r = rehearse(cpu, you, pl.at, pl.dir, pl.power, 2.6); if (r.bOff) off++; if (r.aOff) self++; } tier = keep; layout(); return { off: off / n, self: self / n }; };
     window.__pfStep = (n) => { for (let i = 0; i < (n || 1); i++) frame(16.7, true); };
     window.__pfReset = () => { save.tin = [STARTER]; save.beaten = []; save.lost = {}; save.champion = false; save.lastWon = null; persist(); };
 
