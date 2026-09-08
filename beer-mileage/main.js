@@ -1041,7 +1041,7 @@ window.plethoraBit = {
       ".bm-sheet{position:absolute;inset:0;background:rgba(10,5,3,.95);",
       "pointer-events:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;",
       "padding:0 22px}",
-      ".bm-sheet h2{font-family:" + DISPLAY + ";font-size:30px;letter-spacing:.12em;color:#e9b95a;margin:0 0 14px;text-align:center}",
+      ".bm-sheet h2{font-family:" + DISPLAY + ";font-size:27px;letter-spacing:.12em;color:#e9b95a;margin:0 0 14px;text-align:center;padding:0 48px}",
       ".bm-sheet h3{font-family:" + DISPLAY + ";font-size:15px;letter-spacing:.2em;color:#e9b95a;opacity:.8;margin:18px 0 8px}",
       ".bm-sheet p{font-size:13px;line-height:1.5;opacity:.85;margin:0 0 10px}",
       ".bm-sheet code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(255,255,255,.06);",
