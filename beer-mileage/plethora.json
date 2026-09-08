@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Beer Mileage",
+  "description": "Turn what you walked into what you have earned to drink. Log steps, runs, rides, swims and gym time; it counts only the energy above sitting at the bar, from the Compendium of Physical Activities, and divides by the real calories in a pint of whatever you drink — alcohol at 7 kcal a gram plus the malt left behind. Ten thousand steps is a pint and a half of lager. Watch a real glass fill in 3D: refraction, a head that settles, bubbles from fixed nucleation sites, a nitro cascade for stout, and condensation only where the beer is. Tilt the phone and the beer stays level. Pour one when you have earned it.",
+  "tags": [
+    "fitness",
+    "beer",
+    "tracker",
+    "3d",
+    "steps",
+    "calories",
+    "fun",
+    "toy"
+  ],
+  "permissions": [
+    "haptics",
+    "storage",
+    "motion",
+    "audio",
+    "backgroundMusic"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ]
+}
