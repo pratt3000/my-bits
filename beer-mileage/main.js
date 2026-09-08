@@ -560,18 +560,20 @@ window.plethoraBit = {
     // ---- your tab, chalked on the wall: four strokes and a diagonal per
     // ---- pint earned today, the ones you have drunk rubbed dim
     const TAB_MAX = 40;
+    // From the settled camera the only clear wall is a narrow band just above
+    // the rail, right of the earned glasses; the board is a strip that fits it.
     const tabMarks = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.008, 0.062, 0.004),
-      new THREE.MeshStandardMaterial({ roughness: 0.95 }), TAB_MAX);
+      new THREE.BoxGeometry(0.0055, 0.052, 0.004),
+      new THREE.MeshStandardMaterial({ roughness: 0.95, emissive: "#d9d2c2", emissiveIntensity: 0.45 }), TAB_MAX);
     tabMarks.count = 0;
     {
       const board = new THREE.Group();
-      board.position.set(-0.25, 0.25, -1.07);
-      board.rotation.y = 0.1;
-      board.add(new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.3, 0.018),
+      board.position.set(0.25, 0.012, -1.07);
+      board.rotation.y = -0.1;
+      board.add(new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.15, 0.018),
         new THREE.MeshStandardMaterial({ color: "#182521", roughness: 0.96 })));
       const wood = new THREE.MeshStandardMaterial({ color: "#5a3a22", roughness: 0.7 });
-      for (const f of [[0.48, 0.026, 0, 0.163], [0.48, 0.026, 0, -0.163], [0.026, 0.3, -0.227, 0], [0.026, 0.3, 0.227, 0]]) {
+      for (const f of [[0.48, 0.022, 0, 0.086], [0.48, 0.022, 0, -0.086], [0.022, 0.15, -0.229, 0], [0.022, 0.15, 0.229, 0]]) {
         const m = new THREE.Mesh(new THREE.BoxGeometry(f[0], f[1], 0.03), wood);
         m.position.set(f[2], f[3], 0.005);
         board.add(m);
@@ -585,12 +587,12 @@ window.plethoraBit = {
       const chalk = new THREE.Color("#f3eee2"), dim = new THREE.Color("#5b665f");
       let k = 0;
       for (let i = 0; i < total; i++) {
-        const grp = Math.floor(i / 5), inG = i % 5, row = Math.floor(grp / 4), col = grp % 4;
-        const x0 = -0.16 + col * 0.1, y0 = 0.06 - row * 0.125;
-        _pos.set(x0 + (inG < 4 ? inG * 0.02 : 0.03), y0, 0.012);
+        const grp = Math.floor(i / 5), inG = i % 5;
+        const x0 = -0.19 + grp * 0.052;
+        _pos.set(x0 + (inG < 4 ? inG * 0.0095 : 0.0145), 0, 0.012);
         const jit = ((i * 7919) % 13) / 13 - 0.5;
-        _q.setFromAxisAngle(_zAxis, inG < 4 ? jit * 0.16 : 0.78);
-        _scl.set(1, inG < 4 ? 1 + jit * 0.08 : 1.55, 1);
+        _q.setFromAxisAngle(_zAxis, inG < 4 ? jit * 0.16 : 0.8);
+        _scl.set(1, inG < 4 ? 1 + jit * 0.08 : 1.45, 1);
         _m4.compose(_pos, _q, _scl);
         tabMarks.setMatrixAt(k, _m4);
         tabMarks.setColorAt(k, i < day.poured ? dim : chalk);
