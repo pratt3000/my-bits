@@ -156,6 +156,12 @@ like art-direction or tuning failures until you find them:
   [`first-rakhi/`](first-rakhi) and [`cats-cradle/`](cats-cradle).
 - **Particles that integrate their drift wander off**, and one that drifts
   through the near plane fills the screen. Orbit a fixed home instead.
+- **An `InstancedMesh` created with `count = 0` is culled forever.** Its
+  bounding sphere is computed on the first render from the instances it has
+  — none — and it never recomputes, so whatever you write into it later is
+  never drawn and nothing errors. Set `frustumCulled = false` on any instanced
+  mesh you fill in after creation. Found in [`beer-mileage/`](beer-mileage),
+  by probing pixels after "make it brighter" would have been the wrong fix.
 
 ## Publishing
 

@@ -83,6 +83,17 @@ want them.
 - The environment is a small room of warm panels baked to a PMREM, which is
   what makes glass look like glass, and the wall is bokeh.
 
+### An InstancedMesh that starts empty is culled forever
+
+The chalk marks on the tab are an `InstancedMesh` created with `count = 0`
+and filled in later. three computes an instanced mesh's bounding sphere on
+its first render from the instances it has — none — gets an empty sphere,
+and frustum-culls the mesh from then on. Nothing written into it afterwards is
+ever drawn, and nothing errors. A pixel probe of the board region showed a
+flat 77 (the board face) and then 6 (the wall): no strokes at any brightness,
+which is how "make the chalk brighter" got ruled out before it was tried.
+`frustumCulled = false`, as on every other instanced mesh in the file.
+
 ### Nested transmission does not work, and that is not a bug in this file
 
 A transmissive material in three refracts a render of the *opaque* scene. Put a
