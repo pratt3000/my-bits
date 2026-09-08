@@ -30,7 +30,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`sketch-hop/`](sketch-hop)             | Endless doodle jumper on graph paper — bounce up the page, dodge monsters. Ships as *Sketch Hop II*. |
 | [`windmill-cove/`](windmill-cove)       | Mini golf in the Golf With Your Friends mould — seven courses, nine holes each. |
 | [`windmill-cove-3d/`](windmill-cove-3d) | The same game in 3D — orbit the camera, survey the hole, aim by looking.     |
-| [`pen-fight/`](pen-fight)               | The desk duel in 3D — flick your gold pen to shove your rival's off the table. |
+| [`pen-fight/`](pen-fight)               | The school-bench desk duel in 3D — twelve familiar pens, eleven rivals, winner keeps the pen. |
 | [`mandelbrot/`](mandelbrot)             | Pinch 68 levels into the Mandelbrot set, and hear each point's orbit sing.  |
 | [`n-body/`](n-body)                     | Gravity you can throw — grow a world, launch it, watch orbits and collisions form. |
 | [`wave-interference/`](wave-interference) | Two fingers become wave sources — watch the fringes, hear them beat.       |

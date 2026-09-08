@@ -1,87 +1,85 @@
 # Pen Fight
 
-The desk game, with the physics actually simulated. Two pens on a gold-inlaid
-walnut table: flick yours to shove your rival's over the edge before they do it
-to you. First to three rounds.
+The Indian school-bench game, rebuilt in 3D. Two pens on a scratched wooden
+desk: flick yours to shove your rival's over the edge before they do it to you.
+Best of five rounds, scored in chalk on the blackboard. Winner keeps the pen.
 
 ## Files
 
-| File            | What it is                                                    |
-| --------------- | ------------------------------------------------------------- |
-| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, one leaderboard. |
-| `main.js`       | Entry source defining `window.plethoraBit`.                    |
+| File            | What it is                                                                 |
+| --------------- | -------------------------------------------------------------------------- |
+| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, three leaderboards.           |
+| `main.js`       | Entry source defining `window.plethoraBit`. Everything is generated in-file. |
 
 ## How it plays
 
-Touch your gold pen, drag the way you want it to go, let go. Two things decide
-what happens: the direction and length of the drag, and **where on the pen you
-touched it**. Catch it at the tip and it spins; catch it at the balance point
-and it drives straight. A fast swipe counts for extra power even if it is short.
+Touch your pen, drag the way you want it to go, let go. Direction and length of
+the drag set the power; **where on the pen you touched it** sets the spin. Catch
+it at the tip and it spins; catch it at the balance point and it drives straight.
+A pen is out when its centre of mass crosses the desk edge. First to three
+rounds takes the match.
 
-While you drag, the table shows the contact point, an arrow for direction and
-power, a dashed line for how far it will actually coast, and a curl that grows
-as the flick puts more spin on.
+**The bench.** Eleven rivals sit between you and the title, from Bunty on the
+back bench of 9B up to Vikram in twelfth standard. Each rival plays with their
+own pen, aims a little better than the last, and reads the desk edge more
+carefully. Beat one to unlock the next.
+
+**Winner keeps the pen.** Before a bench match you stake one pen from your tin.
+Win and the rival's pen goes in your tin. Lose and your staked pen is gone. If
+the tin ever empties, a Pinpoint turns up in lost-and-found so you can keep
+playing.
+
+**Pass and play.** Two players on one phone, each picking a pen from the full
+roster. Nothing is staked.
+
+## The pens
+
+Twelve pens you would know from a pencil box, each with its own radius, length,
+density, friction and bounce, so they behave differently on the desk:
+
+| Pen                  | Character                                            |
+| -------------------- | ---------------------------------------------------- |
+| Cello Pinpoint       | the starter; average in every way                    |
+| Classmate Octane     | light and quick, will not sit still                  |
+| Flair Writometer     | long and low-friction, slides further than you meant |
+| Cello Gripper        | rubber grip; parks where you put it                  |
+| Linc Ocean           | bouncy; hits ricochet sideways                       |
+| Add Gel              | planted, hits solid                                  |
+| Cello Butterflow     | dead restitution; hits sink into it                  |
+| Reynolds Racer Gel   | fat and grippy, moves what it meets                  |
+| Montex Megatop       | top-heavy cap, wobbles instead of sliding straight   |
+| Apsara Platinum      | a hex pencil; light, low bounce                      |
+| Parker Vector        | steel; dead weight, clean executions                 |
+| Reynolds Trimax      | triangular, so it does not roll                      |
+
+Bodies, caps, grips, bands and side text are baked into a livery texture per pen
+at runtime; no image assets are shipped.
 
 ## The physics
 
-A pen is a capsule — a segment with a radius — sliding on a plane, with three
-degrees of freedom: position, heading, and the two velocities that go with them.
+A pen is a capsule (segment plus radius) sliding on a plane with position,
+heading and their velocities. A flick is an impulse applied at the touch point,
+so tip-versus-centre behaviour falls out of the off-centre torque rather than a
+special case. Friction is integrated along the pen so a pen that slides and
+spins loses both together. Round pens roll (lower friction perpendicular to
+their axis); hex and triangular pens do not. Collisions use segment-segment
+closest points with per-pen restitution. A pen hangs flat over the lip until
+its centre of mass crosses the edge, then tips and falls.
 
-**Flicking.** A flick is an impulse `J` applied at the point you touched, which
-gives `dv = J/m` and `dw = (r x J)/I`. Tip-versus-centre behaviour is not a
-special case anywhere in the code; it falls out of applying the impulse off the
-centre of mass. The angular term is scaled by `SPIN_TRANSFER` because a
-fingertip is a patch that keeps pushing as the pen turns away, not an ideal
-point impulse — without it a tip strike spins at 16 rev/s instead of 6.5.
+## The rivals
 
-**Friction.** Integrated along the pen at nine sample points rather than applied
-as one drag term at the centre. Each sample carries `m/9` of the load and drags
-against its own local velocity, contributing both force and torque. That
-coupling is the reason a pen that is sliding *and* spinning loses both together
-and stops all at once — measured at 0.44 s for each, from the same flick.
+The CPU rehearses candidate flicks in a copy of the simulation and scores each
+by whether it knocks you off, keeps itself on, and how much desk-edge distance
+it gains. Higher rivals rehearse more candidates and add less execution noise.
 
-**Contact.** Capsule/capsule closest-point, resolved with a normal impulse plus
-a clamped Coulomb friction impulse, both carrying the angular terms — which is
-what turns a glancing hit into spin instead of a shove. The closest-point
-routine handles the parallel case explicitly: two parallel pens touch along a
-band, and the textbook fallback picks an arbitrary end of it, which would
-resolve every broadside opening hit at one tip. Taking the middle of the overlap
-instead is worth about a third more transfer on a clean hit.
+## Leaderboards
 
-**Going over.** A rod is rigid, so it does not sag over a lip — it stays flat
-until its centre of mass crosses, then it tips. So the test is exactly "is the
-centre of mass still over the table", and a pen hanging half off the edge is
-genuinely, not decoratively, still in play. Once it tips it leaves the 2D world
-and falls in full 3D, tumbling about the table lip and clattering on the floor.
+- **Pens In The Tin** — most pens held at once.
+- **Rivals Beaten** — how far along the bench you have got.
+- **Round Streak** — longest run of rounds won without dropping one.
 
-## Difficulty
+## Harness hooks
 
-The brief was that one flick must not end it. Full power carries a pen 0.53 m,
-just short of the 0.59 m from the start line to the far lip — so a full-power
-flick down an open table is committed but survivable, and that ceiling caps how
-hard you can ever arrive at your rival. Across the opening gap that is 0.67 m/s,
-which after an `e = 0.34` exchange moves them about 3 cm; they sit 13 cm from
-the edge. Over 400 simulated rounds a knockout took 2.6 flicks on average and
-**never** took one, while 17% of rounds were lost by flicking your own pen off
-the far side.
-
-Close range is the skill ceiling: walk them back first and a single clean hit
-does end it. The rival's aim and power judgement improve as your streak grows.
-
-## Contract notes
-
-- `dependencies: ["three@0.164.1"]`, loaded with `ctx.importModule`, with the
-  exact registry URL as a fallback.
-- Packaged assets are disabled, so every texture — walnut grain, gold, the
-  equirectangular studio environment that makes the gold read as metal, the aim
-  arrow, the glows — is drawn to an `OffscreenCanvas` at runtime, with a hidden
-  `ctx.createCanvas2D` fallback for WebViews that lack it.
-- All sound is synthesised: pen-on-pen clacks are a noise transient plus two
-  inharmonic tube modes, and there is a speed-driven sliding bed, a flick
-  whoosh, floor clatter, and an edge creak. `ctx.music` carries the bed and the
-  round stings.
-- The render surface is claimed **before** `ctx.createRoot`, so the HUD lands
-  above it; the root is `pointer-events: none` so flicks reach the canvas, and
-  only the title curtain takes hits.
-- `win_streak` record channel for the consecutive-rounds leaderboard.
-- Permissions: `audio`, `backgroundMusic`, `haptics`, `storage`.
+`__pfInfo()`, `__pfGo(page, arg, arg2)`, `__pfFlick(dx, dy, power, s)`,
+`__pfKnock(side)`, `__pfSkipIntro()`, `__pfReset()` are exposed on `window` for
+the local harness only.
