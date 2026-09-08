@@ -562,10 +562,16 @@ window.plethoraBit = {
     const TAB_MAX = 30;
     // From the settled camera the only clear wall is a narrow band just above
     // the rail, right of the earned glasses; the board is a strip that fits it.
+    // Chalk is unlit on purpose: at two metres, under fog and tone mapping, a
+    // lit stroke reads as grey. This one reads as chalk.
     const tabMarks = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.0065, 0.05, 0.004),
-      new THREE.MeshStandardMaterial({ roughness: 0.95, emissive: "#d9d2c2", emissiveIntensity: 0.55 }), TAB_MAX);
+      new THREE.BoxGeometry(0.009, 0.056, 0.004),
+      new THREE.MeshBasicMaterial({ color: "#f7f1e4", fog: false }), TAB_MAX);
     tabMarks.count = 0;
+    // An InstancedMesh that starts empty gets an empty bounding sphere on its
+    // first render and is culled forever after — the marks never showed at all
+    // until this line. Same rule as every other instanced mesh in the file.
+    tabMarks.frustumCulled = false;
     {
       const board = new THREE.Group();
       // The glass hides the wall to about x = 0.09 and the frame edge is near
@@ -586,7 +592,7 @@ window.plethoraBit = {
     const _zAxis = new THREE.Vector3(0, 0, 1);
     function updateTab() {
       const total = Math.min(TAB_MAX, Math.floor(derived.earned + 1e-9));
-      const chalk = new THREE.Color("#f3eee2"), dim = new THREE.Color("#5b665f");
+      const chalk = new THREE.Color("#ffffff"), dim = new THREE.Color("#4a5550");
       let k = 0;
       for (let i = 0; i < total; i++) {
         const grp = Math.floor(i / 5), inG = i % 5, row = Math.floor(grp / 3), col = grp % 3;
