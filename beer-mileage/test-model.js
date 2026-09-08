@@ -1,4 +1,5 @@
-// Slices the MODEL block out of main.js and checks it against label values
+// Slices the MODEL block out of main.js (run from the repo root:
+//   node beer-mileage/test-model.js beer-mileage/main.js) and checks it against label values
 // and published figures. Run: node test-model.js
 const fs = require("fs");
 const src = fs.readFileSync(process.argv[2] || "beer-mileage/main.js", "utf8");

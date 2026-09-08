@@ -14,6 +14,7 @@ half of lager. That number is the whole product, and it is honest.
 | --------------- | ----------------------------------------------------------------- |
 | `plethora.json` | Manifest (`plethora-bit@2`, runtime global `window.plethoraBit`).  |
 | `main.js`       | The entry source (`entry: "main.js"`).                             |
+| `test-model.js` | Node checks on the pure model; not part of the uploaded package.   |
 
 ## Two real models, and the arithmetic between them
 
@@ -44,7 +45,8 @@ So the stout — in the biggest glass — costs less than the lager, which is tr
 and which nobody believes until they see the sum.
 
 The model is a pure block between `// === MODEL BEGIN` and `// === MODEL END`
-with no `ctx`, DOM or three in it. `test-model.js` slices it out and runs 44
+with no `ctx`, DOM or three in it. `beer-mileage/test-model.js` slices it out
+and runs 44
 checks against the label values above, published rules of thumb (10k steps ≈
 278 kcal, 10 km run ≈ 635), and the day arithmetic: immutable adds, undo of the
 last add only, clearing one activity, pouring only what is earned, the
@@ -167,7 +169,7 @@ and a 2.5 s cap on waiting.
 
 ## Verified
 
-`node test-model.js beer-mileage/main.js` — 44 passed.
+`node beer-mileage/test-model.js beer-mileage/main.js` — 44 passed.
 
 Headless Chromium against the strict mock `ctx`, driving the whole flow through
 the DOM with `eval` steps and synthetic pointer events: pick steps, preset,
