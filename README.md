@@ -163,6 +163,17 @@ like art-direction or tuning failures until you find them:
   never drawn and nothing errors. Set `frustumCulled = false` on any instanced
   mesh you fill in after creation. Found in [`beer-mileage/`](beer-mileage),
   by probing pixels after "make it brighter" would have been the wrong fix.
+- **A unit mesh scaled per instance stretches its texture with it.** One
+  instanced column with `scale.y = height` is the cheap way to draw pillars,
+  and its blocks are 30 cm on a short one and 2 m on a tall one. Map by world
+  height in `onBeforeCompile` (`vMapUv.y = worldY * k`, after
+  `#include <project_vertex>`). Used in [`kingfisher/`](kingfisher).
+- **Three axis-aligned sines are a lattice from a low camera**, and a
+  `sin*sin` glitter mask is a dotted grid. Water wants small slopes, wave
+  vectors off the axes, and a specular lobe broken by value noise.
+- **The visible sun is a backdrop, not the lamp.** Point the directional light
+  the way the sun looks and every face you see is in shadow. Key from the
+  camera's side; let the sky shader draw the sun where the mood says.
 
 ## Publishing
 
