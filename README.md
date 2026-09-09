@@ -49,6 +49,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
 | [`beer-mileage/`](beer-mileage)       | Steps, runs, rides, swims and gym time become pints, by the Compendium's METs and the calories in a glass — and a real 3D glass fills. |
 | [`govinda-ala-re/`](govinda-ala-re)     | Dahi handi — build the human pyramid, hold it up with one thumb, break the pot. |
+| [`kingfisher/`](kingfisher)             | One tap to fly — a kingfisher over a lake in 3D, a day that turns as you go, and a difficulty curve a planner must prove fair. |
 
 ### Rakshabandhan set
 

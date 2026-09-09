@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Kingfisher",
+  "description": "One tap to fly. A kingfisher over a lake at dawn, stone pillars rising from the water and hanging from the mist, and a day that turns as the run gets long: dawn to noon to dusk to stars. The physics is fixed-step and deterministic, the difficulty eases in over sixty pillars and is proved fair in tests by a player that must clear two hundred, a gentle wind arrives after forty, and the hitboxes forgive a graze. Medals at 10, 25, 50 and 100; your best score goes on the leaderboard. Built in three.js, everything procedural.",
+  "tags": [
+    "game",
+    "arcade",
+    "3d",
+    "bird",
+    "flappy",
+    "one-tap",
+    "endless"
+  ],
+  "permissions": [
+    "haptics",
+    "audio",
+    "backgroundMusic",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "score": {
+        "label": "High Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  }
+}
