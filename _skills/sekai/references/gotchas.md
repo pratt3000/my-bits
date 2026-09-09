@@ -144,3 +144,27 @@ same ~2.9 s. It is not a validation failure and not a size problem, and the
 first upload that "timed out" had in fact landed (the retry came back
 `updated`, not `created`). `upload.py` now retries with a pause; if you are
 posting by hand, do the same before you bisect anything.
+
+## Three lessons from a lake (Kingfisher)
+
+**A unit cylinder scaled to each height stretches its texture.** One
+`InstancedMesh` of a 1 m column with `scale.y = height` is the cheap way
+to draw pillars, but its UVs stretch with it: a course of blocks is 30 cm
+on a short column and 2 m on a tall one. Map by world height instead.
+With `material.onBeforeCompile`, after `#include <project_vertex>`, set
+`vMapUv = vec2(vMapUv.x, (modelMatrix * instanceMatrix * vec4(transformed,
+1.0)).y * k)`. The varying is `vMapUv` from r152 on (older builds call it
+`vUv`).
+
+**Three sine waves are a lattice from a low camera.** A water normal built
+from `sin(x)`, `sin(z)` and `sin(x+z)` looks fine from above and like a
+quilt at a grazing angle, and a `sin*sin` glitter mask is a dotted grid.
+Keep the slopes small (a few degrees), use wave vectors that are not
+axis-aligned, and break the specular lobe with drifting value noise
+(`hash(floor(p))` bilinear) rather than a sine product.
+
+**The sun in the sky is a backdrop, not the lamp.** If the directional
+light points the way the visible sun does — away from the camera — every
+face you look at is in shadow and the scene reads black at 1.0 exposure.
+Put the key light on the camera's side of the world and let the sky
+shader draw the sun where the mood says it is.
