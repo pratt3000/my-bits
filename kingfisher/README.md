@@ -1,79 +1,82 @@
 # Kingfisher
 
-One tap to fly. A kingfisher over a lake at dawn, stone pillars rising from
-the water and hanging from the mist, and a day that turns as the run gets
-long. A Flappy Bird built the way a game should be built: a pure,
-deterministic model with fixed-step physics, a difficulty curve that is
-proved fair by a test rather than asserted, hitboxes that forgive a graze,
-and input that is never lost.
+One tap to fly. The original one-tap bird, rebuilt faithfully: its rules,
+its numbers, its pixel language. Not a reinterpretation.
 
-## Play
+## The rules, and where they come from
 
-- Tap anywhere (or press space) to flap. That is the whole interface.
-- Pass a pillar for a point. Medals at 10, 25, 50 and 100.
-- Your best is kept on the device and goes on the platform leaderboard.
-- After forty pillars a gentle wind arrives. The day cycles dawn, noon,
-  dusk and stars over about 120 pillars.
+The constants are the ones the well-known faithful clones carry
+(sourabhv's FlapPyBird and the projects built on it, nebez's floppybird
+for the medals and the game-over choreography), which are the closest
+thing to the original's numbers that exists in the open:
+
+| Rule | Value |
+|---|---|
+| World | 288 × 512, thirty ticks a second |
+| Bird | 34 × 24 at x = 57, starts at y = 244 |
+| Gravity | 1 px per tick per tick, fall capped at 10 |
+| Flap | sets the fall to −9: a rise of exactly 45 px, 9+8+…+1 |
+| Pipes | 52 wide, 4 px a tick, gap 100 |
+| Gap position | top uniform over [80, 221], so anywhere in a 142 px band |
+| Spacing | first pipes at 488 and 632; a new one at 298 when the first crosses x < 5 (144 to 152 apart) |
+| Score | the tick the bird's middle passes the pipe's middle |
+| Nose | 20° up for eight ticks after a tap, then 3° a tick down to −90° |
+| Ground | y = 404; a dead bird falls at 2 px per tick per tick, capped at 15 |
+| Medals | bronze 10, silver 20, gold 30, platinum 40 |
+
+Difficulty is constant, like the original. The randomness is the
+difficulty: a gap can sit 141 px from the last one, and the drop or the
+climb has to happen in the sixteen ticks of clear air between pipes.
 
 ## Why it feels right
 
-**The model is pure and fixed-step.** Everything between `MODEL BEGIN` and
-`MODEL END` in `main.js` knows nothing about the DOM, three.js or the
-platform. It runs at 120 Hz from an accumulator capped at a tenth of a
-second, so a slow frame never spirals and a run is reproducible from its
-seed. Rendering interpolates between the last two states, so motion is
-smooth at any frame rate.
+**The model is pure and runs at the original's tick rate.** Everything
+between `MODEL BEGIN` and `MODEL END` in `main.js` knows nothing about the
+canvas or the platform. It steps at 30 Hz from an accumulator capped at a
+quarter second, so a slow frame never spirals and a run is reproducible
+from its seed. Rendering interpolates the bird and the pipes between
+ticks, so it is smooth at 60 or 120 Hz while the physics stays the
+original's integer-per-tick arithmetic.
 
 **Taps are queued, not sampled.** A tap between two frames is counted at
-the next fixed step. A swallowed input is invisible in tests and
-infuriating on a phone, so there is none.
-
-**The curve is smooth and bounded.** Speed, gap, spacing and drift ease out
-over sixty pillars and then hold; the test checks that no single point
-moves any of them by more than a hair. The gap starts at 5.4 bird
-diameters and settles at 3.9; the pace settles at 0.9 s a pillar.
-
-**The generator can't ask the impossible.** How far the gap centre may move
-from one pillar to the next is capped by what a bird can fly in the clear
-air between the columns: a four-taps-a-second climb, or a fall from a
-hover, each with slack.
+the next tick.
 
 **Fairness is a test.** `test-model.js` slices the model out and plays it
-with two bots. A steady player holds the next gap's height, taps no faster
-than a thumb, and looks one pillar ahead; a planner is the same player who
-plays both choices a second forward before every tap. The planner must
-clear 200 pillars on every seed or the suite fails; the steady player must
-always reach silver. As tuned, the steady player scores 89 to 200 over
-eight seeds, which is where "very hard, never unfair" sits.
+with two bots. The steady one does what a person does: glides and taps at
+the last moment that keeps it off the pipe's floor, holds a height inside
+each gap's safe window leaning toward the next gap, and taps no faster
+than six times a second. The planner is the same player, but every other
+tick it plays both choices two seconds forward and keeps the one that
+lives longer. The planner must clear 200 pipes on every seed or the suite
+fails. As tuned, the steady bot scores 10 to 99 over eight seeds, which
+is the spread real players get.
 
-**Hitboxes forgive.** The bird is a 0.4 m circle inside a body that draws
-at half a metre; the columns are shrunk by 5 cm and the caps draw wider
-than they collide. What looks clear is clear.
+**Hitboxes forgive two pixels.** The original used pixel masks; this uses
+the bird's rectangle inset by two pixels on every side, which is a hair
+kinder at the rounded corners and never crueller.
 
-**Death has weight.** An 85 ms hit-stop, a flash, a camera shake, the
-tumble, the splash and its ring, then the card. The music ducks under it.
+## The look
 
-## How it's built
+Everything is drawn in-file on the original's grid: two-by-two pixels on a
+144 × 256 field, a dark outline on every shape. A round bird with a white
+eye, a red beak and a wing on a hinge (three frames, changing every third
+tick), in yellow, blue or red, picked per game. Green pipes with a wider
+cap, lit from the left. A tan ground with a striped verge, scrolling at
+the pipes' speed. A day and a night backdrop, picked per game: clouds, a
+city, bushes; stars and lit windows at night. The chunky outlined score
+digits, "GET READY!" with the tap hint, "GAME OVER" dropping in, the tan
+score board sliding up with SCORE, BEST, the medal and a NEW tag, then the
+OK button. A white flash on the hit.
 
-three.js r164, everything procedural. A sky dome shader with the sun in
-it; a water shader with ripples, fresnel and the sun's glitter; three
-periodic parallax ridges; instanced clouds; instanced pillar bodies, caps
-and their reflections in the lake; a bird from spheres with wings hinged at
-the shoulder; one instanced quad pool for feathers, spray and sparks. Four
-moods (dawn, day, dusk, night) are lerped through by distance.
+The scale is chosen so a logical pixel is a whole number of device
+pixels, so the art stays crisp on any phone; the sky extends above the
+frame and the sand below it on taller screens.
 
-Sound is synthesised in-file: a wingbeat, a two-note chime that climbs a
-step every ten pillars, a thud, a splash, a small fanfare for medals, and
-a `drift` music bed whose intensity rises with the score.
+Sound is synthesised: wing, point, hit, die, swoosh. No music, like the
+original.
 
 ## Test
 
 ```
 node kingfisher/test-model.js kingfisher/main.js
 ```
-
-Difficulty monotone, bounded and cliff-free; every gap inside the play
-band and reachable from the last; collision cases; hover before the first
-flap; no input dies in the water before the first pillar; the planner
-clears 200 on eight seeds; the steady player reaches silver; scoring counts
-exactly one point per pillar; medals; determinism.

@@ -1,26 +1,33 @@
 /**
- * Kingfisher — one tap to flap, a lake at dawn, and the day turning as you go.
+ * Kingfisher — the original one-tap bird, rebuilt faithfully.
  *
- * The game is a pure model with fixed-step physics and a seeded random
- * stream, so a run is deterministic and the rules can be tested in Node —
- * including an ideal player that has to clear two hundred pillars at every
- * difficulty, which is how "the difficulty scales appropriately" is proved
- * rather than asserted. Everything you see is three@0.164.1 and procedural.
+ * The rules are the ones the well-known faithful clones carry (FlapPyBird
+ * and its descendants): a 288×512 world run at 30 ticks a second, gravity of
+ * one pixel a tick squared, a flap that sets the fall to minus nine, a fall
+ * capped at ten, pipes 52 wide moving four pixels a tick with a 100-pixel
+ * gap whose top is uniform over [80, 221], a new pipe at x = 298 the moment
+ * the first one crosses x < 5, a point when the bird's middle passes the
+ * pipe's middle, and a nose that holds 20° up for a third of a second after
+ * every tap and then pitches to −90°. Difficulty is constant, like the
+ * original: the randomness is the difficulty.
+ *
+ * The model is pure and runs in Node, where a planner has to clear two
+ * hundred pipes on every seed. The art is drawn here, pixel by pixel, in the
+ * original's language: two-by-two pixels on a 144×256 grid, a dark outline
+ * on everything, green pipes, a tan ground with a striped verge.
  */
 window.plethoraBit = {
   meta: {
     title: "Kingfisher",
     runtime: "plethora-bit@2",
-    tags: ["game", "arcade", "3d", "bird", "flappy"],
-    permissions: ["haptics", "audio", "backgroundMusic", "storage"]
+    tags: ["game", "arcade", "pixel", "bird", "flappy", "retro"],
+    permissions: ["haptics", "audio", "storage"]
   },
 
   async init(ctx) {
     const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
     const lerp = (a, b, t) => a + (b - a) * t;
     const easeOut = (t) => 1 - Math.pow(1 - t, 3);
-    const smooth = (t) => t * t * (3 - 2 * t);
-
     let seed = 0x1f2e3d4c;
     function rnd() {
       seed ^= seed << 13; seed >>>= 0;
@@ -28,8 +35,6 @@ window.plethoraBit = {
       seed ^= seed << 5; seed >>>= 0;
       return seed / 4294967296;
     }
-    const rrange = (a, b) => a + (b - a) * rnd();
-
     function fireAndForget(thunk) {
       try {
         const r = thunk();
@@ -38,141 +43,111 @@ window.plethoraBit = {
     }
 
     // === MODEL BEGIN
-    // Pure: no ctx, DOM or three. Units are metres and seconds. The bird flies
-    // along +x; y is up; the water is near y = 0 and the ceiling is soft.
+    // Pure: no ctx, DOM or canvas. Units are the original's logical pixels
+    // (288×512) and ticks (30 a second). y grows downward, as on a screen.
     const MODEL = (function () {
-      const G = 30;                 // gravity, m/s^2
-      const FLAP_VY = 9.4;          // a flap sets the vertical speed to this
-      const VMAX_DOWN = 15;
-      const BIRD_R = 0.40;          // collision radius; the body draws at ~0.5
-      const WATER_Y = 0.75;
-      const CEIL_Y = 12.6;
-      const PILLAR_W = 1.2;
-      const INSET = 0.05;           // hitbox forgiveness on the pillar edges
-      const FIRST_PILLAR_X = 10;
-      const LOOKAHEAD = 15;
+      const W = 288, H = 512, TPS = 30;
+      const BIRD_W = 34, BIRD_H = 24, BIRD_X = Math.floor(W * 0.2);     // 57
+      const PIPE_W = 52, GAP = 100, BASE_Y = Math.floor(H * 0.79);      // 404
+      const SPEED = 4;                                                  // px a tick
+      const ACC = 1, FLAP = -9, VMAX = 10;                              // px a tick
+      const ROT_FLAP = 45, ROT_VEL = 3, ROT_THR = 20, ROT_MIN = -90;    // degrees
+      const DEAD_ACC = 2, DEAD_VMAX = 15, DEAD_ROT_VEL = 7;
+      const GAP_MIN = Math.floor(BASE_Y * 0.2);                         // 80
+      const GAP_RANGE = Math.floor(BASE_Y * 0.6 - GAP);                 // 142
+      const FIRST_X = W + 200, SPAWN_X = W + 10, INSET = 2;
+      const START_Y = Math.floor((H - BIRD_H) / 2);                     // 244
 
-      function clampM(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-      function lerpM(a, b, t) { return a + (b - a) * t; }
-
-      // The curve. Eases out over sixty pillars and then holds, except for a
-      // gentle wind that arrives after forty. Gap starts at 5.4 bird
-      // diameters and settles at 3.9; the pace settles at 0.9 s a pillar.
-      function difficulty(score) {
-        const t = clampM(score / 60, 0, 1);
-        const e = 1 - Math.pow(1 - t, 2);
-        return {
-          speed: lerpM(4.1, 5.8, e),
-          gap: lerpM(4.3, 3.1, e),
-          spacing: lerpM(5.6, 5.2, e),
-          drift: lerpM(1.8, 2.6, e),            // max change of gap centre, pillar to pillar
-          wind: score > 40 ? lerpM(0, 1.1, clampM((score - 40) / 60, 0, 1)) : 0
-        };
-      }
-
-      function newRun(seedValue) {
-        return {
-          x: 0, y: 6.6, vy: 0, t: 0, dist: 0, score: 0,
-          started: false, alive: true, dead: 0, cause: null,
-          hover: 0, rot: 0, windT: 0,
-          pillars: [], nextX: FIRST_PILLAR_X, nextId: 1,
-          rng: (seedValue >>> 0) || 0x9e3779b9
-        };
-      }
       function rand(run) {
         let s = run.rng;
         s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0;
         run.rng = s;
         return s / 4294967296;
       }
-      function gapBounds(gap) {
-        return [WATER_Y + 1.3 + gap / 2, CEIL_Y - 0.9 - gap / 2];
-      }
-      // How far the gap centre may move between two pillars: the design's
-      // drift, capped by what a bird can fly in the clear air between the
-      // columns (a four-taps-a-second climb, or a fall from a hover, each with
-      // slack), so the generator can never ask for the impossible.
-      function reach(d) {
-        const T = (d.spacing - PILLAR_W - 2 * BIRD_R) / d.speed;
-        return { up: Math.min(d.drift, 5.0 * T), down: Math.min(d.drift, 0.35 * G * T * T) };
-      }
-      function spawnPillar(run) {
-        const d = difficulty(run.score);
-        const last = run.pillars.length ? run.pillars[run.pillars.length - 1].cy : 6.6;
-        const b = gapBounds(d.gap);
-        const r = reach(d);
-        const u = rand(run) * 2 - 1;
-        let cy = last + (u > 0 ? u * r.up : u * r.down);
-        cy = clampM(cy, b[0], b[1]);
-        run.pillars.push({ id: run.nextId++, x: run.nextX, cy: cy, gap: d.gap, w: PILLAR_W,
-                           passed: false, kind: rand(run) < 0.25 ? 1 : 0 });
-        run.nextX += d.spacing;
+      function gapFor(run) { return GAP_MIN + Math.floor(rand(run) * GAP_RANGE); }
+      function newRun(seedValue) {
+        const run = {
+          tick: 0, y: START_Y, vy: -9, rot: ROT_FLAP, flapped: false,
+          started: false, alive: true, landed: false, cause: null, score: 0,
+          bob: 0, bobDir: 1, wing: 0, wingT: 0,
+          pipes: [], nextId: 1, rng: (seedValue >>> 0) || 0x9e3779b9
+        };
+        run.pipes.push({ id: run.nextId++, x: FIRST_X, gapY: gapFor(run), passed: false });
+        run.pipes.push({ id: run.nextId++, x: FIRST_X + W / 2, gapY: gapFor(run), passed: false });
+        return run;
       }
       function flap(run) {
         if (!run.alive) return false;
+        if (run.y <= -2 * BIRD_H) return false;            // too far above the top
         run.started = true;
-        run.vy = FLAP_VY;
+        run.vy = FLAP;
+        run.flapped = true;
         return true;
       }
-      // Circle against the two columns, each an axis-aligned box shrunk by
-      // INSET so a graze that looks clear is clear.
-      function hitsPillar(x, y, p) {
-        const x0 = p.x - p.w / 2 + INSET, x1 = p.x + p.w / 2 - INSET;
-        const topY = p.cy + p.gap / 2 + INSET, botY = p.cy - p.gap / 2 - INSET;
-        const dx = x - clampM(x, x0, x1);
-        const du = y - Math.max(y, topY);      // up to the upper column's underside
-        const dl = y - Math.min(y, botY);      // down to the lower column's top
-        const r2 = BIRD_R * BIRD_R;
-        return dx * dx + du * du < r2 || dx * dx + dl * dl < r2;
+      function visibleRot(run) { return run.rot > ROT_THR ? ROT_THR : run.rot; }
+      function birdRect(run) { return [BIRD_X + INSET, run.y + INSET, BIRD_W - 2 * INSET, BIRD_H - 2 * INSET]; }
+      function hitsPipe(run, p) {
+        const [bx, by, bw, bh] = birdRect(run);
+        if (bx + bw <= p.x || bx >= p.x + PIPE_W) return false;
+        return by < p.gapY || by + bh > p.gapY + GAP;
       }
-      function kill(run, cause) {
-        run.alive = false; run.cause = cause; run.dead = 0;
-        run.vy = Math.max(run.vy, 2.5);        // a little bounce, then the fall
-        return "die:" + cause;
+      function wingStep(run) {
+        // frames cycle 0,1,2,1 and change every third tick, like the original
+        run.wingT++;
+        if (run.wingT % 3 === 0) run.wing = [0, 1, 2, 1][(run.wingT / 3) % 4];
       }
-      /** One fixed step. Returns an event string or null. */
-      function step(run, dt) {
-        run.t += dt;
+      /** One tick. Returns an event string or null. */
+      function step(run) {
+        run.tick++;
+        wingStep(run);
         if (!run.started) {
-          run.hover = Math.sin(run.t * 3.2) * 0.28;
+          // the welcome bob: ±8 px, one pixel a tick
+          if (Math.abs(run.bob) === 8) run.bobDir = -run.bobDir;
+          run.bob += run.bobDir;
           return null;
         }
         if (!run.alive) {
-          run.dead += dt;
-          run.vy = Math.max(-VMAX_DOWN, run.vy - G * dt);
-          run.y += run.vy * dt;
-          if (run.y < WATER_Y - 0.6) { run.y = WATER_Y - 0.6; run.vy = 0; }
+          if (run.landed) return null;
+          if (run.cause !== "ground" && run.rot > ROT_MIN) run.rot = Math.max(ROT_MIN, run.rot - DEAD_ROT_VEL);
+          if (run.vy < DEAD_VMAX) run.vy += DEAD_ACC;
+          run.y += Math.min(run.vy, BASE_Y - run.y - BIRD_H);
+          if (run.y + BIRD_H >= BASE_Y - 1) { run.landed = true; return "land"; }
           return null;
         }
-        const d = difficulty(run.score);
-        run.windT += dt;
-        const wind = d.wind * Math.sin(run.windT * 1.7) * 0.5;
-        run.vy = Math.max(-VMAX_DOWN, run.vy - G * dt);
-        run.y += (run.vy + wind) * dt;
-        run.x += d.speed * dt;
-        run.dist += d.speed * dt;
-        if (run.y > CEIL_Y) { run.y = CEIL_Y; run.vy = Math.min(run.vy, 0); }
-        while (run.nextX < run.x + LOOKAHEAD) spawnPillar(run);
-        while (run.pillars.length && run.pillars[0].x < run.x - 8) run.pillars.shift();
-        if (run.y - BIRD_R < WATER_Y) return kill(run, "water");
+        // rotation, then velocity, then position — the original's order
+        if (run.rot > ROT_MIN) run.rot -= ROT_VEL;
+        if (run.vy < VMAX && !run.flapped) run.vy += ACC;
+        if (run.flapped) { run.flapped = false; run.rot = ROT_FLAP; }
+        run.y += Math.min(run.vy, BASE_Y - run.y - BIRD_H);
+        for (const p of run.pipes) p.x -= SPEED;
+        if (run.pipes.length && run.pipes[0].x > 0 && run.pipes[0].x < 5) {
+          run.pipes.push({ id: run.nextId++, x: SPAWN_X, gapY: gapFor(run), passed: false });
+        }
+        while (run.pipes.length && run.pipes[0].x < -PIPE_W) run.pipes.shift();
         let ev = null;
-        for (const p of run.pillars) {
-          if (hitsPillar(run.x, run.y, p)) return kill(run, "pillar");
-          if (!p.passed && p.x + p.w / 2 < run.x) { p.passed = true; run.score++; ev = "score"; }
+        const mid = BIRD_X + BIRD_W / 2;
+        for (const p of run.pipes) {
+          const pm = p.x + PIPE_W / 2;
+          if (!p.passed && pm <= mid && mid < pm + SPEED) { p.passed = true; run.score++; ev = "score"; }
+        }
+        if (run.y + BIRD_H >= BASE_Y - 1) { run.alive = false; run.cause = "ground"; run.landed = true; return "die:ground"; }
+        for (const p of run.pipes) {
+          if (hitsPipe(run, p)) { run.alive = false; run.cause = "pipe"; return "die:pipe"; }
         }
         return ev;
       }
       function medal(score) {
-        return score >= 100 ? "platinum" : score >= 50 ? "gold" : score >= 25 ? "silver" : score >= 10 ? "bronze" : null;
+        return score >= 40 ? "platinum" : score >= 30 ? "gold" : score >= 20 ? "silver" : score >= 10 ? "bronze" : null;
       }
-      return { G, FLAP_VY, BIRD_R, WATER_Y, CEIL_Y, PILLAR_W, FIRST_PILLAR_X,
-               difficulty, newRun, rand, reach, spawnPillar, flap, hitsPillar, step, medal, gapBounds };
+      return { W, H, TPS, BIRD_W, BIRD_H, BIRD_X, PIPE_W, GAP, BASE_Y, SPEED, ACC, FLAP, VMAX,
+               ROT_THR, ROT_MIN, GAP_MIN, GAP_RANGE, FIRST_X, SPAWN_X, START_Y,
+               newRun, rand, flap, step, hitsPipe, birdRect, visibleRot, medal };
     })();
     // === MODEL END
 
     // ===================================================================
-    // Sound. A wingbeat, a two-note chime that climbs a step every ten
-    // pillars, a thud, a splash, a little fanfare. All synthesised.
+    // Sound. Wing, point, hit, die, swoosh — synthesised to sit where the
+    // original's five sounds sat.
     // ===================================================================
     let ac = null, master = null, noiseBuf = null, audioOn = false;
     function initAudio() {
@@ -182,7 +157,7 @@ window.plethoraBit = {
       try {
         ac = new AC();
         master = ac.createGain();
-        master.gain.value = 0.8;
+        master.gain.value = 0.7;
         master.connect(ac.destination);
         const n = ac.sampleRate * 0.6;
         noiseBuf = ac.createBuffer(1, n, ac.sampleRate);
@@ -199,13 +174,15 @@ window.plethoraBit = {
       gn.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
       node.connect(gn); gn.connect(master);
     }
-    function noise(at, dur, type, freq, q, peak, attack) {
+    function noise(at, dur, type, f0, f1, q, peak, attack) {
       const src = ac.createBufferSource();
       src.buffer = noiseBuf; src.loop = true;
       const f = ac.createBiquadFilter();
-      f.type = type; f.frequency.value = freq; f.Q.value = q;
+      f.type = type; f.Q.value = q;
+      f.frequency.setValueAtTime(f0, at);
+      if (f1 && f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, at + dur);
       src.connect(f);
-      env(f, at, peak, attack || 0.006, dur);
+      env(f, at, peak, attack || 0.005, dur);
       src.start(at); src.stop(at + dur + (attack || 0) + 0.05);
     }
     function tone(at, type, f0, f1, dur, peak, attack) {
@@ -213,659 +190,388 @@ window.plethoraBit = {
       o.type = type;
       o.frequency.setValueAtTime(f0, at);
       if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, at + dur);
-      env(o, at, peak, attack || 0.005, dur);
+      env(o, at, peak, attack || 0.004, dur);
       o.start(at); o.stop(at + dur + (attack || 0) + 0.05);
     }
-    function sfxFlap() {
+    function sfxWing() {
       if (!audioOn) return;
-      const at = ac.currentTime + 0.003;
-      noise(at, 0.1, "bandpass", 700 + Math.random() * 300, 0.8, 0.14, 0.02);
-      tone(at, "sine", 300, 480, 0.07, 0.04);
+      const at = ac.currentTime + 0.002;
+      noise(at, 0.09, "bandpass", 1500, 500, 1.1, 0.16, 0.012);
+      tone(at, "sine", 520, 300, 0.06, 0.03);
     }
-    function sfxPoint(n) {
+    function sfxPoint() {
       if (!audioOn) return;
-      const at = ac.currentTime + 0.003;
-      const stepUp = Math.min(6, Math.floor(n / 10));
-      const f0 = 660 * Math.pow(2, (stepUp * 2) / 12);
-      tone(at, "triangle", f0, f0, 0.16, 0.16);
-      tone(at + 0.075, "triangle", f0 * 1.5, f0 * 1.5, 0.26, 0.14);
-      tone(at + 0.075, "sine", f0 * 3, f0 * 3, 0.12, 0.03);
+      const at = ac.currentTime + 0.002;
+      tone(at, "triangle", 1318.5, 1318.5, 0.05, 0.16);
+      tone(at + 0.055, "triangle", 1760, 1760, 0.16, 0.16);
+      tone(at + 0.055, "sine", 3520, 3520, 0.08, 0.03);
     }
     function sfxHit() {
       if (!audioOn) return;
       const at = ac.currentTime + 0.002;
-      noise(at, 0.16, "lowpass", 420, 0.7, 0.55);
-      tone(at, "sine", 150, 48, 0.28, 0.45);
-      noise(at, 0.05, "highpass", 2500, 0.5, 0.18);
+      noise(at, 0.16, "lowpass", 900, 200, 0.7, 0.5);
+      tone(at, "square", 140, 55, 0.14, 0.22);
     }
-    function sfxSplash() {
+    function sfxDie() {
       if (!audioOn) return;
       const at = ac.currentTime + 0.002;
-      noise(at, 0.55, "bandpass", 1600, 0.4, 0.34, 0.03);
-      noise(at, 0.3, "lowpass", 700, 0.6, 0.28);
-      tone(at, "sine", 240, 90, 0.2, 0.18);
-    }
-    function sfxMedal() {
-      if (!audioOn) return;
-      const at = ac.currentTime + 0.01;
-      [659.3, 784, 987.8, 1318.5].forEach((f, i) => {
-        tone(at + i * 0.09, "sine", f, f, 0.45, 0.14, 0.01);
-        tone(at + i * 0.09, "triangle", f / 2, f / 2, 0.3, 0.05, 0.01);
-      });
+      tone(at, "sawtooth", 620, 140, 0.36, 0.12, 0.01);
+      tone(at, "square", 310, 70, 0.36, 0.05, 0.01);
     }
     function sfxSwoosh() {
       if (!audioOn) return;
-      const at = ac.currentTime + 0.003;
-      noise(at, 0.35, "bandpass", 500, 0.6, 0.12, 0.12);
+      const at = ac.currentTime + 0.002;
+      noise(at, 0.28, "bandpass", 500, 2400, 0.8, 0.12, 0.08);
     }
-    let musicHandle = null;
-    async function startMusic() {
-      if (!ctx.capabilities.backgroundMusic) return;
-      try {
-        await ctx.music.unlock();
-        if (musicHandle) return;
-        musicHandle = await ctx.music.play({
-          preset: "drift", scale: "major", root: "D", volume: 0.2, tempo: 92,
-          intensity: 0.28, fadeInMs: 1800
-        });
-      } catch (err) { musicHandle = null; }
-    }
-    function musicIntensity(v) {
-      try { if (musicHandle) musicHandle.setIntensity(v, { fadeMs: 900 }); } catch (err) { /* no bed */ }
-    }
-    function sting(name) { try { ctx.music.sting(name); } catch (err) { /* no bed */ } }
-    function duck(amount, ms) { try { ctx.music.duck(amount, ms); } catch (err) { /* no bed */ } }
     function haptic(kind) { try { ctx.platform.haptic(kind); } catch (err) { /* none */ } }
 
     // ===================================================================
-    // Fonts — approved registry faces, with the system stack underneath.
+    // Pixel art. Everything is drawn on a 144×256 grid of two-by-two
+    // pixels, the way the original's sheet was, with a dark outline on
+    // every shape. Sprites are baked once into OffscreenCanvases.
     // ===================================================================
-    const fontsReady = Promise.all([
-      ctx.loadFont("Bebas Neue", "bebas-neue", "1.0.0", { weight: "400" }),
-      ctx.loadFont("DM Serif Display", "dm-serif-display", "1.0.0", { weight: "400", style: "italic" })
-    ]).catch(() => null);
-
-    // ===================================================================
-    // Three
-    // ===================================================================
-    const canvas = ctx.createCanvas({ touchAction: "none" });
-    let THREE = null;
-    const THREE_URL = "https://libs.plethora.studio/three/0.164.1/three.module.js";
-    try {
-      THREE = await ctx.importModule("three", "0.164.1");
-    } catch (e1) {
-      try { THREE = await ctx.importModule(THREE_URL); } catch (e2) { THREE = null; }
+    const canvas = ctx.createCanvas2D({ touchAction: "none" });
+    const g = canvas.getContext("2d");
+    const CAN_BAKE = typeof OffscreenCanvas === "function";
+    const K = "#533847";                      // the outline everything shares
+    function bake(w, h, draw) {
+      const oc = CAN_BAKE ? new OffscreenCanvas(w, h) : null;
+      if (!oc) return null;
+      const c = oc.getContext("2d");
+      c.imageSmoothingEnabled = false;
+      draw(c, w, h);
+      return oc;
     }
-    if (THREE && !THREE.WebGLRenderer && THREE.default) THREE = THREE.default;
-    if (!THREE || !THREE.WebGLRenderer) {
-      ctx.platform.error({ where: "load three", message: "WebGLRenderer missing" });
-      ctx.platform.ready();
-      return;
+    // rows of characters → sprite, each character a 2×2 block of a palette colour
+    function sprite(rows, pal) {
+      const w = rows[0].length * 2, h = rows.length * 2;
+      return bake(w, h, (c) => {
+        for (let y = 0; y < rows.length; y++) {
+          const row = rows[y];
+          for (let x = 0; x < row.length; x++) {
+            const ch = row[x];
+            if (ch === "." || !pal[ch]) continue;
+            c.fillStyle = pal[ch];
+            c.fillRect(x * 2, y * 2, 2, 2);
+          }
+        }
+      });
     }
-    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(ctx.nativeDpr || window.devicePixelRatio || 1, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    ctx.onDestroy(() => { try { renderer.dispose(); } catch (err) { /* gone */ } });
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 520);
-    const _c1 = new THREE.Color(), _c2 = new THREE.Color();
-    const _m4 = new THREE.Matrix4(), _pos = new THREE.Vector3(), _scl = new THREE.Vector3(), _q = new THREE.Quaternion();
-    const _idq = new THREE.Quaternion();
-    const _e = new THREE.Euler();
-
-    // ---- the day. Four moods the world lerps between as the run gets long:
-    // ---- dawn, day, dusk, night, and dawn again.
-    const MOODS = [
-      { top: "#2f4f9e", hor: "#ffb47c", sun: "#ffdcae", deep: "#0e3160", shallow: "#8fbdd9", far: "#7d8fc4", near: "#3a5786", sunI: 1.7, sunC: "#ffd6ae", skyL: "#a9c6ff", gndL: "#4b3a2b", star: 0.15, sunAlt: 0.16 },
-      { top: "#2570d0", hor: "#cfe8ff", sun: "#fff7dc", deep: "#0d4a86", shallow: "#8fd1f2", far: "#8eb2e2", near: "#4c7b5b", sunI: 2.3, sunC: "#fff4de", skyL: "#c4e2ff", gndL: "#5c6b4a", star: 0.0, sunAlt: 0.62 },
-      { top: "#3e2a6e", hor: "#ff8b5a", sun: "#ffb26e", deep: "#1b1d48", shallow: "#c58077", far: "#8a5b90", near: "#4a3059", sunI: 1.4, sunC: "#ffb284", skyL: "#a184c2", gndL: "#3f2b31", star: 0.25, sunAlt: 0.12 },
-      { top: "#060a20", hor: "#1f3462", sun: "#e6efff", deep: "#04081a", shallow: "#243d66", far: "#1a2851", near: "#0f172d", sunI: 0.55, sunC: "#b3c9ff", skyL: "#36467a", gndL: "#0f0f1f", star: 1.0, sunAlt: 0.5 }
-    ].map((m) => {
-      const o = {};
-      for (const k in m) o[k] = typeof m[k] === "string" ? new THREE.Color(m[k]) : m[k];
-      return o;
-    });
-    const mood = {};
-    for (const k in MOODS[0]) mood[k] = MOODS[0][k].isColor ? MOODS[0][k].clone() : MOODS[0][k];
-    function setMood(t) {
-      t = ((t % 1) + 1) % 1;
-      const f = t * 4, i = Math.floor(f), j = (i + 1) % 4, u = smooth(f - i);
-      for (const k in mood) {
-        if (mood[k].isColor) mood[k].copy(MOODS[i][k]).lerp(MOODS[j][k], u);
-        else mood[k] = lerp(MOODS[i][k], MOODS[j][k], u);
-      }
-    }
-    const sunDir = new THREE.Vector3(0.35, 0.3, -0.88).normalize();
-
-    // ---- light
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
-    scene.add(hemi);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
-    // the key light comes from the camera's side of the world, so the faces
-    // we look at are lit; the sun in the sky is a backdrop, not the lamp
-    const sun = new THREE.DirectionalLight(0xffffff, 2);
-    scene.add(sun);
-    scene.add(sun.target);
-    const keyDir = new THREE.Vector3(0.45, 0.85, 0.75).normalize();
-
-    // ---- sky: a dome around the camera with a gradient and the sun in it
-    const skyMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: {
-        top: { value: new THREE.Color() }, hor: { value: new THREE.Color() },
-        sunC: { value: new THREE.Color() }, sunD: { value: sunDir }, glow: { value: 1 }
-      },
-      vertexShader: [
-        "varying vec3 vD;",
-        "void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w; }"
-      ].join("\n"),
-      fragmentShader: [
-        "uniform vec3 top, hor, sunC, sunD; uniform float glow; varying vec3 vD;",
-        "void main(){",
-        "  vec3 d = normalize(vD);",
-        "  float h = clamp(d.y, -0.3, 1.0);",
-        "  vec3 col = mix(hor, top, pow(smoothstep(-0.04, 0.55, h), 0.8));",
-        "  float s = max(0.0, dot(d, sunD));",
-        "  col += sunC * (pow(s, 900.0) * 1.6 + pow(s, 14.0) * 0.32 * glow + pow(s, 3.0) * 0.06 * glow);",
-        "  gl_FragColor = vec4(col, 1.0);",
-        "}"
-      ].join("\n")
-    });
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), skyMat);
-    sky.frustumCulled = false;
-    sky.renderOrder = -10;
-    scene.add(sky);
-
-    // ---- stars, only at night
-    const starGeo = new THREE.BufferGeometry();
-    {
-      const n = 500, arr = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) {
-        const a = rrange(0, Math.PI * 2), b = Math.acos(rrange(0.05, 1));
-        arr[i * 3] = Math.cos(a) * Math.sin(b) * 380; arr[i * 3 + 1] = Math.cos(b) * 380; arr[i * 3 + 2] = Math.sin(a) * Math.sin(b) * 380;
-      }
-      starGeo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
-    }
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
-    const stars = new THREE.Points(starGeo, starMat);
-    stars.frustumCulled = false;
-    stars.renderOrder = -9;
-    scene.add(stars);
-
-    // ---- a soft disc texture for clouds, the sun and particles
-    function discTexture(size, inner, outer) {
-      const oc = new OffscreenCanvas(size, size);
-      const g = oc.getContext("2d");
-      const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      grad.addColorStop(0, "rgba(255,255,255,1)");
-      grad.addColorStop(inner, "rgba(255,255,255,0.85)");
-      grad.addColorStop(outer, "rgba(255,255,255,0.18)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
-      g.fillStyle = grad;
-      g.fillRect(0, 0, size, size);
-      const tex = new THREE.CanvasTexture(oc);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
-    }
-    const softTex = discTexture(128, 0.25, 0.7);
-    const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    sunSprite.scale.setScalar(36);
-    sunSprite.renderOrder = -8;
-    scene.add(sunSprite);
-
-    // ---- water: a plane with ripples, fresnel and the sun's glitter
-    const waterMat = new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false,
-      uniforms: {
-        deep: { value: new THREE.Color() }, shallow: { value: new THREE.Color() }, sunC: { value: new THREE.Color() },
-        sunD: { value: sunDir }, time: { value: 0 }, fogC: { value: new THREE.Color() }, fogN: { value: 60 }, fogF: { value: 300 }
-      },
-      vertexShader: [
-        "varying vec3 vW;",
-        "void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }"
-      ].join("\n"),
-      fragmentShader: [
-        "uniform vec3 deep, shallow, sunC, sunD, fogC; uniform float time, fogN, fogF; varying vec3 vW;",
-        "float hash(vec2 q){ return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }",
-        "float vnoise(vec2 q){ vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);",
-        "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }",
-        "void main(){",
-        "  vec3 V = normalize(cameraPosition - vW);",
-        "  vec2 p = vW.xz;",
-        "  // three small waves; the normal is the gradient of their sum",
-        "  float a = dot(p, vec2(1.26, 0.98)) + time * 1.3;",
-        "  float b = dot(p, vec2(-1.15, 2.53)) + time * 0.9;",
-        "  float c = dot(p, vec2(5.3, -1.6)) - time * 2.1;",
-        "  vec2 g = 0.02 * cos(a) * vec2(1.26, 0.98) + 0.012 * cos(b) * vec2(-1.15, 2.53) + 0.005 * cos(c) * vec2(5.3, -1.6);",
-        "  vec3 N = normalize(vec3(-g.x, 1.0, -g.y));",
-        "  float fres = pow(1.0 - max(0.0, dot(N, V)), 2.4);",
-        "  vec3 col = mix(deep, shallow, 0.08 + 0.92 * fres);",
-        "  // a slow swell of brightness so the near water is not flat",
-        "  col *= 0.94 + 0.06 * sin(dot(p, vec2(0.21, 0.13)) + time * 0.4);",
-        "  // the sun's glitter: a specular lobe broken up by drifting noise",
-        "  vec3 H = normalize(V + sunD);",
-        "  float spec = pow(max(0.0, dot(N, H)), 320.0);",
-        "  float glit = vnoise(p * 2.6 + vec2(time * 0.6, -time * 0.4)) * vnoise(p * 6.5 - vec2(time * 0.8, time * 0.5));",
-        "  glit = smoothstep(0.28, 0.75, glit);",
-        "  col += sunC * spec * (0.1 + 2.4 * glit);",
-        "  float f = smoothstep(fogN, fogF, distance(cameraPosition, vW));",
-        "  col = mix(col, fogC, f);",
-        "  gl_FragColor = vec4(col, mix(0.84, 1.0, f));",
-        "}"
-      ].join("\n")
-    });
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), waterMat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.y = MODEL.WATER_Y;
-    water.renderOrder = 2;
-    water.frustumCulled = false;
-    scene.add(water);
-    // the lake bed under the water's edge, so the deep colour reads under the surface
-    const bed = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshBasicMaterial({ color: 0x06142c }));
-    bed.rotation.x = -Math.PI / 2;
-    bed.position.y = MODEL.WATER_Y - 6;
-    bed.frustumCulled = false;
-    scene.add(bed);
-
-    // ---- ridges: three parallax layers of hills, periodic so they wrap
-    const PERIOD = 600;
-    function ridge(z, amp, base, seedA, colTop, colBot) {
-      const segs = 240, xs = [], w = PERIOD * 2;
-      const pos = [], col = [], idx = [];
-      const cT = new THREE.Color(colTop), cB = new THREE.Color(colBot);
-      for (let i = 0; i <= segs; i++) {
-        const x = -w / 2 + (w * i) / segs;
-        const k = (x / PERIOD) * Math.PI * 2;
-        const h = base + amp * (0.55 * Math.sin(k * 3 + seedA) + 0.3 * Math.sin(k * 7 + seedA * 2.1) + 0.15 * Math.sin(k * 17 + seedA * 3.3) + 0.08 * Math.sin(k * 41 + seedA));
-        pos.push(x, h, z, x, MODEL.WATER_Y - 0.2, z);
-        col.push(cT.r, cT.g, cT.b, cB.r, cB.g, cB.b);
-        xs.push(x);
-      }
-      for (let i = 0; i < segs; i++) {
-        const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
-        idx.push(a, b, c, b, d, c);
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-      g.setIndex(idx);
-      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: true }));
-      m.frustumCulled = false;
-      scene.add(m);
-      return m;
-    }
-    const ridges = [
-      { mesh: ridge(-150, 16, 9, 1.3, "#ffffff", "#8c8c8c"), key: "far", mul: 1.0 },
-      { mesh: ridge(-95, 9, 5, 4.1, "#ffffff", "#7a7a7a"), key: "far", mul: 0.74 },
-      { mesh: ridge(-52, 5, 2.4, 7.7, "#ffffff", "#6e6e6e"), key: "near", mul: 1.0 }
+    // ---- the bird: 17×12, three wing frames, three plumages
+    const BIRD_BODY = [
+      ".....kkkkkkk.....",
+      "...kkyyyyyykkk...",
+      "..kyyyyyyyykwwwk.",
+      ".kyyyyyyyyykwwwwk",
+      ".kyyyyyyyyykwwbwk",
+      "kyyyyyyyyyyykwwwk",
+      "kyyyyyyyyyyyckkkk",
+      "kyyyyyyyyyyckrrrk",
+      "kyyyyyyyyycckkkkk",
+      ".kyyyyyyycccckRRk",
+      "..kyyyyycccccckkk",
+      "...kkkkkkkkkkk..."
     ];
-    scene.fog = new THREE.Fog(0xffffff, 60, 300);
-
-    // ---- clouds: soft billboards at several depths, drifting
-    const CLOUD_N = 22;
-    const cloudMat = new THREE.MeshBasicMaterial({ map: softTex, transparent: true, depthWrite: false, opacity: 0.85, fog: true });
-    const clouds = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), cloudMat, CLOUD_N * 2);
-    clouds.frustumCulled = false;
-    clouds.renderOrder = 1;
-    scene.add(clouds);
-    const cloudSeeds = [];
-    for (let i = 0; i < CLOUD_N; i++) {
-      cloudSeeds.push({ x: rrange(-140, 140), y: rrange(14, 34), z: rrange(-130, -40), w: rrange(14, 34), h: rrange(4, 9), sp: rrange(0.4, 1.2), ph: rrange(0, 6.28) });
+    const BIRD_WING = [
+      ".kkkkk.",
+      "kWWWWWk",
+      ".kWWWk.",
+      "..kkk.."
+    ];
+    const WING_Y = [3, 5, 7];                   // up, mid, down — frames 0, 1, 2
+    const PLUMAGE = {
+      yellow: { y: "#f8d448", W: "#e9b93a", c: "#f8f0c8" },
+      blue: { y: "#52bdf5", W: "#3e97cc", c: "#eef6fb" },
+      red: { y: "#ee5b46", W: "#c93f2f", c: "#f9e0d4" }
+    };
+    const birdSprites = {};
+    for (const name in PLUMAGE) {
+      const p = PLUMAGE[name];
+      const pal = { k: K, y: p.y, c: p.c, w: "#ffffff", b: "#101010", r: "#f0562a", R: "#c43b15", W: p.W };
+      birdSprites[name] = WING_Y.map((wy) => {
+        const rows = BIRD_BODY.map((r) => r.split(""));
+        for (let j = 0; j < BIRD_WING.length; j++) {
+          for (let i = 0; i < BIRD_WING[j].length; i++) {
+            const ch = BIRD_WING[j][i];
+            if (ch !== ".") rows[wy + j][2 + i] = ch;
+          }
+        }
+        return sprite(rows.map((r) => r.join("")), pal);
+      });
     }
-    const cloudCol = new THREE.Color();
 
-    // ===================================================================
-    // Pillars. Stone columns rising from the lake and hanging from the mist,
-    // each with a wider cap at the gap so the edge reads. Instanced: one
-    // draw for bodies, one for caps, one for their reflections.
-    // ===================================================================
-    function stoneTexture() {
-      const S = 256, oc = new OffscreenCanvas(S, S), g = oc.getContext("2d");
-      g.fillStyle = "#8d8779";
-      g.fillRect(0, 0, S, S);
-      // blocks
-      const rows = 8, rh = S / rows;
-      for (let r = 0; r < rows; r++) {
-        let x = (r % 2) * 18;
-        while (x < S) {
-          const w = 40 + Math.floor(rnd() * 34);
-          const l = 118 + Math.floor(rnd() * 40);
-          const warm = rnd() < 0.5;
-          g.fillStyle = "rgb(" + (l + (warm ? 10 : -4)) + "," + (l + (warm ? 4 : 0)) + "," + (l - (warm ? 10 : -2)) + ")";
-          g.fillRect(x + 2, r * rh + 2, w - 4, rh - 4);
-          x += w;
+    // ---- pipes: a 26-wide cap and a 24-wide body, lit from the left
+    const PIPE = { L: "#9de85a", G: "#73bf2e", D: "#4e8c22" };
+    function pipeRow(width) {
+      const row = [];
+      row.push("k", "L", "L");
+      for (let i = 0; i < width - 7; i++) row.push("G");
+      row.push("D", "D", "D", "k");
+      return row.join("");
+    }
+    const pipeCap = sprite(["k".repeat(26)].concat(Array(11).fill(pipeRow(26))).concat(["k".repeat(26)]), { k: K, L: PIPE.L, G: PIPE.G, D: PIPE.D });
+    const pipeBody = sprite([pipeRow(24)], { k: K, L: PIPE.L, G: PIPE.G, D: PIPE.D });
+
+    // ---- the ground: a striped verge over sand, 168 wide so it tiles
+    const groundSprite = bake(336, 112, (c) => {
+      c.fillStyle = "#ded895"; c.fillRect(0, 0, 336, 112);
+      c.fillStyle = K; c.fillRect(0, 0, 336, 2);
+      for (let x = 0; x < 168; x++) {
+        for (let y = 1; y <= 6; y++) {
+          c.fillStyle = ((x + y) % 12) < 6 ? "#9de85a" : "#73bf2e";
+          c.fillRect(x * 2, y * 2, 2, 2);
         }
       }
-      // grain
-      for (let i = 0; i < 2600; i++) {
-        const l = 90 + Math.floor(rnd() * 90);
-        g.fillStyle = "rgba(" + l + "," + l + "," + (l - 8) + ",0.35)";
-        g.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 2, 1 + rnd() * 2);
-      }
-      // moss streaks
-      for (let i = 0; i < 26; i++) {
-        g.fillStyle = "rgba(70,110,50," + (0.15 + rnd() * 0.25) + ")";
-        g.fillRect(rnd() * S, rnd() * S, 4 + rnd() * 10, 30 + rnd() * 90);
-      }
-      const tex = new THREE.CanvasTexture(oc);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(1, 1);
-      return tex;
-    }
-    const stoneTex = stoneTexture();
-    const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.92, metalness: 0.0, color: 0xffffff });
-    const capMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.85, metalness: 0.0, color: 0xd9d2c4 });
-    // The columns are one unit cylinder scaled to each height, so map the
-    // stone by world height instead of by the stretched UV: a course of
-    // blocks is the same size on a short column and a tall one.
-    const worldStone = (sh) => {
-      sh.vertexShader = sh.vertexShader.replace(
-        "#include <project_vertex>",
-        "#include <project_vertex>\n vec4 kfW = modelMatrix * instanceMatrix * vec4(transformed, 1.0);\n vMapUv = vec2(vMapUv.x, kfW.y * 0.14);"
-      );
+      c.fillStyle = "#5a8f2a"; c.fillRect(0, 14, 336, 2);
+      c.fillStyle = "#d3c26f"; c.fillRect(0, 16, 336, 2);
+      c.fillStyle = "#f1e8b6"; c.fillRect(0, 18, 336, 4);
+    });
+
+    // ---- backgrounds: day and night, 288 wide so they tile sideways
+    const SKIES = {
+      day: { sky: "#4ec0ca", cloud: "#e8f9f6", cloudLo: "#cdeeed", city: "#cbe9dc", cityLo: "#b4dcc9", win: "#a2d0be", bush: "#8fd44b", bushLo: "#66b32c", star: null },
+      night: { sky: "#12283a", cloud: "#365b6a", cloudLo: "#2b4a58", city: "#22404f", cityLo: "#1b3442", win: "#f0d27a", bush: "#2f7d2b", bushLo: "#215e22", star: "#e9f2ff" }
     };
-    stoneMat.onBeforeCompile = worldStone;
-    capMat.onBeforeCompile = worldStone;
-    const reflMat = new THREE.MeshBasicMaterial({ color: 0x0b1a33, transparent: true, opacity: 0.42, side: THREE.DoubleSide, fog: true });
-    const POOL = 12;                                  // pillars kept warm; two columns each
-    const R_COL = MODEL.PILLAR_W / 2;
-    const bodyGeo = new THREE.CylinderGeometry(R_COL * 0.94, R_COL, 1, 22, 1);
-    bodyGeo.translate(0, 0.5, 0);                     // unit column from y=0 up; scale.y = height
-    const capGeo = new THREE.CylinderGeometry(R_COL * 1.16, R_COL * 1.06, 0.5, 22, 1);
-    capGeo.translate(0, 0.25, 0);
-    const bodies = new THREE.InstancedMesh(bodyGeo, stoneMat, POOL * 2);
-    const caps = new THREE.InstancedMesh(capGeo, capMat, POOL * 2);
-    const refl = new THREE.InstancedMesh(bodyGeo, reflMat, POOL);
-    for (const m of [bodies, caps, refl]) { m.frustumCulled = false; scene.add(m); }
-    refl.renderOrder = 1;
-    const kindTint = [new THREE.Color(0xffffff), new THREE.Color(0xd9b8a0)];
-    const capTint = [new THREE.Color(0xffffff), new THREE.Color(0xc99f84)];
-    const _flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
-    function placePillars(run) {
-      let n = 0;
-      const W = MODEL.WATER_Y, C = MODEL.CEIL_Y;
-      for (let i = 0; i < run.pillars.length && n < POOL; i++) {
-        const p = run.pillars[i];
-        const topY = p.cy + p.gap / 2, botY = p.cy - p.gap / 2;
-        // lower column: from under the water to botY, cap on top
-        _pos.set(p.x, W - 6, 0); _scl.set(1, botY - 0.5 - (W - 6), 1);
-        _m4.compose(_pos, _idq, _scl); bodies.setMatrixAt(n * 2, _m4);
-        _pos.set(p.x, botY - 0.5, 0); _scl.set(1, 1, 1);
-        _m4.compose(_pos, _idq, _scl); caps.setMatrixAt(n * 2, _m4);
-        // upper column: from topY up into the mist, cap hanging at topY
-        _pos.set(p.x, C + 30, 0); _scl.set(1, C + 30 - (topY + 0.5), 1);
-        _m4.compose(_pos, _flip, _scl); bodies.setMatrixAt(n * 2 + 1, _m4);
-        _pos.set(p.x, topY + 0.5, 0); _scl.set(1, 1, 1);
-        _m4.compose(_pos, _flip, _scl); caps.setMatrixAt(n * 2 + 1, _m4);
-        // reflection: the lower column mirrored in the water
-        _pos.set(p.x, W, 0); _scl.set(1, -(botY - W), 1);
-        _m4.compose(_pos, _idq, _scl); refl.setMatrixAt(n, _m4);
-        bodies.setColorAt(n * 2, kindTint[p.kind]); bodies.setColorAt(n * 2 + 1, kindTint[p.kind]);
-        caps.setColorAt(n * 2, capTint[p.kind]); caps.setColorAt(n * 2 + 1, capTint[p.kind]);
-        n++;
-      }
-      _scl.set(0, 0, 0); _pos.set(0, -100, 0); _m4.compose(_pos, _idq, _scl);
-      for (let i = n; i < POOL; i++) { bodies.setMatrixAt(i * 2, _m4); bodies.setMatrixAt(i * 2 + 1, _m4); caps.setMatrixAt(i * 2, _m4); caps.setMatrixAt(i * 2 + 1, _m4); refl.setMatrixAt(i, _m4); }
-      bodies.instanceMatrix.needsUpdate = true; caps.instanceMatrix.needsUpdate = true; refl.instanceMatrix.needsUpdate = true;
-      if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
-      if (caps.instanceColor) caps.instanceColor.needsUpdate = true;
+    function bakeBackground(sk) {
+      let s0 = 0x51ab3c7e;
+      const r = () => { s0 ^= s0 << 13; s0 >>>= 0; s0 ^= s0 >> 17; s0 ^= s0 << 5; s0 >>>= 0; return s0 / 4294967296; };
+      return bake(288, 512, (c) => {
+        c.fillStyle = sk.sky; c.fillRect(0, 0, 288, 512);
+        if (sk.star) {
+          c.fillStyle = sk.star;
+          for (let i = 0; i < 46; i++) { const x = Math.floor(r() * 144) * 2, y = Math.floor(r() * 150) * 2; c.fillRect(x, y, 2, 2); }
+        }
+        // clouds: a band of soft humps
+        const bumps = (y0, colTop, colLo, n, rmin, rmax) => {
+          for (let i = 0; i < n; i++) {
+            const cx = Math.floor((i / n) * 144 + r() * 10) * 2, rad = Math.floor(rmin + r() * (rmax - rmin));
+            for (let dy = -rad; dy <= 0; dy++) {
+              const half = Math.floor(Math.sqrt(rad * rad - dy * dy));
+              c.fillStyle = dy < -rad * 0.45 ? colTop : colLo;
+              c.fillRect(cx - half * 2, y0 + dy * 2, half * 4 + 2, 2);
+            }
+          }
+        };
+        c.fillStyle = sk.cloud; c.fillRect(0, 352, 288, 30);
+        bumps(352, sk.cloud, sk.cloud, 9, 7, 13);
+        // the city: blocks with windows
+        let x = 0;
+        while (x < 144) {
+          const w = 6 + Math.floor(r() * 10), h = 10 + Math.floor(r() * 22);
+          c.fillStyle = sk.city; c.fillRect(x * 2, 372 - h * 2, w * 2, h * 2);
+          c.fillStyle = sk.cityLo; c.fillRect(x * 2 + w * 2 - 2, 372 - h * 2, 2, h * 2);
+          c.fillStyle = sk.win;
+          for (let wy = 2; wy < h - 1; wy += 3) for (let wx = 1; wx < w - 1; wx += 3) if (r() < 0.7) c.fillRect((x + wx) * 2, 372 - h * 2 + wy * 2, 2, 2);
+          x += w + 1 + Math.floor(r() * 2);
+        }
+        // bushes
+        c.fillStyle = sk.bushLo; c.fillRect(0, 372, 288, 32);
+        bumps(376, sk.bush, sk.bushLo, 12, 6, 11);
+        c.fillStyle = sk.bush; c.fillRect(0, 384, 288, 20);
+        c.fillStyle = sk.bushLo; c.fillRect(0, 400, 288, 4);
+      });
     }
+    const backgrounds = { day: bakeBackground(SKIES.day), night: bakeBackground(SKIES.night) };
 
-    // ===================================================================
-    // The bird. A kingfisher out of spheres: cobalt back, orange breast,
-    // white throat, a dagger of a beak. Wings hinge at the shoulder.
-    // ===================================================================
-    const bird = new THREE.Group();
-    scene.add(bird);
-    const blue = new THREE.MeshStandardMaterial({ color: 0x1590cf, roughness: 0.55, metalness: 0.05 });
-    const deepBlue = new THREE.MeshStandardMaterial({ color: 0x0b5f95, roughness: 0.6 });
-    const orange = new THREE.MeshStandardMaterial({ color: 0xf0842a, roughness: 0.7 });
-    const white = new THREE.MeshStandardMaterial({ color: 0xf6f1e6, roughness: 0.8 });
-    const black = new THREE.MeshStandardMaterial({ color: 0x14141a, roughness: 0.4 });
-    const shine = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    function part(geo, mat, x, y, z, sx, sy, sz, parent) {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z);
-      m.scale.set(sx || 1, sy || 1, sz || 1);
-      (parent || bird).add(m);
-      return m;
-    }
-    const sphereGeo = new THREE.SphereGeometry(0.5, 22, 16);
-    part(sphereGeo, blue, 0, 0, 0, 1.2, 0.86, 0.86);                       // body
-    part(sphereGeo, orange, 0.02, -0.14, 0, 1.0, 0.7, 0.8);               // breast
-    part(sphereGeo, blue, 0.5, 0.26, 0, 0.74, 0.7, 0.7);                   // head
-    part(sphereGeo, white, 0.62, 0.04, 0, 0.36, 0.26, 0.5);                // throat
-    part(sphereGeo, orange, 0.56, 0.2, 0.3, 0.2, 0.16, 0.1);              // cheek
-    part(sphereGeo, orange, 0.56, 0.2, -0.3, 0.2, 0.16, 0.1);
-    const beak = part(new THREE.ConeGeometry(0.09, 0.7, 12), black, 1.06, 0.2, 0, 1, 1, 1);
-    beak.rotation.z = -Math.PI / 2;
-    for (const s of [1, -1]) {
-      part(sphereGeo, black, 0.7, 0.33, s * 0.22, 0.17, 0.17, 0.12);      // eye
-      part(sphereGeo, shine, 0.74, 0.36, s * 0.26, 0.05, 0.05, 0.05);     // glint
-    }
-    const tail = part(new THREE.BoxGeometry(0.5, 0.06, 0.3), deepBlue, -0.66, 0.02, 0, 1, 1, 1);
-    tail.rotation.z = 0.25;
-    const wingGeo = new THREE.SphereGeometry(0.5, 16, 10);
-    const wings = [];
-    for (const s of [1, -1]) {
-      const pivot = new THREE.Group();
-      pivot.position.set(-0.06, 0.22, s * 0.26);
-      bird.add(pivot);
-      const w = new THREE.Mesh(wingGeo, deepBlue);
-      w.position.set(-0.08, 0, s * 0.48);
-      w.scale.set(0.58, 0.07, 1.0);
-      pivot.add(w);
-      const tip = new THREE.Mesh(wingGeo, blue);
-      tip.position.set(-0.16, 0.01, s * 0.86);
-      tip.scale.set(0.34, 0.05, 0.36);
-      pivot.add(tip);
-      wings.push({ pivot, s });
-    }
-    // the bird's shadow on the water, a soft dark disc that tightens as it dives
-    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: softTex, color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.renderOrder = 3;
-    scene.add(shadow);
-    const look = { rot: 0, flapT: 9, spin: 0 };
-    function placeBird(x, y, rot, alive, t) {
-      bird.position.set(x, y, 0);
-      bird.rotation.set(0, 0, rot);
-      if (!alive) bird.rotation.x = look.spin;
-      // wings: a quick downstroke on each flap, a lazy beat otherwise
-      let ang;
-      if (look.flapT < 0.28) ang = lerp(0.35, -1.05, Math.sin(Math.PI * (look.flapT / 0.28)));
-      else ang = 0.35 + Math.sin(t * 5.2) * 0.12;
-      if (!alive) ang = 0.9;
-      for (const w of wings) w.pivot.rotation.x = -w.s * ang;
-      const h = clamp((y - MODEL.WATER_Y) / 8, 0, 1);
-      shadow.position.set(x, MODEL.WATER_Y + 0.02, 0);
-      shadow.scale.set(lerp(1.4, 2.6, h), lerp(1.0, 1.8, h), 1);
-      shadow.material.opacity = lerp(0.42, 0.06, h);
-    }
-
-    // ===================================================================
-    // Particles: feathers, spray, sparks. One instanced quad pool.
-    // ===================================================================
-    const PN = 160;
-    const partMat = new THREE.MeshBasicMaterial({ map: softTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
-    const parts = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), partMat, PN);
-    parts.frustumCulled = false;
-    parts.renderOrder = 4;
-    scene.add(parts);
-    const P = [];
-    for (let i = 0; i < PN; i++) P.push({ life: 0, max: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: 0, s: 0.1, rot: 0, spin: 0, kind: 0, drag: 0, col: new THREE.Color() });
-    let pNext = 0;
-    function emit(kind, x, y, z, vx, vy, vz, life, size, col, g, drag) {
-      const q = P[pNext]; pNext = (pNext + 1) % PN;
-      q.kind = kind; q.x = x; q.y = y; q.z = z; q.vx = vx; q.vy = vy; q.vz = vz;
-      q.life = life; q.max = life; q.s = size; q.col.set(col); q.g = g; q.drag = drag || 0;
-      q.rot = rrange(0, 6.28); q.spin = rrange(-6, 6);
-    }
-    function emitFeathers(x, y) {
-      for (let i = 0; i < 2; i++) emit(0, x - 0.2, y + 0.1, rrange(-0.4, 0.4), rrange(-2.5, -1), rrange(0.5, 2), rrange(-1, 1), rrange(0.7, 1.1), rrange(0.16, 0.24), i ? 0xbfe6ff : 0xffffff, 3.5, 2.2);
-    }
-    function emitSparks(x, y, col) {
-      for (let i = 0; i < 14; i++) {
-        const a = rrange(0, 6.28), sp = rrange(2, 6.5);
-        emit(2, x, y, rrange(-0.3, 0.3), Math.cos(a) * sp, Math.sin(a) * sp + 1.5, rrange(-1, 1), rrange(0.35, 0.65), rrange(0.1, 0.2), col, 7, 1.5);
-      }
-    }
-    function emitSplash(x) {
-      const y = MODEL.WATER_Y;
-      for (let i = 0; i < 34; i++) {
-        const a = rrange(0, 6.28), sp = rrange(0.5, 3.2);
-        emit(1, x, y + 0.05, rrange(-0.5, 0.5), Math.cos(a) * sp, rrange(5, 11), Math.sin(a) * sp, rrange(0.5, 0.9), rrange(0.12, 0.3), i % 3 ? 0xcfe9ff : 0xffffff, 26, 0.4);
-      }
-    }
-    function stepParts(dt) {
-      let any = false;
-      for (let i = 0; i < PN; i++) {
-        const q = P[i];
-        if (q.life <= 0) { _scl.set(0, 0, 0); _pos.set(0, -50, 0); _m4.compose(_pos, _idq, _scl); parts.setMatrixAt(i, _m4); continue; }
-        any = true;
-        q.life -= dt;
-        q.vy -= q.g * dt;
-        const k = 1 - Math.min(1, q.drag * dt);
-        q.vx *= k; q.vz *= k; if (q.kind !== 1) q.vy *= k;
-        if (q.kind === 0) q.vx += Math.sin(q.life * 9 + q.rot) * 2.2 * dt * 3;   // feathers flutter
-        q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt;
-        q.rot += q.spin * dt;
-        if (q.kind === 1 && q.y < MODEL.WATER_Y - 0.05) q.life = 0;
-        const u = q.life / q.max;
-        const sz = q.s * (q.kind === 2 ? u : q.kind === 0 ? 1 : 0.6 + 0.4 * u);
-        _pos.set(q.x, q.y, q.z); _scl.set(sz * (q.kind === 0 ? 1.8 : 1), sz, 1);
-        _e.set(0, 0, q.rot); _q.setFromEuler(_e);
-        _m4.compose(_pos, _q, _scl); parts.setMatrixAt(i, _m4);
-        parts.setColorAt(i, q.col);
-      }
-      parts.instanceMatrix.needsUpdate = true;
-      if (parts.instanceColor) parts.instanceColor.needsUpdate = true;
-      return any;
-    }
-    // splash rings on the water
-    const rings = [];
-    const ringGeo = new THREE.RingGeometry(0.8, 1, 40);
-    for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
-      m.rotation.x = -Math.PI / 2;
-      m.position.y = MODEL.WATER_Y + 0.03;
-      m.renderOrder = 3;
-      scene.add(m);
-      rings.push({ mesh: m, t: 9, x: 0 });
-    }
-    function splashRing(x) {
-      const r = rings.reduce((a, b) => (a.t > b.t ? a : b));
-      r.t = 0; r.x = x;
-    }
-    function stepRings(dt) {
-      for (const r of rings) {
-        r.t += dt;
-        const u = r.t / 1.1;
-        if (u >= 1) { r.mesh.material.opacity = 0; continue; }
-        r.mesh.position.x = r.x;
-        const s = 0.6 + easeOut(u) * 4.2;
-        r.mesh.scale.set(s, s * 0.55, 1);
-        r.mesh.material.opacity = 0.55 * (1 - u);
-      }
-    }
-
-    // ===================================================================
-    // Chrome. Title, HUD, medal toasts, the game-over card, a flash. None
-    // of it takes the finger: the whole screen is the one button.
-    // ===================================================================
-    const ui = ctx.createRoot({ touchAction: "none" });
-    ui.style.pointerEvents = "none";
-    const DISPLAY = '"Bebas Neue","Oswald","Impact",system-ui,sans-serif';
-    const SERIF = '"DM Serif Display",Georgia,"Times New Roman",serif';
-    const BODY = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
-    ui.innerHTML = [
-      "<style>",
-      ".kf{position:absolute;inset:0;pointer-events:none;color:#fff;font-family:" + BODY + ";",
-      "-webkit-user-select:none;user-select:none;overflow:hidden}",
-      ".kf *{box-sizing:border-box}",
-      ".kf .vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 58%,rgba(0,0,0,.26) 100%)}",
-      ".kf .hud{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 16px);text-align:center;opacity:0;transition:opacity .3s}",
-      ".kf .hud.on{opacity:1}",
-      ".kf .score{display:inline-block;font-family:" + DISPLAY + ";font-size:80px;line-height:1;letter-spacing:.02em;",
-      "text-shadow:0 3px 0 rgba(0,0,0,.16),0 12px 30px rgba(0,0,0,.28)}",
-      ".kf .score.pop{animation:kfpop .34s cubic-bezier(.2,1.6,.4,1)}",
-      "@keyframes kfpop{0%{transform:scale(1)}35%{transform:scale(1.3)}100%{transform:scale(1)}}",
-      ".kf .best{font-size:12px;letter-spacing:.3em;text-transform:uppercase;opacity:.85;margin-top:2px;text-shadow:0 1px 6px rgba(0,0,0,.45)}",
-      ".kf .title{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 11vh);text-align:center;opacity:0;",
-      "transform:translateY(10px);transition:opacity .45s,transform .45s}",
-      ".kf .title.on{opacity:1;transform:translateY(0)}",
-      ".kf .name{font-family:" + DISPLAY + ";font-size:min(19vw,104px);line-height:.92;letter-spacing:.06em;white-space:nowrap;",
-      "text-shadow:0 4px 0 rgba(0,0,0,.14),0 20px 44px rgba(0,0,0,.3)}",
-      ".kf .tag{font-family:" + SERIF + ";font-style:italic;font-size:min(6.2vw,26px);opacity:.94;margin-top:8px;text-shadow:0 1px 10px rgba(0,0,0,.4)}",
-      ".kf .bestline{margin-top:16px;font-size:12px;letter-spacing:.26em;text-transform:uppercase;opacity:.82;text-shadow:0 1px 6px rgba(0,0,0,.45)}",
-      ".kf .prompt{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 15vh);text-align:center;opacity:0;transition:opacity .3s}",
-      ".kf .prompt.on{opacity:1}",
-      ".kf .prompt span{display:inline-block;font-family:" + DISPLAY + ";font-size:28px;letter-spacing:.22em;",
-      "text-shadow:0 2px 10px rgba(0,0,0,.4);animation:kfpulse 1.6s ease-in-out infinite}",
-      "@keyframes kfpulse{0%,100%{opacity:.6;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}",
-      ".kf .toast{position:absolute;left:0;right:0;top:33%;text-align:center;font-family:" + DISPLAY + ";font-size:min(17vw,86px);",
-      "letter-spacing:.14em;opacity:0;text-shadow:0 4px 0 rgba(0,0,0,.15),0 16px 40px rgba(0,0,0,.3)}",
-      ".kf .toast.on{animation:kftoast 1.6s cubic-bezier(.2,1.4,.4,1) forwards}",
-      "@keyframes kftoast{0%{opacity:0;transform:scale(.6)}18%{opacity:1;transform:scale(1.1)}30%{transform:scale(1)}78%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.08) translateY(-24px)}}",
-      ".kf .over{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s}",
-      ".kf .over.on{opacity:1}",
-      ".kf .card{width:min(78vw,340px);padding:22px 22px 18px;border-radius:24px;background:rgba(10,16,38,.58);",
-      "border:1px solid rgba(255,255,255,.2);box-shadow:0 30px 80px rgba(0,0,0,.4);text-align:center;transform:translateY(28px);",
-      "transition:transform .5s cubic-bezier(.2,1.2,.3,1)}",
-      ".kf .over.on .card{transform:translateY(0)}",
-      ".kf .card .h{font-family:" + SERIF + ";font-style:italic;font-size:22px;opacity:.9}",
-      ".kf .card .n{font-family:" + DISPLAY + ";font-size:96px;line-height:1;margin-top:2px}",
-      ".kf .card .m{display:inline-block;margin-top:8px;padding:6px 16px;border-radius:999px;font-family:" + DISPLAY + ";font-size:20px;letter-spacing:.2em}",
-      ".kf .card .m.bronze{background:#8f5b2a}.kf .card .m.silver{background:#97a3b3;color:#0f1828}",
-      ".kf .card .m.gold{background:#e6b53c;color:#3a2600}.kf .card .m.platinum{background:#e9f3ff;color:#1a2a44}",
-      ".kf .card .b{margin-top:12px;font-size:12px;letter-spacing:.28em;text-transform:uppercase;opacity:.8}",
-      ".kf .card .b.new{color:#ffd76a;opacity:1}",
-      ".kf .card .p{margin-top:16px;font-family:" + DISPLAY + ";font-size:22px;letter-spacing:.22em;animation:kfpulse 1.6s ease-in-out infinite}",
-      ".kf .flash{position:absolute;inset:0;background:#fff;opacity:0}",
-      "</style>",
-      '<div class="kf">',
-      '<div class="vig"></div>',
-      '<div class="hud" data-hud><div class="score" data-score>0</div><div class="best" data-best></div></div>',
-      '<div class="title" data-title><div class="name">KINGFISHER</div><div class="tag">one tap to fly. the lake does the rest.</div><div class="bestline" data-bestline></div></div>',
-      '<div class="prompt" data-prompt><span>TAP TO FLY</span></div>',
-      '<div class="toast" data-toast></div>',
-      '<div class="over" data-over><div class="card"><div class="h" data-cause></div><div class="n" data-final>0</div>',
-      '<div class="m" data-medal></div><div class="b" data-bestover></div><div class="p">TAP TO FLY AGAIN</div></div></div>',
-      '<div class="flash" data-flash></div>',
-      "</div>"
-    ].join("");
-    const $ = (sel) => ui.querySelector(sel);
-    const el = {
-      hud: $("[data-hud]"), score: $("[data-score]"), best: $("[data-best]"), title: $("[data-title]"),
-      bestline: $("[data-bestline]"), prompt: $("[data-prompt]"), toast: $("[data-toast]"), over: $("[data-over]"),
-      cause: $("[data-cause]"), final: $("[data-final]"), medal: $("[data-medal]"), bestover: $("[data-bestover]"), flash: $("[data-flash]")
+    // ---- type: a 5×7 face for words, a 5×8 face for the score
+    const FONT = {
+      A: [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+      B: ["####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."],
+      C: [".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."],
+      D: ["####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."],
+      E: ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
+      F: ["#####", "#....", "#....", "####.", "#....", "#....", "#...."],
+      G: [".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".####"],
+      H: ["#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+      I: [".###.", "..#..", "..#..", "..#..", "..#..", "..#..", ".###."],
+      J: ["..###", "...#.", "...#.", "...#.", "...#.", "#..#.", ".##.."],
+      K: ["#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"],
+      L: ["#....", "#....", "#....", "#....", "#....", "#....", "#####"],
+      M: ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"],
+      N: ["#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"],
+      O: [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+      P: ["####.", "#...#", "#...#", "####.", "#....", "#....", "#...."],
+      Q: [".###.", "#...#", "#...#", "#...#", "#.#.#", "#..#.", ".##.#"],
+      R: ["####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"],
+      S: [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
+      T: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
+      U: ["#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+      V: ["#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."],
+      W: ["#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"],
+      X: ["#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"],
+      Y: ["#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."],
+      Z: ["#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"],
+      "0": [".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."],
+      "1": ["..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."],
+      "2": [".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"],
+      "3": ["#####", "...#.", "..#..", "...#.", "....#", "#...#", ".###."],
+      "4": ["...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."],
+      "5": ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."],
+      "6": ["..##.", ".#...", "#....", "####.", "#...#", "#...#", ".###."],
+      "7": ["#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."],
+      "8": [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
+      "9": [".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."],
+      "!": ["..#..", "..#..", "..#..", "..#..", "..#..", ".....", "..#.."],
+      ".": [".....", ".....", ".....", ".....", ".....", ".##..", ".##.."],
+      "-": [".....", ".....", ".....", ".###.", ".....", ".....", "....."],
+      "'": ["..#..", "..#..", ".....", ".....", ".....", ".....", "....."],
+      " ": [".....", ".....", ".....", ".....", ".....", ".....", "....."]
     };
+    const DIGITS = [
+      [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+      ["..#..", ".##..", "..#..", "..#..", "..#..", "..#..", "..#..", ".###."],
+      [".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#....", "#####"],
+      [".###.", "#...#", "....#", "..##.", "....#", "....#", "#...#", ".###."],
+      ["...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#.", "...#."],
+      ["#####", "#....", "#....", "####.", "....#", "....#", "#...#", ".###."],
+      [".###.", "#...#", "#....", "####.", "#...#", "#...#", "#...#", ".###."],
+      ["#####", "....#", "...#.", "..#..", "..#..", "..#..", "..#..", "..#.."],
+      [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", "#...#", ".###."],
+      [".###.", "#...#", "#...#", "#...#", ".####", "....#", "#...#", ".###."]
+    ];
+    const textCache = new Map();
+    // A word as a sprite: cells of `cell` px, an outline one cell thick, a
+    // shadow one cell down. Cached by everything that shapes it.
+    function textSprite(str, cell, fill, outline, shadow) {
+      const key = str + "|" + cell + "|" + fill + "|" + outline + "|" + shadow;
+      const hit = textCache.get(key);
+      if (hit) return hit;
+      const glyphs = str.toUpperCase().split("").map((ch) => FONT[ch] || FONT["."]);
+      const cols = glyphs.length * 6 - 1;
+      const pad = outline ? 1 : 0;
+      const w = (cols + 2 * pad) * cell, h = (7 + 2 * pad + (shadow ? 1 : 0)) * cell;
+      const sp = bake(w, h, (c) => {
+        const plot = (col, dx, dy) => {
+          c.fillStyle = col;
+          let x = pad + dx;
+          for (const gl of glyphs) {
+            for (let r = 0; r < 7; r++) for (let q = 0; q < 5; q++) if (gl[r][q] === "#") c.fillRect((x + q) * cell, (pad + r + dy) * cell, cell, cell);
+            x += 6;
+          }
+        };
+        if (shadow) { plot(shadow, 0, 1); if (outline) { plot(shadow, 1, 1); plot(shadow, -1, 1); plot(shadow, 0, 2); } }
+        if (outline) for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) plot(outline, dx, dy);
+        plot(fill, 0, 0);
+      });
+      const out = { sp, w, h };
+      textCache.set(key, out);
+      return out;
+    }
+    // Score digits: 24×36 like the original's, a body of 4 px cells with a
+    // 2 px outline. Also a half-size set for the score board.
+    function digitSet(cell, edge) {
+      return DIGITS.map((rows) => {
+        const w = 5 * cell + 2 * edge, h = 8 * cell + 2 * edge;
+        return { w, h, sp: bake(w, h, (c) => {
+          const plot = (col, dx, dy) => {
+            c.fillStyle = col;
+            for (let r = 0; r < 8; r++) for (let q = 0; q < 5; q++) if (rows[r][q] === "#") c.fillRect(edge + q * cell + dx, edge + r * cell + dy, cell, cell);
+          };
+          for (const [dx, dy] of [[-edge, 0], [edge, 0], [0, -edge], [0, edge], [-edge, -edge], [edge, -edge], [-edge, edge], [edge, edge]]) plot(K, dx, dy);
+          plot("#ffffff", 0, 0);
+        }) };
+      });
+    }
+    const bigDigits = digitSet(4, 2), smallDigits = digitSet(2, 2);
+    function drawNumber(set, n, x, y, align) {
+      const s = String(Math.max(0, Math.floor(n)));
+      const gap = set === bigDigits ? 2 : 1;
+      let w = 0;
+      for (let i = 0; i < s.length; i++) w += set[+s[i]].w + (i ? gap : 0);
+      let cx = align === "center" ? Math.round(x - w / 2) : align === "right" ? x - w : x;
+      for (let i = 0; i < s.length; i++) {
+        const d = set[+s[i]];
+        if (d.sp) g.drawImage(d.sp, cx, y);
+        cx += d.w + gap;
+      }
+    }
+    function drawText(str, cell, x, y, style, align) {
+      const t = textSprite(str, cell, style.fill, style.outline, style.shadow);
+      if (!t.sp) return;
+      const dx = align === "center" ? Math.round(x - t.w / 2) : align === "right" ? x - t.w : x;
+      g.drawImage(t.sp, dx, y);
+    }
+    const STYLE = {
+      logo: { fill: "#ffffff", outline: K, shadow: "#f5a623" },
+      title: { fill: "#f8a62a", outline: "#ffffff", shadow: K },
+      label: { fill: "#e8702a", outline: null, shadow: "#f6efc5" },
+      button: { fill: "#ffffff", outline: K, shadow: null },
+      plain: { fill: "#ffffff", outline: K, shadow: null },
+      tag: { fill: "#ffffff", outline: null, shadow: null }
+    };
+
+    // ---- the score board's pieces
+    function medalSprite(kind) {
+      const c1 = { bronze: "#d0894c", silver: "#dbe2e8", gold: "#f7c948", platinum: "#eef6f9" }[kind];
+      const c2 = { bronze: "#8a5330", silver: "#8e9aa8", gold: "#c48d1c", platinum: "#9bb6c4" }[kind];
+      return bake(44, 44, (c) => {
+        const disc = (r, col) => {
+          c.fillStyle = col;
+          for (let dy = -r; dy <= r; dy++) {
+            const half = Math.floor(Math.sqrt(r * r - dy * dy + 0.5));
+            c.fillRect(22 - half * 2, 22 + dy * 2 - 2, half * 4, 2);
+          }
+        };
+        disc(11, K); disc(10, c1); disc(8, c2); disc(7, c1);
+        // a small star
+        const star = [".....#.....", "....###....", "#####.#####", ".#########.", "..#######..", "...#####...", "..###.###..", ".##.....##."];
+        c.fillStyle = c2;
+        for (let r = 0; r < star.length; r++) for (let q = 0; q < 11; q++) if (star[r][q] === "#") c.fillRect(11 + q * 2, 14 + r * 2, 2, 2);
+        c.fillStyle = "#ffffff";
+        c.fillRect(12, 10, 2, 2); c.fillRect(14, 8, 2, 2);
+      });
+    }
+    const medals = { bronze: medalSprite("bronze"), silver: medalSprite("silver"), gold: medalSprite("gold"), platinum: medalSprite("platinum") };
+    function panelSprite(w, h, fill, edge, line) {
+      return bake(w, h, (c) => {
+        const box = (x, y, bw, bh, col) => { c.fillStyle = col; c.fillRect(x, y, bw, bh); };
+        box(4, 0, w - 8, h, line); box(0, 4, w, h - 8, line); box(2, 2, w - 4, h - 4, line);
+        box(4, 2, w - 8, h - 4, edge); box(2, 4, w - 4, h - 8, edge);
+        box(6, 4, w - 12, h - 8, fill); box(4, 6, w - 8, h - 12, fill);
+      });
+    }
+    const board = panelSprite(226, 116, "#ded895", "#f7f1c8", K);
+    const newTag = panelSprite(32, 14, "#f45c4a", "#f45c4a", K);
+    function buttonSprite(label, w, h) {
+      return bake(w, h, (c) => {
+        const box = (x, y, bw, bh, col) => { c.fillStyle = col; c.fillRect(x, y, bw, bh); };
+        box(2, 0, w - 4, h, K); box(0, 2, w, h - 4, K);
+        box(4, 2, w - 8, h - 8, "#f7b32b"); box(2, 4, w - 4, h - 12, "#f7b32b");
+        box(4, h - 6, w - 8, 2, "#c67f1e"); box(2, h - 8, w - 4, 2, "#c67f1e");
+        const t = textSprite(label, 2, "#ffffff", K, null);
+        if (t.sp) c.drawImage(t.sp, Math.round((w - t.w) / 2), Math.round((h - 4 - t.h) / 2));
+      });
+    }
+    const playButton = buttonSprite("PLAY", 104, 40), okButton = buttonSprite("OK", 80, 28);
+    const hand = sprite([
+      "....kk.....",
+      "...kwwk....",
+      "...kwwk....",
+      "...kwwk....",
+      ".kkkwwkkk..",
+      "kwwkwwkwwk.",
+      "kwwwwwwwwwk",
+      "kwwwwwwwwwk",
+      ".kwwwwwwwk.",
+      "..kwwwwwk..",
+      "..kkkkkkk.."
+    ], { k: K, w: "#ffffff" });
+    const tapBubble = panelSprite(34, 16, "#ffffff", "#ffffff", K);
 
     // ===================================================================
     // State
     // ===================================================================
-    const UI = { state: "title", overT: 0, best: 0, newBest: false };
-    const KEY_BEST = "kingfisher.best";
+    const KEY_BEST = "kingfisher.best.v2";
+    const UI = { state: "title", best: 0, newBest: false, overT: 0, landedT: -1, flash: 0, sky: "day", plumage: "yellow", shownScore: 0 };
     let run = MODEL.newRun(1);
-    const prev = { x: 0, y: 6.6 };
-    const DT = 1 / 120;
-    let acc = 0, hitStop = 0, shake = 0, flashA = 0, splashed = false, lastMedal = null, started = false;
+    let prevY = run.y, prevBob = 0, groundScroll = 0, started = false;
     const input = { flaps: 0 };
-    const world = { dayT: 0.02 };
-    let dayBase = 0.02;
-    const cam = { x: 0, y: 7.2, lead: 3 };
+    let W = 1, H = 1, S = 1, VW = 288, VH = 512, fx = 0, fy = 0, lastW = 0, lastH = 0;
 
     function setState(s) {
       UI.state = s;
-      el.title.classList.toggle("on", s === "title");
-      el.prompt.classList.toggle("on", s === "title" || s === "ready");
-      el.hud.classList.toggle("on", s === "play" || s === "ready");
-      el.over.classList.toggle("on", s === "over");
-      ui.setAttribute("data-state", s);
+      canvas.setAttribute("data-state", s);
     }
     async function loadBest() {
       try {
@@ -873,119 +579,72 @@ window.plethoraBit = {
         if (typeof v === "number" && v > 0) UI.best = Math.floor(v);
       } catch (err) { /* no storage here */ }
     }
-    function showBest() {
-      el.best.textContent = UI.best > 0 ? "best " + UI.best : "";
-      const m = MODEL.medal(UI.best);
-      el.bestline.textContent = UI.best > 0 ? "best " + UI.best + (m ? " · " + m : "") : "";
-    }
     function firstGesture() {
       if (started) return;
       started = true;
       initAudio();
       if (ac && ac.state === "suspended") { try { ac.resume(); } catch (err) { /* blocked */ } }
-      startMusic();
       ctx.platform.start();
     }
+    const PLUMAGES = ["yellow", "blue", "red"];
     function newRun() {
       const seedValue = ((Date.now() & 0xffffff) ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
       run = MODEL.newRun(seedValue || 1);
-      prev.x = run.x; prev.y = run.y;
-      acc = 0; hitStop = 0; input.flaps = 0; splashed = false; lastMedal = null;
-      UI.newBest = false; UI.overT = 0;
-      look.rot = 0; look.spin = 0; look.flapT = 9;
-      el.score.textContent = "0";
-      placePillars(run);
+      prevY = run.y; prevBob = 0;
+      input.flaps = 0;
+      UI.newBest = false; UI.overT = 0; UI.landedT = -1; UI.flash = 0; UI.shownScore = 0;
+      UI.plumage = PLUMAGES[Math.floor(rnd() * 3)];
+      UI.sky = rnd() < 0.5 ? "day" : "night";
+      canvas.setAttribute("data-score", "0");
     }
     function onTap() {
-      if (UI.state === "title" || UI.state === "ready") {
+      if (UI.state === "title") {
         firstGesture();
-        dayBase = world.dayT;
-        setState("play");
-        ctx.platform.interact({ kind: "start" });
+        sfxSwoosh();
+        newRun();
+        setState("ready");
+        return;
+      }
+      if (UI.state === "ready" || UI.state === "play") {
+        firstGesture();
         input.flaps++;
         return;
       }
-      if (UI.state === "play") { input.flaps++; return; }
-      if (UI.state === "over" && UI.overT > 0.7) {
+      if (UI.state === "over" && UI.landedT >= 0 && UI.overT - UI.landedT > 1.9) {
+        sfxSwoosh();
         newRun();
         setState("ready");
-        sfxSwoosh();
       }
     }
-    function doFlap() {
-      if (!MODEL.flap(run)) return;
-      look.flapT = 0;
-      sfxFlap();
-      emitFeathers(run.x, run.y);
-    }
-    function medalToast(m) {
-      el.toast.textContent = m.toUpperCase();
-      el.toast.classList.remove("on");
-      void el.toast.offsetWidth;
-      el.toast.classList.add("on");
-      sfxMedal(); sting("success"); haptic("success");
-      ctx.platform.milestone("medal_" + m, { score: run.score });
-      emitSparks(run.x, run.y + 0.8, m === "gold" ? 0xffd040 : m === "silver" ? 0xe8f0ff : m === "platinum" ? 0xc8f0ff : 0xe09a5a);
-    }
-    function splashNow() {
-      splashed = true;
-      emitSplash(run.x); splashRing(run.x);
-      sfxSplash(); haptic("medium");
-      shake = Math.max(shake, 0.3);
-    }
-    function onDeath(inWater) {
-      hitStop = inWater ? 0.05 : 0.085;
-      shake = inWater ? 0.4 : 0.7;
-      flashA = inWater ? 0.4 : 0.85;
-      sfxHit(); haptic("heavy"); duck(0.7, 1400);
-      if (inWater) splashNow(); else emitSparks(run.x + 0.3, run.y, 0xd8d0c0);
-      el.cause.textContent = inWater ? "into the lake" : "into the stone";
-      el.final.textContent = String(run.score);
-      const m = MODEL.medal(run.score);
-      el.medal.textContent = m ? m.toUpperCase() : "";
-      el.medal.className = "m " + (m || "");
-      el.medal.style.display = m ? "" : "none";
+    function onDeath(cause) {
+      UI.flash = 1;
+      sfxHit(); haptic("heavy");
+      if (cause !== "ground") ctx.timeout(sfxDie, 120);
+      UI.overT = 0; UI.landedT = run.landed ? 0 : -1;
       UI.newBest = run.score > UI.best;
       if (UI.newBest) {
         UI.best = run.score;
         fireAndForget(() => ctx.storage.set(KEY_BEST, UI.best));
-        fireAndForget(() => ctx.memory.record("score").submit(UI.best, { label: UI.best + " pillars" }));
+        fireAndForget(() => ctx.memory.record("score").submit(UI.best, { label: UI.best + " pipes" }));
       }
-      el.bestover.textContent = UI.newBest ? "new best" : (UI.best > 0 ? "best " + UI.best : "");
-      el.bestover.classList.toggle("new", UI.newBest);
-      showBest();
-      musicIntensity(0.28);
-      ctx.platform.fail({ score: run.score, cause: run.cause, best: UI.best });
-      const dead = run;
-      ctx.timeout(() => {
-        if (run !== dead || run.alive) return;
-        setState("over");
-        sting(UI.newBest ? "win" : "lose");
-      }, 900);
+      ctx.platform.fail({ score: run.score, cause, best: UI.best });
+      setState("over");
     }
+    let lastMedal = null;
     function onEvent(ev) {
       if (ev === "score") {
-        sfxPoint(run.score); haptic("light");
-        el.score.textContent = String(run.score);
-        el.score.classList.remove("pop");
-        void el.score.offsetWidth;
-        el.score.classList.add("pop");
-        let pp = null;
-        for (const q of run.pillars) if (q.passed && (!pp || q.x > pp.x)) pp = q;
-        if (pp) emitSparks(pp.x, pp.cy, 0xffd76a);
+        sfxPoint(); haptic("light");
+        canvas.setAttribute("data-score", String(run.score));
         ctx.platform.setScore(run.score, { score: run.score });
         const m = MODEL.medal(run.score);
-        if (m && m !== lastMedal) { lastMedal = m; medalToast(m); }
-        if (run.score % 10 === 0) musicIntensity(clamp(0.28 + run.score / 110, 0.28, 0.85));
-      } else if (ev === "die:pillar") {
-        onDeath(false);
-      } else if (ev === "die:water") {
-        onDeath(true);
-      }
+        if (m && m !== lastMedal) { lastMedal = m; ctx.platform.milestone("medal_" + m, { score: run.score }); }
+      } else if (ev === "die:pipe") onDeath("pipe");
+      else if (ev === "die:ground") onDeath("ground");
+      else if (ev === "land") { if (UI.landedT < 0) UI.landedT = UI.overT; }
     }
 
     // ===================================================================
-    // Input: anywhere on the screen, or space on a keyboard
+    // Input: the whole screen, or space on a keyboard
     // ===================================================================
     ctx.listen(canvas, "pointerdown", (e) => {
       if (typeof e.button === "number" && e.button > 0) return;
@@ -997,151 +656,182 @@ window.plethoraBit = {
     });
 
     // ===================================================================
-    // Simulation: fixed 120 Hz steps, an accumulator that never spirals,
-    // taps queued so none is lost between frames, a hit-stop on death.
+    // Ticks: thirty a second, like the original, from an accumulator that
+    // never spirals. Taps are queued so none is lost between frames.
     // ===================================================================
-    function simulate(dt) {
-      acc += dt;
-      if (acc > 0.1) acc = 0.1;
-      while (acc >= DT) {
-        acc -= DT;
-        if (hitStop > 0) { hitStop -= DT; continue; }
-        prev.x = run.x; prev.y = run.y;
-        if (input.flaps > 0) { input.flaps = 0; doFlap(); }
-        const ev = MODEL.step(run, DT);
-        if (ev) onEvent(ev);
+    const TICK = 1 / 30;
+    let acc = 0;
+    function tick() {
+      if (input.flaps > 0) {
+        input.flaps = 0;
+        if ((UI.state === "ready" || UI.state === "play") && MODEL.flap(run)) {
+          sfxWing();
+          if (UI.state === "ready") {
+            lastMedal = null;
+            ctx.platform.interact({ kind: "start" });
+            setState("play");
+          }
+        }
       }
+      prevY = run.y; prevBob = run.bob;
+      const ev = MODEL.step(run);
+      if (ev) onEvent(ev);
+      if (UI.state !== "over") groundScroll = (groundScroll + MODEL.SPEED) % 336;
+      if (UI.state === "over") UI.overT += TICK;
+      if (UI.flash > 0) UI.flash = Math.max(0, UI.flash - 0.34);
     }
 
     // ===================================================================
-    // Camera and world
+    // Drawing, in the original's 288×512 units. The scale is chosen so a
+    // logical pixel is a whole number of device pixels and stays crisp.
     // ===================================================================
-    function updateCamera(bx, by, dt, t) {
-      const targetY = 7.0 + (by - 6.6) * 0.32;
-      cam.y += (targetY - cam.y) * Math.min(1, dt * 6);
-      cam.x = bx;
-      shake = Math.max(0, shake - dt * 1.7);
-      const a = shake * shake * 1.1;
-      const sx = a * Math.sin(t * 67.3), sy = a * Math.cos(t * 53.1);
-      const sway = UI.state === "title" ? Math.sin(t * 0.35) * 0.6 : 0;
-      camera.position.set(cam.x + cam.lead - 4.5 + sx + sway, cam.y + 2.4 + sy, 30);
-      camera.lookAt(cam.x + cam.lead + 1.2 + sx, cam.y - 0.4 + sy, 0);
-    }
-    function updateWorld(t, dt) {
-      if (UI.state === "title" || UI.state === "ready") world.dayT += dt * 0.01;
-      else if (UI.state === "play") world.dayT = dayBase + run.dist / 620;
-      setMood(world.dayT);
-      sunDir.set(0.42, mood.sunAlt, -0.9).normalize();
-      skyMat.uniforms.top.value.copy(mood.top);
-      skyMat.uniforms.hor.value.copy(mood.hor);
-      skyMat.uniforms.sunC.value.copy(mood.sun);
-      skyMat.uniforms.glow.value = 1 - mood.star * 0.75;
-      sky.position.copy(camera.position);
-      stars.position.copy(camera.position);
-      starMat.opacity = mood.star * 0.9;
-      sunSprite.position.copy(camera.position).addScaledVector(sunDir, 380);
-      sunSprite.material.color.copy(mood.sun);
-      sunSprite.scale.setScalar(lerp(36, 20, mood.star));
-      waterMat.uniforms.deep.value.copy(mood.deep);
-      waterMat.uniforms.shallow.value.copy(mood.shallow);
-      waterMat.uniforms.sunC.value.copy(mood.sunC);
-      waterMat.uniforms.fogC.value.copy(mood.hor);
-      waterMat.uniforms.time.value = t;
-      water.position.x = cam.x; bed.position.x = cam.x;
-      scene.fog.color.copy(mood.hor);
-      hemi.color.copy(mood.skyL); hemi.groundColor.copy(mood.gndL);
-      sun.color.copy(mood.sunC); sun.intensity = mood.sunI;
-      sun.position.copy(bird.position).addScaledVector(keyDir, 40);
-      sun.target.position.copy(bird.position);
-      for (const r of ridges) {
-        r.mesh.material.color.copy(mood[r.key]).multiplyScalar(r.mul);
-        r.mesh.position.x = Math.round(cam.x / PERIOD) * PERIOD;
-      }
-      cloudCol.copy(mood.hor).lerp(_c1.set(0xffffff), 0.5).multiplyScalar(1 - mood.star * 0.55);
-      cloudMat.color.copy(cloudCol);
-      for (let i = 0; i < CLOUD_N; i++) {
-        const c = cloudSeeds[i];
-        let dx = c.x + t * c.sp * 0.5 - cam.x;
-        dx = ((dx + 160) % 320 + 320) % 320 - 160;
-        const y = c.y + Math.sin(t * 0.2 + c.ph) * 0.4;
-        _pos.set(cam.x + dx, y, c.z);
-        _scl.set(c.w, c.h, 1);
-        _m4.compose(_pos, _idq, _scl);
-        clouds.setMatrixAt(i * 2, _m4);
-        _pos.set(cam.x + dx + c.w * 0.28, y + c.h * 0.3, c.z + 0.5);
-        _scl.set(c.w * 0.55, c.h * 0.8, 1);
-        _m4.compose(_pos, _idq, _scl);
-        clouds.setMatrixAt(i * 2 + 1, _m4);
-      }
-      clouds.instanceMatrix.needsUpdate = true;
-    }
-
-    // ===================================================================
-    // Frame
-    // ===================================================================
-    let W = 1, H = 1, lastW = 0, lastH = 0;
     function resize() {
       W = ctx.width; H = ctx.height;
-      camera.aspect = W / Math.max(1, H);
-      camera.fov = camera.aspect < 0.8 ? 50 : 38;
-      camera.updateProjectionMatrix();
-      renderer.setSize(W, H, false);
-      const visW = 2 * 30 * Math.tan((camera.fov * Math.PI) / 360) * camera.aspect;
-      cam.lead = visW * 0.2;
-      fitTitle();
-    }
-    // the title must fit whatever face the device fell back to
-    const nameEl = ui.querySelector(".name");
-    function fitTitle() {
-      let px = Math.min(104, W * 0.19);
-      nameEl.style.fontSize = px + "px";
-      for (let i = 0; i < 8 && nameEl.scrollWidth > W - 28; i++) {
-        px *= 0.92;
-        nameEl.style.fontSize = px + "px";
+      const dpr = ctx.dpr || window.devicePixelRatio || 1;
+      // the runtime owns the backing store; if a resize left it behind, bring
+      // it along and put back the same CSS-pixel transform it uses
+      const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw; canvas.height = bh;
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
+      const fit = Math.min(W / MODEL.W, H / MODEL.H);
+      S = Math.max(1 / dpr, Math.floor(fit * dpr) / dpr);
+      if (fit * dpr < 1) S = fit;
+      VW = W / S; VH = H / S;
+      fx = Math.floor((VW - MODEL.W) / 2);
+      fy = Math.floor((VH - MODEL.H) * 0.72);
+      canvas.setAttribute("data-layout", [W, H, S.toFixed(3), fx, fy].join(","));
     }
-    ctx.onFrame((dtMs, timeMs) => {
-      const dt = clamp(dtMs / 1000, 0.001, 0.1);
-      const t = timeMs / 1000;
-      if (ctx.width !== lastW || ctx.height !== lastH) { lastW = ctx.width; lastH = ctx.height; resize(); }
-      simulate(dt);
-      if (UI.state === "over") UI.overT += dt;
-      if (!run.alive && !splashed && run.y - MODEL.BIRD_R <= MODEL.WATER_Y + 0.05) splashNow();
-      look.flapT += dt;
-      const alpha = clamp(acc / DT, 0, 1);
-      const bx = lerp(prev.x, run.x, alpha);
-      const by = run.started ? lerp(prev.y, run.y, alpha) : run.y + run.hover;
-      let targetRot;
-      if (!run.started) targetRot = Math.sin(t * 3.2) * 0.06;
-      else if (run.alive) targetRot = clamp(Math.atan2(run.vy, MODEL.difficulty(run.score).speed) * 0.8, -1.2, 0.45);
-      else { targetRot = -1.5; look.spin += dt * 5.5; }
-      look.rot += (targetRot - look.rot) * Math.min(1, dt * (run.alive ? 9 : 4));
-      placeBird(bx, by, look.rot, run.alive, t);
-      placePillars(run);
-      updateCamera(bx, by, dt, t);
-      updateWorld(t, dt);
-      stepParts(dt);
-      stepRings(dt);
-      if (flashA > 0) { flashA = Math.max(0, flashA - dt * 3.2); el.flash.style.opacity = flashA.toFixed(3); }
-      renderer.render(scene, camera);
-    });
+    function drawImg(sp, x, y, w, h) {
+      if (!sp) return;
+      if (w === undefined) g.drawImage(sp, Math.round(x), Math.round(y));
+      else g.drawImage(sp, Math.round(x), Math.round(y), w, h);
+    }
+    function drawPipe(px, gapY) {
+      const top = -fy, capH = 26;
+      // the pipe above: body from the top of the screen down to its cap
+      const upperBodyH = gapY - capH - top;
+      if (upperBodyH > 0) drawImg(pipeBody, px + 2, top, 48, upperBodyH);
+      drawImg(pipeCap, px, gapY - capH);
+      // the pipe below: cap, then body down to the ground
+      drawImg(pipeCap, px, gapY + MODEL.GAP);
+      const lowerBodyH = MODEL.BASE_Y - (gapY + MODEL.GAP + capH);
+      if (lowerBodyH > 0) drawImg(pipeBody, px + 2, gapY + MODEL.GAP + capH, 48, lowerBodyH);
+    }
+    function drawBird(x, y, rotDeg, frame) {
+      const sp = birdSprites[UI.plumage][frame];
+      if (!sp) return;
+      g.save();
+      g.translate(Math.round(x) + 17, Math.round(y) + 12);
+      g.rotate(-rotDeg * Math.PI / 180);
+      g.drawImage(sp, -17, -12);
+      g.restore();
+    }
+    function render(alpha) {
+      g.save();
+      g.imageSmoothingEnabled = false;
+      g.translate(fx * S, fy * S);
+      g.scale(S, S);
+      const sky = SKIES[UI.sky];
+      // sky beyond the frame, then the frame's backdrop tiled sideways
+      g.fillStyle = sky.sky;
+      g.fillRect(-fx, -fy, VW, VH);
+      const bg = backgrounds[UI.sky];
+      for (let x = -fx - ((-fx) % 288 + 288) % 288 - 288; x < VW - fx; x += 288) drawImg(bg, x, 0);
+      // pipes, interpolated between ticks while they move
+      const moving = run.started && run.alive;
+      for (const p of run.pipes) {
+        const px = p.x + (moving ? MODEL.SPEED * (1 - alpha) : 0);
+        if (px > VW - fx || px + MODEL.PIPE_W < -fx) continue;
+        drawPipe(px, p.gapY);
+      }
+      // the ground, scrolling, and the sand under it to the bottom of the screen
+      const scroll = (groundScroll + (UI.state !== "over" ? MODEL.SPEED * alpha : 0)) % 336;
+      for (let x = -fx - ((scroll + fx) % 336 + 336) % 336 - 336; x < VW - fx; x += 336) drawImg(groundSprite, x, MODEL.BASE_Y);
+      g.fillStyle = "#ded895";
+      g.fillRect(-fx, MODEL.BASE_Y + 112, VW, VH);
+      // the bird
+      const bob = run.started ? 0 : lerp(prevBob, run.bob, alpha);
+      const by = run.started ? lerp(prevY, run.y, alpha) : run.y + bob;
+      const rot = run.started ? MODEL.visibleRot(run) : 0;
+      if (UI.state === "title") {
+        // beside the name, flapping in place
+        const t = textSprite("KINGFISHER", 3, STYLE.logo.fill, STYLE.logo.outline, STYLE.logo.shadow);
+        const total = t.w + 10 + MODEL.BIRD_W;
+        const x0 = Math.round((MODEL.W - total) / 2);
+        drawImg(t.sp, x0, 118);
+        drawBird(x0 + t.w + 10, 118 + Math.round((t.h - MODEL.BIRD_H) / 2) + bob, 0, run.wing);
+        drawImg(playButton, (MODEL.W - 104) / 2, 330);
+        if (UI.best > 0) drawText("BEST " + UI.best, 2, MODEL.W / 2, 386, STYLE.plain, "center");
+      } else {
+        drawBird(MODEL.BIRD_X, by, rot, run.alive ? run.wing : 1);
+      }
+      // chrome by state
+      if (UI.state === "ready") {
+        drawNumber(bigDigits, run.score, MODEL.W / 2, 40, "center");
+        drawText("GET READY!", 4, MODEL.W / 2, 130, STYLE.title, "center");
+        // the tap hint, to the right of the bird: a hand and two taps
+        const hx = MODEL.W / 2 + 22;
+        drawImg(hand, hx - 11, 262);
+        const tapAt = (x, y) => { drawImg(tapBubble, x, y); drawText("TAP", 1, x + 17, y + 5, STYLE.plain, "center"); };
+        tapAt(hx - 62, 246); tapAt(hx + 28, 246);
+        drawText("TAP TO FLY", 1, MODEL.W / 2, 300, STYLE.plain, "center");
+      } else if (UI.state === "play") {
+        drawNumber(bigDigits, run.score, MODEL.W / 2, 40, "center");
+      } else if (UI.state === "over") {
+        drawOver();
+      }
+      if (UI.flash > 0) {
+        g.fillStyle = "rgba(255,255,255," + UI.flash.toFixed(2) + ")";
+        g.fillRect(-fx, -fy, VW, VH);
+      }
+      g.restore();
+    }
+    function drawOver() {
+      if (UI.landedT < 0) { drawNumber(bigDigits, run.score, MODEL.W / 2, 40, "center"); return; }
+      const t = UI.overT - UI.landedT;
+      // "GAME OVER" drops in
+      const t1 = clamp(t / 0.35, 0, 1);
+      drawText("GAME OVER", 4, MODEL.W / 2, Math.round(lerp(60, 128, easeOut(t1))), STYLE.title, "center");
+      // the board slides up from below the screen
+      const t2 = clamp((t - 0.5) / 0.45, 0, 1);
+      if (t2 <= 0) return;
+      const bx = (MODEL.W - 226) / 2, byy = Math.round(lerp(VH - fy + 10, 186, easeOut(t2)));
+      drawImg(board, bx, byy);
+      drawText("SCORE", 2, bx + 206, byy + 14, STYLE.label, "right");
+      drawText("BEST", 2, bx + 206, byy + 64, STYLE.label, "right");
+      drawText("MEDAL", 2, bx + 48, byy + 14, STYLE.label, "center");
+      // the score counts up once the board has settled
+      const t3 = clamp((t - 1.0) / 0.5, 0, 1);
+      const shown = t2 >= 1 ? Math.round(run.score * t3) : 0;
+      drawNumber(smallDigits, shown, bx + 206, byy + 32, "right");
+      drawNumber(smallDigits, UI.best, bx + 206, byy + 82, "right");
+      if (t3 >= 1) {
+        const m = MODEL.medal(run.score);
+        if (m) drawImg(medals[m], bx + 26, byy + 42);
+        if (UI.newBest) { drawImg(newTag, bx + 130, byy + 66); drawText("NEW", 1, bx + 146, byy + 70, STYLE.tag, "center"); }
+      }
+      if (t > 1.9) drawImg(okButton, (MODEL.W - 80) / 2, 330);
+    }
 
     // ===================================================================
-    // Boot
+    // Frame and boot
     // ===================================================================
-    await Promise.race([fontsReady, new Promise((res) => ctx.timeout(res, 2500))]);
+    ctx.onFrame((dtMs) => {
+      const dt = clamp(dtMs / 1000, 0.001, 0.25);
+      if (ctx.width !== lastW || ctx.height !== lastH) { lastW = ctx.width; lastH = ctx.height; resize(); }
+      acc += dt;
+      while (acc >= TICK) { acc -= TICK; tick(); }
+      render(clamp(acc / TICK, 0, 1));
+    });
+
     await loadBest();
-    showBest();
     newRun();
     setState("title");
-    W = ctx.width; H = ctx.height; lastW = W; lastH = H;
+    lastW = ctx.width; lastH = ctx.height;
     resize();
-    setMood(world.dayT);
-    placeBird(0, 6.6, 0, true, 0);
-    updateCamera(0, 6.6, 1, 0);
-    updateWorld(0, 0.016);
-    stepParts(0.016);
-    renderer.render(scene, camera);
+    render(0);
     ctx.markVisualReady("first frame");
     ctx.platform.ready();
   }

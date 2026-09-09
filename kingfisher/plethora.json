@@ -3,24 +3,21 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Kingfisher",
-  "description": "One tap to fly. A kingfisher over a lake at dawn, stone pillars rising from the water and hanging from the mist, and a day that turns as the run gets long: dawn to noon to dusk to stars. The physics is fixed-step and deterministic, the difficulty eases in over sixty pillars and is proved fair in tests by a player that must clear two hundred, a gentle wind arrives after forty, and the hitboxes forgive a graze. Medals at 10, 25, 50 and 100; your best score goes on the leaderboard. Built in three.js, everything procedural.",
+  "description": "One tap to fly. The original one-tap bird, rebuilt faithfully: a 288x512 world at thirty ticks a second, gravity of one pixel a tick, a flap that lifts exactly 45 pixels, pipes 52 wide scrolling four pixels a tick with a 100-pixel gap placed anywhere in a 142-pixel band, a point when the bird's middle passes the pipe's middle, a nose that holds 20 degrees up after every tap and then pitches over. Difficulty is constant, like the original: the randomness is the difficulty. Pixel art in the original's language (two-by-two pixels, a dark outline on everything, green pipes, a striped verge), day and night, three plumages, medals at 10, 20, 30 and 40, and a score board. The rules run in Node, where a planner has to clear two hundred pipes on every seed.",
   "tags": [
     "game",
     "arcade",
-    "3d",
+    "pixel",
     "bird",
     "flappy",
+    "retro",
     "one-tap",
     "endless"
   ],
   "permissions": [
     "haptics",
     "audio",
-    "backgroundMusic",
     "storage"
-  ],
-  "dependencies": [
-    "three@0.164.1"
   ],
   "memory": {
     "records": {
