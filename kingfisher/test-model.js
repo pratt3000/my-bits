@@ -24,16 +24,18 @@ ok(M.difficulty(40).wind === 0 && M.difficulty(41).wind > 0 && M.difficulty(200)
 // --- spawning: always reachable, drift bounded, ids unique
 for (const seed of [1, 2, 3, 4, 5]) {
   const run = M.newRun(seed);
-  run.score = 0;
-  for (let i = 0; i < 300; i++) { M.spawnPillar(run); run.score = Math.min(200, i); }
   let last = 6.6;
   const ids = new Set();
-  for (const p of run.pillars) {
+  for (let i = 0; i < 300; i++) {
+    run.score = Math.min(200, i);
+    M.spawnPillar(run);
+    const p = run.pillars[run.pillars.length - 1];
+    const d = M.difficulty(run.score), r = M.reach(d);
     const [lo, hi] = M.gapBounds(p.gap);
     ok(p.cy >= lo - 1e-9 && p.cy <= hi + 1e-9, "gap inside the play band (seed " + seed + ")");
-    ok(Math.abs(p.cy - last) <= 3.4 + 1e-9, "drift bounded (seed " + seed + ")");
-    const r = M.reach(p.__d || M.difficulty(200));
+    ok(Math.abs(p.cy - last) <= d.drift + 1e-9, "drift bounded by the curve (seed " + seed + ")");
     ok(p.cy - last <= r.up + 1e-9 && last - p.cy <= r.down + 1e-9, "every gap is reachable from the last (seed " + seed + ")");
+    ok(Math.abs(p.gap - d.gap) < 1e-9, "the gap is the curve's gap at this score");
     ok(!ids.has(p.id), "ids unique"); ids.add(p.id);
     last = p.cy;
   }
@@ -48,7 +50,10 @@ ok(M.hitsPillar(10, 6 + 1.5 + 0.2, P), "into the upper column hits");
 ok(M.hitsPillar(10, 6 - 1.5 - 0.2, P), "into the lower column hits");
 ok(!M.hitsPillar(10 - 0.675 - 0.41, 9, P), "beside the column, not touching, is clear");
 ok(M.hitsPillar(10 - 0.675 + 0.1, 9, P), "overlapping the column's face hits");
-ok(!M.hitsPillar(10, 2, { x: 10, cy: 6, gap: 3, w: 1.35 }) === false, "deep in the lower column hits");
+ok(M.hitsPillar(10, 2, { x: 10, cy: 6, gap: 3, w: 1.35 }), "deep in the lower column hits");
+ok(M.hitsPillar(10, 11, { x: 10, cy: 6, gap: 3, w: 1.35 }), "deep in the upper column hits");
+ok(!M.hitsPillar(7, 11, { x: 10, cy: 6, gap: 3, w: 1.35 }), "well before the column is clear");
+ok(!M.hitsPillar(13, 2, { x: 10, cy: 6, gap: 3, w: 1.35 }), "well after the column is clear");
 
 // --- a run: hover before the first flap, then physics
 {
