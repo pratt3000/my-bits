@@ -244,3 +244,24 @@ Driven headless in Chromium against a mock `ctx`:
 - **Soak** — ~150 s of autopilot across four stages with no page errors, divers
   bounded to x ∈ [8, 216] (they bank off the walls rather than leaving), and
   convoy records peaking at 2 rather than accumulating.
+
+## v2
+
+Feel, not rules. The scoring table, the dive profiles, the rack and the sound
+board are untouched — a v1 high score is still a v2 high score.
+
+- **A number on every kill.** v1 floated the score only for a flagship (150 and
+  up), which meant the ordinary 30–100 point kill — most of the game — landed
+  with no readout. Every kill now pops its value: white under 150, yellow up to
+  300, cyan for the 800.
+- **The cabinet knocks.** Losing a Galaxip jolts the playfield for ~0.6 s, and
+  a full convoy wipe for ~0.4 s. The knock is applied *inside* the clip, so the
+  contents move and the screen edge stays put, and it is rounded to whole
+  virtual pixels so nothing smears off the grid mid-jolt. A harder knock
+  overrides whatever is left of a softer one.
+- **A build marker** in the corner of the attract screen, so two builds are easy to
+  tell apart at a glance.
+
+Re-driven headless at 390×800, 900×600 and 360×640: a full run to game over —
+36 kills across all four alien types, three deaths, the score submitted — with
+no page errors.

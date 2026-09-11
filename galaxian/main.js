@@ -38,6 +38,7 @@ window.plethoraBit = {
     const YELLOW = "#fcd800";
     const CYAN = "#3cf8f8";
     const GREY = "#909090";
+    const BUILD = "v2";
 
     /* ================================================================ *
      * SMALL MATH
@@ -775,6 +776,8 @@ window.plethoraBit = {
     const bullets = [];       // alien fire
     const bursts = [];        // explosions
     const pops = [];          // floating score numbers
+    // A cabinet knock: the playfield jolts inside its own frame and settles.
+    const shake = { t: 0, dur: 0, mag: 0 };
 
     const missile = { x: 0, y: 0, live: false };
     const ship = { x: VW / 2, targetX: VW / 2, alive: true, visible: true, blinkT: 0 };
@@ -1017,6 +1020,28 @@ window.plethoraBit = {
       pops.push({ x, y, text: String(text), t: 0, dur: 900, color: color || WHITE });
     }
 
+    // A new knock only wins if it is harder than whatever is left of the
+    // one still running, so a death never gets softened by a stray kill.
+    function addShake(mag, dur) {
+      const left = shake.dur > 0 ? shake.mag * (1 - shake.t / shake.dur) : 0;
+      if (mag <= left) return;
+      shake.mag = mag;
+      shake.dur = dur;
+      shake.t = 0;
+    }
+
+    function shakeX(now) {
+      if (shake.t >= shake.dur) return 0;
+      // Rounded, because the playfield is drawn on a coarse pixel grid and
+      // a fractional offset would smear every sprite for the whole jolt.
+      return Math.round(Math.sin(now / 13) * shake.mag * (1 - shake.t / shake.dur));
+    }
+
+    function shakeY(now) {
+      if (shake.t >= shake.dur) return 0;
+      return Math.round(Math.cos(now / 9) * shake.mag * (1 - shake.t / shake.dur));
+    }
+
     function addScore(n) {
       game.score += n;
       ctx.platform.setScore(game.score);
@@ -1050,8 +1075,11 @@ window.plethoraBit = {
       explode(a.x, a.y, false, KIND_COLOR[a.kind], a.kind);
       sfx.alienDie(a.kind);
       haptic(a.kind === FLAGSHIP ? "medium" : "light");
-      if (value >= 150) addPop(a.x, a.y, value, value >= 800 ? CYAN : YELLOW);
-      if (value >= 800) ctx.platform.milestone("convoy_wipe", { value, stage: game.stage });
+      addPop(a.x, a.y, value, value >= 800 ? CYAN : value >= 150 ? YELLOW : WHITE);
+      if (value >= 800) {
+        addShake(2, 420);
+        ctx.platform.milestone("convoy_wipe", { value, stage: game.stage });
+      }
       ctx.platform.interact({ type: "kill", target: KIND_NAME[a.kind], value });
       game.aliveCount = countAlive();
     }
@@ -1256,6 +1284,7 @@ window.plethoraBit = {
       ship.alive = false;
       game.lives--;
       explode(ship.x, zone.shipY, true, WHITE);
+      addShake(3, 620);
       sfx.shipDie();
       sfx.sirenOff();
       haptic("heavy");
@@ -1464,6 +1493,9 @@ window.plethoraBit = {
       drawButton("help", "how to play", 20, by + 22, 84, 14, CYAN, false);
       drawButton("settings", "settings", VW - 104, by + 22, 84, 14, CYAN, false);
       drawText(g, "1st bonus galaxip for 7000 pts", VW / 2, by + 42, 1, GREY, 0);
+      // Build marker, tucked into the corner: enough to tell two cabinets
+      // apart at a glance without sitting in the middle of the marquee.
+      drawText(g, BUILD, VW - 6, view.vh - 12, 1, "#4a4a4a", 1);
     }
 
     function drawReady(now) {
@@ -1899,6 +1931,7 @@ window.plethoraBit = {
         pops[i].t += dt;
         if (pops[i].t >= pops[i].dur) pops.splice(i, 1);
       }
+      if (shake.t < shake.dur) shake.t += dt;
 
       if (!overlay) {
         if (game.screen === "attract") {
@@ -1958,6 +1991,9 @@ window.plethoraBit = {
       g.clip();
       g.fillStyle = BLACK;
       g.fillRect(0, 0, VW, view.vh);
+      // Displace the contents inside the clip, never the clip itself, or the
+      // whole playfield would visibly slide off the edge of the screen.
+      if (shake.t < shake.dur) g.translate(shakeX(now), shakeY(now));
 
       drawStars(now);
       if (game.screen !== "attract") {
