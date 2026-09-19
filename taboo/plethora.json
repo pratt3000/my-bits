@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Forbidden Five",
-  "description": "The word-twisting party game, on one phone. Two teams, and a clue-giver who has to land the word on the card without ever saying it — or any of the five forbidden words printed under it. Say APPLE without RED, FRUIT, PIE, CIDER or CORE. Your team shouts guesses, the other team watches the screen over your shoulder and hits the buzzer the moment you slip. Every word you land is a point, every buzz costs you one, and skips are rationed. Pass the phone, take turns, and play to the whistle. 310 cards across five decks, a turn timer you can set, and a leaderboard for the biggest single turn anyone has ever pulled off.",
+  "description": "The word-twisting party game, on one phone. Two teams, and a clue-giver who has to land the word on the card without ever saying it — or any of the five forbidden words printed under it. Say APPLE without RED, FRUIT, PIE, CIDER or CORE. Your team shouts guesses, the other team watches the screen over your shoulder and hits the buzzer the moment you slip. Every word you land is a point, every buzz costs you one, and skips are rationed. Pass the phone, take turns, and play to the whistle. Built for a room: two to four teams, a roster of up to forty names, and a clue-giver rotation that works round every team so nobody hogs the phone. 310 cards across five decks, a turn timer you can set, and a leaderboard for the biggest single turn anyone has ever pulled off.",
   "tags": [
     "party",
     "word-game",
@@ -28,8 +28,8 @@
     "replayable": true,
     "pages": [
       {
-        "title": "One phone, two teams",
-        "body": "Split the room in two. Each turn, one player on the active team is the clue-giver and holds the phone. Their team shouts guesses. The other team reads the screen over their shoulder and watches for slip-ups."
+        "title": "One phone, the whole room",
+        "body": "Split the room into two, three or four teams. Each turn, one player on the active team is the clue-giver and holds the phone. Their team shouts guesses. The other teams read the screen over their shoulder and watch for slip-ups."
       },
       {
         "title": "Say the word without saying the word",
@@ -37,7 +37,7 @@
       },
       {
         "title": "The other team is listening",
-        "body": "If the clue-giver says a forbidden word, the watching team taps TABOO and the point comes off. When time runs out the card in hand is dead. Teams alternate until every turn is used, and the higher score wins."
+        "body": "If the clue-giver says a forbidden word, the watching team taps TABOO and the point comes off. When time runs out the card in hand is dead. Add everyone\u0027s name at setup and the phone will call out whose go it is, working round each team in turn."
       }
     ]
   },
@@ -95,12 +95,21 @@
         "intent": "gameplay",
         "apply": "restart"
       },
+      "default_teams": {
+        "label": "Teams preselected at setup",
+        "type": "choice",
+        "default": "2",
+        "options": ["2", "3", "4"],
+        "group": "rules",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
       "default_turns": {
         "label": "Turns each team gets",
         "type": "integer",
         "default": 4,
         "min": 2,
-        "max": 8,
+        "max": 12,
         "step": 1,
         "group": "rules",
         "intent": "gameplay",
@@ -167,6 +176,22 @@
         "label": "Second team color",
         "type": "color",
         "default": "#2fb8e6",
+        "group": "look",
+        "intent": "visual",
+        "apply": "live"
+      },
+      "team_three_color": {
+        "label": "Third team color",
+        "type": "color",
+        "default": "#ffb020",
+        "group": "look",
+        "intent": "visual",
+        "apply": "live"
+      },
+      "team_four_color": {
+        "label": "Fourth team color",
+        "type": "color",
+        "default": "#b07bff",
         "group": "look",
         "intent": "visual",
         "apply": "live"

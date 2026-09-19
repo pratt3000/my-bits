@@ -371,12 +371,21 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     const tBool = (id, fb) => (tune.boolean ? tune.boolean(id) : undefined) ?? fb;
     const tColor = (id, fb) => (tune.color ? tune.color(id) : undefined) ?? fb;
 
-    const TEAM_COLOR = [tColor("team_one_color", "#ff5b4a"), tColor("team_two_color", "#2fb8e6")];
+    const TEAM_COLOR = [
+      tColor("team_one_color", "#ff5b4a"),
+      tColor("team_two_color", "#2fb8e6"),
+      tColor("team_three_color", "#ffb020"),
+      tColor("team_four_color", "#b07bff")
+    ];
+    const TEAM_NAMES = ["Team One", "Team Two", "Team Three", "Team Four"];
+    const MAX_TEAMS = 4;
+    const MAX_ROSTER = 40;   // a big room, with headroom over the twenty
     const PENALTY_TABOO = tInt("taboo_penalty", -1);
     const PENALTY_SKIP = tInt("skip_penalty", 0);
     const WARN_AT = tInt("warn_seconds", 10);
 
     const SECONDS_OPTIONS = [30, 45, 60, 90];
+    const TEAM_OPTIONS = [2, 3, 4];
     const SKIP_OPTIONS = [0, 1, 2, 3, Infinity];
     const skipLabel = n => (n === Infinity ? "∞" : String(n));
 
@@ -473,6 +482,17 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
 .ff-log .v{color:#8a8076;font-variant-numeric:tabular-nums}
 
 .ff-board{display:flex;gap:10px;flex:none}
+.ff-board.wide{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ff-board.wide .ff-team{padding:9px 11px}
+.ff-board.wide .ff-team s{font-size:24px}
+
+.ff-ply{display:inline-flex;align-items:stretch;border-radius:12px;overflow:hidden;background:#241f1d}
+.ff-ply button{appearance:none;border:0;font:inherit;font-weight:700;font-size:14px;
+  background:transparent;color:#e6ddcf;cursor:pointer;min-height:44px;padding:0 12px}
+.ff-ply button[data-move]{border-left:4px solid var(--c);padding-left:10px}
+.ff-ply button[data-drop]{color:#8a8076;font-size:19px;padding:0 12px;
+  box-shadow:inset 1px 0 0 rgba(255,255,255,.07)}
+.ff-ply button:active{background:rgba(255,255,255,.08)}
 .ff-team{flex:1;border-radius:16px;padding:12px 14px;background:#1e1a18;display:flex;
   flex-direction:column;gap:3px;box-shadow:inset 0 0 0 2px transparent}
 .ff-team.lead{box-shadow:inset 0 0 0 2px var(--c)}
@@ -570,14 +590,16 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
         seconds: Number(tChoice("default_seconds", "60")) || 60,
         skips: (() => { const v = tChoice("default_skips", "2"); return v === "unlimited" ? Infinity : Number(v); })(),
         turnsEach: tInt("default_turns", 4),
+        teamCount: Number(tChoice("default_teams", "2")) || 2,
         decks: new Set(["classic"]),
         sound: tBool("sound_default", true),
         haptics: tBool("haptics_default", true)
       },
-      teams: [
-        { name: "Team One", color: TEAM_COLOR[0], score: 0, taken: 0 },
-        { name: "Team Two", color: TEAM_COLOR[1], score: 0, taken: 0 }
-      ],
+      teams: [],
+      // Naming the room is optional. With names in, the phone calls out who
+      // is up and works round every team so one person cannot hog the cards.
+      roster: [],
+      focusAdd: false,
       active: 0,
       pool: [],
       poolAt: 0,
@@ -592,6 +614,57 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     };
 
     const turnTarget = () => S.cfg.turnsEach + S.extraTurns;
+
+    /* ================================================================ *
+     * TEAMS AND THE ROOM
+     * ================================================================ */
+    const makeTeam = i => ({ name: TEAM_NAMES[i], color: TEAM_COLOR[i], score: 0, taken: 0, giverAt: 0 });
+
+    const membersOf = i => S.roster.filter(p => p.team === i);
+
+    function smallestTeam() {
+      let best = 0;
+      for (let i = 1; i < S.teams.length; i++) {
+        if (membersOf(i).length < membersOf(best).length) best = i;
+      }
+      return best;
+    }
+
+    function setTeamCount(want) {
+      const n = Math.max(2, Math.min(MAX_TEAMS, want));
+      while (S.teams.length < n) S.teams.push(makeTeam(S.teams.length));
+      if (S.teams.length > n) {
+        S.teams.length = n;
+        // Anyone stranded on a team that just disappeared rejoins the
+        // thinnest one left rather than vanishing from the room.
+        S.roster.forEach(pl => { if (pl.team >= n) pl.team = smallestTeam(); });
+      }
+      S.cfg.teamCount = n;
+    }
+
+    function addPlayer(raw) {
+      const name = String(raw || "").trim().replace(/\s+/g, " ").slice(0, 16);
+      if (!name || S.roster.length >= MAX_ROSTER) return false;
+      S.roster.push({ name, team: smallestTeam() });
+      return true;
+    }
+
+    // Reshuffle the whole room and deal it round-robin, so the teams are
+    // not just whoever typed their name first.
+    function dealRoster() {
+      shuffle(S.roster);
+      S.roster.forEach((pl, i) => { pl.team = i % S.teams.length; });
+    }
+
+    // Whose turn it is to give clues for a team: straight round-robin
+    // through that team's list, so everybody gets the phone in order.
+    function giverFor(i) {
+      const list = membersOf(i);
+      if (!list.length) return null;
+      return list[S.teams[i].giverAt % list.length];
+    }
+
+    setTeamCount(S.cfg.teamCount);
 
     // The primary track is the single number worth carrying off the table:
     // the most words one clue-giver landed in one turn.
@@ -634,13 +707,25 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
       let saved = null;
       try { saved = await ctx.storage.get(SAVE_KEY); } catch (e) { return; }
       if (!saved || typeof saved !== "object") return;
+      if (Number.isFinite(saved.teamCount)) setTeamCount(saved.teamCount);
       if (Array.isArray(saved.names)) {
         saved.names.forEach((n, i) => { if (S.teams[i] && typeof n === "string" && n.trim()) S.teams[i].name = n.slice(0, 18); });
+      }
+      if (Array.isArray(saved.roster)) {
+        S.roster = saved.roster
+          .filter(pl => pl && typeof pl.name === "string" && pl.name.trim())
+          .slice(0, MAX_ROSTER)
+          .map(pl => ({
+            name: pl.name.slice(0, 16),
+            // A roster saved against more teams than are set now has to land
+            // somewhere real, so out-of-range players join the first team.
+            team: Number.isInteger(pl.team) && pl.team >= 0 && pl.team < S.teams.length ? pl.team : 0
+          }));
       }
       if (SECONDS_OPTIONS.indexOf(saved.seconds) >= 0) S.cfg.seconds = saved.seconds;
       if (saved.skips === "unlimited") S.cfg.skips = Infinity;
       else if (SKIP_OPTIONS.indexOf(saved.skips) >= 0) S.cfg.skips = saved.skips;
-      if (Number.isFinite(saved.turnsEach) && saved.turnsEach >= 2 && saved.turnsEach <= 8) S.cfg.turnsEach = saved.turnsEach;
+      if (Number.isFinite(saved.turnsEach) && saved.turnsEach >= 2 && saved.turnsEach <= 12) S.cfg.turnsEach = saved.turnsEach;
       if (Array.isArray(saved.decks)) {
         const valid = saved.decks.filter(id => DECKS.some(d => d.id === id));
         if (valid.length) S.cfg.decks = new Set(valid);
@@ -653,6 +738,8 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
       if (!ctx.capabilities.storage) return;
       ctx.storage.set(SAVE_KEY, {
         names: S.teams.map(t => t.name),
+        teamCount: S.teams.length,
+        roster: S.roster.map(pl => ({ name: pl.name, team: pl.team })),
         seconds: S.cfg.seconds,
         skips: S.cfg.skips === Infinity ? "unlimited" : S.cfg.skips,
         turnsEach: S.cfg.turnsEach,
@@ -711,8 +798,8 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
      * Each one returns markup; mount() swaps it in and rewires the taps.
      * ================================================================ */
     const TURN_OPTIONS = (() => {
-      const set = new Set([2, 3, 4, 5, 6, 8]);
-      set.add(Math.min(8, Math.max(2, S.cfg.turnsEach)));
+      const set = new Set([2, 3, 4, 5, 6, 8, 10, 12]);
+      set.add(Math.min(12, Math.max(2, S.cfg.turnsEach)));
       return Array.from(set).sort((a, b) => a - b);
     })();
 
@@ -728,13 +815,42 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     }
 
     function teamBoard() {
-      const lead = S.teams[0].score === S.teams[1].score ? -1 : (S.teams[0].score > S.teams[1].score ? 0 : 1);
-      return `<div class="ff-board">` + S.teams.map((t, i) =>
-        `<div class="ff-team${i === lead ? " lead" : ""}" style="--c:${t.color}">
+      const top = S.teams.reduce((m, t) => Math.max(m, t.score), -Infinity);
+      // Nobody is outlined while the top is shared, or every team would be.
+      const sole = S.teams.filter(t => t.score === top).length === 1;
+      return `<div class="ff-board${S.teams.length > 2 ? " wide" : ""}">` + S.teams.map(t =>
+        `<div class="ff-team${sole && t.score === top ? " lead" : ""}" style="--c:${t.color}">
            <b>${esc(t.name)}</b><s>${t.score}</s></div>`).join("") + `</div>`;
     }
 
+    // A line of honest advice about whether the room actually fits the rules
+    // it has chosen: twenty people and four turns means most never play.
+    function rosterHint() {
+      if (!S.roster.length) return "Optional. Add names and the phone calls out whose turn it is to give clues.";
+      const biggest = S.teams.reduce((m, t, i) => Math.max(m, membersOf(i).length), 0);
+      const empty = S.teams.filter((t, i) => !membersOf(i).length).length;
+      if (empty) return `${empty} team${empty === 1 ? " has" : "s have"} nobody in it \u2014 shuffle, or move players across.`;
+      if (S.cfg.turnsEach >= biggest) return `${S.roster.length} players. Everyone gives clues at least once.`;
+      return `${S.roster.length} players, up to ${biggest} a team \u2014 only ${S.cfg.turnsEach} of them get to give clues. Raise turns each for a full round.`;
+    }
+
     function setupScreen() {
+      const teamChips = TEAM_OPTIONS.map(t =>
+        `<button class="ff-chip${S.teams.length === t ? " on" : ""}" data-teamcount="${t}">${t}</button>`).join("");
+      // Players are listed under the team they are on, and tapping a name
+      // walks them to the next team.
+      const rosterLists = S.teams.map((t, i) => {
+        const mine = S.roster.map((pl, idx) => ({ pl, idx })).filter(e => e.pl.team === i);
+        if (!mine.length && !S.roster.length) return "";
+        return `<div style="display:flex;flex-direction:column;gap:6px">
+          <span class="ff-t" style="color:${t.color}">${esc(t.name)} &middot; ${mine.length}</span>
+          <div class="ff-chips">${mine.map(e =>
+            `<span class="ff-ply" style="--c:${t.color}">
+               <button data-move="${e.idx}" aria-label="Move ${esc(e.pl.name)} to the next team">${esc(e.pl.name)}</button>
+               <button data-drop="${e.idx}" aria-label="Remove ${esc(e.pl.name)}">&times;</button>
+             </span>`).join("") || `<span class="ff-note" style="text-align:left">nobody yet</span>`}</div>
+        </div>`;
+      }).join("");
       const deckChips = DECKS.map(d =>
         `<button class="ff-chip${S.cfg.decks.has(d.id) ? " on" : ""}" data-deck="${d.id}">${esc(d.name)}</button>`).join("");
       const secChips = SECONDS_OPTIONS.map(s =>
@@ -757,6 +873,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
 
   <div class="ff-field">
     <span class="ff-t">Teams</span>
+    <div class="ff-chips">${teamChips}</div>
     ${S.teams.map((t, i) => `
       <div style="display:flex;align-items:center;gap:10px">
         <span class="ff-dot" style="background:${t.color}"></span>
@@ -764,6 +881,22 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
                value="${esc(t.name)}" maxlength="18" autocomplete="off"
                spellcheck="false" aria-label="Team ${i + 1} name">
       </div>`).join("")}
+  </div>
+
+  <div class="ff-field">
+    <span class="ff-t">Players${S.roster.length ? " &middot; " + S.roster.length : ""}</span>
+    <div style="display:flex;gap:8px">
+      <input class="ff-name" data-newplayer placeholder="Add a name" maxlength="16"
+             autocomplete="off" spellcheck="false" aria-label="Add a player"
+             style="flex:1;min-width:0;font-size:15px">
+      <button class="ff-chip" data-add style="flex:none">Add</button>
+    </div>
+    ${rosterLists}
+    ${S.roster.length ? `<div class="ff-chips">
+      <button class="ff-chip" data-deal>Shuffle teams</button>
+      <button class="ff-chip" data-clearroster>Clear all</button>
+    </div>` : ""}
+    <p class="ff-note" style="text-align:left">${rosterHint()}</p>
   </div>
 
   <div class="ff-field">
@@ -802,17 +935,19 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
 
     function passScreen() {
       const t = S.teams[S.active];
+      const g = giverFor(S.active);
       const n = S.tiebreak ? "Tiebreak" : `Turn ${t.taken + 1} of ${turnTarget()}`;
       return `
 ${teamBoard()}
 <div class="ff-pass" style="--team:${t.color}">
   <p class="ff-t" style="color:rgba(255,255,255,.82)">${n}</p>
-  <h1 class="ff-h1" style="font-size:32px">${esc(t.name)}</h1>
-  <p class="ff-sub">Hand the phone to your clue-giver.<br>Everyone else on the team, eyes off the screen.</p>
+  <h1 class="ff-h1" style="font-size:${g ? 24 : 32}px">${esc(t.name)}</h1>
+  ${g ? `<h1 class="ff-h1" style="font-size:38px">${esc(g.name)}</h1>` : ""}
+  <p class="ff-sub">${g ? `Hand the phone to ${esc(g.name)}.` : "Hand the phone to your clue-giver."}<br>Everyone else on the team, eyes off the screen.</p>
 </div>
 <div class="ff-foot">
   <button class="ff-btn go big" data-ready>Start my turn</button>
-  <p class="ff-note">Other team: watch the screen and hit TABOO on a slip.</p>
+  <p class="ff-note">${S.teams.length > 2 ? "Other teams" : "Other team"}: watch the screen and hit TABOO on a slip.</p>
 </div>`;
     }
 
@@ -853,7 +988,7 @@ ${teamBoard()}
       const got = S.turn.log.filter(e => e.kind === "got").length;
       return `
 <div>
-  <p class="ff-t">Time &mdash; ${got} word${got === 1 ? "" : "s"} landed</p>
+  <p class="ff-t">${S.turn.giver ? esc(S.turn.giver) + " &middot; " : ""}Time &mdash; ${got} word${got === 1 ? "" : "s"} landed</p>
   <h1 class="ff-h1" style="font-size:28px">${esc(t.name)} scored ${S.turn.points >= 0 ? "+" : ""}${S.turn.points}</h1>
 </div>
 ${teamBoard()}
@@ -864,17 +999,20 @@ ${teamBoard()}
     }
 
     function overScreen() {
-      const [a, b] = S.teams;
-      const draw = a.score === b.score;
-      const win = draw ? null : (a.score > b.score ? a : b);
-      const head = draw ? "It's a draw" : `${win.name} wins`;
-      const color = draw ? "#6b625a" : win.color;
+      const ranked = S.teams.slice().sort((x, y) => y.score - x.score);
+      const top = ranked[0].score;
+      const leaders = S.teams.filter(t => t.score === top);
+      const draw = leaders.length > 1;
+      const head = !draw ? `${leaders[0].name} wins`
+        : leaders.length === S.teams.length ? "It's a draw"
+        : `${leaders.map(t => t.name).join(" and ")} tie`;
+      const color = draw ? "#6b625a" : leaders[0].color;
       const pb = S.personalBest ? `<p class="ff-note" style="color:${HOT}">New personal best</p>` : "";
       return `
 <div class="ff-pass hug" style="--team:${color}">
   <p class="ff-t" style="color:rgba(255,255,255,.82)">Full time</p>
-  <h1 class="ff-h1" style="font-size:30px">${esc(head)}</h1>
-  <p class="ff-sub" style="font-size:26px;font-weight:800;color:#fff">${a.score} &ndash; ${b.score}</p>
+  <h1 class="ff-h1" style="font-size:${head.length > 22 ? 24 : 30}px">${esc(head)}</h1>
+  <p class="ff-sub" style="font-size:26px;font-weight:800;color:#fff">${ranked.map(t => t.score).join(" &ndash; ")}</p>
 </div>
 ${teamBoard()}
 <p class="ff-note">Best turn of the match: ${S.bestTurn} word${S.bestTurn === 1 ? "" : "s"} in ${S.cfg.seconds}s</p>
@@ -942,6 +1080,44 @@ ${pb}
         if (key === "haptics" && S.cfg.haptics) haptic("light");
         saveSettings(); mount();
       });
+      bind("[data-teamcount]", el => {
+        setTeamCount(Number(el.getAttribute("data-teamcount")));
+        saveSettings(); mount();
+      });
+
+      const addField = stage.querySelector("[data-newplayer]");
+      const commitPlayer = () => {
+        if (!addField) return;
+        if (addPlayer(addField.value)) {
+          haptic("light");
+          // Twenty names is a lot of typing, so keep the caret where it was.
+          S.focusAdd = true;
+          saveSettings();
+          mount();
+        }
+      };
+      if (addField) {
+        ctx.listen(addField, "keydown", e => {
+          if (e.key === "Enter") { e.preventDefault(); commitPlayer(); }
+        });
+      }
+      bind("[data-add]", commitPlayer);
+      bind("[data-move]", el => {
+        const pl = S.roster[Number(el.getAttribute("data-move"))];
+        if (pl) { pl.team = (pl.team + 1) % S.teams.length; saveSettings(); mount(); }
+      });
+      bind("[data-drop]", el => {
+        S.roster.splice(Number(el.getAttribute("data-drop")), 1);
+        saveSettings(); mount();
+      });
+      bind("[data-deal]", () => { dealRoster(); haptic("medium"); saveSettings(); mount(); });
+      bind("[data-clearroster]", () => { S.roster = []; saveSettings(); mount(); });
+
+      if (S.focusAdd && addField) {
+        S.focusAdd = false;
+        addField.focus();
+      }
+
       bind("[data-rules]", () => {
         if (ctx.onboarding && ctx.onboarding.replay) ctx.onboarding.replay();
       });
@@ -977,7 +1153,7 @@ ${pb}
     function startMatch() {
       ctx.platform.start({ mode: Array.from(S.cfg.decks).join("+") });
       sfx.unlock();
-      S.teams.forEach(t => { t.score = 0; t.taken = 0; });
+      S.teams.forEach(t => { t.score = 0; t.taken = 0; t.giverAt = 0; });
       S.active = 0;
       S.bestTurn = 0;
       S.tiebreak = false;
@@ -992,13 +1168,17 @@ ${pb}
       ctx.platform.emit("match_start", {
         seconds: S.cfg.seconds,
         turns: S.cfg.turnsEach,
+        teams: S.teams.length,
+        players: S.roster.length,
         decks: Array.from(S.cfg.decks)
       });
     }
 
     function startTurn() {
       sfx.unlock();
+      const giver = giverFor(S.active);
       S.turn = {
+        giver: giver ? giver.name : null,
         card: dealCard(),
         msLeft: S.cfg.seconds * 1000,
         skipsLeft: S.cfg.skips,
@@ -1042,6 +1222,8 @@ ${pb}
       const team = S.teams[S.active];
       team.score += S.turn.points;
       team.taken += 1;
+      // Move the cursor on, so next time this team is up it is someone else.
+      team.giverAt += 1;
 
       const landed = S.turn.log.filter(e => e.kind === "got").length;
       if (landed > S.bestTurn) S.bestTurn = landed;
@@ -1050,12 +1232,12 @@ ${pb}
       S.screen = "turnEnd";
       mount();
 
-      ctx.platform.milestone("turn_end", { team: team.name, landed, points: S.turn.points });
+      ctx.platform.milestone("turn_end", { team: team.name, giver: S.turn.giver, landed, points: S.turn.points });
     }
 
     function afterTurn() {
       if (S.gameOverNext) { finishMatch(); return; }
-      S.active = S.active === 0 ? 1 : 0;
+      S.active = (S.active + 1) % S.teams.length;
       S.screen = "pass";
       mount();
     }
@@ -1066,15 +1248,18 @@ ${pb}
       sfx.fanfare();
       haptic("success");
 
-      const [a, b] = S.teams;
-      const draw = a.score === b.score;
-      const winner = draw ? null : (a.score > b.score ? a : b);
+      const best = S.teams.reduce((m, t) => Math.max(m, t.score), -Infinity);
+      const leaders = S.teams.filter(t => t.score === best);
+      const draw = leaders.length > 1;
+      const winner = draw ? null : leaders[0];
 
       ctx.platform.setProgress(1);
       ctx.platform.complete({
         result: draw ? "draw" : "win",
         winner: winner ? winner.name : null,
-        scores: [a.score, b.score],
+        teams: S.teams.length,
+        players: S.roster.length,
+        scores: S.teams.map(t => t.score),
         bestTurn: S.bestTurn
       });
 
@@ -1096,8 +1281,8 @@ ${pb}
           result: draw ? "draw" : "win",
           score: S.bestTurn,
           text: draw
-            ? `${a.score}–${b.score} draw in Forbidden Five`
-            : `${winner.name} won ${Math.max(a.score, b.score)}–${Math.min(a.score, b.score)} at Forbidden Five`
+            ? `${S.teams.map(t => t.score).sort((x, y) => y - x).join("–")} draw in Forbidden Five`
+            : `${winner.name} won Forbidden Five on ${best}`
         });
       }
     }

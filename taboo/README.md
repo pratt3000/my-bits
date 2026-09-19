@@ -5,8 +5,11 @@ party game, on one phone.
 
 One player holds the handset and has to talk their team onto the word printed
 across the top of the card — without ever saying it, or any of the five words
-listed underneath. The other team reads the same screen over their shoulder and
-hits the buzzer the moment a forbidden word slips out.
+listed underneath. The other teams read the same screen over their shoulder and
+hit the buzzer the moment a forbidden word slips out.
+
+Built for a room rather than a pair: two to four teams, up to forty names, and a
+clue-giver rotation that works round every team so nobody hogs the phone.
 
 > Say **APPLE** without RED, FRUIT, PIE, CIDER or CORE.
 
@@ -23,11 +26,29 @@ The game is titled *Forbidden Five* — for the five words under the answer —
 rather than *Taboo*, which is Hasbro's mark. The folder keeps the working name,
 as `galaxian/` does. Nothing about the rules is softened; only the title is ours.
 
+## The room
+
+Teams are 2–4, and the player list is optional — leave it empty and the game
+behaves as it always did, with each team sorting out its own clue-giver.
+
+Type names in and it does more. New players drop into the thinnest team, so
+twenty names typed straight through come out 5/5/5/5. **Shuffle teams** redeals
+the whole room at random; tapping a name walks that person to the next team;
+the × removes them. From then on the handoff screen calls out *who* is up by
+name, cycling round each team's list in order, so over a match everybody gets
+the phone exactly once before anyone gets it twice.
+
+A line under the list does the arithmetic nobody does at a party: twenty people
+in two teams with four turns each means only four of ten on each team ever give
+clues, and it says so, and tells you to raise turns each. Turns go to 12, which
+is a full round for a team of twelve.
+
 ## A turn
 
-1. **Handoff.** A full-bleed panel in the team's colour names whose turn it is
-   and tells everyone else to look away. Nothing starts until the clue-giver
-   presses the button themselves, so the phone can cross the room first.
+1. **Handoff.** A full-bleed panel in the team's colour names the team, and the
+   clue-giver by name when there is a roster, and tells everyone else to look
+   away. Nothing starts until the clue-giver presses the button themselves, so
+   the phone can cross the room first.
 2. **Play.** The card fills the screen: the answer in a coloured band, the five
    forbidden words stacked under it. The clock drains across a bar in the same
    colour and ticks audibly over the last ten seconds.
@@ -36,16 +57,20 @@ as `galaxian/` does. Nothing about the rules is softened; only the title is ours
    - **SKIP** — rationed, and the button disables when they run out.
 3. **Time.** The card in hand when the buzzer goes is dead — it is never logged
    and never scored, exactly as a card is discarded across a table.
-4. **Summary.** Every card played, marked and totalled, with the running match
-   score, then the phone goes back across the room.
+4. **Summary.** Every card played, marked and totalled, credited to whoever gave
+   the clues, with the running match score, then the phone goes back across the
+   room.
 
-A match runs until both teams have used every turn. A draw offers a tiebreak
-turn each, repeating until somebody is ahead.
+A match runs until every team has used every turn. A tie at the top offers a
+tiebreak turn each, repeating until somebody is ahead — and with three or four
+teams it names the teams that are level rather than calling the whole thing a
+draw.
 
 ## The decks
 
 310 cards across five decks, dealt off one shuffled pile spanning everything
-selected — so a card cannot come round twice until the pile is exhausted.
+selected — so a card cannot come round twice until the pile is exhausted, at
+which point it reshuffles.
 
 | Deck              | Cards | What's in it                                    |
 | ----------------- | ----- | ----------------------------------------------- |
@@ -62,14 +87,14 @@ substring of another (so `POPCORN` and `POPCORN BUCKET` cannot both exist).
 ## Settings
 
 All of it is in-game, because in this game they are the players' choices rather
-than the creator's: team names, 30/45/60/90 seconds a turn, 0–3 or unlimited
-skips, 2–8 turns each, which decks are in the pile, and sound and vibration.
-Everything persists through `ctx.storage`, so the same group picks up where they
-left off.
+than the creator's: how many teams, team names, the player list, 30/45/60/90
+seconds a turn, 0–3 or unlimited skips, 2–12 turns each, which decks are in the
+pile, and sound and vibration. Everything persists through `ctx.storage`,
+roster included, so the same group picks up where they left off.
 
-`manifest.tuning` sets which of those a fresh install *starts* on, plus the two
+`manifest.tuning` sets which of those a fresh install *starts* on, plus the
 things players never see: what a buzz costs, what a skip costs, when the clock
-starts ticking, and the two team colours. Ten knobs, all bounded.
+starts ticking, and the four team colours. Thirteen knobs, all bounded.
 
 ## Everything is drawn
 
@@ -123,10 +148,18 @@ Driven headless in Chromium against a mock `ctx` built from this manifest, at
   buttons, the clock running out, the turn summary, and the result screen —
   with no page errors, nothing overflowing the root, and no touch target under
   40px.
+- **20 players across 4 teams**: dealt 5/5/5/5, all 20 turns played, and all
+  20 distinct players gave clues, one each, in strict rotation. The partial tie
+  on the result screen read "Team One and Team Four tie", not "draw".
+- **22 players across 2 teams at 12 turns each**: 24 turns, 22 distinct
+  clue-givers. At 20 players, 2 teams and only 3 turns each, the setup line
+  correctly warns that just 3 of 10 on each team will give clues.
+- Moving a player across teams and reshuffling both rebalance the split.
+- With no roster at all, the original two-team game is unchanged.
 - Skips disable at zero and stay live on unlimited.
 - The card in hand at time-up is not logged and not scored.
-- Replay reshuffles: zero cards repeated between the first turn of one match
-  and the first turn of the next.
-- A draw offers a tiebreak, the tiebreak resolves, and it neither edits the
+- 129 consecutive draws off a one-deck pile returned 129 distinct cards: no
+  card comes round twice before the pile is exhausted.
+- A tie offers a tiebreak, the tiebreak resolves, and it neither edits the
   saved turn count nor suppresses a record it improved.
-- Settings survive a return to the setup screen.
+- Settings, team count and roster survive a return to the setup screen.
