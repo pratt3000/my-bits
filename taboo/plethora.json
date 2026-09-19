@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Forbidden Five",
+  "description": "The word-twisting party game, on one phone. Two teams, and a clue-giver who has to land the word on the card without ever saying it — or any of the five forbidden words printed under it. Say APPLE without RED, FRUIT, PIE, CIDER or CORE. Your team shouts guesses, the other team watches the screen over your shoulder and hits the buzzer the moment you slip. Every word you land is a point, every buzz costs you one, and skips are rationed. Pass the phone, take turns, and play to the whistle. 310 cards across five decks, a turn timer you can set, and a leaderboard for the biggest single turn anyone has ever pulled off.",
+  "tags": [
+    "party",
+    "word-game",
+    "guessing",
+    "teams",
+    "pass-and-play",
+    "local-multiplayer",
+    "social",
+    "family",
+    "timer",
+    "cards"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "onboarding": {
+    "kind": "briefing",
+    "version": 1,
+    "replayable": true,
+    "pages": [
+      {
+        "title": "One phone, two teams",
+        "body": "Split the room in two. Each turn, one player on the active team is the clue-giver and holds the phone. Their team shouts guesses. The other team reads the screen over their shoulder and watches for slip-ups."
+      },
+      {
+        "title": "Say the word without saying the word",
+        "body": "The big word at the top is what your team has to say out loud. The five words under it are forbidden — so is any part of the answer itself. Land it and tap GOT IT for a point. Stuck? SKIP, if you have skips left."
+      },
+      {
+        "title": "The other team is listening",
+        "body": "If the clue-giver says a forbidden word, the watching team taps TABOO and the point comes off. When time runs out the card in hand is dead. Teams alternate until every turn is used, and the higher score wins."
+      }
+    ]
+  },
+  "memory": {
+    "records": {
+      "best_turn": {
+        "label": "Words In One Turn",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user",
+        "dimensions": {
+          "length": [
+            "30s",
+            "45s",
+            "60s",
+            "90s"
+          ]
+        }
+      }
+    }
+  },
+  "tuning": {
+    "schemaVersion": 1,
+    "groups": {
+      "rules": { "label": "Rules" },
+      "feel": { "label": "Feel" },
+      "look": { "label": "Look" }
+    },
+    "knobs": {
+      "default_seconds": {
+        "label": "Turn length preselected at setup",
+        "type": "choice",
+        "default": "60",
+        "options": ["30", "45", "60", "90"],
+        "group": "rules",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
+      "default_skips": {
+        "label": "Skips per turn preselected at setup",
+        "type": "choice",
+        "default": "2",
+        "options": ["0", "1", "2", "3", "unlimited"],
+        "group": "rules",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
+      "default_turns": {
+        "label": "Turns each team gets",
+        "type": "integer",
+        "default": 4,
+        "min": 2,
+        "max": 8,
+        "step": 1,
+        "group": "rules",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
+      "taboo_penalty": {
+        "label": "Points lost to a buzz",
+        "type": "integer",
+        "default": -1,
+        "min": -3,
+        "max": 0,
+        "step": 1,
+        "group": "rules",
+        "intent": "difficulty",
+        "apply": "live"
+      },
+      "skip_penalty": {
+        "label": "Points lost to a skip",
+        "type": "integer",
+        "default": 0,
+        "min": -1,
+        "max": 0,
+        "step": 1,
+        "group": "rules",
+        "intent": "difficulty",
+        "apply": "live"
+      },
+      "warn_seconds": {
+        "label": "Seconds left when the clock starts ticking",
+        "type": "integer",
+        "default": 10,
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "group": "feel",
+        "intent": "feel",
+        "apply": "live"
+      },
+      "sound_default": {
+        "label": "Sound on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "feel",
+        "intent": "audio",
+        "apply": "restart"
+      },
+      "haptics_default": {
+        "label": "Vibration on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "feel",
+        "intent": "feel",
+        "apply": "restart"
+      },
+      "team_one_color": {
+        "label": "First team color",
+        "type": "color",
+        "default": "#ff5b4a",
+        "group": "look",
+        "intent": "visual",
+        "apply": "live"
+      },
+      "team_two_color": {
+        "label": "Second team color",
+        "type": "color",
+        "default": "#2fb8e6",
+        "group": "look",
+        "intent": "visual",
+        "apply": "live"
+      }
+    }
+  }
+}
