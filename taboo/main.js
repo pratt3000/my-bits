@@ -415,7 +415,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
 
 .ff-btn{appearance:none;border:0;width:100%;min-height:54px;border-radius:16px;
   font:inherit;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:15px;
-  background:#272220;color:${INK};cursor:pointer;display:flex;align-items:center;
+  background:#272220;color:${INK};cursor:pointer;touch-action:manipulation;display:flex;align-items:center;
   justify-content:center;gap:8px;padding:10px 12px;transition:transform .07s ease,filter .12s ease}
 .ff-btn:active{transform:scale(.975);filter:brightness(1.15)}
 .ff-btn[disabled]{opacity:.34;pointer-events:none}
@@ -427,7 +427,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
 
 .ff-chips{display:flex;flex-wrap:wrap;gap:8px}
 .ff-chip{appearance:none;border:0;font:inherit;font-weight:700;font-size:14px;letter-spacing:.04em;
-  padding:11px 14px;min-height:44px;border-radius:12px;background:#241f1d;color:#bab0a3;cursor:pointer}
+  padding:11px 14px;min-height:44px;border-radius:12px;background:#241f1d;color:#bab0a3;cursor:pointer;touch-action:manipulation}
 .ff-chip.on{background:${INK};color:#14110f}
 .ff-chip:active{transform:scale(.96)}
 
@@ -488,7 +488,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
 
 .ff-ply{display:inline-flex;align-items:stretch;border-radius:12px;overflow:hidden;background:#241f1d}
 .ff-ply button{appearance:none;border:0;font:inherit;font-weight:700;font-size:14px;
-  background:transparent;color:#e6ddcf;cursor:pointer;min-height:44px;padding:0 12px}
+  background:transparent;color:#e6ddcf;cursor:pointer;touch-action:manipulation;min-height:44px;padding:0 12px}
 .ff-ply button[data-move]{border-left:4px solid var(--c);padding-left:10px}
 .ff-ply button[data-drop]{color:#8a8076;font-size:19px;padding:0 12px;
   box-shadow:inset 1px 0 0 rgba(255,255,255,.07)}
@@ -774,18 +774,6 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     const esc = s => String(s).replace(/[&<>"']/g, c =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-    // Prefer the SDK's activation helper: it covers click plus keyboard
-    // for DOM controls and hands cleanup back to ctx.
-    function onTap(el, fn) {
-      if (!el) return;
-      if (ctx.input && ctx.input.activate) ctx.input.activate(el, fn);
-      else ctx.listen(el, "click", fn);
-    }
-
-    function bind(selector, fn) {
-      stage.querySelectorAll(selector).forEach(el => onTap(el, () => fn(el)));
-    }
-
     function screenFlash(color) {
       flash.style.setProperty("--flash", color);
       flash.classList.remove("on");
@@ -1030,6 +1018,13 @@ ${pb}
      * ================================================================ */
     let secsNode = null, fillNode = null, tallyNode = null;
 
+    // Repainting is immediate, and safe to do from inside a tap, because
+    // the only listeners are on the stage itself and the stage is never
+    // replaced -- only its contents. Deferring it by a tick would leave the
+    // screen one frame behind the state, so a quick second tap would act on
+    // a card nobody had seen yet.
+    function repaint() { mount(); }
+
     function mount() {
       secsNode = fillNode = tallyNode = null;
       stage.classList.remove("ff-warn");
@@ -1044,108 +1039,127 @@ ${pb}
       else if (S.screen === "turnEnd") stage.innerHTML = turnEndScreen();
       else stage.innerHTML = overScreen();
 
-      if (S.screen === "setup") wireSetup();
-      else if (S.screen === "pass") bind("[data-ready]", startTurn);
-      else if (S.screen === "play") wirePlay();
-      else if (S.screen === "turnEnd") bind("[data-next]", afterTurn);
-      else wireOver();
+      if (S.screen === "play") {
+        secsNode = stage.querySelector("[data-secs]");
+        fillNode = stage.querySelector("[data-fill]");
+        tallyNode = stage.querySelector("[data-tally]");
+        paintClock();
+      } else if (S.screen === "setup" && S.focusAdd) {
+        S.focusAdd = false;
+        const field = stage.querySelector("[data-newplayer]");
+        if (field) field.focus();
+      }
     }
 
-    function wireSetup() {
-      stage.querySelectorAll("[data-team]").forEach(el => {
-        ctx.listen(el, "input", () => {
-          const i = Number(el.getAttribute("data-team"));
-          S.teams[i].name = el.value.slice(0, 18);
-          saveSettings();
-        });
-      });
-      bind("[data-sec]", el => { S.cfg.seconds = Number(el.getAttribute("data-sec")); saveSettings(); mount(); });
-      bind("[data-skips]", el => {
+    /* ---------------------------------------------------------------- *
+     * ONE DELEGATED LISTENER FOR EVERY CONTROL
+     *
+     * The screen rebuilds itself on every tap. Binding each button after
+     * each repaint meant re-registering some thirty activations a tap and,
+     * worse, tearing the tapped node out of the document from inside the
+     * handler the runtime was still dispatching on. One listener on the
+     * stage outlives every repaint instead, and native buttons already
+     * fire click from Enter and Space, so keyboard activation comes free.
+     * ---------------------------------------------------------------- */
+    function commitPlayer(field) {
+      const f = field || stage.querySelector("[data-newplayer]");
+      if (!f || !addPlayer(f.value)) return;
+      haptic("light");
+      // Twenty names is a lot of typing, so put the caret back afterwards.
+      S.focusAdd = true;
+      saveSettings();
+      repaint();
+    }
+
+    const ACTIONS = {
+      // ---- setup ----
+      "data-sec": el => { S.cfg.seconds = Number(el.getAttribute("data-sec")); saveSettings(); repaint(); },
+      "data-skips": el => {
         const v = el.getAttribute("data-skips");
         S.cfg.skips = v === "Infinity" ? Infinity : Number(v);
-        saveSettings(); mount();
-      });
-      bind("[data-turns]", el => { S.cfg.turnsEach = Number(el.getAttribute("data-turns")); saveSettings(); mount(); });
-      bind("[data-deck]", el => {
+        saveSettings(); repaint();
+      },
+      "data-turns": el => { S.cfg.turnsEach = Number(el.getAttribute("data-turns")); saveSettings(); repaint(); },
+      "data-teamcount": el => { setTeamCount(Number(el.getAttribute("data-teamcount"))); saveSettings(); repaint(); },
+      "data-deck": el => {
         const id = el.getAttribute("data-deck");
         // A match needs somewhere to deal from, so the last deck standing
         // cannot be switched off.
         if (S.cfg.decks.has(id)) { if (S.cfg.decks.size > 1) S.cfg.decks.delete(id); }
         else S.cfg.decks.add(id);
-        saveSettings(); mount();
-      });
-      bind("[data-toggle]", el => {
+        saveSettings(); repaint();
+      },
+      "data-toggle": el => {
         const key = el.getAttribute("data-toggle");
         S.cfg[key] = !S.cfg[key];
         if (key === "haptics" && S.cfg.haptics) haptic("light");
-        saveSettings(); mount();
-      });
-      bind("[data-teamcount]", el => {
-        setTeamCount(Number(el.getAttribute("data-teamcount")));
-        saveSettings(); mount();
-      });
-
-      const addField = stage.querySelector("[data-newplayer]");
-      const commitPlayer = () => {
-        if (!addField) return;
-        if (addPlayer(addField.value)) {
-          haptic("light");
-          // Twenty names is a lot of typing, so keep the caret where it was.
-          S.focusAdd = true;
-          saveSettings();
-          mount();
-        }
-      };
-      if (addField) {
-        ctx.listen(addField, "keydown", e => {
-          if (e.key === "Enter") { e.preventDefault(); commitPlayer(); }
-        });
-      }
-      bind("[data-add]", commitPlayer);
-      bind("[data-move]", el => {
+        saveSettings(); repaint();
+      },
+      "data-add": () => commitPlayer(null),
+      "data-move": el => {
         const pl = S.roster[Number(el.getAttribute("data-move"))];
-        if (pl) { pl.team = (pl.team + 1) % S.teams.length; saveSettings(); mount(); }
-      });
-      bind("[data-drop]", el => {
-        S.roster.splice(Number(el.getAttribute("data-drop")), 1);
-        saveSettings(); mount();
-      });
-      bind("[data-deal]", () => { dealRoster(); haptic("medium"); saveSettings(); mount(); });
-      bind("[data-clearroster]", () => { S.roster = []; saveSettings(); mount(); });
+        if (pl) { pl.team = (pl.team + 1) % S.teams.length; saveSettings(); repaint(); }
+      },
+      "data-drop": el => {
+        const i = Number(el.getAttribute("data-drop"));
+        if (i >= 0 && i < S.roster.length) { S.roster.splice(i, 1); saveSettings(); repaint(); }
+      },
+      "data-deal": () => { dealRoster(); haptic("medium"); saveSettings(); repaint(); },
+      "data-clearroster": () => { S.roster = []; saveSettings(); repaint(); },
+      "data-rules": () => { if (ctx.onboarding && ctx.onboarding.replay) ctx.onboarding.replay(); },
+      "data-go": () => startMatch(),
 
-      if (S.focusAdd && addField) {
-        S.focusAdd = false;
-        addField.focus();
-      }
+      // ---- play ----
+      "data-ready": () => startTurn(),
+      "data-got": () => resolve("got"),
+      "data-taboo": () => resolve("taboo"),
+      "data-skip": () => resolve("skip"),
 
-      bind("[data-rules]", () => {
-        if (ctx.onboarding && ctx.onboarding.replay) ctx.onboarding.replay();
-      });
-      bind("[data-go]", startMatch);
-    }
-
-    function wirePlay() {
-      secsNode = stage.querySelector("[data-secs]");
-      fillNode = stage.querySelector("[data-fill]");
-      tallyNode = stage.querySelector("[data-tally]");
-      bind("[data-got]", () => resolve("got"));
-      bind("[data-taboo]", () => resolve("taboo"));
-      bind("[data-skip]", () => resolve("skip"));
-      paintClock();
-    }
-
-    function wireOver() {
-      bind("[data-again]", () => { startMatch(); });
-      bind("[data-setup]", () => { S.screen = "setup"; mount(); });
-      bind("[data-tiebreak]", () => {
+      // ---- results ----
+      "data-next": () => afterTurn(),
+      "data-again": () => startMatch(),
+      "data-setup": () => { S.screen = "setup"; repaint(); },
+      "data-tiebreak": () => {
         // One extra turn each, from the top, until somebody is ahead.
         S.tiebreak = true;
         S.extraTurns += 1;
         S.active = 0;
         S.screen = "pass";
-        mount();
-      });
-    }
+        repaint();
+      }
+    };
+
+    const ACTION_KEYS = Object.keys(ACTIONS);
+    const ACTION_SELECTOR = ACTION_KEYS.map(a => "[" + a + "]").join(",");
+
+    ctx.listen(stage, "click", event => {
+      const target = event.target;
+      const el = target && target.closest ? target.closest(ACTION_SELECTOR) : null;
+      if (!el || el.disabled) return;
+      for (let i = 0; i < ACTION_KEYS.length; i++) {
+        if (el.hasAttribute(ACTION_KEYS[i])) { ACTIONS[ACTION_KEYS[i]](el); return; }
+      }
+    });
+
+    ctx.listen(stage, "input", event => {
+      const el = event.target;
+      if (!el || !el.getAttribute) return;
+      const i = el.getAttribute("data-team");
+      if (i === null) return;
+      const team = S.teams[Number(i)];
+      // Typing a team name must never repaint: that would blow away the
+      // field under the caret on every keystroke.
+      if (team) { team.name = el.value.slice(0, 18); saveSettings(); }
+    });
+
+    ctx.listen(stage, "keydown", event => {
+      if (event.key !== "Enter") return;
+      const el = event.target;
+      if (el && el.hasAttribute && el.hasAttribute("data-newplayer")) {
+        event.preventDefault();
+        commitPlayer(el);
+      }
+    });
 
     /* ================================================================ *
      * MATCH FLOW
@@ -1164,7 +1178,7 @@ ${pb}
       buildPool();
       S.started = true;
       S.screen = "pass";
-      mount();
+      repaint();
       ctx.platform.emit("match_start", {
         seconds: S.cfg.seconds,
         turns: S.cfg.turnsEach,
@@ -1188,7 +1202,7 @@ ${pb}
         lastWholeSecond: -1
       };
       S.screen = "play";
-      mount();
+      repaint();
       haptic("light");
     }
 
@@ -1210,7 +1224,7 @@ ${pb}
       ctx.platform.interact({ type: kind, word: S.turn.card.word, deck: S.turn.card.deck });
 
       S.turn.card = dealCard();
-      mount();
+      repaint();
     }
 
     function endTurn() {
@@ -1230,7 +1244,7 @@ ${pb}
 
       S.gameOverNext = S.teams.every(t => t.taken >= turnTarget());
       S.screen = "turnEnd";
-      mount();
+      repaint();
 
       ctx.platform.milestone("turn_end", { team: team.name, giver: S.turn.giver, landed, points: S.turn.points });
     }
@@ -1239,12 +1253,12 @@ ${pb}
       if (S.gameOverNext) { finishMatch(); return; }
       S.active = (S.active + 1) % S.teams.length;
       S.screen = "pass";
-      mount();
+      repaint();
     }
 
     async function finishMatch() {
       S.screen = "over";
-      mount();
+      repaint();
       sfx.fanfare();
       haptic("success");
 
@@ -1272,7 +1286,7 @@ ${pb}
             label: `${S.bestTurn} in ${S.cfg.seconds}s`,
             dimensions: { length: S.cfg.seconds + "s" }
           });
-          if (res && res.isPersonalBest) { S.personalBest = true; if (S.screen === "over") mount(); }
+          if (res && res.isPersonalBest) { S.personalBest = true; if (S.screen === "over") repaint(); }
         } catch (e) { /* a refused write must never break the result screen */ }
       }
 

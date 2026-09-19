@@ -115,8 +115,17 @@ tick and the fanfare are all built in place.
 
 - Runtime `plethora-bit@2`, SDK 1.5.7, manifest schema 1, no dependencies.
 - Permissions `audio`, `haptics`, `storage` — and nothing else is touched.
-- Controls go through `ctx.input.activate`, the clock through `ctx.game.loop`,
-  and the turn tally through `ctx.game.score`, submitted once a match.
+- The clock runs on `ctx.game.loop` and the turn tally on `ctx.game.score`,
+  submitted once a match.
+- **Controls are delegated.** Three listeners on the stage — click, input,
+  keydown — handle every button for the life of the Bit. The first build bound
+  each control with `ctx.input.activate` after each repaint, which registered
+  sixty handlers on the first paint of the setup screen and some thirty more on
+  every tap, and tore the tapped node out of the document from inside the
+  handler the runtime was still dispatching on. It crashed on the first tap on
+  a real device. `ctx.listen` on a container that is never replaced is the
+  documented escape hatch for exactly this, and native buttons already fire
+  click from Enter and Space, so keyboard activation is unaffected.
 - `manifest.onboarding` is `briefing`: three pages. The rules genuinely need
   explaining before the first card, and the runtime holds play until Start.
   A **Rules** button on the setup screen replays it.
@@ -163,3 +172,7 @@ Driven headless in Chromium against a mock `ctx` built from this manifest, at
 - A tie offers a tiebreak, the tiebreak resolves, and it neither edits the
   saved turn count nor suppresses a record it improved.
 - Settings, team count and roster survive a return to the setup screen.
+- Under a deliberately hostile mock — one that caps live activations and
+  throws if a handler detaches its own target mid-dispatch — the delegated
+  build registers **zero** per-element activations and takes every tap. The
+  build it replaced registered 60 on first paint and threw on tap one.
