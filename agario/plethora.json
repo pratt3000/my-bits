@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Petri Bloom",
+  "description": "You are one cell in a dish full of hungry ones. Drag to steer, swallow anything smaller than you, and stay clear of anything bigger \u2014 because the heavier you get, the slower you move, and thirty-four rivals are doing the same arithmetic about you. Split to lunge at prey and you are briefly several fragile halves instead of one safe whole. Spit mass into a spiked virus and it fires a new one across the dish; blunder into one yourself and you burst into pieces, which is the only thing keeping the leader honest. Single player against bots that flee, hunt, ambush and hide.",
+  "tags": [
+    "arcade",
+    "action",
+    "io-game",
+    "eat",
+    "grow",
+    "bots",
+    "arena",
+    "one-hand",
+    "leaderboard",
+    "survival"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "onboarding": {
+    "kind": "guided",
+    "version": 1,
+    "replayable": true,
+    "steps": [
+      {
+        "id": "steer",
+        "title": "Drag to steer",
+        "body": "Put a finger anywhere on the dish and your cell swims towards it. The heavier you get, the slower you move \u2014 that trade is the whole game.",
+        "advance": "continue"
+      },
+      {
+        "id": "eat",
+        "title": "Swallow anything smaller",
+        "body": "The coloured specks are free mass. So is any cell meaningfully smaller than yours \u2014 cover it and it is yours. Anything meaningfully bigger is thinking exactly that about you.",
+        "advance": "continue"
+      },
+      {
+        "id": "split",
+        "title": "Split to catch, not to sit",
+        "body": "SPLIT throws half of you forward at speed. It is how you catch something quicker than you, and it leaves you as fragile halves until the merge timer runs down. FEED spits out a blob of your own mass.",
+        "advance": "continue"
+      },
+      {
+        "id": "virus",
+        "title": "Mind the spikes",
+        "body": "Green spiked viruses burst anything bigger than they are into a dozen pieces. Small cells can hide inside them. Seven fed blobs makes one fire a new virus across the dish \u2014 which is how you break someone who has got too big.",
+        "advance": "continue"
+      }
+    ]
+  },
+  "memory": {
+    "records": {
+      "best_mass": {
+        "label": "Biggest Bloom",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  },
+  "tuning": {
+    "schemaVersion": 1,
+    "groups": {
+      "dish": {
+        "label": "The Dish"
+      },
+      "feel": {
+        "label": "Feel"
+      },
+      "look": {
+        "label": "Look"
+      }
+    },
+    "knobs": {
+      "bot_count": {
+        "label": "Rival cells in the dish",
+        "type": "integer",
+        "default": 28,
+        "min": 8,
+        "max": 60,
+        "step": 1,
+        "group": "dish",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "world_size": {
+        "label": "Dish width",
+        "type": "integer",
+        "default": 3600,
+        "min": 2400,
+        "max": 7000,
+        "step": 100,
+        "group": "dish",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
+      "pellet_count": {
+        "label": "Free mass in the dish",
+        "type": "integer",
+        "default": 1500,
+        "min": 250,
+        "max": 2400,
+        "step": 10,
+        "group": "dish",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
+      "virus_count": {
+        "label": "Viruses",
+        "type": "integer",
+        "default": 20,
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "group": "dish",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "start_mass": {
+        "label": "Mass you start with",
+        "type": "integer",
+        "default": 60,
+        "min": 12,
+        "max": 200,
+        "step": 1,
+        "group": "dish",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "bot_skill": {
+        "label": "How sharp the rivals are",
+        "type": "number",
+        "default": 0.72,
+        "min": 0.1,
+        "max": 1,
+        "step": 0.02,
+        "group": "dish",
+        "intent": "difficulty",
+        "apply": "live"
+      },
+      "speed_base": {
+        "label": "Swimming speed",
+        "type": "number",
+        "default": 560,
+        "min": 320,
+        "max": 900,
+        "step": 10,
+        "group": "feel",
+        "intent": "feel",
+        "apply": "live"
+      },
+      "merge_seconds": {
+        "label": "Seconds before split halves rejoin",
+        "type": "number",
+        "default": 11,
+        "min": 2,
+        "max": 30,
+        "step": 0.5,
+        "group": "feel",
+        "intent": "gameplay",
+        "apply": "live"
+      },
+      "decay_rate": {
+        "label": "How fast big cells rot",
+        "type": "number",
+        "default": 0.0022,
+        "min": 0,
+        "max": 0.01,
+        "step": 0.0002,
+        "group": "feel",
+        "intent": "difficulty",
+        "apply": "live"
+      },
+      "dish_style": {
+        "label": "Dish",
+        "type": "choice",
+        "default": "night",
+        "options": [
+          "night",
+          "clean",
+          "warm"
+        ],
+        "group": "look",
+        "intent": "visual",
+        "apply": "restart"
+      },
+      "sound_default": {
+        "label": "Sound on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "feel",
+        "intent": "audio",
+        "apply": "restart"
+      },
+      "haptics_default": {
+        "label": "Vibration on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "feel",
+        "intent": "feel",
+        "apply": "restart"
+      }
+    }
+  }
+}
