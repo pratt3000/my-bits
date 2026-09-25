@@ -129,19 +129,25 @@ leaders rise and get overtaken (Tapioca 676 → Orbit 820 → Amoeba 1790 →
 Sir Eats 16432), with the tenth-placed cell still around 400. The 22,500
 ceiling holds.
 
-**Cheap.** Update costs 0.11-0.21ms a frame throughout. Render was the whole
-budget and was measured, not guessed:
+**Cheap.** Update costs 0.1-0.27ms a frame throughout and never mattered.
+Render was the whole budget, and was measured rather than guessed. The five
+minute column is the worst case in the game: the player is gone, so the camera
+spectates an enormous leader at full zoom-out with a hundred-odd cells and
+every pellet on screen at once.
 
-| | early | 1 min | 3 min |
-| --- | --- | --- | --- |
-| first build | 0.38ms | 5.11ms | 5.67ms |
-| pellets batched by colour | 0.23ms | 0.57ms | 6.02ms |
-| membranes scaled to on-screen size | 0.25ms | 0.60ms | **0.67ms** |
+| | early | 1 min | 3 min | 5 min |
+| --- | --- | --- | --- | --- |
+| first build | 0.38ms | 5.11ms | 5.67ms | 6.14ms |
+| pellets batched by colour | 0.23ms | 0.57ms | 6.02ms | 5.68ms |
+| membranes scaled to on-screen size | 0.25ms | 0.60ms | 0.67ms | 5.31ms |
+| no rim under ten pixels | 0.23ms | 0.50ms | 0.68ms | **0.76ms** |
 
-Counting the actual canvas calls is what found each one: at three minutes a
-frame was making 123 fills and 102 strokes and only 1.1 text draws, so the
-text was never the problem — fifteen hundred separate pellet arcs were, and
-then eighty-odd nineteen-point membranes on cells that were specks on screen.
+Counting the actual canvas calls is what found each one. At three minutes a
+frame was making 123 fills, 102 strokes and only 1.1 text draws — so the text
+was never the problem. Fifteen hundred separate pellet arcs were, then
+eighty-odd nineteen-point membranes on cells that were specks on screen, then
+a sub-pixel rim stroked onto every one of those specks. The cost is now flat
+across a whole session instead of climbing with the leader.
 
 **Contained.** Every field of the manifest validates against the live
 `schema.json` — knob types, intents, apply modes, groups, onboarding step
