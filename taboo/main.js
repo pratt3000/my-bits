@@ -395,6 +395,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     const INK = "#f4efe6";
     const BG = "#14110f";
     const HOT = "#ffcf3d";
+    const BUILD = "ff-b5";
     const GOOD = "#49c97a";
     const BAD = "#ff4d4d";
 
@@ -928,6 +929,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     <div class="ff-chips">
       <button class="ff-chip${S.cfg.sound ? " on" : ""}" data-toggle="sound">Sound</button>
       <button class="ff-chip${S.cfg.haptics ? " on" : ""}" data-toggle="haptics">Vibrate</button>
+      <span class="ff-note" style="align-self:center;padding:0 6px;opacity:.45">${BUILD}</span>
     </div>
   </div>
 </div>
@@ -1041,10 +1043,16 @@ ${pb}
     // a card nobody had seen yet.
     function repaint() { mount(); }
 
+    // The scrolling list lives inside the element a repaint replaces, so
+    // every tap on a setting was rebuilding it at the top and throwing you
+    // back up the page. Carry the offset across when the screen is the same
+    // one, and only reset it when the screen actually changes.
+    let lastScreen = null;
     function mount() {
+      const prevScroll = stage.querySelector(".ff-scroll");
+      const keepTop = prevScroll && S.screen === lastScreen ? prevScroll.scrollTop : 0;
       secsNode = fillNode = tallyNode = null;
       stage.classList.remove("ff-warn");
-      stage.scrollTop = 0;
 
       const live = S.screen === "pass" || S.screen === "play" || S.screen === "turnEnd";
       stage.style.setProperty("--team", live ? S.teams[S.active].color : "#8a8076");
@@ -1054,6 +1062,10 @@ ${pb}
       else if (S.screen === "play") stage.innerHTML = playScreen();
       else if (S.screen === "turnEnd") stage.innerHTML = turnEndScreen();
       else stage.innerHTML = overScreen();
+
+      const nextScroll = stage.querySelector(".ff-scroll");
+      if (nextScroll && keepTop) nextScroll.scrollTop = keepTop;
+      lastScreen = S.screen;
 
       if (S.screen === "play") {
         secsNode = stage.querySelector("[data-secs]");

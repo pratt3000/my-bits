@@ -87,6 +87,7 @@ window.plethoraBit = {
 
     // Vivid, well separated hues: two cells should never be mistaken for
     // each other in a scrum.
+    const BUILD = "pb-b5";
     const HUES = [4, 18, 34, 48, 62, 96, 140, 165, 186, 200, 214, 232, 258, 280, 300, 320, 340];
     const cellColor = (hi, light) => `hsl(${HUES[hi]} 78% ${light}%)`;
     const randHue = () => Math.floor(Math.random() * HUES.length);
@@ -1084,6 +1085,7 @@ window.plethoraBit = {
   <div class="pb-tip"><i>&#8226;</i><span><b>Feed</b> spits out a blob of your own mass. Seven into a spiked virus and it fires a new one.</span></div>
   <div class="pb-tip"><i>&#9670;</i><span>Viruses burst anything bigger than they are. Small cells can hide inside them.</span></div>
   ${state.best ? `<p class="pb-copy">Your best bloom: <b>${Math.round(state.best)}</b></p>` : ""}
+  <p class="pb-copy" style="font-size:11px;opacity:.4;letter-spacing:.12em">${BUILD}</p>
   <button class="pb-btn" data-play>Drop in</button>
   <div style="display:flex;gap:9px">
     <button class="pb-btn ghost" data-sound>Sound ${state.sound ? "on" : "off"}</button>

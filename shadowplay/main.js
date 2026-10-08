@@ -74,6 +74,7 @@ window.plethoraBit = {
 
     // The solids are real objects on a rack, so they are painted like
     // objects: a few honest poster colours, not a gradient ramp.
+    const BUILD = "um-b5";
     const STOCK = ["#d8453f", "#2f6fd0", "#e8b53a", "#f2efe9", "#3f9e6a", "#c8603f", "#7a5bd0"];
 
     const CSS = `
@@ -868,6 +869,7 @@ window.plethoraBit = {
   <div class="um-tip"><i>&#8593;</i><span>Tap, or hit JUMP, to jump. You get a moment of grace after walking off an edge.</span></div>
   <div class="um-tip"><i>&#9681;</i><span>A slab turned edge-on is barely there. A bar sweeps like a clock hand. Watch what the solid is doing, not just the shadow.</span></div>
   ${state.best ? `<p class="um-copy">Your best climb: <b>${Math.floor(state.best / 10)}m</b></p>` : ""}
+  <p class="um-copy" style="font-size:11px;opacity:.4;letter-spacing:.12em">${BUILD}</p>
   <button class="um-btn" data-play>Climb</button>
   <div style="display:flex;gap:9px">
     <button class="um-btn ghost" data-sound>Sound ${state.sound ? "on" : "off"}</button>
