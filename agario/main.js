@@ -964,7 +964,7 @@ window.plethoraBit = {
     })();
 
     function haptic(kind) {
-      if (state.haptics && ctx.capabilities.haptics) ctx.platform.haptic(kind);
+      if (state.haptics && ctx.capabilities.haptics && typeof ctx.platform.haptic === "function") ctx.platform.haptic(kind);
     }
 
     /* ================================================================ *
@@ -984,9 +984,26 @@ window.plethoraBit = {
 
     const track = ctx.game && ctx.game.score ? ctx.game.score({ initial: 0, min: 0 }) : null;
 
+    /* ---------------------------------------------------------------- *
+     * STORAGE IS A CONVENIENCE, NEVER A DEPENDENCY
+     * The capability flag can read true while ctx.storage itself is not
+     * there -- a draft preview does exactly that -- so every call checks
+     * the object it is about to use rather than the flag beside it, and
+     * set() is not assumed to hand back a promise.
+     * ---------------------------------------------------------------- */
+    const canRead = () => !!(ctx.storage && typeof ctx.storage.get === "function");
+    const canWrite = () => !!(ctx.storage && typeof ctx.storage.set === "function");
+    function writeSaved(value) {
+      if (!canWrite()) return;
+      try {
+        const r = ctx.storage.set(SAVE_KEY, value);
+        if (r && typeof r.catch === "function") r.catch(() => {});
+      } catch (e) { /* nothing here is worth losing a game over */ }
+    }
+
     const SAVE_KEY = "petri-bloom/v1";
     async function loadSaved() {
-      if (!ctx.capabilities.storage) return;
+      if (!canRead()) return;
       let s = null;
       try { s = await ctx.storage.get(SAVE_KEY); } catch (e) { return; }
       if (!s || typeof s !== "object") return;
@@ -996,10 +1013,9 @@ window.plethoraBit = {
       if (Number.isFinite(s.best)) state.best = s.best;
     }
     function save() {
-      if (!ctx.capabilities.storage) return;
-      ctx.storage.set(SAVE_KEY, {
+      writeSaved({
         name: state.name, sound: state.sound, haptics: state.haptics, best: state.best
-      }).catch(() => {});
+      });
     }
 
     /* ================================================================ *

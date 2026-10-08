@@ -578,7 +578,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     })();
 
     function haptic(kind) {
-      if (S.cfg.haptics && ctx.capabilities.haptics) ctx.platform.haptic(kind);
+      if (S.cfg.haptics && ctx.capabilities.haptics && typeof ctx.platform.haptic === "function") ctx.platform.haptic(kind);
     }
 
     /* ================================================================ *
@@ -700,10 +700,27 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     /* ================================================================ *
      * SETTINGS THAT OUTLIVE THE SESSION
      * ================================================================ */
+    /* ---------------------------------------------------------------- *
+     * STORAGE IS A CONVENIENCE, NEVER A DEPENDENCY
+     * The capability flag can read true while ctx.storage itself is not
+     * there -- a draft preview does exactly that -- so every call checks
+     * the object it is about to use rather than the flag beside it, and
+     * set() is not assumed to hand back a promise.
+     * ---------------------------------------------------------------- */
+    const canRead = () => !!(ctx.storage && typeof ctx.storage.get === "function");
+    const canWrite = () => !!(ctx.storage && typeof ctx.storage.set === "function");
+    function writeSaved(value) {
+      if (!canWrite()) return;
+      try {
+        const r = ctx.storage.set(SAVE_KEY, value);
+        if (r && typeof r.catch === "function") r.catch(() => {});
+      } catch (e) { /* nothing here is worth losing a game over */ }
+    }
+
     const SAVE_KEY = "forbidden-five/v1";
 
     async function loadSaved() {
-      if (!ctx.capabilities.storage) return;
+      if (!canRead()) return;
       let saved = null;
       try { saved = await ctx.storage.get(SAVE_KEY); } catch (e) { return; }
       if (!saved || typeof saved !== "object") return;
@@ -735,8 +752,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
     }
 
     function saveSettings() {
-      if (!ctx.capabilities.storage) return;
-      ctx.storage.set(SAVE_KEY, {
+      writeSaved({
         names: S.teams.map(t => t.name),
         teamCount: S.teams.length,
         roster: S.roster.map(pl => ({ name: pl.name, team: pl.team })),
@@ -746,7 +762,7 @@ FREE TRIAL|DAYS|NO|PAY|CANCEL|SIGN
         decks: Array.from(S.cfg.decks),
         sound: S.cfg.sound,
         haptics: S.cfg.haptics
-      }).catch(() => {});
+      });
     }
 
     /* ================================================================ *
