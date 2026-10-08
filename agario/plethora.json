@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Petri Bloom",
-  "description": "You are one cell in a dish full of hungry ones. Drag to steer, swallow anything smaller than you, and stay clear of anything bigger \u2014 because the heavier you get, the slower you move, and thirty-four rivals are doing the same arithmetic about you. Split to lunge at prey and you are briefly several fragile halves instead of one safe whole. Spit mass into a spiked virus and it fires a new one across the dish; blunder into one yourself and you burst into pieces, which is the only thing keeping the leader honest. Single player against bots that flee, hunt, ambush and hide.",
+  "description": "You are one glowing cell in a dish full of hungry ones. Drag to steer, swallow anything smaller than you, and evolve through eight stages of life \u2014 from spore to apex bloom \u2014 while staying clear of anything bigger, because the heavier you get the slower you swim. Golden blooms are a dozen meals in one; chain kills for a frenzy bonus. Split to lunge at prey and you are briefly several fragile halves instead of one safe whole. Spit mass into a spiked virus and it fires a new one across the dish; blunder into one yourself and you burst into pieces, which is the only thing keeping the leader honest. Single player against twenty-eight bots that flee, hunt, ambush and hide.",
   "tags": [
     "arcade",
     "action",
@@ -36,7 +36,7 @@
       {
         "id": "eat",
         "title": "Swallow anything smaller",
-        "body": "The coloured specks are free mass. So is any cell meaningfully smaller than yours \u2014 cover it and it is yours. Anything meaningfully bigger is thinking exactly that about you.",
+        "body": "The glowing specks are free mass, and the golden blooms are worth a dozen of them. So is any cell meaningfully smaller than yours \u2014 cover it and it is yours. Every few hundred mass you evolve into something bigger; the bar under your mass shows how close the next stage is.",
         "advance": "continue"
       },
       {
@@ -112,7 +112,7 @@
       "pellet_count": {
         "label": "Free mass in the dish",
         "type": "integer",
-        "default": 1500,
+        "default": 1800,
         "min": 250,
         "max": 2400,
         "step": 10,
@@ -134,7 +134,7 @@
       "start_mass": {
         "label": "Mass you start with",
         "type": "integer",
-        "default": 60,
+        "default": 50,
         "min": 12,
         "max": 200,
         "step": 1,
@@ -156,7 +156,7 @@
       "speed_base": {
         "label": "Swimming speed",
         "type": "number",
-        "default": 560,
+        "default": 520,
         "min": 320,
         "max": 900,
         "step": 10,
@@ -167,7 +167,7 @@
       "merge_seconds": {
         "label": "Seconds before split halves rejoin",
         "type": "number",
-        "default": 11,
+        "default": 8,
         "min": 2,
         "max": 30,
         "step": 0.5,
