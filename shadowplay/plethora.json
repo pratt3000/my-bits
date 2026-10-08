@@ -35,8 +35,8 @@
       },
       {
         "id": "move",
-        "title": "Drag to lean, tap to jump",
-        "body": "Put a finger anywhere on the wall; sliding it left or right leans you that way. A quick tap jumps, and so does the JUMP button. You get a moment of grace after walking off an edge.",
+        "title": "Arrows to move, JUMP to jump",
+        "body": "Hold \u25c0 or \u25b6 at the bottom left to move. Press JUMP with your other thumb \u2014 it jumps the instant you touch it, even while you are moving. You get a moment of grace after walking off an edge.",
         "advance": "continue"
       },
       {

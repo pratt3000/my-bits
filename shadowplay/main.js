@@ -74,7 +74,7 @@ window.plethoraBit = {
 
     // The solids are real objects on a rack, so they are painted like
     // objects: a few honest poster colours, not a gradient ramp.
-    const BUILD = "um-b5";
+    const BUILD = "um-b6";
     const STOCK = ["#d8453f", "#2f6fd0", "#e8b53a", "#f2efe9", "#3f9e6a", "#c8603f", "#7a5bd0"];
 
     const CSS = `
@@ -92,14 +92,18 @@ window.plethoraBit = {
 .um-right{position:absolute;right:calc(var(--sar) + 14px);top:calc(var(--sat) + 12px);text-align:right;
   display:flex;flex-direction:column;gap:2px}
 
-.um-pads{position:absolute;inset:auto 0 0 0;pointer-events:none;z-index:3;
-  padding:0 calc(var(--sar) + 14px) calc(var(--sab) + 14px) calc(var(--sal) + 14px);
-  display:flex;justify-content:flex-end}
-.um-jump{pointer-events:auto;appearance:none;border:0;width:84px;height:84px;border-radius:50%;
-  font:inherit;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
-  background:rgba(46,36,64,.14);color:${SKIN.ink};cursor:pointer;touch-action:manipulation;
-  box-shadow:inset 0 0 0 2px rgba(46,36,64,.2);display:flex;align-items:center;justify-content:center}
-.um-jump:active{background:rgba(46,36,64,.3)}
+/* ---- the pad: one surface, three zones, every finger tracked ---- */
+.um-pads{position:absolute;left:0;right:0;bottom:0;z-index:3;pointer-events:auto!important;
+  touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+  height:calc(var(--sab) + 172px);
+  padding:0 calc(var(--sar) + 10px) calc(var(--sab) + 12px) calc(var(--sal) + 10px);
+  display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;align-items:end}
+.um-key{pointer-events:none;height:86px;border-radius:24px;display:flex;align-items:center;justify-content:center;gap:8px;
+  background:rgba(46,36,64,.12);box-shadow:inset 0 0 0 2px rgba(46,36,64,.2);color:${SKIN.ink};
+  font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  transition:transform .07s ease,background-color .07s ease}
+.um-key svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.um-key.on{background:rgba(46,36,64,.32);transform:scale(.95)}
 
 .um-modal{position:absolute;inset:0;z-index:5;pointer-events:auto;display:flex;align-items:center;
   justify-content:center;padding:calc(var(--sat) + 16px) calc(var(--sar) + 16px) calc(var(--sab) + 16px) calc(var(--sal) + 16px);
@@ -159,7 +163,9 @@ window.plethoraBit = {
         const j = (i + 1) % n;
         f.push([i, j, n + j, n + i]);
       }
-      return { v, f };
+      // A round side is shaded, not outlined: twenty outlined facets read
+      // as a barcode.
+      return { v, f, smooth: n >= 8 };
     }
 
     function wedgeGeo(w, h, d) {
@@ -282,7 +288,16 @@ window.plethoraBit = {
     // Where a point of this piece's shadow was one tick ago, so a platform
     // that turns under your feet carries you with it instead of sliding
     // out from under you.
+    //
+    // Only a solid turning in the plane of the wall moves its shadow the
+    // way a turntable moves what sits on it. One turning about the upright
+    // axis just narrows its shadow, and its in-plane block is a squash, not
+    // a rotation: the old code "undid" it with the same squash, so anyone
+    // standing on one was pushed sideways every frame by their offset times
+    // sin^2 of its angle -- off the starting ledge inside two seconds.
     function carryDelta(p, wx, wy, out) {
+      out[0] = 0; out[1] = 0;
+      if (p.axis !== AX_Z) return;
       const dx = wx - p.x, dy = wy - p.y;
       const back = -p.ang, fwd = p.prevAng;
       const A = axisMat(p.axis[0], p.axis[1], p.axis[2], back);
@@ -433,7 +448,6 @@ window.plethoraBit = {
       let x = W.spineX + rand(-reach, reach);
       if (Math.abs(x - W.spineX) < 22) x += (x < WALL_W / 2 ? 1 : -1) * 30;
       const spine = place(pick(SPINE_IDS), x, y, d);
-      spine.oneWay = true;
       W.spineX = spine.x;
       W.spineY = y;
       W.topY = y;
@@ -460,7 +474,6 @@ window.plethoraBit = {
         parts: [{ geo: geoOf("box", 190, 18, 46), color: STOCK[3], ox: 0, oy: 0, oz: 0 }]
       });
       start.kind = "slab";
-      start.oneWay = true;
       W.pieces.push(start);
       W.lightY = -320;
       while (W.topY < 1500) addPiece();
@@ -472,70 +485,64 @@ window.plethoraBit = {
     const P = { x: 0, y: 0, prevY: 0, vx: 0, vy: 0, grounded: false, lastGround: -9, face: 1,
                 best: 0, alive: true, squash: 0, spin: 0 };
 
-    // Circle against convex polygon. Returns the shallowest push that
-    // separates them, plus the contact point so a turning platform can
-    // carry whatever is standing on it.
-    function circlePoly(cx, cy, r, poly) {
+    // The top of a convex hull above x, and how steep it is there.
+    // Counter-clockwise with y up, the upper chain is the run of edges
+    // heading right to left.
+    const _surf = { y: 0, slope: 0 };
+    function surfaceAt(poly, x, out) {
       const n = poly.length / 2;
-      if (n < 3) return null;
-      let inside = true, bestDepth = Infinity, bnx = 0, bny = 0;
+      let top = -Infinity, slope = 0;
       for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        const ax = poly[i * 2], ay = poly[i * 2 + 1];
-        const ex = poly[j * 2] - ax, ey = poly[j * 2 + 1] - ay;
-        const L = Math.sqrt(ex * ex + ey * ey) || 1;
-        const nx = ey / L, ny = -ex / L;
-        const d = (cx - ax) * nx + (cy - ay) * ny;
-        if (d > r) return null;              // a separating edge: done
-        if (d > 0) inside = false;
-        const depth = r - d;
-        if (depth < bestDepth) { bestDepth = depth; bnx = nx; bny = ny; }
+        const j = i + 1 < n ? i + 1 : 0;
+        const ax = poly[i * 2], bx = poly[j * 2];
+        if (bx >= ax || x > ax || x < bx) continue;
+        const ay = poly[i * 2 + 1], by = poly[j * 2 + 1];
+        const y = ay + (by - ay) * ((ax - x) / (ax - bx));
+        if (y > top) { top = y; slope = Math.abs((by - ay) / (ax - bx)); }
       }
-      if (inside) {
-        return { nx: bnx, ny: bny, depth: bestDepth, px: cx - bnx * (bestDepth - r), py: cy - bny * (bestDepth - r) };
-      }
-      let cbx = 0, cby = 0, best = Infinity;
-      for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        const ax = poly[i * 2], ay = poly[i * 2 + 1];
-        const ex = poly[j * 2] - ax, ey = poly[j * 2 + 1] - ay;
-        const t = clamp(((cx - ax) * ex + (cy - ay) * ey) / (ex * ex + ey * ey || 1), 0, 1);
-        const px = ax + ex * t, py = ay + ey * t;
-        const dd = (cx - px) * (cx - px) + (cy - py) * (cy - py);
-        if (dd < best) { best = dd; cbx = px; cby = py; }
-      }
-      const dist = Math.sqrt(best);
-      if (dist > r) return null;
-      const nx = dist > 1e-6 ? (cx - cbx) / dist : bnx;
-      const ny = dist > 1e-6 ? (cy - cby) / dist : bny;
-      return { nx, ny, depth: r - dist, px: cbx, py: cby };
+      out.y = top; out.slope = slope;
+      return top;
     }
 
+    // Steeper than about fifty degrees and a shadow stops being a floor.
+    const MAX_SLOPE = 1.25;
     const _carry = [0, 0];
+
+    // Every shadow is one-way: you pass up through it, and land on it only
+    // by coming down onto its top. That is decided against the top surface
+    // itself rather than by pushing a ball out of a box, which on a thin
+    // ledge could pick a side and shove you off -- and a turning bar that
+    // was solid from every side could sweep across the ledge you stood on
+    // and knock you off it from nowhere.
     function collide(dt) {
       P.grounded = false;
-      for (const piece of W.pieces) {
-        if (Math.abs(piece.y - P.y) > 220) continue;
-        for (const poly of piece.hulls) {
-          if (piece.oneWay) {
-            if (P.vy > 30) continue;                       // on the way up
-            let top = -1e9;
-            for (let i = 1; i < poly.length; i += 2) if (poly[i] > top) top = poly[i];
-            if (P.prevY - PLAYER_R < top - 5) continue;    // came from below
+      if (P.vy <= 0) {
+        const feet = P.y - PLAYER_R, wasFeet = P.prevY - PLAYER_R;
+        let land = -Infinity, on = null;
+        for (const piece of W.pieces) {
+          if (Math.abs(piece.y - P.y) > 220) continue;
+          for (const poly of piece.hulls) {
+            let minX = Infinity, maxX = -Infinity;
+            for (let i = 0; i < poly.length; i += 2) {
+              if (poly[i] < minX) minX = poly[i];
+              if (poly[i] > maxX) maxX = poly[i];
+            }
+            // Your toes hold you until your middle is a little past the end.
+            if (P.x < minX - PLAYER_R * 0.55 || P.x > maxX + PLAYER_R * 0.55) continue;
+            const top = surfaceAt(poly, clamp(P.x, minX + 1e-3, maxX - 1e-3), _surf);
+            if (top === -Infinity || _surf.slope > MAX_SLOPE) continue;
+            if (top > land && wasFeet >= top - 4 && feet <= top + 0.5) { land = top; on = piece; }
           }
-          const hit = circlePoly(P.x, P.y, PLAYER_R, poly);
-          if (!hit) continue;
-          P.x += hit.nx * hit.depth;
-          P.y += hit.ny * hit.depth;
-          const vn = P.vx * hit.nx + P.vy * hit.ny;
-          if (vn < 0) { P.vx -= vn * hit.nx; P.vy -= vn * hit.ny; }
-          if (hit.ny > 0.42) {
-            P.grounded = true;
-            P.lastGround = W.t;
-            carryDelta(piece, hit.px, hit.py, _carry);
-            P.x += _carry[0];
-            P.y += _carry[1];
-          }
+        }
+        if (on) {
+          P.y = land + PLAYER_R;
+          P.vy = 0;
+          P.grounded = true;
+          P.lastGround = W.t;
+          // A piece turning in the plane of the wall carries you round.
+          carryDelta(on, P.x, land, _carry);
+          P.x += _carry[0];
+          P.y += _carry[1];
         }
       }
       P.x = clamp(P.x, PLAYER_R, WALL_W - PLAYER_R);
@@ -547,14 +554,18 @@ window.plethoraBit = {
     let g = null, canvas = null;
     const cam = { y: 0, shake: 0 };
     const fx = [];
-    const PENUMBRA = [[5.5, 0.11], [2.6, 0.17]];
+    // One thin soft ring round each shadow. Two wide ones, drawn on a
+    // canvas at a third of the screen's resolution, read as plain blur.
+    const PENUMBRA = [[1.8, 0.16]];
 
     const scaleOf = () => ctx.width / WALL_W;
 
     function updateCamera(dt) {
       const s = scaleOf();
       const vh = ctx.height / s;                 // visible wall height
-      const want = P.y - vh * 0.36;
+      // You sit a little above the middle of the lower half, clear of the
+      // pad along the bottom, with the climb ahead filling the rest.
+      const want = P.y - vh * 0.42;
       // Rise with the climb quickly, sink back slowly: falling should feel
       // like falling, not like the camera chasing you down.
       const k = 1 - Math.exp((want > cam.y ? -9 : -3.2) * dt);
@@ -563,8 +574,25 @@ window.plethoraBit = {
       if (cam.shake > 0) cam.shake = Math.max(0, cam.shake - dt * 2.6);
     }
 
+    let wallGrad = null, vignette = null, gradKey = "";
     function render() {
       const vw = ctx.width, vh = ctx.height, s = scaleOf();
+      if (!vw || !vh || !canvas.width) return;
+      // The backing store is finer than CSS pixels where the runtime honours
+      // maxDpr; everything below is drawn in CSS pixels either way.
+      const k = canvas.width / vw;
+      g.setTransform(k, 0, 0, k, 0, 0);
+      g.globalAlpha = 1;
+      if (gradKey !== vw + "x" + vh) {
+        gradKey = vw + "x" + vh;
+        wallGrad = g.createLinearGradient(0, 0, 0, vh);
+        wallGrad.addColorStop(0, SKIN.wall2);
+        wallGrad.addColorStop(0.55, SKIN.wall);
+        wallGrad.addColorStop(1, SKIN.wall2);
+        vignette = g.createRadialGradient(vw * 0.5, vh * 0.42, vh * 0.2, vw * 0.5, vh * 0.42, vh * 0.85);
+        vignette.addColorStop(0, "rgba(0,0,0,0)");
+        vignette.addColorStop(1, "rgba(32,22,42,.3)");
+      }
       const shakeX = cam.shake > 0 ? Math.sin(W.t * 47) * cam.shake * 5 : 0;
       const shakeY = cam.shake > 0 ? Math.cos(W.t * 39) * cam.shake * 5 : 0;
       const sxOf = wx => wx * s + shakeX;
@@ -572,11 +600,7 @@ window.plethoraBit = {
       const topWall = cam.y + vh / s;
 
       /* ---- the lit wall ---- */
-      const grad = g.createLinearGradient(0, 0, 0, vh);
-      grad.addColorStop(0, SKIN.wall2);
-      grad.addColorStop(0.55, SKIN.wall);
-      grad.addColorStop(1, SKIN.wall2);
-      g.fillStyle = grad;
+      g.fillStyle = wallGrad;
       g.fillRect(0, 0, vw, vh);
 
       /* ---- shadows, and the solid throwing each one ---- */
@@ -621,8 +645,12 @@ window.plethoraBit = {
           g.fill();
         }
 
-        // The object itself, seen faintly through the wall. This is the
-        // whole point of the game and it costs three dozen triangles.
+        // The object itself, in front of its own shadow: a tint on each face
+        // the lamp lights and a crisp edge round it, so you can see which
+        // way it is turning and so what its shadow is about to do. This is
+        // the whole point of the game and it costs three dozen triangles.
+        g.lineJoin = "round";
+        g.lineWidth = 1.25;
         for (const f of piece.faces) {
           const wv = f.world, geo = f.geo;
           for (const face of geo.f) {
@@ -633,16 +661,21 @@ window.plethoraBit = {
             if (nz <= 0) continue;                       // facing away
             const nx3 = uy * vz2 - uz * vy2, ny3 = uz * vx2 - ux * vz2;
             const L = Math.sqrt(nx3 * nx3 + ny3 * ny3 + nz * nz) || 1;
-            g.globalAlpha = 0.045 + 0.105 * (nz / L);
             g.fillStyle = f.color;
+            g.strokeStyle = f.color;
             g.beginPath();
-            for (let k = 0; k < face.length; k++) {
-              const i3 = face[k] * 3;
+            for (let q = 0; q < face.length; q++) {
+              const i3 = face[q] * 3;
               const px = sxOf(piece.x + wv[i3]), py = syOf(piece.y + wv[i3 + 1]);
-              if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+              if (q === 0) g.moveTo(px, py); else g.lineTo(px, py);
             }
             g.closePath();
+            g.globalAlpha = 0.07 + 0.17 * (nz / L);
             g.fill();
+            if (!geo.smooth || face.length !== 4) {
+              g.globalAlpha = 0.55;
+              g.stroke();
+            }
           }
         }
         g.globalAlpha = 1;
@@ -664,7 +697,7 @@ window.plethoraBit = {
       }
 
       /* ---- you ---- */
-      if (P.alive) {
+      if (P.alive && state.screen === "play") {
         const px = sxOf(P.x), py = syOf(P.y);
         const r = PLAYER_R * s;
         const sq = 1 + P.squash * 0.35, st = 1 - P.squash * 0.28;
@@ -705,22 +738,19 @@ window.plethoraBit = {
       /* ---- pops ---- */
       for (let i = fx.length - 1; i >= 0; i--) {
         const e = fx[i];
-        const k = e.t / 0.5;
-        if (k >= 1) { fx.splice(i, 1); continue; }
-        g.globalAlpha = 1 - k;
+        const kk = e.t / 0.5;
+        if (kk >= 1) { fx.splice(i, 1); continue; }
+        g.globalAlpha = 1 - kk;
         g.strokeStyle = SKIN.glow;
         g.lineWidth = 3;
         g.beginPath();
-        g.arc(sxOf(e.x), syOf(e.y), (6 + k * 26) * s, 0, Math.PI * 2);
+        g.arc(sxOf(e.x), syOf(e.y), (6 + kk * 26) * s, 0, Math.PI * 2);
         g.stroke();
         g.globalAlpha = 1;
       }
 
       /* ---- the lamp's own vignette ---- */
-      const vg = g.createRadialGradient(vw * 0.5, vh * 0.42, vh * 0.2, vw * 0.5, vh * 0.42, vh * 0.85);
-      vg.addColorStop(0, "rgba(0,0,0,0)");
-      vg.addColorStop(1, "rgba(32,22,42,.34)");
-      g.fillStyle = vg;
+      g.fillStyle = vignette;
       g.fillRect(0, 0, vw, vh);
     }
 
@@ -821,7 +851,12 @@ window.plethoraBit = {
     // this canvas somewhere nothing was ever visible. Default stacking is
     // source order, so the canvas made first sits under the HUD made
     // after it, and the HUD stays click-through from its own stylesheet.
-    canvas = ctx.createCanvas2D({ touchAction: "none" });
+    //
+    // maxDpr on its own raises the backing store and leaves the drawing
+    // space as raw canvas pixels; render() scales to CSS pixels itself each
+    // frame. The first build drew at 1x on a 3x screen, which is most of
+    // why everything looked soft.
+    canvas = ctx.createCanvas2D({ touchAction: "none", maxDpr: 2 });
     g = canvas.getContext("2d");
 
     const root = ctx.createRoot({ className: "um" });
@@ -831,7 +866,9 @@ window.plethoraBit = {
   <div class="um-right"><div class="um-h" data-motes>0</div><div class="um-sub" data-act>act one</div></div>
 </div>
 <div class="um-pads" hidden data-pads>
-  <button class="um-jump" data-jump>Jump</button>
+  <div class="um-key" data-k="left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+  <div class="um-key" data-k="right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+  <div class="um-key" data-k="jump" aria-label="Jump"><svg viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"/></svg>Jump</div>
 </div>
 <div class="um-modal" data-modal></div>`;
 
@@ -865,8 +902,8 @@ window.plethoraBit = {
     <h1 class="um-title">Umbra</h1>
   </div>
   <p class="um-copy">Every ledge here is the shadow of a real solid turning in front of a lamp. Stand on the dark. The light is coming up the wall behind you.</p>
-  <div class="um-tip"><i>&#8597;</i><span>Drag anywhere to lean left and right.</span></div>
-  <div class="um-tip"><i>&#8593;</i><span>Tap, or hit JUMP, to jump. You get a moment of grace after walking off an edge.</span></div>
+  <div class="um-tip"><i>&#9666;&#9656;</i><span>Hold the arrows at the bottom left to move.</span></div>
+  <div class="um-tip"><i>&#8593;</i><span>Press JUMP with your other thumb &mdash; it jumps the moment you touch it. You get a moment of grace after walking off an edge.</span></div>
   <div class="um-tip"><i>&#9681;</i><span>A slab turned edge-on is barely there. A bar sweeps like a clock hand. Watch what the solid is doing, not just the shadow.</span></div>
   ${state.best ? `<p class="um-copy">Your best climb: <b>${Math.floor(state.best / 10)}m</b></p>` : ""}
   <p class="um-copy" style="font-size:11px;opacity:.4;letter-spacing:.12em">${BUILD}</p>
@@ -897,6 +934,7 @@ window.plethoraBit = {
     }
 
     function showModal(html) {
+      releaseAll();
       modal.innerHTML = html;
       modal.hidden = false;
       pads.hidden = true;
@@ -912,17 +950,41 @@ window.plethoraBit = {
 
     /* ================================================================ *
      * INPUT
-     * The whole wall is a thumb stick: wherever you put a finger down
-     * becomes the centre, and sliding either way leans you. A quick tap
-     * jumps, and so does the button, so it plays with one thumb or two.
+     * Three keys along the bottom: left, right, and a wide JUMP. They are
+     * read straight off pointer events, one entry per finger, so you can
+     * hold a direction and jump at the same time, and a jump fires the
+     * moment a finger lands rather than when it lifts. The zones are the
+     * whole bottom strip split a quarter, a quarter and a half, so a thumb
+     * never has to hit a button exactly.
+     *
+     * The first build used the wall as a floating stick plus tap-to-jump.
+     * Moving and jumping at once needed a second finger on a button whose
+     * click only fires on release -- and a phone may not fire a click at
+     * all while another finger is down.
      * ================================================================ */
-    const pointer = ctx.input && ctx.input.track
-      ? ctx.input.track(canvas, { preventDefault: true, touchAction: "none", tapMaxMs: 240, tapMaxDistance: 16 })
-      : null;
     const keys = { left: false, right: false };
-    let jumpQueued = 0;
+    const touchKeys = { left: false, right: false, jump: false };
+    const held = new Map();
+    const keyEls = Array.from(pads.querySelectorAll("[data-k]"));
+    let jumpQueued = -9;
 
     function queueJump() { jumpQueued = W.t; }
+
+    function zoneAt(clientX) {
+      const r = pads.getBoundingClientRect();
+      const x = (clientX - r.left) / Math.max(1, r.width);
+      return x < 0.25 ? "left" : x < 0.5 ? "right" : "jump";
+    }
+    function syncKeys() {
+      touchKeys.left = touchKeys.right = touchKeys.jump = false;
+      for (const z of held.values()) touchKeys[z] = true;
+      for (const el of keyEls) el.classList.toggle("on", !!touchKeys[el.getAttribute("data-k")]);
+    }
+    function releaseAll() {
+      held.clear();
+      keys.left = keys.right = false;
+      syncKeys();
+    }
 
     function tryJump() {
       if (state.screen !== "play" || !P.alive) return;
@@ -940,19 +1002,36 @@ window.plethoraBit = {
 
     function readMove() {
       let m = 0;
-      if (keys.left) m -= 1;
-      if (keys.right) m += 1;
-      if (!m && pointer && pointer.down && Number.isFinite(pointer.startX)) {
-        m = clamp((pointer.x - pointer.startX) / 42, -1, 1);
-        if (Math.abs(m) < 0.14) m = 0;
-      }
+      if (keys.left || touchKeys.left) m -= 1;
+      if (keys.right || touchKeys.right) m += 1;
       return m;
     }
 
-    ctx.listen(pads, "click", event => {
-      const el = event.target && event.target.closest ? event.target.closest("[data-jump]") : null;
-      if (el) queueJump();
+    ctx.listen(pads, "pointerdown", event => {
+      if (state.screen !== "play") return;
+      if (event.cancelable) event.preventDefault();
+      const z = zoneAt(event.clientX);
+      held.set(event.pointerId, z);
+      try { pads.setPointerCapture(event.pointerId); } catch (e) { /* the window listeners below cover it */ }
+      if (z === "jump") queueJump();
+      syncKeys();
     });
+    ctx.listen(pads, "pointermove", event => {
+      const was = held.get(event.pointerId);
+      if (!was || was === "jump") return;
+      // A thumb rocking between the arrows changes direction; sliding
+      // across never turns into a jump.
+      const z = zoneAt(event.clientX);
+      if (z !== "jump" && z !== was) { held.set(event.pointerId, z); syncKeys(); }
+    });
+    const lift = event => { if (held.delete(event.pointerId)) syncKeys(); };
+    ctx.listen(pads, "pointerup", lift);
+    ctx.listen(pads, "pointercancel", lift);
+    ctx.listen(pads, "lostpointercapture", lift);
+    // A finger can lift somewhere else entirely; a key must never stick.
+    ctx.listen(window, "pointerup", lift);
+    ctx.listen(window, "pointercancel", lift);
+    ctx.listen(window, "blur", releaseAll);
 
     ctx.listen(modal, "click", event => {
       const el = event.target && event.target.closest
@@ -993,10 +1072,11 @@ window.plethoraBit = {
       state.motes = 0;
       state.newBest = false;
       state.submitted = 0;
-      cam.y = -ctx.height / scaleOf() * 0.36 + 40;
+      cam.y = -ctx.height / scaleOf() * 0.42 + 40;
       cam.shake = 0;
       fx.length = 0;
       jumpQueued = -9;
+      releaseAll();
       for (const piece of W.pieces) { updatePiece(piece, 0); piece.prevAng = piece.ang; }
       if (track) track.reset();
       hideModal();
@@ -1045,11 +1125,13 @@ window.plethoraBit = {
       spinRack(dt);
 
       const move = readMove();
-      const accel = P.grounded ? 2400 : 1500;
+      const accel = P.grounded ? 2600 : 1700;
       const want = move * RUN_V;
       const dv = clamp(want - P.vx, -accel * dt, accel * dt);
       P.vx += dv;
-      if (!move && P.grounded) P.vx *= Math.exp(-11 * dt);
+      // Let go and you stop: quickly on a ledge, and in the air soon enough
+      // that a jump goes where you aimed it rather than drifting on.
+      if (!move) P.vx *= Math.exp((P.grounded ? -12 : -4) * dt);
 
       P.vy -= GRAVITY * dt;
       if (P.vy < -MAX_FALL) P.vy = -MAX_FALL;
@@ -1133,19 +1215,9 @@ window.plethoraBit = {
     }
 
     if (ctx.game && ctx.game.loop) {
-      ctx.game.loop({ update, render, resetOnResume: true, input: pointer || undefined });
+      ctx.game.loop({ update, render, resetOnResume: true });
     } else {
       ctx.onFrame(dt => { update(dt); render(); });
-    }
-
-    // A tap anywhere on the wall jumps, so the game plays with one thumb.
-    if (pointer) {
-      ctx.listen(canvas, "pointerup", () => {
-        if (state.screen !== "play") return;
-        if (pointer.distance !== undefined && pointer.distance > 16) return;
-        if (pointer.durationMs !== undefined && pointer.durationMs > 260) return;
-        queueJump();
-      });
     }
 
     /* ================================================================ *
