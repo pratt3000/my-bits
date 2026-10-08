@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Umbra",
+  "description": "A climbing game played entirely on shadows. A rack of blocks, bars, wedges and drums turns slowly in front of a lamp, and the only thing you can stand on is the dark shape they throw on the wall behind. Nothing here is drawn as a platform and then animated: the solids are real convex geometry, spun by a real rotation matrix and projected flat, so a ledge narrows to nothing because the slab casting it has turned edge-on, and it tips you off because the shadow genuinely tipped. Meanwhile the light is coming up the wall behind you. Climb, gather motes, and see how far you get before it catches you.",
+  "tags": [
+    "platformer",
+    "arcade",
+    "shadow",
+    "climb",
+    "endless",
+    "physics",
+    "one-hand",
+    "leaderboard",
+    "atmospheric",
+    "geometry"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "onboarding": {
+    "kind": "guided",
+    "version": 1,
+    "replayable": true,
+    "steps": [
+      {
+        "id": "shadows",
+        "title": "You stand on the dark",
+        "body": "Every ledge is the shadow of a solid object turning in front of a lamp. Watch the object, not just the shadow \u2014 a slab turning edge-on is about to stop being a floor.",
+        "advance": "continue"
+      },
+      {
+        "id": "move",
+        "title": "Drag to lean, tap to jump",
+        "body": "Put a finger anywhere on the wall; sliding it left or right leans you that way. A quick tap jumps, and so does the JUMP button. You get a moment of grace after walking off an edge.",
+        "advance": "continue"
+      },
+      {
+        "id": "light",
+        "title": "The light is rising",
+        "body": "It climbs the wall behind you and it never stops. Gather motes on the way up if you can reach them, but the only thing that really matters is going higher than the light.",
+        "advance": "continue"
+      }
+    ]
+  },
+  "memory": {
+    "records": {
+      "best_height": {
+        "label": "Highest Climb",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  },
+  "tuning": {
+    "schemaVersion": 1,
+    "groups": {
+      "climb": {
+        "label": "The Climb"
+      },
+      "rack": {
+        "label": "The Rack"
+      },
+      "look": {
+        "label": "Look"
+      }
+    },
+    "knobs": {
+      "gravity": {
+        "label": "Gravity",
+        "type": "number",
+        "default": 1850,
+        "min": 1200,
+        "max": 2600,
+        "step": 25,
+        "group": "climb",
+        "intent": "feel",
+        "apply": "live"
+      },
+      "jump_speed": {
+        "label": "Jump strength",
+        "type": "number",
+        "default": 690,
+        "min": 500,
+        "max": 900,
+        "step": 10,
+        "group": "climb",
+        "intent": "feel",
+        "apply": "live"
+      },
+      "run_speed": {
+        "label": "Lean speed",
+        "type": "number",
+        "default": 196,
+        "min": 140,
+        "max": 380,
+        "step": 10,
+        "group": "climb",
+        "intent": "feel",
+        "apply": "live"
+      },
+      "coyote_ms": {
+        "label": "Grace after leaving a ledge, ms",
+        "type": "integer",
+        "default": 110,
+        "min": 0,
+        "max": 250,
+        "step": 10,
+        "group": "climb",
+        "intent": "feel",
+        "apply": "live"
+      },
+      "gap_base": {
+        "label": "Spacing between objects",
+        "type": "number",
+        "default": 96,
+        "min": 70,
+        "max": 130,
+        "step": 2,
+        "group": "rack",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "spin_base": {
+        "label": "How fast the rack turns",
+        "type": "number",
+        "default": 0.42,
+        "min": 0.1,
+        "max": 1.2,
+        "step": 0.02,
+        "group": "rack",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "light_rise": {
+        "label": "How fast the light climbs",
+        "type": "number",
+        "default": 26,
+        "min": 8,
+        "max": 70,
+        "step": 1,
+        "group": "climb",
+        "intent": "difficulty",
+        "apply": "live"
+      },
+      "light_ramp": {
+        "label": "How much the light speeds up with height",
+        "type": "number",
+        "default": 0.055,
+        "min": 0,
+        "max": 0.2,
+        "step": 0.005,
+        "group": "climb",
+        "intent": "difficulty",
+        "apply": "live"
+      },
+      "lamp_colour": {
+        "label": "Lamp",
+        "type": "choice",
+        "default": "warm",
+        "options": [
+          "warm",
+          "cold",
+          "amber"
+        ],
+        "group": "look",
+        "intent": "visual",
+        "apply": "restart"
+      },
+      "sound_default": {
+        "label": "Sound on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "look",
+        "intent": "audio",
+        "apply": "restart"
+      },
+      "haptics_default": {
+        "label": "Vibration on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "look",
+        "intent": "feel",
+        "apply": "restart"
+      }
+    }
+  }
+}
