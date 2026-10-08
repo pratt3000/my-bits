@@ -77,7 +77,7 @@ window.plethoraBit = {
     const STOCK = ["#d8453f", "#2f6fd0", "#e8b53a", "#f2efe9", "#3f9e6a", "#c8603f", "#7a5bd0"];
 
     const CSS = `
-.um{position:absolute;inset:0;overflow:hidden;pointer-events:none;
+.um{position:absolute;inset:0;overflow:hidden;pointer-events:none!important;
   font-family:ui-rounded,"SF Pro Rounded",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;color:${SKIN.ink}}
 .um *{box-sizing:border-box}
@@ -814,12 +814,16 @@ window.plethoraBit = {
     /* ================================================================ *
      * SURFACES
      * ================================================================ */
-    canvas = ctx.createCanvas2D({
-      maxDpr: 2, coordinateSpace: "css", alpha: false, layer: "background", touchAction: "none"
-    });
+    // Plain defaults, which is what the contract says to start with and
+    // what the one bit of mine that renders on a real device uses. The
+    // advanced placement opt-ins went on untested and between them put
+    // this canvas somewhere nothing was ever visible. Default stacking is
+    // source order, so the canvas made first sits under the HUD made
+    // after it, and the HUD stays click-through from its own stylesheet.
+    canvas = ctx.createCanvas2D({ touchAction: "none" });
     g = canvas.getContext("2d");
 
-    const root = ctx.createRoot({ className: "um", layer: "overlay", input: "passthrough" });
+    const root = ctx.createRoot({ className: "um" });
     root.innerHTML = `<style>${CSS}</style>
 <div class="um-view">
   <div class="um-hud"><div class="um-h" data-height>0</div><div class="um-sub">metres</div></div>

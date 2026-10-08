@@ -104,7 +104,7 @@ window.plethoraBit = {
 .pb{position:absolute;inset:0;overflow:hidden;
   font-family:ui-rounded,"SF Pro Rounded",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;color:${SKIN.ink};
-  pointer-events:none}
+  pointer-events:none!important}
 .pb *{box-sizing:border-box}
 .pb [hidden]{display:none!important}
 
@@ -1024,12 +1024,16 @@ window.plethoraBit = {
      * The read-only HUD never takes a touch, so a finger dragged across
      * the score still steers the cell.
      * ================================================================ */
-    canvas = ctx.createCanvas2D({
-      maxDpr: 2, coordinateSpace: "css", alpha: false, layer: "background", touchAction: "none"
-    });
+    // Plain defaults, which is what the contract says to start with and
+    // what the one bit of mine that renders on a real device uses. The
+    // advanced placement opt-ins went on untested and between them put
+    // this canvas somewhere nothing was ever visible. Default stacking is
+    // source order, so the canvas made first sits under the HUD made
+    // after it, and the HUD stays click-through from its own stylesheet.
+    canvas = ctx.createCanvas2D({ touchAction: "none" });
     g = canvas.getContext("2d");
 
-    const root = ctx.createRoot({ className: "pb", layer: "overlay", input: "passthrough" });
+    const root = ctx.createRoot({ className: "pb" });
     root.innerHTML = `<style>${CSS}</style>
 <div class="pb-view">
   <div class="pb-stats">
