@@ -197,10 +197,18 @@ where it will come out. A heartbeat rises as it hunts you closer.
   than after the first submit returns.
 - `manifest.onboarding` is `guided`, four steps.
 - No `document.` reference anywhere in the source, no network, no packaged
-  assets, and no URL of any kind. The first upload was refused for using
-  "remote resources" over one string: the grain overlay was an SVG data URI,
-  and its `xmlns` namespace looks like a remote address to the upload check.
-  The grain moved into the shaders.
+  assets, and no URL of any kind.
+- **Write it so the upload check can follow it.** The draft upload first
+  refused the bit for using "remote resources" though it loads none. Its
+  static check gives up on values it cannot resolve. Bisecting the source
+  against the endpoint, section by section, found the culprits, all harmless:
+  the HUD's style block came from a function call (now a constant string);
+  the safe-area variables were set with computed names, `"--sa" + k[0]` (now
+  four literal `setProperty` calls); and the storage promise in `save()` was
+  named `r`, the same as every room, whose `r.style` holds a room's style
+  name (it is now `pending`). Each part of the source passed alone; only the
+  combinations failed. The film grain also moved from a CSS SVG data URI into
+  the shaders, so the source holds no URL-like string at all.
 
 ## Verified
 
