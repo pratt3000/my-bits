@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Still Water",
+  "description": "A first-person horror crawl through drowned night-time baths. Something long and pale lives in the water, and it is blind: on the dry tiles you make no sound it can follow, but every step you wade sends ripples it can hear. Scavenge four spring coils for jump boots, climb to the high shelves for the five parts of a bazooka, dive the pool floors for rockets, then lure it up with a rubber duck and shoot it while its head is out of the water. Three hits. It only needs one.",
+  "tags": [
+    "horror",
+    "3d",
+    "stealth",
+    "survival",
+    "maze",
+    "first-person",
+    "atmospheric",
+    "leaderboard",
+    "backrooms",
+    "creature"
+  ],
+  "permissions": [
+    "audio",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "onboarding": {
+    "kind": "guided",
+    "version": 1,
+    "replayable": true,
+    "steps": [
+      {
+        "id": "blind",
+        "title": "It cannot see you",
+        "body": "The baths are flooded, and something lives in the water. It is blind. Every step you wade sends out ripples it can hear; on the dry tiles you make no sound at all.",
+        "advance": "continue"
+      },
+      {
+        "id": "move",
+        "title": "Two thumbs",
+        "body": "Left thumb walks. Push it gently to wade slowly and quietly. Right thumb looks around. In the water, walk into a low ledge or press JUMP to haul yourself out.",
+        "advance": "continue"
+      },
+      {
+        "id": "build",
+        "title": "Build, then hunt",
+        "body": "Four spring coils make jump boots, and the boots reach the high shelves. Five parts make a bazooka. Rockets glow on the pool floors.",
+        "advance": "continue"
+      },
+      {
+        "id": "lure",
+        "title": "Lure it up",
+        "body": "Throw a rubber duck into the water and it will come to bite. While its head is up it can be hurt. Three hits.",
+        "advance": "continue"
+      }
+    ]
+  },
+  "memory": {
+    "records": {
+      "best_progress": {
+        "label": "Furthest Progress",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "fastest_slay": {
+        "label": "Fastest Kill",
+        "valueType": "duration_ms",
+        "order": "asc",
+        "format": "timer",
+        "periods": [
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  },
+  "tuning": {
+    "schemaVersion": 1,
+    "groups": {
+      "baths": {
+        "label": "The Baths"
+      },
+      "listener": {
+        "label": "The Listener"
+      },
+      "feel": {
+        "label": "Feel"
+      }
+    },
+    "knobs": {
+      "mood": {
+        "label": "Light",
+        "type": "choice",
+        "default": "night",
+        "options": [
+          "night",
+          "dawn",
+          "abyss"
+        ],
+        "group": "baths",
+        "intent": "visual",
+        "apply": "restart"
+      },
+      "map_size": {
+        "label": "Size of the baths",
+        "type": "choice",
+        "default": "medium",
+        "options": [
+          "small",
+          "medium",
+          "large"
+        ],
+        "group": "baths",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
+      "rockets": {
+        "label": "Rockets hidden in the pools",
+        "type": "integer",
+        "default": 5,
+        "min": 2,
+        "max": 10,
+        "step": 1,
+        "group": "baths",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "creature_speed": {
+        "label": "How fast it hunts (m/s)",
+        "type": "number",
+        "default": 4.3,
+        "min": 2.5,
+        "max": 7,
+        "step": 0.1,
+        "group": "listener",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "hearing_range": {
+        "label": "How far it hears a wading step (m)",
+        "type": "number",
+        "default": 15,
+        "min": 6,
+        "max": 30,
+        "step": 0.5,
+        "group": "listener",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "creature_hp": {
+        "label": "Hits to kill it",
+        "type": "integer",
+        "default": 3,
+        "min": 1,
+        "max": 6,
+        "step": 1,
+        "group": "listener",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "sound_default": {
+        "label": "Sound on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "feel",
+        "intent": "audio",
+        "apply": "restart"
+      },
+      "haptics_default": {
+        "label": "Vibration on by default",
+        "type": "boolean",
+        "default": true,
+        "group": "feel",
+        "intent": "feel",
+        "apply": "restart"
+      }
+    }
+  }
+}
