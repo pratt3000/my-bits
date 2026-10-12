@@ -2811,12 +2811,28 @@ window.plethoraBit = {
     }
     function explode(b) {
       sfx.explode(b.x, b.z);
+      // The fireball: a few big glows that swell and are gone.
+      for (let k = 0; k < 7; k++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 0.35;
+        const q = spawnParticle(b.x + Math.cos(a) * r, b.y + 0.25 + Math.random() * 0.4, b.z + Math.sin(a) * r,
+          Math.cos(a) * 0.8, 0.6 + Math.random(), Math.sin(a) * 0.8, 0.26 + Math.random() * 0.22, 0.7 + Math.random() * 0.7, [1.9, 1.1, 0.5], 0);
+        q.grow = 1.2;
+      }
+      // Sparks.
       for (let k = 0; k < 40; k++) {
         const a = Math.random() * Math.PI * 2, u = Math.random();
         spawnParticle(b.x, b.y + 0.1, b.z, Math.cos(a) * 6 * u, 2 + Math.random() * 6, Math.sin(a) * 6 * u, 0.9, 0.1, [1, 0.75 - u * 0.4, 0.3]);
       }
-      if (typeAt(b.x, b.z) === T_WATER) burstSplash(b.x, b.z, 2.8);
-      flash("#ffb36a", 0.45, 0.35);
+      // On the water, a column of it thrown up into the dark.
+      if (typeAt(b.x, b.z) === T_WATER) {
+        burstSplash(b.x, b.z, 2.8);
+        for (let k = 0; k < 46; k++) {
+          const a = Math.random() * Math.PI * 2, u = Math.random();
+          spawnParticle(b.x + Math.cos(a) * u * 0.5, 0.05, b.z + Math.sin(a) * u * 0.5, Math.cos(a) * 1.4 * u, 5 + Math.random() * 5, Math.sin(a) * 1.4 * u,
+            1.1 + Math.random() * 0.5, 0.07 + Math.random() * 0.08, [0.55, 0.8, 0.85]);
+        }
+      }
+      flash("#ffb36a", 0.6, 0.5);
       P.shake = Math.max(P.shake, 0.6 * clamp(1 - Math.hypot(b.x - P.x, b.z - P.z) / 18, 0.2, 1));
       // Did it catch the thing while its head was up?
       if (C.alive && !(C.act && C.act.kind === "die")) {
@@ -2861,7 +2877,7 @@ window.plethoraBit = {
       uniforms: { uScale: { value: 600 } },
       vertexShader: /* glsl */`attribute float size; uniform float uScale; varying vec3 vC;
         void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vC = color; gl_PointSize = size * uScale / max(-mv.z, 0.1); gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: /* glsl */`varying vec3 vC; void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = 1.0 - smoothstep(0.4, 1.0, d); gl_FragColor = vec4(vC * a, 1.0);
+      fragmentShader: /* glsl */`varying vec3 vC; void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = exp(-d * d * 3.2) * (1.0 - smoothstep(0.85, 1.0, d)); gl_FragColor = vec4(vC * a, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         }`
@@ -2872,7 +2888,9 @@ window.plethoraBit = {
     scene.add(pPoints);
     function spawnParticle(x, y, z, vx, vy, vz, life, size, rgb, grav) {
       if (pBuf.live.length >= PART_MAX) pBuf.live.shift();
-      pBuf.live.push({ x, y, z, vx, vy, vz, life, t: 0, size, r: rgb[0], g: rgb[1], b: rgb[2], grav: grav === undefined ? 9 : grav });
+      const q = { x, y, z, vx, vy, vz, life, t: 0, size, r: rgb[0], g: rgb[1], b: rgb[2], grav: grav === undefined ? 9 : grav, grow: 0 };
+      pBuf.live.push(q);
+      return q;
     }
     // Bubbles: they rise, wobble, and break the surface in a tiny ring.
     function bubble(x, z, spread) {
@@ -2905,7 +2923,7 @@ window.plethoraBit = {
         const q = L[i], a = 1 - q.t / q.life;
         pBuf.pos[i * 3] = q.x; pBuf.pos[i * 3 + 1] = q.y; pBuf.pos[i * 3 + 2] = q.z;
         pBuf.col[i * 3] = q.r * a; pBuf.col[i * 3 + 1] = q.g * a; pBuf.col[i * 3 + 2] = q.b * a;
-        pBuf.size[i] = q.size;
+        pBuf.size[i] = q.size * (1 + q.grow * (q.t / q.life));
       }
       for (let i = n; i < PART_MAX; i++) pBuf.size[i] = 0;
       pGeom.attributes.position.needsUpdate = true;
