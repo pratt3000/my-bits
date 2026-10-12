@@ -161,6 +161,8 @@ Plethora library registry) and two registry fonts.
 - **Resolution follows the frame rate:** the canvas starts at the device's
   pixel ratio (capped at 2), gives back a quarter step after 1.5 s of slow
   frames, down to 0.85, and takes it back after 10 s of fast ones.
+- **Film grain** is added in the shaders' fog step, scaled to brightness, so it
+  also dithers the banding out of the dark gradients.
 - A typical view is about 35 draw calls.
 
 ## Sound
@@ -195,7 +197,10 @@ where it will come out. A heartbeat rises as it hunts you closer.
   than after the first submit returns.
 - `manifest.onboarding` is `guided`, four steps.
 - No `document.` reference anywhere in the source, no network, no packaged
-  assets.
+  assets, and no URL of any kind. The first upload was refused for using
+  "remote resources" over one string: the grain overlay was an SVG data URI,
+  and its `xmlns` namespace looks like a remote address to the upload check.
+  The grain moved into the shaders.
 
 ## Verified
 

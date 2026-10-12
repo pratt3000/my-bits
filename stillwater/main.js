@@ -462,7 +462,10 @@ window.plethoraBit = {
         float f = 1.0 - exp(-uFogD * uFogD * d * d);
         // A low mist hangs on the water.
         float mist = (1.0 - smoothstep(-0.2, 1.4, P.y)) * (1.0 - exp(-d * 0.035)) * 0.45;
-        return mix(c, uFogC, clamp(f + mist * (1.0 - f), 0.0, 1.0));
+        c = mix(c, uFogC, clamp(f + mist * (1.0 - f), 0.0, 1.0));
+        // A fine moving film grain, which also dithers the dark gradients.
+        float g = hash12(floor(gl_FragCoord.xy) + fract(uTime * 7.31) * 517.0) - 0.5;
+        return max(c + g * (0.01 + 0.035 * dot(c, vec3(0.3, 0.55, 0.15))), 0.0);
       }
     `;
 
@@ -3144,7 +3147,6 @@ window.plethoraBit = {
   <button class="sw-btn sw-jump" data-btn="jump"><em>Jump</em></button>
 </div>
 <div class="sw-flash" data-flash></div>
-<div class="sw-grain"></div>
 <div class="sw-modal" data-modal></div>`;
     const $ = sel => root.querySelector(sel);
     const touch = $("[data-touch]"), hud = $("[data-hud]"), stickEl = $("[data-stick]"), knob = $("[data-knob]");
@@ -3216,10 +3218,6 @@ window.plethoraBit = {
 .sw-fire{grid-column:2;grid-row:1;width:72px;height:72px;background:rgba(120,30,20,.45);box-shadow:inset 0 0 0 1.5px rgba(255,150,110,.55)}
 .sw-throw.empty{opacity:.4}
 .sw-flash{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
-.sw-grain{position:absolute;inset:-20%;pointer-events:none;opacity:.07;mix-blend-mode:overlay;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  animation:swGrain .5s steps(4) infinite}
-@keyframes swGrain{0%{transform:translate(0,0)}25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-3%)}75%{transform:translate(-2%,-1%)}100%{transform:translate(0,0)}}
 .sw::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 48%,rgba(0,0,0,0) 52%,rgba(0,0,0,.55) 100%)}
 .sw-modal{position:absolute;inset:0;z-index:20;pointer-events:auto!important;display:flex;flex-direction:column;justify-content:flex-end;
   padding:calc(var(--sat) + 24px) calc(var(--sar) + 22px) calc(var(--sab) + 28px) calc(var(--sal) + 22px);
