@@ -4477,7 +4477,8 @@ window.plethoraBit = {
       cardT = 4.2;
       sfx.chime(true);
     }
-    // Where the goal is: a diamond over it while it is in view, metres to it always.
+    // Where the goal is: a diamond over it while it is in view and no chapter card
+    // is up, metres to it always.
     const _wp = V3(), _wv = V3();
     let distShown = null, wpShown = false;
     function updateGuide() {
@@ -4492,7 +4493,7 @@ window.plethoraBit = {
       if (ds !== distShown) { distShown = ds; distEl().textContent = ds; }
       _wv.set(g.x, (g.y || 0) + 1.1, g.z).applyMatrix4(camera.matrixWorldInverse);
       _wp.set(g.x, (g.y || 0) + 1.1, g.z).project(camera);
-      const on = _wv.z < -1 && Math.abs(_wp.x) < 0.94 && Math.abs(_wp.y) < 0.9 && d > 4;
+      const on = cardT <= 0 && _wv.z < -1 && Math.abs(_wp.x) < 0.94 && Math.abs(_wp.y) < 0.9 && d > 4;
       if (on !== wpShown) { wpShown = on; wpEl.hidden = !on; }
       if (on) {
         wpEl.style.transform = `translate(${((_wp.x * 0.5 + 0.5) * ctx.width).toFixed(1)}px,${((0.5 - _wp.y * 0.5) * ctx.height).toFixed(1)}px)`;
