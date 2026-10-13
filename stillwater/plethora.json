@@ -3,18 +3,18 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Still Water",
-  "description": "A first-person horror crawl through drowned night-time baths. Something long and pale lives in the water, and it is blind: on the dry tiles you make no sound it can follow, but every step you wade sends ripples it can hear. Scavenge four spring coils for jump boots, climb to the high shelves for the five parts of a bazooka, dive the pool floors for rockets, then lure it up with a rubber duck and shoot it while its head is out of the water. Three hits. It only needs one.",
+  "description": "One night in a drowned cypress swamp. Something long and pale lives in the black water, and it is blind: on the mud and the boardwalks you make no sound it can follow, but every step you wade carries, and every stroke you swim carries further. Search the Fishing Camp, the Stilt Village, the Drowned Chapel, the Watchtower, the Sunken Barge, the Pumphouse and the Boathouse for spring coils and the parts of a bazooka, build them at the workbench, then call it up with a rubber duck, the chapel bell or the generator and shoot it while its head is out of the water. It only has to find you once.",
   "tags": [
     "horror",
     "3d",
     "stealth",
     "survival",
-    "maze",
+    "swamp",
     "first-person",
     "atmospheric",
     "leaderboard",
-    "backrooms",
-    "creature"
+    "creature",
+    "exploration"
   ],
   "permissions": [
     "audio",
@@ -32,25 +32,25 @@
       {
         "id": "blind",
         "title": "It cannot see you",
-        "body": "The baths are flooded, and something lives in the water. It is blind. Every step you wade sends out ripples it can hear; on the dry tiles you make no sound at all.",
+        "body": "Most of the swamp is black water, and something lives in it. It is blind. On land and boardwalks you are silent; every step you wade carries, and swimming carries furthest.",
         "advance": "continue"
       },
       {
         "id": "move",
         "title": "Two thumbs",
-        "body": "Left thumb walks. Push it gently to wade slowly and quietly. Right thumb looks around. In the water, walk into a low ledge or press JUMP to haul yourself out.",
+        "body": "Left thumb walks: push it only a little to wade slowly and quietly. Right thumb looks. Walk into a low bank or a ladder to climb out of the water.",
         "advance": "continue"
       },
       {
         "id": "build",
-        "title": "Build, then hunt",
-        "body": "Four spring coils make jump boots, and the boots reach the high shelves. Five parts make a bazooka. Rockets glow on the pool floors.",
+        "title": "Find, then build",
+        "body": "Five spring coils make jump boots; five parts make a bazooka. The compass marks the places you have found, and the map button shows where you have been.",
         "advance": "continue"
       },
       {
         "id": "lure",
-        "title": "Lure it up",
-        "body": "Throw a rubber duck into the water and it will come to bite. While its head is up it can be hurt. Three hits.",
+        "title": "Call it up",
+        "body": "Hold DUCK to aim and let go to throw. A duck in the water, the chapel bell or the pumphouse generator will bring it. When its head rears out of the water, fire.",
         "advance": "continue"
       }
     ]
@@ -93,58 +93,21 @@
   "tuning": {
     "schemaVersion": 1,
     "groups": {
-      "baths": {
-        "label": "The Baths"
-      },
       "listener": {
         "label": "The Listener"
+      },
+      "swamp": {
+        "label": "The Swamp"
       },
       "feel": {
         "label": "Feel"
       }
     },
     "knobs": {
-      "mood": {
-        "label": "Light",
-        "type": "choice",
-        "default": "night",
-        "options": [
-          "night",
-          "dawn",
-          "abyss"
-        ],
-        "group": "baths",
-        "intent": "visual",
-        "apply": "restart"
-      },
-      "map_size": {
-        "label": "Size of the baths",
-        "type": "choice",
-        "default": "medium",
-        "options": [
-          "small",
-          "medium",
-          "large"
-        ],
-        "group": "baths",
-        "intent": "gameplay",
-        "apply": "restart"
-      },
-      "rockets": {
-        "label": "Rockets hidden in the pools",
-        "type": "integer",
-        "default": 5,
-        "min": 2,
-        "max": 10,
-        "step": 1,
-        "group": "baths",
-        "intent": "difficulty",
-        "apply": "restart"
-      },
       "creature_speed": {
         "label": "How fast it hunts (m/s)",
         "type": "number",
-        "default": 4.3,
+        "default": 4.6,
         "min": 2.5,
         "max": 7,
         "step": 0.1,
@@ -155,9 +118,9 @@
       "hearing_range": {
         "label": "How far it hears a wading step (m)",
         "type": "number",
-        "default": 15,
+        "default": 22,
         "min": 6,
-        "max": 30,
+        "max": 40,
         "step": 0.5,
         "group": "listener",
         "intent": "difficulty",
@@ -172,6 +135,25 @@
         "step": 1,
         "group": "listener",
         "intent": "difficulty",
+        "apply": "restart"
+      },
+      "ducks": {
+        "label": "Rubber ducks you start with",
+        "type": "integer",
+        "default": 2,
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "group": "swamp",
+        "intent": "difficulty",
+        "apply": "restart"
+      },
+      "storms": {
+        "label": "Storms come and go",
+        "type": "boolean",
+        "default": true,
+        "group": "swamp",
+        "intent": "gameplay",
         "apply": "restart"
       },
       "sound_default": {
