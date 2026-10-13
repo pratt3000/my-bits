@@ -7,11 +7,12 @@ one night in a drowned cypress swamp, and the thing that lives in it.
 
 Most of the swamp is black water: deep channels, waist-deep flats, a southern
 lagoon, and islands of mud and palmetto between. Something long and pale lives
-in it, and it is blind. On land and on the boardwalks you make no sound it can
-follow. Every step you wade carries; every stroke you swim carries further.
-Search the old places for spring coils and the parts of a bazooka, build them at
-the workbench, then call it up and shoot it while its head is out of the water.
-It only has to find you once.
+in it, and it is blind. On land you make no sound it can follow. Every step you
+wade carries, every stroke you swim carries further, and the rotten boardwalks
+creak down into the water unless you tread gently. Follow Eli's journal across
+the swamp for spring coils and the parts of a bazooka, then call it up and shoot
+it while its head is out of the water -- or find fuel and Eli's key and run for
+it in the boat. It only has to find you once.
 
 ## Files
 
@@ -28,17 +29,40 @@ It only has to find you once.
 | Right thumb, drag         | Mouse drag, ← →           | Look                                         |
 | JUMP                      | Space                     | Jump; in the water, haul out onto a bank     |
 | DUCK (hold, aim, release) | Q (hold)                  | Throw a rubber duck, or a firecracker        |
+| STONE (hold, aim, release) | R (hold)                 | Throw a stone: a plop that draws it away     |
 | FIRE (once built)         | F or Enter                | Fire the bazooka                             |
 | The gold button           | E                         | Use: the workbench, the bell, the generator  |
 | The map button            | M                         | The map of where you have been               |
+| The goal line at the top  | J                         | The journal: goals, Eli's pages, how it hears |
 |                           | Shift                     | Wade quietly                                 |
 
 The stick floats under your thumb; its inner ring lights while you push gently
 enough to be quiet. Holding DUCK draws the throw's arc and a ring where it will
 land: blue on water, red on land, where it cannot hear it. Walk into a ladder to
 climb it, and into a low bank or a boardwalk from the water to haul yourself
-out. The compass marks the places you have found, names the one you face, and
-points to the workbench when you have something to build.
+out. The map and the journal stop the night while they are open.
+
+## Never aimless
+
+The line at the top of the screen always says what to do next and how far it
+is; a gold diamond hangs over the goal while it is in view and sits on the
+compass when it is not. The night comes in chapters, each with its card:
+
+| Chapter        | The goal                                                          |
+| -------------- | ----------------------------------------------------------------- |
+| I The Landing  | Pick up Eli's first page; follow the lanterns to the Fishing Camp  |
+| II Springheel  | Five spring coils; make the boots at the workbench                 |
+| III High Ground| Climb the Watchtower; from the top the whole map fills in          |
+| IV Armed       | Five bazooka parts, the bazooka, a rocket                          |
+| V The Hunt     | Lure it up and hit it three times while its head is out            |
+| VI Dawn        | It is dead, or you are gone                                        |
+
+**Eli's journal** is nine pages left across the swamp. Each one tells you
+something true about the thing, and the ones that name places mark them on your
+map: the coils (page two, on the workbench), the parts (page three, on the
+tower), the rockets, the duck crates, the fuel and the key. First times are
+explained once, as they happen: the first wade, the first creak, the first gap
+in a boardwalk, the first time it hears you, the first time it comes.
 
 ## The way through
 
@@ -56,7 +80,14 @@ points to the workbench when you have something to build.
    four times. Whatever it comes for, it rears its head out of the water there.
 5. **Three hits** kill it. Each makes it faster and angrier. Then dawn comes up.
 
-Five notes left by whoever was here before you tell you the rest.
+**Or leave.** A can of fuel in the Pumphouse and Eli's key, where his lantern
+still burns in the Cypress Grove, start the boat in the Boathouse. The outboard
+is the loudest thing in the swamp: it comes after you at a quarter more than its
+hunting speed, down its channel, across the lagoon and along the old canal under
+the dead trees. Pull it somewhere else first.
+
+**Waking at the camp.** Taken, you can wake at the Fishing Camp with everything
+you found, for 400 points a time, or start the night over.
 
 ## The places
 
@@ -93,7 +124,11 @@ charge it can drag itself through shallower water back to the deep.
 | Hauling yourself out               | 17–24 m                                       |
 | A duck, a firecracker              | 140 m, 110 m                                  |
 | The generator, the bell            | 160 m, the whole swamp                        |
-| Anything on land or a boardwalk    | nothing at all                               |
+| A rotten plank over water, walking | 15 m; nothing at all walking gently          |
+| Landing on planks over water       | 15–30 m                                       |
+| A stone in the water               | 26 m                                          |
+| The boat's outboard                | the whole swamp                               |
+| Anything on land                   | nothing at all                               |
 
 - It hears 15% less of you before you have the boots; 15% more once you carry
   the bazooka; 10% more for every hit it has taken; 55% less in the rain; and
@@ -107,21 +142,29 @@ charge it can drag itself through shallower water back to the deep.
   **touching**. Freeze while it hunts you and it has only where it last heard
   you. A duck in shallows it cannot swim, it **charges** through with its back
   out of the water, and anyone wading in the way is taken.
+- On a **low deck or jetty** over the water you are not safe from it: hunting,
+  it can rear up and take you off the planks.
+- The water is full of something that glows when it is stirred: **its wake
+  glows**, so you can watch it come; your own ripples glow faintly.
 - Its lure, photophores and milky eyes glow brighter the harder it listens; its
   dark shape is drawn through the water. The HUD's ear goes amber when it is
-  listening and red when it is coming, and a heartbeat rises as it closes.
+  listening and red when it is coming, a heartbeat rises as it closes, and the
+  frogs go quiet.
 
 ## Weather
 
-Every three or four minutes the rain comes for a minute or so: rings open all
-over the water, the wind rises in the trees, lightning shows you the swamp, and
-the rain drowns your steps.
+Every three or four minutes a storm announces itself with distant thunder, then
+the rain comes for a minute or so: rings open all over the water, the wind rises
+in the trees, and the rain drowns your steps. Bolts fork down over the trees in
+front of you, a flicker of light and then thunder as late as their distance.
 
 ## Ranks and records
 
 Progress is scored as you go: 100 a coil, 150 a part, 80 a rocket, 25 a place,
-40 a note, 400 for the boots, 700 for the bazooka, 1200 a hit, and 6000 for the
-kill plus up to 3000 for speed (two points off for every second).
+40 a page, 150 the tower's view, 150 each for the fuel and the key, 400 for the
+boots, 700 for the bazooka, 1200 a hit, and 6000 for the kill plus up to 3000
+for speed (two points off for every second); escaping by boat is worth 2500 plus
+up to 1500. Each waking at the camp costs 400.
 
 | Rank       | From    |
 | ---------- | ------- |
@@ -165,8 +208,16 @@ Plethora library registry) and two registry fonts.
   per material (planks, stone, rusted tin, cloth, dark iron), each solid part
   leaving a collider behind, so what you see is what you stand on.
 - **Lamps**: every lantern glows, and the three nearest the camera are real
-  lights. A lamp's light is capped close up, so the moss beside it never burns
-  out to white. Your own lantern lights the ground round your feet.
+  lights. A real light is lent to a lantern and fades up there; when another
+  lantern becomes clearly nearer it fades out before it moves, so walking past
+  lanterns never makes the light pop. A lamp's light is capped close up, so the
+  moss beside it never burns out to white. Moths circle every lantern.
+- **Mist** lies on the water in 150 drifting banks, lit pale toward the moon.
+- **Glowing fungi** crowd the feet of the cypress and the tops of fallen logs:
+  thousands of cyan and violet points. Logs, stumps and stones are scattered
+  over the islands and the shallows.
+- **Moonlight shafts**: the bright sky round the moon is smeared toward it at a
+  quarter resolution, so every branch across it casts a ray.
 - **Moonlight shadows** follow you in 6 m steps and are only redrawn when you
   cross one.
 - **The Listener** is one tube posed in the vertex shader from a spine laid
@@ -179,16 +230,22 @@ Plethora library registry) and two registry fonts.
   (capped at 1.25), gives back 0.15 after 1.5 s of slow frames down to 0.6,
   then redraws the mirror only every other frame, and takes it all back after
   8 s of fast ones.
-- A typical view is about 110 draw calls and 320k triangles before the mirror.
+- A typical view is about 150 to 210 draw calls and 0.3 to 0.65 million
+  triangles, mirror included.
 
 ## Sound
 
 Everything is synthesised with WebAudio, through a compressor and a generated
 open-air reverb. Frogs and crickets placed round you, an owl far off, wind in
-the trees; all of it goes quiet when the thing is near. Steps on mud and on
-planks, wading and swimming, splashes by force, hauling out, ladder rungs, the
-duck's squeak, the bell, the generator, the bazooka and the blast, rain and
-thunder. The Listener is placed in 3D (HRTF): a low detuned drone that grows
+the trees; all of it goes quiet when the thing is near. **Water is made of
+bubbles**: each one a sine that rises in pitch as it shrinks, scattered over
+swells of filtered noise. A wading step is a slosh in, a slop back, a few
+bubbles and the drips off your leg; a swimming stroke is the arm going in, the
+pull and the gurgle; a splash is a crash and dozens of bubbles; standing in the
+water it laps at you; rain is a hiss and a patter of tiny bubbles on the
+surface. Planks knock hollow and the rotten ones creak; mud sucks. The duck's
+squeak, a stone's plop, the bell, the generator, the outboard, the bazooka and
+the blast, and thunder that cracks when it is close. The Listener is placed in 3D (HRTF): a low detuned drone that grows
 louder and harsher as it listens, clicks when it hears something, a growl when
 it starts to hunt, a roar as it lunges.
 
@@ -251,5 +308,17 @@ this manifest:
   the ring; JUMP, hold-to-aim DUCK, the map; a blur mid-drag lets go; keyboard
   walks. All of it again with `ctx.storage` and `ctx.platform.haptic` missing:
   no errors.
-- **Cost**: game logic about 0.1 ms a frame; a view is about 110 draw calls and
-  320k triangles before the mirror, 100 to 230 and 0.25 to 0.6 million with it.
+- **Guidance**: page one, then the camp with the distance counting down; page
+  two marks all six coils and the goal moves to the nearest; the diamond shows
+  over it; the journal opens from the goal line and stops the clock; chapter
+  cards at each step.
+- **Lanterns**: walking a lantern-lined boardwalk for six seconds, the real
+  lights used to jump between lanterns ten times; now none moves while lit.
+- **New threats**: a stone into the water sends it to the splash; running the
+  rotten walk with it near brings it hunting, walking gently does not; hunting,
+  it took the player off a low deck.
+- **Waking and leaving**: waking at the camp keeps what was found and counts a
+  death; fuel, key and the boat: started, a 15 s run down the canal, out, the
+  card, `complete`.
+- **Cost**: game logic about 0.2 ms a frame; a view is about 150 to 210 draw
+  calls and 0.3 to 0.65 million triangles, mirror included.

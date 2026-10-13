@@ -3,7 +3,7 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Still Water",
-  "description": "One night in a drowned cypress swamp. Something long and pale lives in the black water, and it is blind: on the mud and the boardwalks you make no sound it can follow, but every step you wade carries, and every stroke you swim carries further. Search the Fishing Camp, the Stilt Village, the Drowned Chapel, the Watchtower, the Sunken Barge, the Pumphouse and the Boathouse for spring coils and the parts of a bazooka, build them at the workbench, then call it up with a rubber duck, the chapel bell or the generator and shoot it while its head is out of the water. It only has to find you once.",
+  "description": "One night in a drowned cypress swamp. Something long and pale lives in the black water, and it is blind: on land you make no sound it can follow, but every step you wade carries, every stroke you swim carries further, and the rotten boardwalks creak down into the water unless you tread gently. Follow Eli's journal across the swamp to find spring coils and the parts of a bazooka, then call the thing up with a duck, the chapel bell or the generator and shoot it while its head is out of the water. Or find fuel and Eli's key and run for it in the boat. It only has to find you once.",
   "tags": [
     "horror",
     "3d",
@@ -32,25 +32,25 @@
       {
         "id": "blind",
         "title": "It cannot see you",
-        "body": "Most of the swamp is black water, and something lives in it. It is blind. On land and boardwalks you are silent; every step you wade carries, and swimming carries furthest.",
+        "body": "Most of the swamp is black water, and something lives in it. It is blind. On land you are silent; every step you wade carries, swimming carries furthest, and rotten planks creak into the water unless you walk gently.",
         "advance": "continue"
       },
       {
         "id": "move",
         "title": "Two thumbs",
-        "body": "Left thumb walks: push it only a little to wade slowly and quietly. Right thumb looks. Walk into a low bank or a ladder to climb out of the water.",
+        "body": "Left thumb walks: push it only a little to move slowly and quietly. Right thumb looks. Walk into a ladder or a low bank to climb. Hold STONE and let go to throw one: a splash somewhere else draws it away.",
         "advance": "continue"
       },
       {
-        "id": "build",
-        "title": "Find, then build",
-        "body": "Five spring coils make jump boots; five parts make a bazooka. The compass marks the places you have found, and the map button shows where you have been.",
+        "id": "journal",
+        "title": "Follow the journal",
+        "body": "Eli left his journal in pages across the swamp, and they mark what you need on your map. The line at the top always says where to go next; tap it for the whole journal.",
         "advance": "continue"
       },
       {
         "id": "lure",
         "title": "Call it up",
-        "body": "Hold DUCK to aim and let go to throw. A duck in the water, the chapel bell or the pumphouse generator will bring it. When its head rears out of the water, fire.",
+        "body": "With the bazooka built, hold DUCK to aim and let go to throw. A duck in the water brings it; when its head rears up to bite, fire. Three hits. Or take the boat and leave.",
         "advance": "continue"
       }
     ]

@@ -252,13 +252,13 @@ window.plethoraBit = {
      * ================================================================ */
     const LOOK = {
       moonDir: V3(-0.42, 0.26, -0.87).normalize(),
-      moonColor: col("#c3d4ff"), moonI: 2.6,
-      hemiSky: col("#41607d"), hemiGround: col("#1d1f16"), hemiI: 1.25,
-      fogA: col("#0e1a1f"), fogB: col("#3d5262"), fogDensity: 0.017,
-      skyZenith: col("#010309"), skyHorizon: col("#0f1a22"), skyMoon: col("#6f87a8"),
+      moonColor: col("#c3d4ff"), moonI: 3.0,
+      hemiSky: col("#4a6d8e"), hemiGround: col("#1f2118"), hemiI: 1.35,
+      fogA: col("#162832"), fogB: col("#56707f"), fogDensity: 0.019,
+      skyZenith: col("#02060f"), skyHorizon: col("#1d3240"), skyMoon: col("#8ca6c9"),
       waterDeep: col("#020708"), waterMurk: col("#0d1a12"), waterScum: col("#2d3d1c"),
       lantern: col("#ffb35a"),
-      exposure: 1.25
+      exposure: 1.3
     };
 
     const scene = new THREE.Scene();
@@ -514,8 +514,11 @@ window.plethoraBit = {
     const ripples = [];
     for (let i = 0; i < MAX_RIP; i++) ripples.push(new THREE.Vector4(0, 0, -99, 0));
     let ripNext = 0;
-    function addRipple(x, z, amp) {
-      ripples[ripNext].set(x, z, SHARED.uTime.value, amp);
+    // A ring on the water. `glow` lights it with the swamp's own
+    // bioluminescence: 1 for the thing's slime and whatever is thrown in,
+    // a little for your own steps, none for rain and bubbles.
+    function addRipple(x, z, amp, glow) {
+      ripples[ripNext].set(x, z, SHARED.uTime.value, Math.min(amp, 0.98) + (glow >= 1 ? 1 : glow > 0 ? 2 : 0));
       ripNext = (ripNext + 1) % MAX_RIP;
     }
     const MAX_GLINT = 6;
@@ -568,15 +571,19 @@ window.plethoraBit = {
           float breeze = smoothstep(0.55, 0.8, texture2D(uNoise, p * 0.008 + vec2(uTime * 0.006, uTime * 0.004)).r);
           vec2 g = (a.xy * (0.07 + breeze * 0.16) + b.xy * (0.04 + breeze * 0.1)) * (1.0 - scum * 0.85);
           // Rings from everything that touches the water.
+          float biolum = 0.0;
           for (int i = 0; i < ${MAX_RIP}; i++) {
             vec4 r = uRip[i];
             float age = uTime - r.z;
             if (r.w <= 0.0 || age < 0.0 || age > 6.0) continue;
+            float lev = floor(r.w);
+            float amp = r.w - lev;
             vec2 dv = p - r.xy;
             float d = length(dv) + 1e-4;
             float k = d - age * 1.15;
-            float w = r.w * exp(-k * k * 6.0) * exp(-age * 0.7) / (1.0 + d * 0.8);
+            float w = amp * exp(-k * k * 6.0) * exp(-age * 0.7) / (1.0 + d * 0.8);
             g += (dv / d) * cos(k * 14.0) * w * 9.0;
+            biolum += (lev > 1.5 ? 0.3 : lev) * w * (0.55 + 0.45 * cos(k * 14.0));
           }
           // Rain: small rings opening everywhere at once.
           if (uRain > 0.02) {
@@ -623,6 +630,8 @@ window.plethoraBit = {
             c += uGlintC[i] * pow(s, 400.0) * 5.0 * smoothstep(0.5, 0.7, fine) * L.w / (1.0 + d2 * 0.02) * (1.0 - scum * 0.7);
             c += uGlintC[i] * 0.025 * L.w / (1.0 + d2 * 0.5);
           }
+          // The water is full of something that glows when it is stirred.
+          c += vec3(0.12, 0.78, 0.66) * clamp(biolum, 0.0, 0.25) * 14.0 * (1.0 - scum * 0.5);
           float alpha = clamp(0.6 + depth * 0.55, 0.6, 0.97);
           alpha = max(alpha, fres);
           alpha = max(alpha, scum);
@@ -645,7 +654,8 @@ window.plethoraBit = {
       side: THREE.BackSide,
       uniforms: {
         uTime: SHARED.uTime, uNoise: SHARED.uNoise, uMoonDir: SHARED.uMoonDir,
-        uZen: { value: LOOK.skyZenith }, uHor: { value: LOOK.skyHorizon }, uMoonGlow: { value: LOOK.skyMoon }
+        uZen: { value: LOOK.skyZenith }, uHor: { value: LOOK.skyHorizon }, uMoonGlow: { value: LOOK.skyMoon },
+        uFlash: { value: 0 }, uBoltDir: { value: V3(0, 0.3, -1).normalize() }
       },
       vertexShader: /* glsl */`
         varying vec3 vD;
@@ -653,7 +663,8 @@ window.plethoraBit = {
       fragmentShader: /* glsl */`
         uniform float uTime;
         uniform sampler2D uNoise;
-        uniform vec3 uMoonDir, uZen, uHor, uMoonGlow;
+        uniform vec3 uMoonDir, uZen, uHor, uMoonGlow, uBoltDir;
+        uniform float uFlash;
         varying vec3 vD;
         float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         void main() {
@@ -685,6 +696,8 @@ window.plethoraBit = {
           vec2 cp = d.xz / (d.y + 0.12) * 0.32 + vec2(uTime * 0.0012, 0.0);
           float cl = smoothstep(0.5, 0.85, texture2D(uNoise, cp).r * 0.7 + texture2D(uNoise, cp * 2.7).g * 0.3) * smoothstep(0.02, 0.25, d.y);
           c = mix(c, uHor * 0.45 + uMoonGlow * pow(m, 6.0) * 0.5, cl * 0.6);
+          // Lightning lights the cloud it is in, and a little of everything.
+          c += vec3(0.5, 0.56, 0.78) * uFlash * (0.06 + 1.4 * pow(max(dot(d, uBoltDir), 0.0), 8.0)) * (0.35 + cl * 1.3);
           gl_FragColor = vec4(c, 1.0);
         }`
     });
@@ -1236,17 +1249,39 @@ window.plethoraBit = {
           gl_FragColor = vec4(c / 16.0 * uK, 1.0);
         }`
     });
+    // Shafts of moonlight: the bright sky round the moon, smeared toward it,
+    // so every branch across it casts a ray.
+    const godRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false });
+    const mGod = new THREE.ShaderMaterial({
+      depthTest: false, depthWrite: false,
+      uniforms: { uSrc: { value: null }, uMoon: { value: new THREE.Vector2(0.5, 0.5) }, uAspect: { value: 0.5 } },
+      vertexShader: POST_VS,
+      fragmentShader: /* glsl */`
+        uniform sampler2D uSrc; uniform vec2 uMoon; uniform float uAspect; varying vec2 vUv;
+        void main() {
+          vec2 uv = vUv, dir = (uMoon - vUv) / 30.0;
+          float decay = 1.0; vec3 acc = vec3(0.0);
+          for (int i = 0; i < 30; i++) {
+            uv += dir;
+            vec2 q = (uv - uMoon) * vec2(uAspect, 1.0);
+            acc += texture2D(uSrc, uv).rgb * (1.0 - smoothstep(0.0, 0.45, length(q))) * decay;
+            decay *= 0.955;
+          }
+          gl_FragColor = vec4(acc / 30.0, 1.0);
+        }`
+    });
     const mFinal = new THREE.ShaderMaterial({
       depthTest: false, depthWrite: false,
       uniforms: {
         uScene: { value: null }, uBloom: { value: null }, uTime: SHARED.uTime, uNoise: SHARED.uNoise,
         uExposure: { value: LOOK.exposure }, uBloomK: { value: 0.42 }, uRes: { value: new THREE.Vector2(1, 1) },
-        uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uFear: { value: 0 }
+        uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uFear: { value: 0 },
+        uGod: { value: godRT.texture }, uGodK: { value: 0 }
       },
       vertexShader: POST_VS,
       fragmentShader: /* glsl */`
-        uniform sampler2D uScene, uBloom, uNoise;
-        uniform float uTime, uExposure, uBloomK, uFear;
+        uniform sampler2D uScene, uBloom, uNoise, uGod;
+        uniform float uTime, uExposure, uBloomK, uFear, uGodK;
         uniform vec2 uRes;
         uniform vec4 uFlash;
         varying vec2 vUv;
@@ -1264,6 +1299,7 @@ window.plethoraBit = {
           c.g = texture2D(uScene, vUv).g;
           c.b = texture2D(uScene, vUv + q * ca).b;
           c += texture2D(uBloom, vUv).rgb * uBloomK;
+          c += texture2D(uGod, vUv).rgb * uGodK;
           c *= uExposure;
           c = mix(c, uFlash.rgb, uFlash.a);
           // Grade: shadows toward teal, highlights toward amber.
@@ -1330,6 +1366,8 @@ window.plethoraBit = {
       reflRT.setSize(Math.max(2, Math.round(W * gfx.refl)), Math.max(2, Math.round(H * gfx.refl)));
       let bw = W >> 1, bh = H >> 1;
       for (let i = 0; i < BLOOM_LEVELS; i++) { bloomRT[i].setSize(Math.max(2, bw), Math.max(2, bh)); bw >>= 1; bh >>= 1; }
+      godRT.setSize(Math.max(2, W >> 2), Math.max(2, H >> 2));
+      mGod.uniforms.uAspect.value = W / H;
       camera.aspect = w / h;
       camera.fov = w / h < 0.75 ? 74 : 66;
       camera.updateProjectionMatrix();
@@ -1339,6 +1377,7 @@ window.plethoraBit = {
     }
 
     const hideInReflection = [];
+    const _mv = V3(), _fw = V3();
     function drawFrame() {
       SHARED.uMoonDir.value.copy(LOOK.moonDir);
       camera.updateMatrixWorld();
@@ -1367,6 +1406,16 @@ window.plethoraBit = {
         mDown.uniforms.uSrc.value = bloomRT[i - 1].texture;
         mDown.uniforms.uTexel.value.set(1 / bloomRT[i - 1].width, 1 / bloomRT[i - 1].height);
         pass(mDown, bloomRT[i]);
+      }
+      // Moon shafts, from the pure bright pass before the up-chain adds into it.
+      _mv.copy(LOOK.moonDir).multiplyScalar(500).add(camera.position).project(camera);
+      _fw.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      const facing = smooth(0.15, 0.55, _fw.dot(LOOK.moonDir)) * (1 - smooth(1.1, 1.6, Math.max(Math.abs(_mv.x), Math.abs(_mv.y))));
+      mFinal.uniforms.uGodK.value = facing * 0.5 * (1 - weather.rain * 0.8);
+      if (facing > 0.01) {
+        mGod.uniforms.uSrc.value = bloomRT[1].texture;
+        mGod.uniforms.uMoon.value.set(_mv.x * 0.5 + 0.5, _mv.y * 0.5 + 0.5);
+        pass(mGod, godRT);
       }
       for (let i = BLOOM_LEVELS - 1; i > 0; i--) {
         mUp.uniforms.uSrc.value = bloomRT[i].texture;
@@ -1442,7 +1491,9 @@ window.plethoraBit = {
       { w: 5.5, d: -1.7, pts: [[36, 40], [52, 100], [40, 150], [30, 180]] },
       // Into the southern lagoon, and on to the boathouse: no water is out of its reach.
       { w: 5, d: -1.6, pts: [[112, 156], [110, 172], [104, 190], [96, 200]] },
-      { w: 4.5, d: -1.5, pts: [[170, 226], [186, 229], [200, 228]] }
+      { w: 4.5, d: -1.5, pts: [[170, 226], [186, 229], [200, 228]] },
+      // The old canal: the one way out by water, south through the dead trees.
+      { w: 4.5, d: -1.7, pts: [[162, 229], [154, 238], [151, 248], [150, 262]] }
     ];
     function segDist(px, pz, ax, az, bx, bz) {
       const vx = bx - ax, vz = bz - az, wx = px - ax, wz = pz - az;
@@ -1563,9 +1614,9 @@ window.plethoraBit = {
       const [wx, wz] = F.p(lx, lz);
       BUILD.windows.push({ x: wx, y: F.y + ly, z: wz, w, h, rot: F.rot + (rot || 0) });
     }
-    function anchor(name, F, lx, ly, lz) {
+    function anchor(name, F, lx, ly, lz, extra) {
       const [wx, wz] = F.p(lx, lz);
-      (BUILD.anchors[name] = BUILD.anchors[name] || []).push({ x: wx, y: F.y + ly, z: wz });
+      (BUILD.anchors[name] = BUILD.anchors[name] || []).push(Object.assign({ x: wx, y: F.y + ly, z: wz }, extra || {}));
     }
     function ladder(F, lx, lz, y0, y1, face) {
       // Two rails and rungs. `face` is the side you climb from (0 = local +z).
@@ -1669,7 +1720,12 @@ window.plethoraBit = {
         box(Fc, "wood", 0, 0.12, 0, 0.8, 0.25, 4.2, { rz: 0.25, solid: false, tone: 0.6 });
         box(Fc, "wood", 0.35, 0.3, 0, 0.08, 0.35, 4, { rz: 0.25, solid: false, tone: 0.55 });
         box(Fc, "wood", -0.35, 0.3, 0, 0.08, 0.35, 4, { rz: 0.25, solid: false, tone: 0.55 });
-        anchor("note", F, 0.4, 0.55, -0.6);
+        // The first page lies a few steps up the path, where you will see it.
+        {
+          const [sx, sz] = F.p(0.6, 2.2), dx = POI.camp.x - sx, dz = POI.camp.z - sz, L = Math.hypot(dx, dz);
+          const nx = sx + dx / L * 3.2, nz = sz + dz / L * 3.2;
+          anchor("note", frameAt(nx, nz, 0, H(nx, nz)), 0, 0.22, 0, { page: 1 });
+        }
       }
       // The boardwalk from the Landing to the camp.
       walk(frameAt(0, 0, 0), 133, 208, 150, 192, 0.55, { rail: false, lamps: 12 });
@@ -1706,6 +1762,7 @@ window.plethoraBit = {
         const [bx, bz] = Fb.p(0, 0);
         BUILD.interact.push({ kind: "bench", x: bx, y: Fb.y + 1, z: bz, r: 2.4 });
         anchor("ducks", Fb, -1.8, 0.35, -0.2);
+        anchor("note", Fb, 0.3, 1.0, 0.1, { page: 2 });
         // Drying racks with nets.
         const Fr = frameAt(...F.p(3.5, -4), F.rot - 0.2, F.y);
         for (const lx of [-1.4, 0, 1.4]) cyl(Fr, "wood", lx, 0.9, 0, 0.05, 0.05, 1.8, { tone: 0.7, post: true });
@@ -1737,6 +1794,8 @@ window.plethoraBit = {
         for (const [lx, lz] of [[-half, -half], [half, -half], [-half, half], [half, half]]) cyl(F, "wood", lx, top + 1.2, lz, 0.06, 0.06, 2.4, { tone: 0.65 });
         box(F, "tin", 0, top + 2.45, 0, half * 2 + 1.2, 0.06, half * 2 + 1.2, { tone: 0.7, collide: { hx: half + 0.6, hz: half + 0.6, y0: -0.05, y1: 0.05 }, solid: false });
         ladder(F, 0, half + 0.3, 0, top + 0.1, 0);
+        anchor("towertop", F, 0, top + 0.07, 0);
+        anchor("note", F, 0.7, top + 0.12, 0.8, { page: 3 });
         lampAt(F, half - 0.2, top + 1.6, -half + 0.2);
         anchor("part", F, -0.6, top + 0.35, -0.6);
       }
@@ -1759,6 +1818,7 @@ window.plethoraBit = {
         lampAt(F, 1.6, 3.4, L / 2 - 1.0, { k: 0.7 });
         anchor("rocket", F, -0.8, 1.9, L / 2 - 3.2);
         anchor("rocket", F, 0.6, 1.9, L / 2 - 3.4);
+        anchor("note", F, 0.9, 1.75, L / 2 - 1.8, { page: 4 });
         anchor("part", F, 0, 0.55, -L / 2 + 3);
       }
       // Stilt Village: three huts over the water, walks between, ladders down.
@@ -1822,7 +1882,7 @@ window.plethoraBit = {
           box(F, "stone", gx, 0.35, gz, 0.6, 0.9, 0.14, { rot: (k % 5 - 2) * 0.08, rz: (k % 3 - 1) * 0.12, tone: 0.75, solid: false });
         }
         anchor("coil", F, -Wd / 2 - 5, 0.6, -L / 2 + 6);
-        anchor("note", F, 0.5, 0.35, -L / 2 + 1.6);
+        anchor("note", F, 0.5, 0.35, -L / 2 + 1.6, { page: 6 });
       }
       // Pumphouse: brick, a tin roof, pipes into the channel, a generator.
       {
@@ -1842,7 +1902,8 @@ window.plethoraBit = {
         lampAt(F, w / 2 - 0.4, 2.6, 2.3, { k: 0.5 });
         lampAt(F, -1.2, 2.7, -1.6, { k: 2.4, gen: true });
         anchor("part", F, 1.2, 0.4, -1.8);
-        anchor("note", F, -1.0, 1.25, -1.45);
+        anchor("note", F, -1.0, 1.25, -1.45, { page: 7 });
+        anchor("fuel", F, 1.5, 0.3, 1.6);
       }
       // Hermit's Shack: lanterns, junk, a fence of sticks.
       {
@@ -1855,7 +1916,7 @@ window.plethoraBit = {
         }
         for (let k = 0; k < 4; k++) cyl(F, "dark", -2.5 + k * 0.7, 0.4, -3, 0.28, 0.28, 0.8, { seg: 10, tone: 0.7 });
         anchor("part", F, -0.8, 0.85, -0.8);
-        anchor("note", F, 0.9, 0.5, -0.9);
+        anchor("note", F, 0.9, 0.5, -0.9, { page: 5 });
         anchor("ducks", F, 2.6, 0.35, 2.6);
       }
       // Boathouse: a long shed on stilts over open water, a dock to the shore.
@@ -1866,26 +1927,39 @@ window.plethoraBit = {
           box(F, "wood", s * (w / 2 - 0.75), y - 0.06, 0, 1.5, 0.12, d, { floor: true, tone: 0.8 });
           box(F, "wood", s * w / 2, y + 1.3, 0, 0.12, 2.6, d, { tone: 0.85 });
         }
-        box(F, "wood", 0, y + 1.3, d / 2, w, 2.6, 0.12, { tone: 0.85 });
-        box(F, "wood", 0, y + 2.2, -d / 2, w, 0.8, 0.12, { tone: 0.85 });
+        // The water door faces the open bay to the south; a plain door north to the dock.
+        box(F, "wood", 0, y + 2.2, d / 2, w, 0.8, 0.12, { tone: 0.85 });
+        box(F, "wood", 0.75, y + 1.3, -d / 2, w - 1.5, 2.6, 0.12, { tone: 0.85 });
+        box(F, "wood", -2.75, y + 2.2, -d / 2, 1.5, 0.8, 0.12, { tone: 0.85 });
         box(F, "tin", 0, y + 2.75, 0, w + 0.8, 0.06, d + 0.8, { tone: 0.6, solid: false, collide: { hx: w / 2 + 0.4, hz: d / 2 + 0.4, y0: -0.05, y1: 0.05 } });
         for (let k = 0; k <= 4; k++) for (const s of [-1, 1]) cyl(F, "wood", s * w / 2, -0.8, -d / 2 + k * d / 4, 0.12, 0.1, 2.8, { tone: 0.6, post: true });
         walk(frameAt(0, 0, 0), P.x + 2.2, P.z + d / 2, P.x + 2.2, P.z + d / 2 + 0.5, y, {});
         walk(frameAt(0, 0, 0), P.x - 2.75, P.z - d / 2 - 6.5, P.x - 2.75, P.z - d / 2 + 0.1, y, { width: 1.3 });
         lampAt(F, w / 2 - 0.4, y + 2.0, -d / 2 + 0.6);
         lampAt(F, -w / 2 + 0.4, y + 2.0, d / 2 - 0.6, { k: 0.7 });
-        // A skiff in the bay, swamped.
-        box(F, "wood", 0, -0.15, 1, 1.4, 0.4, 4.2, { rz: 0.15, solid: false, tone: 0.5 });
+        // The boat floats in the bay (it is built apart, so that it can leave).
+        {
+          const [px, pz] = F.p(w / 2 - 1.3, 1.6);
+          BUILD.interact.push({ kind: "boat", x: px, y: y + 1, z: pz, r: 2.6 });
+          anchor("boat", F, 0, 0.1, 1);
+        }
         anchor("rocket", F, w / 2 - 0.75, y + 0.25, 3);
         anchor("rocket", F, -(w / 2 - 0.75), y + 0.25, -2);
         anchor("firecracker", F, w / 2 - 0.75, y + 0.25, -4);
-        anchor("note", F, -(w / 2 - 0.75), y + 0.12, 1.5);
+        anchor("note", F, -(w / 2 - 0.75), y + 0.12, 1.5, { page: 8 });
       }
       // The grove: no buildings -- a coil in the roots, a part on a stump.
       {
         const P = POI.grove;
         anchor("coil", frameAt(P.x + 6, P.z - 4, 0, Math.max(0.05, H(P.x + 6, P.z - 4))), 0, 0.45, 0);
         anchor("coil", frameAt(P.x - 14, P.z + 8, 0, Math.max(0.05, H(P.x - 14, P.z + 8))), 0, 0.45, 0);
+        // Where Eli stopped: his coat, his lantern still burning, his last page, the key.
+        const Fe = frameAt(P.x + 2, P.z + 12, 0.6, Math.max(0.05, H(P.x + 2, P.z + 12)));
+        box(Fe, "cloth", 0, 0.06, 0, 0.7, 0.1, 1.5, { solid: false, tone: 0.55 });
+        box(Fe, "dark", 0.7, 0.12, 0.6, 0.18, 0.24, 0.18, { solid: false });
+        lampAt(Fe, 0.7, 0.32, 0.6, { k: 0.45 });
+        anchor("note", Fe, -0.3, 0.2, -0.5, { page: 9 });
+        anchor("key", Fe, 0.35, 0.2, -0.2);
       }
       anchor("coil", frameAt(POI.pump.x - 18, POI.pump.z + 10, 0, Math.max(0.05, H(POI.pump.x - 18, POI.pump.z + 10))), 0, 0.45, 0);
       // Places where no tree may stand.
@@ -2233,7 +2307,12 @@ window.plethoraBit = {
           const impact = -P.vy;
           P.y = gNow; P.vy = 0; P.ground = true;
           const m = mediumAt(P.x, P.z, P.y);
-          if (m.m === "dry") { sfx.land(impact, m.floor); if (impact > 8) haptic("light"); }
+          if (m.m === "dry") {
+            sfx.land(impact, m.floor);
+            if (impact > 8) haptic("light");
+            // A landing on planks over the water thuds down the posts.
+            if (m.floor && impact > 4 && overWater(P.x, P.z)) { sfx.thud(); makeNoise(P.x, P.z, clamp(impact / 7, 0.7, 1.6), "thud"); }
+          }
         }
       }
       // ---- the sounds of moving ----
@@ -2243,13 +2322,21 @@ window.plethoraBit = {
         const strideLen = m.m === "swim" ? 1.1 : m.m === "wade" ? 0.75 : P.sneak ? 0.62 : 0.82;
         if (P.stride > strideLen) {
           P.stride = 0;
-          if (m.m === "dry") sfx.step(P.sneak, m.floor);
+          if (m.m === "dry") {
+            sfx.step(P.sneak, m.floor);
+            // Rotten planks over the water creak, and the posts carry it down.
+            if (m.floor && !P.sneak && overWater(P.x, P.z) && Math.random() < 0.4) {
+              sfx.creak(1);
+              makeNoise(P.x, P.z, 0.8, "creak");
+              hint("creak", "Rotten planks", "They creak, and the sound goes down the posts into the water. Walk gently.");
+            }
+          }
           else {
             const deep = m.m === "swim" ? 1.7 : m.depth > 0.6 ? 1.0 : 0.6;
             const loud = P.sneak ? deep * 0.3 : deep;
             makeNoise(P.x, P.z, loud, m.m === "swim" ? "swim" : "wade");
             sfx.wade(loud, m.m === "swim");
-            addRipple(P.x, P.z, 0.012 + loud * 0.012);
+            addRipple(P.x, P.z, 0.012 + loud * 0.012, 0.35);
             if (!P.sneak && loud > 0.9) haptic("light");
           }
         }
@@ -2259,6 +2346,8 @@ window.plethoraBit = {
       if (P.medium !== "dry" && moved > 0.006 && P.wakeT > 0.5) { P.wakeT = 0; addRipple(P.x - P.vx * 0.2, P.z - P.vz * 0.2, P.sneak ? 0.006 : 0.012); }
     }
 
+    // Is there water worth the name under this point?
+    function overWater(x, z) { return heightAt(swamp, x, z) < WATER_Y - 0.25; }
     function enterWater(vy) {
       const loud = P.sneak ? 0.5 : clamp(vy / 4.2, 0.65, 3.0);
       makeNoise(P.x, P.z, loud, "splash");
@@ -2268,7 +2357,7 @@ window.plethoraBit = {
     }
 
     function jump() {
-      if (state.screen !== "play" || !P.alive || P.vault) return;
+      if (state.screen !== "play" || !P.alive || P.vault || escapeRun) return;
       if (P.ladder) {
         // Push off backwards.
         const L = P.ladder;
@@ -2283,7 +2372,7 @@ window.plethoraBit = {
         if (P.medium === "swim" || P.depth > 0.5) return;
         makeNoise(P.x, P.z, 1.1, "wade");
         sfx.wade(1, false);
-        addRipple(P.x, P.z, 0.04);
+        addRipple(P.x, P.z, 0.04, 0.35);
       }
       if (!P.ground && P.coyote <= 0) return;
       P.vy = state.boots ? JUMP_BOOTS : JUMP_BASE;
@@ -2699,7 +2788,7 @@ window.plethoraBit = {
       m *= 1 - weather.rain * 0.55;
       return m;
     }
-    const LURE_RANGE = { duck: 140, bell: 300, generator: 160, firecracker: 110 };
+    const LURE_RANGE = { duck: 140, bell: 300, generator: 160, firecracker: 110, motor: 400 };
     function beastHear(x, z, loud, kind, src) {
       if (!C.alive || C.state === "dead") return;
       const d = Math.hypot(x - C.x, z - C.z);
@@ -2784,9 +2873,11 @@ window.plethoraBit = {
     function stepBeast(dt) {
       if (!C.alive) { poseBeast(dt); return; }
       C.timer += dt; C.phase += dt;
-      const pIn = state.screen === "play" && P.alive && P.medium !== "dry" && P.ground && !P.vault;
+      const pIn = state.screen === "play" && P.alive && ((P.medium !== "dry" && P.ground && !P.vault) || !!escapeRun);
+      // On a low deck or a jetty over the water it can still reach up and take you.
+      const pDeck = state.screen === "play" && P.alive && P.ground && !P.vault && P.medium === "dry" && P.y < WATER_Y + 1.15 && heightAt(swamp, P.x, P.z) < WATER_Y - 0.4;
       const dP = Math.hypot(P.x - C.x, P.z - C.z);
-      if (C.act) { stepAct(dt, dP, pIn); poseBeast(dt); return; }
+      if (C.act) { stepAct(dt, dP, pIn || pDeck); poseBeast(dt); return; }
       let speed = 1.7, depth = -1.0, turn = 1.6;
       if (C.state === "roam") {
         if (C.pi >= C.path.length || C.timer > 30) { C.timer = 0; roamTarget(); }
@@ -2804,7 +2895,7 @@ window.plethoraBit = {
         if (C.pi >= C.path.length) { C.searchA += 1.2; goTo(C.lastX + Math.cos(C.searchA) * 5, C.lastZ + Math.sin(C.searchA) * 5); }
         if (C.timer > 12 + C.rage * 3) setMind("roam");
       } else if (C.state === "lured") {
-        speed = HUNT_SPEED * 0.92; depth = -0.35; turn = 3.2;
+        speed = HUNT_SPEED * (C.lure && C.lure.kind === "motor" ? 1.15 : 0.92); depth = -0.35; turn = 3.2;
         const L = C.lure;
         if (!L) setMind("search");
         else {
@@ -2812,6 +2903,7 @@ window.plethoraBit = {
           const dl = Math.hypot(L.x - C.x, L.z - C.z);
           if (L.kind === "duck" && L.src && L.src.state !== "float") { C.lure = null; setMind("search"); }
           else if (L.kind === "duck" && dl < 2.4) { startBite(L.src); poseBeast(dt); return; }
+          else if (L.kind === "motor" && dl < 3.2) { C.lure = null; startLunge(); poseBeast(dt); return; }
           else if (L.kind !== "duck" && dl < 4.5) { C.lure = null; C.act = { kind: "rise", t: 0, dur: 4.2 }; sfx.beastBreath(); poseBeast(dt); return; }
           else if (C.pi >= C.path.length) {
             // As close as the water goes: snatch it if it can, and otherwise
@@ -2837,7 +2929,9 @@ window.plethoraBit = {
         }
       }
       // The strike: at a fresh sound, or at what it is touching.
-      if (pIn && (C.state === "hunt" || C.state === "search") && dP < 3.2 && (state.t - C.heardAt < 1.1 || dP < 1.0)) { startLunge(); poseBeast(dt); return; }
+      if ((pIn || pDeck) && (C.state === "hunt" || C.state === "search") && dP < (pDeck ? 2.7 : 3.2) && (state.t - C.heardAt < 1.1 || dP < 1.0)) {
+        startLunge(); poseBeast(dt); return;
+      }
       // Swim.
       let wx = C.tx, wz = C.tz;
       if (C.pi < C.path.length) {
@@ -2864,7 +2958,8 @@ window.plethoraBit = {
       const alertT = C.state === "hunt" || C.state === "lured" ? 1 : C.state === "investigate" || C.state === "search" ? 0.6 : state.screen === "menu" ? 0.45 : 0.18;
       C.alert = lerp(C.alert, alertT, 1 - Math.exp(-2.5 * dt));
       C.wakeT += dt;
-      if (C.speed > 2 && C.y > -0.6 && C.wakeT > 0.28) { C.wakeT = 0; addRipple(C.x, C.z, 0.02 + C.speed * 0.006); }
+      // Its slime glows where it stirs the water: you can watch it come.
+      if (C.speed > 1.2 && C.y > -1.15 && C.wakeT > 0.32 && Math.abs(C.x - P.x) + Math.abs(C.z - P.z) < 90) { C.wakeT = 0; addRipple(C.x, C.z, 0.012 + C.speed * 0.005, 1); }
       C.bubbleT += dt;
       if (C.bubbleT > 0.7 && C.y < -0.6) { C.bubbleT = 0; bubble(C.x, C.z, 0.4); }
       poseBeast(dt);
@@ -2898,7 +2993,10 @@ window.plethoraBit = {
         C.alert = 1.4;
         if (a.t >= a.dur) {
           C.act = null; beast.open.value = 0;
-          if (pIn && Math.hypot(P.x - C.x, P.z - C.z) < 2.6) { killPlayer(); return; }
+          if (pIn && Math.hypot(P.x - C.x, P.z - C.z) < 2.6) {
+            state.deathCause = escapeRun ? "It took the boat out from under you." : P.medium === "dry" ? "It came up out of the water and took you off the planks." : "";
+            killPlayer(); return;
+          }
           burstSplash(C.x, C.z, 2.2);
           C.lastX = P.x; C.lastZ = P.z;
           setMind("search"); goTo(C.lastX, C.lastZ);
@@ -2924,7 +3022,7 @@ window.plethoraBit = {
         C.y = lerp(C.y, Math.max(heightAt(swamp, C.x, C.z) + 0.42, -0.3), 1 - Math.exp(-4 * dt));
         C.alert = 1.15;
         C.wakeT += dt;
-        if (C.wakeT > 0.15) { C.wakeT = 0; addRipple(C.x, C.z, 0.05); }
+        if (C.wakeT > 0.15) { C.wakeT = 0; addRipple(C.x, C.z, 0.05, 1); }
         if (pIn && dP < 1.8) { C.act = null; state.deathCause = "It came through the shallows for the duck, and found you."; killPlayer(); return; }
         if (Math.hypot(d.x - C.x, d.z - C.z) < 2.4) { C.act = null; startBite(d); return; }
         if (a.t >= a.dur) { C.act = null; setMind("search"); goTo(C.x, C.z); }
@@ -2997,7 +3095,8 @@ window.plethoraBit = {
       screen: "menu", t: 0, runStart: 0, seed: 0,
       coils: 0, parts: 0, rockets: 0, rocketsFound: 0, ducks: DUCKS_START, crackers: 0, boots: false, bazooka: false, hits: 0,
       won: false, submitted: false, deathCause: "", best: 0, bestTime: 0, sound: SOUND_DEFAULT, haptics: HAPTICS_DEFAULT, look: 1,
-      seen: {}, hints: {}, aiming: false, bellT: -99, genT: -99, notes: 0, dawn: 0, towerSeen: false
+      seen: {}, hints: {}, aiming: false, bellT: -99, genT: -99, notes: 0, dawn: 0, towerSeen: false,
+      pages: {}, fuel: false, key: false, escaped: false, deaths: 0
     };
     const RANKS = [
       { at: 0, name: "Drifter" }, { at: 300, name: "Scavenger" }, { at: 1000, name: "Springheel" },
@@ -3007,24 +3106,35 @@ window.plethoraBit = {
       let s = state.coils * 100 + state.parts * 150 + state.rocketsFound * 80 + Object.keys(state.seen).length * 25 + state.notes * 40;
       if (state.boots) s += 400;
       if (state.bazooka) s += 700;
+      if (state.towerSeen) s += 150;
+      if (state.fuel) s += 150;
+      if (state.key) s += 150;
       s += state.hits * 1200;
       if (state.won) s += 6000 + Math.max(0, 3000 - Math.floor((state.t - state.runStart) * 2));
-      return s;
+      else if (state.escaped) s += 2500 + Math.max(0, 1500 - Math.floor(state.t - state.runStart));
+      // Every time you wake at the camp, the swamp keeps a little.
+      return Math.max(0, s - state.deaths * 400);
     }
     const rankOf = s => { let r = RANKS[0]; for (const k of RANKS) if (s >= k.at) r = k; return r.name; };
 
     /* ================================================================ *
      * THINGS TO FIND
      * ================================================================ */
-    const ITEM_COL = { coil: "#7fffd4", part: "#ffcf6a", rocket: "#ff6a4f", ducks: "#ffe14d", firecracker: "#ff9a3d", note: "#e9e1cc" };
-    // Whoever was here before you left these.
-    const NOTES = [
-      ["A torn page", "Third night. Something takes the herons off the water and never comes up on the mud. Keep to the mud."],
-      ["Pinned under a candle", "It is blind. We rang the bell for the drowned and it came every time. It comes to the ringing still."],
-      ["Oil-stained card", "The generator hammers the whole channel. Whatever is down there cannot leave it alone. Thirty seconds, then run."],
-      ["The hermit's hand", "Walk slow and it passes you by. Swim and you are already dead. It does not see the jetty. It does not see you."],
-      ["On a crate of rockets", "Ducks from the fair. Throw one in and it goes for it like a pike. When the head is up out of the water, that is your only shot."]
-    ];
+    const ITEM_COL = { coil: "#7fffd4", part: "#ffcf6a", rocket: "#ff6a4f", ducks: "#ffe14d", firecracker: "#ff9a3d", note: "#e9e1cc", fuel: "#ff8a4c", key: "#e7cf72" };
+    // Eli's journal: what he learned, and where he left things. Each page
+    // that names a place marks it on your map.
+    const PAGES = {
+      1: { t: "Eli's journal, page one", x: "If you found the canoe, you found this. Stay out of the water. The thing in it is blind, but it hears every step you take in it. Follow the lanterns up the boardwalk to the Fishing Camp. I left the rest on the workbench.", reveal: [] },
+      2: { t: "Page two: the boots", x: "Five spring coils, and that bench will make you a pair of jump boots. I hid them where I could: the end of the camp jetty, the stilt village, the chapel graves, the cypress grove, the island west of the pumphouse. Marked on your map.", reveal: ["coil"] },
+      3: { t: "Page three: from the tower", x: "From up here you can see all of it. The bazooka came apart when the barge went down. Five pieces: one up here, the barge, the village, the chapel bell tower, the pumphouse. The hermit kept one. Marked.", reveal: ["part"] },
+      4: { t: "Page four: rockets", x: "Two rockets in this cabin, two at the boathouse, one on the islet south of the village. A rocket only hurts it with its head out of the water.", reveal: ["rocket"] },
+      5: { t: "The hermit's page", x: "It cannot leave a squeaking duck alone. Throw one into deep water from somewhere dry, and wait. When it rears up to bite, that is your shot. Crates of them about; firecrackers at the boathouse.", reveal: ["ducks", "firecracker"] },
+      6: { t: "Page six: the bell", x: "They rang this bell for the drowned. It still comes to the ringing, from anywhere in the swamp. Ring it, then be somewhere else.", reveal: [] },
+      7: { t: "Page seven: the generator", x: "Start the generator and it hammers the whole channel for thirty seconds, floodlight and all. It always comes to see. There is a can of fuel in here.", reveal: ["fuel"] },
+      8: { t: "Page eight: the boat", x: "The boat still runs. It wants fuel -- there is a can in the pumphouse -- and the key, which I keep on me. If you cannot kill it, leave. Do not come looking for me.", reveal: ["fuel", "key"] },
+      9: { t: "Eli's last page", x: "It found me in the grove. My lantern is still lit, so you will find this. Take the key. Go.", reveal: ["key"] }
+    };
+    const PAGE_COUNT = 9;
     const items = [];
     const itemGroup = new THREE.Group();
     scene.add(itemGroup);
@@ -3040,6 +3150,12 @@ window.plethoraBit = {
       k.crate = new THREE.BoxGeometry(0.62, 0.38, 0.46);
       k.stick = new THREE.CylinderGeometry(0.03, 0.03, 0.26, 6);
       k.paper = new THREE.PlaneGeometry(0.2, 0.27);
+      k.can = new THREE.BoxGeometry(0.26, 0.34, 0.14);
+      k.capG = new THREE.CylinderGeometry(0.03, 0.03, 0.07, 8);
+      k.keyRing = new THREE.TorusGeometry(0.05, 0.012, 6, 14);
+      k.keyBar = new THREE.BoxGeometry(0.13, 0.022, 0.012);
+      k.stone = new THREE.IcosahedronGeometry(0.045, 0);
+      k.stoneM = new THREE.MeshLambertMaterial({ color: 0x6d6a62 });
       // A crate of ducks as one mesh, coloured by vertex.
       {
         const tint = (geo, c) => { const n = geo.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c[0]; a[i * 3 + 1] = c[1]; a[i * 3 + 2] = c[2]; } geo.setAttribute("color", new THREE.BufferAttribute(a, 3)); return geo; };
@@ -3117,6 +3233,12 @@ window.plethoraBit = {
         for (let k = 0; k < 5; k++) { const s = new THREE.Mesh(KIT.stick, KIT.red); s.position.set((k % 3) * 0.06 - 0.06, 0, Math.floor(k / 3) * 0.06); g.add(s); }
       } else if (kind === "note") {
         const s = new THREE.Mesh(KIT.paper, KIT.paperM); s.rotation.x = -1.2; g.add(s);
+      } else if (kind === "fuel") {
+        g.add(new THREE.Mesh(KIT.can, KIT.red));
+        const c = new THREE.Mesh(KIT.capG, KIT.dark); c.position.set(0.07, 0.2, 0); g.add(c);
+      } else if (kind === "key") {
+        const r = new THREE.Mesh(KIT.keyRing, KIT.mat.key); g.add(r);
+        const b = new THREE.Mesh(KIT.keyBar, KIT.mat.key); b.position.x = 0.11; g.add(b);
       }
       const beam = new THREE.Mesh(KIT.beamG, KIT.beam[kind]);
       beam.position.y = 1.3;
@@ -3130,9 +3252,9 @@ window.plethoraBit = {
         const mesh = itemMesh(kind);
         mesh.position.set(a.x, a.y, a.z);
         itemGroup.add(mesh);
-        items.push({ kind, x: a.x, y: a.y, z: a.z, mesh, taken: false, refill: 0, idx, seen: false });
+        items.push({ kind, x: a.x, y: a.y, z: a.z, mesh, taken: false, refill: 0, idx, seen: false, known: false, page: a.page || 0 });
       };
-      for (const kind of ["coil", "part", "rocket", "ducks", "firecracker", "note"]) (BUILD.anchors[kind] || []).forEach((a, i) => put(kind, a, i));
+      for (const kind of ["coil", "part", "rocket", "ducks", "firecracker", "note", "fuel", "key"]) (BUILD.anchors[kind] || []).forEach((a, i) => put(kind, a, i));
     }
     function stepItems(dt) {
       const t = SHARED.uTime.value;
@@ -3171,8 +3293,18 @@ window.plethoraBit = {
         toast("Firecrackers", "Three bangs. It will come to see. Throw with DUCK once the ducks are gone.");
       } else if (it.kind === "note") {
         state.notes++;
-        const n = NOTES[it.idx % NOTES.length];
-        toast(n[0], n[1], 7);
+        const pg = PAGES[it.page] || PAGES[1];
+        state.pages[it.page] = true;
+        let marked = 0;
+        for (const o of items) if (!o.taken && !o.known && pg.reveal.includes(o.kind)) { o.known = true; marked++; }
+        showPage(pg, marked);
+        sfx.page();
+      } else if (it.kind === "fuel") {
+        state.fuel = true;
+        toast("A can of fuel", state.key ? "The boat at the boathouse can go now." : "The boat at the boathouse wants a key as well.");
+      } else if (it.kind === "key") {
+        state.key = true;
+        toast("Eli's key", state.fuel ? "Fuel and key: the boat at the boathouse can go." : "The boat wants fuel as well: a can in the pumphouse.");
       }
       ctx.platform.interact({ type: "pickup", item: it.kind });
       if (track) track.set(progressScore());
@@ -3197,12 +3329,14 @@ window.plethoraBit = {
       }
       if (it.kind === "bell") return state.t - state.bellT > 25 ? { it, label: "Ring bell" } : { it, label: "Bell", idle: true };
       if (it.kind === "generator") return state.t - state.genT > 40 ? { it, label: "Start it" } : { it, label: "Running", idle: true };
+      if (it.kind === "boat") return state.fuel && state.key ? { it, label: "Start the boat" } : { it, label: "The boat", idle: true };
       return null;
     }
     function useThing() {
       const n = nearInteract();
       if (!n || n.idle) {
         if (n && n.it.kind === "bench") toast("The workbench", `Spring boots need ${COILS_NEED} coils (${state.coils}). The bazooka needs ${PARTS_NEED} parts (${state.parts}).`);
+        if (n && n.it.kind === "boat") toast("The boat", `It needs ${state.fuel ? "" : "fuel (the pumphouse)"}${!state.fuel && !state.key ? " and " : ""}${state.key ? "" : "a key (Eli had it)"}.`);
         return;
       }
       const it = n.it;
@@ -3236,6 +3370,8 @@ window.plethoraBit = {
         beastHear(lx, lz, 3, "generator", { x: lx, z: lz });
         for (const L of BUILD.lamps) if (L.gen) L.until = state.t + 30;
         toast("The generator", "It hammers into the water. Thirty seconds.");
+      } else if (it.kind === "boat") {
+        startEscape();
       }
       updateHud();
     }
@@ -3281,7 +3417,7 @@ window.plethoraBit = {
       return landed;
     }
     function updateArc() {
-      const show = state.aiming && state.screen === "play" && P.alive && (state.ducks > 0 || state.crackers > 0);
+      const show = !!state.aiming && state.screen === "play" && P.alive && (state.aiming === "stone" || state.ducks > 0 || state.crackers > 0);
       arc.pts.visible = show; arc.ring.visible = show;
       if (!show) return;
       camera.updateMatrixWorld();
@@ -3307,6 +3443,19 @@ window.plethoraBit = {
       sfx.whoosh();
       updateHud();
     }
+    // A stone: always to hand. A plop somewhere else draws it there.
+    let stoneT = -9;
+    function throwStone() {
+      if (state.screen !== "play" || !P.alive || state.t - stoneT < 1.2) return;
+      stoneT = state.t;
+      camera.updateMatrixWorld();
+      const v = throwVelocity();
+      const m = new THREE.Mesh(KIT.stone, KIT.stoneM);
+      scene.add(m);
+      ducks.push({ mesh: m, x: v.ox, y: v.oy, z: v.oz, vx: v.x * 1.15, vy: v.y, vz: v.z * 1.15, state: "fly", t: 0, squeakT: 0, stone: true, bangs: 0 });
+      sfx.whoosh();
+      if (!state.hints.stone) state.hints.stone = true;
+    }
     function stepDucks(dt) {
       for (let i = ducks.length - 1; i >= 0; i--) {
         const d = ducks[i];
@@ -3326,7 +3475,12 @@ window.plethoraBit = {
           else { d.x = nx; d.z = nz; }
           d.y = ny;
           const wet = WATER_Y > g + 0.05;
-          if (d.y <= (wet ? WATER_Y : g)) {
+          if (d.stone && d.y <= (wet ? WATER_Y : g)) {
+            // Plop: gone, and a ring of sound where it went in.
+            sfx.plop(d.x, d.z, wet);
+            if (wet) { addRipple(d.x, d.z, 0.05, 1); makeNoise(d.x, d.z, 1.4, "stone"); for (let k = 0; k < 8; k++) spawnParticle(d.x, 0.05, d.z, (Math.random() - 0.5) * 1.2, 1.2 + Math.random() * 1.5, (Math.random() - 0.5) * 1.2, 0.6, 0.04, [0.45, 0.7, 0.75]); }
+            d.state = "gone";
+          } else if (d.y <= (wet ? WATER_Y : g)) {
             if (wet) {
               d.state = "float"; d.t = 0; d.y = WATER_Y + 0.03;
               burstSplash(d.x, d.z, 1.1);
@@ -3349,7 +3503,7 @@ window.plethoraBit = {
           d.mesh.rotation.y += dt * 0.4;
           if (!d.cracker) {
             d.squeakT += dt;
-            if (d.squeakT > 1.6 && d.t < 40) { d.squeakT = 0; sfx.squeak(d.x, d.z); addRipple(d.x, d.z, 0.012); beastHear(d.x, d.z, 1.4, "duck", d); }
+            if (d.squeakT > 1.6 && d.t < 40) { d.squeakT = 0; sfx.squeak(d.x, d.z); addRipple(d.x, d.z, 0.02, 1); beastHear(d.x, d.z, 1.4, "duck", d); }
             if (d.t > 60) d.state = "gone";
           }
         } else if (d.state === "bitten") {
@@ -3365,7 +3519,7 @@ window.plethoraBit = {
             sfx.bang(d.x, d.z);
             for (let k = 0; k < 10; k++) spawnParticle(d.x, d.y + 0.2, d.z, (Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3, 0.4, 0.08, [1.6, 1.0, 0.4]);
             const wet = WATER_Y > groundAt(d.x, d.z, d.y + 0.5).g + 0.05;
-            if (wet) { addRipple(d.x, d.z, 0.05); beastHear(d.x, d.z, 2.5, "firecracker", { x: d.x, z: d.z }); }
+            if (wet) { addRipple(d.x, d.z, 0.05, 1); beastHear(d.x, d.z, 2.5, "firecracker", { x: d.x, z: d.z }); }
             if (d.bangs >= 4) d.state = "gone";
           }
         }
@@ -3545,7 +3699,7 @@ window.plethoraBit = {
         const a = Math.random() * Math.PI * 2, s = Math.random() * 1.6 * loud;
         spawnParticle(x + Math.cos(a) * 0.2, 0.05, z + Math.sin(a) * 0.2, Math.cos(a) * s, 1.5 + Math.random() * 2.5 * loud, Math.sin(a) * s, 0.7 + Math.random() * 0.4, 0.05 + Math.random() * 0.05, [0.45, 0.7, 0.75]);
       }
-      addRipple(x, z, clamp(0.03 + loud * 0.025, 0.03, 0.1));
+      addRipple(x, z, clamp(0.03 + loud * 0.025, 0.03, 0.1), 1);
     }
     function stepParticles(dt) {
       const L = pBuf.live;
@@ -3577,34 +3731,35 @@ window.plethoraBit = {
      * everywhere and the thing hears you at half the distance -- and
      * the lightning shows it to you.
      * ================================================================ */
-    const weather = { rain: 0, target: 0, next: 210, bolt: 8, flash: 0, thunder: [] };
+    const weather = { rain: 0, target: 0, next: 210, bolt: 8, flash: 0, boltT: -99, warned: false };
     const rain = (() => {
-      const N = 1400, pos = new Float32Array(N * 3), seed = new Float32Array(N);
+      const N = 2200, pos = new Float32Array(N * 3), seed = new Float32Array(N);
       for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 30; pos[i * 3 + 1] = Math.random() * 14; pos[i * 3 + 2] = (Math.random() - 0.5) * 30; seed[i] = Math.random(); }
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
       g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1));
       const m = new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-        uniforms: { uTime: SHARED.uTime, uRain: { value: 0 }, uCam: { value: V3() }, uScale: { value: 600 } },
+        uniforms: { uTime: SHARED.uTime, uRain: { value: 0 }, uCam: { value: V3() }, uScale: { value: 600 }, uFlash: { value: 0 } },
         vertexShader: /* glsl */`
           uniform float uTime, uRain, uScale; uniform vec3 uCam; attribute float aSeed; varying float vA;
           void main() {
             vec3 p = position;
-            p.y = mod(p.y - uTime * (9.0 + aSeed * 3.0), 14.0) - 3.0;
+            p.y = mod(p.y - uTime * (10.0 + aSeed * 3.0), 14.0) - 3.0;
             p.xz = mod(p.xz - uCam.xz + 15.0, 30.0) - 15.0;
             vec3 w = vec3(uCam.x + p.x, uCam.y + p.y - 2.0, uCam.z + p.z);
             vA = step(aSeed, uRain) * smoothstep(-0.2, 1.0, w.y);
             vec4 mv = viewMatrix * vec4(w, 1.0);
-            gl_PointSize = 0.05 * uScale / max(-mv.z, 0.3);
+            gl_PointSize = 0.12 * uScale / max(-mv.z, 0.4);
             gl_Position = projectionMatrix * mv;
           }`,
         fragmentShader: /* glsl */`
+          uniform float uFlash;
           varying float vA;
           void main() {
             vec2 q = gl_PointCoord - 0.5;
-            float a = (1.0 - smoothstep(0.03, 0.09, abs(q.x))) * (1.0 - smoothstep(0.3, 0.5, abs(q.y))) * vA;
-            gl_FragColor = vec4(vec3(0.5, 0.6, 0.7) * a * 0.5, 1.0);
+            float a = (1.0 - smoothstep(0.015, 0.05, abs(q.x))) * (1.0 - smoothstep(0.25, 0.5, abs(q.y))) * vA;
+            gl_FragColor = vec4(vec3(0.55, 0.65, 0.78) * a * (0.6 + uFlash * 2.0), 1.0);
           }`
       });
       const pts = new THREE.Points(g, m);
@@ -3612,27 +3767,71 @@ window.plethoraBit = {
       scene.add(pts);
       return { pts, mat: m };
     })();
+    // A bolt: a jagged ribbon from the cloud to the trees, far off, facing you.
+    const bolt = (() => {
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 0.8, 1).multiplyScalar(20), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+      mesh.frustumCulled = false; mesh.visible = false; mesh.renderOrder = -5;
+      scene.add(mesh);
+      return { mesh, mat };
+    })();
+    function strike() {
+      // Ahead of you, give or take, a long way off: it is meant to be seen.
+      const yaw = P.yaw + (Math.random() - 0.5) * 1.3, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      const d = 150 + Math.random() * 70, cx = camera.position.x + fx * d, cz = camera.position.z + fz * d;
+      const sx = -fz, sz = fx, P3 = [], I = [];
+      const ribbon = (x0, y0, segs, w, lean) => {
+        let x = x0, y = y0;
+        for (let k = 0; k < segs; k++) {
+          const nx = x + (Math.random() - 0.5) * 11 + lean, ny = y - (y - 3) / (segs - k + 0.3) * (0.7 + Math.random() * 0.6);
+          const b = P3.length / 3;
+          for (const [px, py, ww] of [[x, y, w], [nx, ny, w * 0.9]]) {
+            P3.push(cx + sx * (px - ww), py, cz + sz * (px - ww), cx + sx * (px + ww), py, cz + sz * (px + ww));
+          }
+          I.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+          if (k > 1 && k < segs - 2 && Math.random() < 0.3 && w > 0.4) ribbon(nx, ny, 3 + Math.floor(Math.random() * 3), w * 0.45, (Math.random() - 0.5) * 6);
+          x = nx; y = ny;
+        }
+      };
+      ribbon(0, 105 + Math.random() * 25, 13, 0.75, 0);
+      const g = bolt.mesh.geometry;
+      g.setAttribute("position", new THREE.Float32BufferAttribute(P3, 3));
+      g.setIndex(I);
+      g.computeBoundingSphere();
+      skyMat.uniforms.uBoltDir.value.set(cx - camera.position.x, 60, cz - camera.position.z).normalize();
+      weather.boltT = state.t;
+      const delay = d / 340 + 0.15;
+      after(delay, () => sfx.thunder(clamp(1.3 - d / 260, 0.35, 1)));
+      if (!state.hints.lightning && state.screen === "play") { state.hints.lightning = true; after(1.2, () => toast("Lightning", "For a moment you can see the whole swamp -- and anything in it.")); }
+    }
     function stepWeather(dt) {
       if (state.screen === "play" && STORMS) {
         weather.next -= dt;
+        // It announces itself: thunder a long way off, then the rain.
+        if (weather.target === 0 && !weather.warned && weather.next < 14) {
+          weather.warned = true;
+          sfx.thunder(0.3);
+          if (!state.hints.storm) { state.hints.storm = true; toast("Thunder", "A storm is coming. While it rains, it can barely hear you."); }
+        }
         if (weather.next <= 0) {
-          if (weather.target === 0) {
-            weather.target = 1; weather.next = 55 + Math.random() * 30;
-            if (!state.hints.rain) { state.hints.rain = true; after(5, () => toast("Rain", "It drowns your steps. Move while it lasts.")); }
-          } else { weather.target = 0; weather.next = 150 + Math.random() * 110; }
+          if (weather.target === 0) { weather.target = 1; weather.next = 60 + Math.random() * 30; weather.bolt = 6; }
+          else { weather.target = 0; weather.next = 150 + Math.random() * 110; weather.warned = false; }
         }
       } else weather.target = state.screen === "menu" ? 0 : weather.target;
-      weather.rain = lerp(weather.rain, weather.target, 1 - Math.exp(-dt / 6));
-      if (weather.rain > 0.55) {
+      weather.rain = lerp(weather.rain, weather.target, 1 - Math.exp(-dt / 5));
+      if (weather.rain > 0.6 && state.screen !== "menu") {
         weather.bolt -= dt;
-        if (weather.bolt <= 0) {
-          weather.bolt = 6 + Math.random() * 12;
-          weather.flash = 1;
-          const delay = 0.6 + Math.random() * 2.5;
-          after(delay, () => sfx.thunder(1 - delay / 4));
-        }
+        if (weather.bolt <= 0) { weather.bolt = 11 + Math.random() * 16; strike(); }
       }
-      weather.flash = Math.max(0, weather.flash - dt * 2.2);
+      // A flash is a flicker: bright, nearly gone, bright again, fading.
+      const age = state.t - weather.boltT;
+      let f = 0;
+      if (age >= 0 && age < 1.5) f = age < 0.06 ? 1 : age < 0.13 ? 0.1 : age < 0.2 ? 0.85 : 0.85 * Math.exp(-(age - 0.2) * 5) + 0.06 * (1 - age / 1.5);
+      weather.flash = f;
+      bolt.mesh.visible = age >= 0 && age < 0.42 && (age < 0.06 || age > 0.13);
+      bolt.mat.color.setRGB(0.75, 0.8, 1).multiplyScalar(20 * Math.max(f, 0.3));
+      skyMat.uniforms.uFlash.value = f;
+      rain.mat.uniforms.uFlash.value = f;
       SHARED.uWind.value = 1 + weather.rain * 1.6;
       rain.mat.uniforms.uRain.value = weather.rain;
       rain.mat.uniforms.uCam.value.copy(camera.position);
@@ -3650,7 +3849,7 @@ window.plethoraBit = {
       const noop = () => {};
       const names = ["unlock", "setEnabled", "update", "step", "wade", "splash", "climb", "drip", "land", "jump", "rung", "bonk", "pickup", "craft", "click", "whoosh",
         "duckSplash", "squeak", "bang", "bell", "generator", "fire", "explode", "thunder", "rain", "beastClick", "beastGrowl", "beastRoar", "beastBite", "beastHurt",
-        "beastDeath", "beastBreath", "death", "win"];
+        "beastDeath", "beastBreath", "death", "win", "creak", "plop", "chime", "page", "motor", "stopMotor", "thud"];
       const api = {};
       for (const n of names) api[n] = noop;
       if (!AC || !ctx.capabilities.audio) return api;
@@ -3712,6 +3911,35 @@ window.plethoraBit = {
         o.connect(g);
         if (dest) g.connect(dest); else out(g, send);
         o.start(at); o.stop(at + dur + 0.05);
+      }
+      // A swell: noise that rises and ebbs, the shape of moving water.
+      function swell(at, dur, f0, f1, peak, type, dest, send) {
+        const src = ac.createBufferSource(); src.buffer = noiseBuf;
+        const f = ac.createBiquadFilter(); f.type = type || "lowpass"; f.Q.value = 0.8;
+        f.frequency.setValueAtTime(f0, at); f.frequency.exponentialRampToValueAtTime(Math.max(40, f1), at + dur);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(peak, at + dur * 0.35); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+        src.connect(f).connect(g);
+        if (dest) g.connect(dest); else out(g, send === undefined ? 0.4 : send);
+        src.start(at, Math.random() * 1.5); src.stop(at + dur + 0.05);
+      }
+      // A bubble: a sine that rises in pitch as it shrinks -- the sound
+      // that makes water sound like water.
+      function bub(at, f, dur, amp, dest) {
+        const o = ac.createOscillator(); o.type = "sine";
+        o.frequency.setValueAtTime(f, at);
+        o.frequency.exponentialRampToValueAtTime(f * (1.5 + Math.random() * 0.9), at + dur);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(amp, at + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+        o.connect(g);
+        if (dest) g.connect(dest); else out(g, 0.3);
+        o.start(at); o.stop(at + dur + 0.02);
+      }
+      function bubbles(at, n, spread, fLo, fHi, amp, dest) {
+        for (let i = 0; i < n; i++) {
+          const t = at + Math.pow(Math.random(), 1.4) * spread;
+          bub(t, fLo * Math.pow(fHi / fLo, Math.random()), 0.025 + Math.random() * 0.07, amp * (0.35 + Math.random() * 0.65), dest);
+        }
       }
       function startAmbience() {
         // Wind in the trees.
@@ -3786,6 +4014,7 @@ window.plethoraBit = {
         heart = { g: hg, next: 0 };
       }
       const setPos = (node, x, y, z) => { if (node.positionX) { node.positionX.value = x; node.positionY.value = y; node.positionZ.value = z; } else node.setPosition(x, y, z); };
+      let lapT = 1, wakeT = 0;
       api.unlock = () => { ready(); };
       api.setEnabled = on => { if (master) master.gain.setTargetAtTime(on ? 0.9 : 0, ac.currentTime, 0.05); };
       api.update = dt => {
@@ -3805,6 +4034,21 @@ window.plethoraBit = {
           voice.o1.frequency.setTargetAtTime(34 + C.alert * 14, t, 0.4);
           voice.o2.frequency.setTargetAtTime(36.5 + C.alert * 16, t, 0.4);
         }
+        // Standing in the water, it laps at you; swimming near the top, it pushes a wake.
+        lapT -= dt;
+        if (lapT <= 0 && state.screen === "play" && P.alive && P.medium !== "dry") {
+          lapT = 0.7 + Math.random() * 1.6;
+          bubbles(t, 1 + Math.floor(Math.random() * 3), 0.6, 220, 800, P.medium === "swim" ? 0.014 : 0.009);
+          if (Math.random() < 0.5) swell(t, 0.9, 240, 520, 0.012, "lowpass");
+        }
+        if (rainK > 0.15) {
+          dropT -= dt;
+          while (dropT <= 0) { dropT += 0.03 + Math.random() * 0.09 / rainK; bub(t + Math.random() * 0.05, 1300 + Math.random() * 2800, 0.018 + Math.random() * 0.02, 0.006 + rainK * 0.006); }
+        }
+        if (C.alive && C.speed > 2.2 && C.y > -0.7 && state.screen !== "menu") {
+          wakeT -= dt;
+          if (wakeT <= 0) { wakeT = 0.5 + Math.random() * 0.3; const p = atPos(C.x, 0, C.z, 1.2, true); swell(t, 0.8, 500, 200, 0.05 + clamp(C.speed / 8, 0, 0.6) * 0.1, "lowpass", p); bubbles(t + 0.1, 3, 0.5, 150, 500, 0.03, p); }
+        }
         // The swamp holds its breath when it is close.
         if (amb) amb.life.gain.setTargetAtTime(C.alive && state.screen === "play" ? smooth(18, 45, dC) : 1, t, 0.8);
         if (heart && state.screen === "play" && P.alive) {
@@ -3818,21 +4062,109 @@ window.plethoraBit = {
           }
         }
       };
-      api.rain = k => { if (rainN) { rainN.g.gain.setTargetAtTime(k * 0.16, ac.currentTime, 0.5); rainN.wind.gain.setTargetAtTime(0.03 + k * 0.06, ac.currentTime, 0.8); } };
+      let rainK = 0, dropT = 0;
+      api.rain = k => { rainK = k; if (rainN) { rainN.g.gain.setTargetAtTime(k * 0.13, ac.currentTime, 0.5); rainN.wind.gain.setTargetAtTime(0.03 + k * 0.06, ac.currentTime, 0.8); } };
       api.step = (sneak, wood) => {
-        if (!ready()) return; const t = ac.currentTime;
-        if (wood) { tone(t, 0.06, 190, 120, "triangle", sneak ? 0.05 : 0.11); noise(t, 0.04, 2400, 1200, 2, sneak ? 0.02 : 0.05); if (Math.random() < 0.15) tone(t + 0.02, 0.25, 420, 380, "sawtooth", 0.012); }
-        else { noise(t, 0.09, 700, 300, 0.8, sneak ? 0.04 : 0.09, "lowpass"); tone(t, 0.06, 90, 60, "sine", sneak ? 0.04 : 0.08); }
+        if (!ready()) return; const t = ac.currentTime, k = sneak ? 0.45 : 1;
+        if (wood) {
+          // A hollow plank: a knock with a little ring under it.
+          noise(t, 0.06, 900, 500, 3, 0.07 * k, "bandpass");
+          tone(t, 0.09, 175 + Math.random() * 30, 115, "triangle", 0.1 * k);
+        } else {
+          // Mud: a soft suck, sometimes a bubble of marsh gas.
+          swell(t, 0.16, 260, 520, 0.07 * k, "lowpass");
+          tone(t, 0.07, 95, 60, "sine", 0.05 * k);
+          if (Math.random() < 0.4) bubbles(t + 0.06, 1, 0.1, 160, 360, 0.02 * k);
+        }
+      };
+      api.creak = loud => {
+        if (!ready()) return; const t = ac.currentTime, d = 0.3 + Math.random() * 0.3, f0 = 150 + Math.random() * 90;
+        // An old plank under weight: a slow, rough glide.
+        const o = ac.createOscillator(); o.type = "sawtooth";
+        o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f0 * (1.25 + Math.random() * 0.3), t + d * 0.6); o.frequency.linearRampToValueAtTime(f0 * 1.05, t + d);
+        const v = ac.createOscillator(); v.frequency.value = 22 + Math.random() * 14;
+        const vg = ac.createGain(); vg.gain.value = 9; v.connect(vg).connect(o.frequency);
+        const f = ac.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 700 + Math.random() * 400; f.Q.value = 5;
+        const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06 * loud, t + d * 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.connect(f).connect(g); out(g, 0.5);
+        o.start(t); v.start(t); o.stop(t + d + 0.05); v.stop(t + d + 0.05);
       };
       api.wade = (loud, swimming) => {
-        if (!ready()) return; const t = ac.currentTime;
-        if (swimming) { noise(t, 0.6, 300, 1400, 1.5, 0.08 * loud + 0.03); noise(t + 0.25, 0.4, 1200, 400, 1.2, 0.05 * loud); }
-        else { noise(t, 0.32, 380, 1300, 2.2, 0.1 * loud + 0.03); noise(t + 0.05, 0.22, 900, 300, 1.5, 0.05 * loud + 0.015); }
+        if (!ready()) return; const t = ac.currentTime, L = clamp(loud, 0.12, 1.8);
+        if (swimming) {
+          // A stroke: the arm going in, the pull through, the water closing behind.
+          noise(t, 0.25, 2600, 1100, 0.8, 0.03 + L * 0.03, "bandpass");
+          swell(t + 0.1, 0.7, 900, 240, 0.07 + L * 0.07, "lowpass");
+          bubbles(t + 0.08, 7 + Math.round(L * 9), 0.6, 210, 1250, 0.03 + L * 0.025);
+          tone(t + 0.12, 0.22, 130, 70, "sine", 0.04 + L * 0.03);
+        } else {
+          // A step: the leg shoves water aside, the water slops back, the boot sucks free and drips.
+          swell(t, 0.24, 320, 1250, 0.05 + L * 0.08, "lowpass");
+          swell(t + 0.17, 0.38, 1150, 360, 0.035 + L * 0.06, "lowpass");
+          bubbles(t + 0.04, 2 + Math.round(L * 7), 0.42, 250, 1050, 0.022 + L * 0.03);
+          tone(t + 0.05, 0.12, 165, 88, "sine", 0.025 + L * 0.03);
+          bubbles(t + 0.38, 1 + Math.round(L * 2), 0.45, 1400, 2700, 0.01 + L * 0.01);
+        }
       };
-      api.splash = loud => { if (!ready()) return; const t = ac.currentTime; noise(t, 0.7 + loud * 0.2, 3200, 300, 0.9, 0.16 + loud * 0.09, "lowpass"); for (let k = 0; k < 5; k++) tone(t + 0.1 + k * 0.07 * Math.random(), 0.08, 900 + Math.random() * 1800, 400, "sine", 0.035); };
-      api.climb = () => { if (!ready()) return; noise(ac.currentTime, 0.45, 600, 2200, 1.5, 0.11); };
-      api.drip = () => { if (!ready()) return; const t = ac.currentTime; for (let k = 0; k < 4; k++) tone(t + k * 0.11 + Math.random() * 0.05, 0.07, 1200 + Math.random() * 1500, 600, "sine", 0.04); };
-      api.land = (v, wood) => { if (!ready()) return; const t = ac.currentTime; tone(t, 0.12, wood ? 160 : 100, 50, "sine", clamp(v / 14, 0.05, 0.25)); noise(t, 0.08, wood ? 2000 : 900, 500, 1, clamp(v / 30, 0.03, 0.12)); };
+      api.splash = loud => {
+        if (!ready()) return; const t = ac.currentTime, L = clamp(loud, 0.4, 3);
+        noise(t, 0.45 + L * 0.2, 4200, 500, 0.6, 0.1 + L * 0.07, "lowpass");
+        swell(t + 0.05, 0.9, 950, 220, 0.08 + L * 0.05, "lowpass");
+        bubbles(t + 0.04, 12 + Math.round(L * 12), 0.9, 180, 1500, 0.035 + L * 0.018);
+        tone(t, 0.32, 115, 42, "sine", 0.1 + L * 0.05);
+        bubbles(t + 0.55, 3 + Math.round(L * 2), 1.2, 1500, 3000, 0.016);
+      };
+      api.climb = () => {
+        if (!ready()) return; const t = ac.currentTime;
+        // Hauling out: water pouring off you, then dripping.
+        swell(t, 0.5, 1800, 500, 0.09, "lowpass");
+        bubbles(t + 0.1, 6, 0.6, 600, 2000, 0.025);
+      };
+      api.drip = () => { if (!ready()) return; bubbles(ac.currentTime + 0.05, 5, 1.1, 1300, 2800, 0.022); };
+      api.land = (v, wood) => { if (!ready()) return; const t = ac.currentTime; tone(t, 0.12, wood ? 160 : 100, 50, "sine", clamp(v / 14, 0.05, 0.25)); noise(t, 0.08, wood ? 1500 : 700, 400, 1.5, clamp(v / 30, 0.03, 0.12), "bandpass"); };
+      api.thud = () => { if (!ready()) return; const t = ac.currentTime; tone(t, 0.2, 120, 55, "sine", 0.18); noise(t, 0.12, 700, 300, 2, 0.08, "bandpass"); };
+      api.plop = (x, z, wet) => {
+        if (!ready()) return; const t = ac.currentTime, p = atPos(x, 0, z, 1.2);
+        if (wet) { bub(t, 260 + Math.random() * 80, 0.09, 0.18, p); bubbles(t + 0.03, 4, 0.25, 500, 1600, 0.05, p); noise(t, 0.18, 2400, 700, 0.8, 0.06, "lowpass", p); }
+        else { noise(t, 0.05, 2600, 1800, 4, 0.12, "bandpass", p); tone(t, 0.05, 900, 600, "triangle", 0.04, p); }
+      };
+      // The outboard: a sputter, then a hammering drone that follows the boat.
+      let motorN = null;
+      api.motor = (x, z, k) => {
+        if (!ready()) return;
+        const t = ac.currentTime;
+        if (!motorN) {
+          const p = panner(x, 0.3, z, false);
+          const o = ac.createOscillator(); o.type = "sawtooth"; o.frequency.value = 52;
+          const am = ac.createOscillator(); am.frequency.value = 13;
+          const amg = ac.createGain(); amg.gain.value = 0.4; am.connect(amg);
+          const g = ac.createGain(); g.gain.value = 0.0001;
+          amg.connect(g.gain);
+          const f = ac.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 520; f.Q.value = 2;
+          const nz = ac.createBufferSource(); nz.buffer = noiseBuf; nz.loop = true;
+          const nf = ac.createBiquadFilter(); nf.type = "bandpass"; nf.frequency.value = 900; nf.Q.value = 0.7;
+          const ng = ac.createGain(); ng.gain.value = 0.05;
+          o.connect(f).connect(g); nz.connect(nf).connect(ng).connect(g);
+          g.connect(p); out(p, 0.3);
+          o.start(t); am.start(t); nz.start(t);
+          motorN = { p, o, am, g, f, nz };
+          noise(t, 0.5, 900, 300, 1, 0.15);
+        }
+        setPos(motorN.p, x, 0.3, z);
+        motorN.g.gain.setTargetAtTime(0.12 + k * 0.22, t, 0.15);
+        motorN.o.frequency.setTargetAtTime(48 + k * 46, t, 0.2);
+        motorN.am.frequency.setTargetAtTime(10 + k * 16, t, 0.2);
+        motorN.f.frequency.setTargetAtTime(400 + k * 900, t, 0.2);
+      };
+      api.stopMotor = () => {
+        if (!motorN || !ac) return;
+        const n = motorN, t = ac.currentTime;
+        motorN = null;
+        n.g.gain.setTargetAtTime(0.0001, t, 0.25);
+        ctx.timeout(() => { try { n.o.stop(); n.am.stop(); n.nz.stop(); n.p.disconnect(); } catch (e) { /* gone */ } }, 1500);
+      };
+      api.chime = (up) => { if (!ready()) return; const t = ac.currentTime; (up ? [0, 5, 9, 14] : [0, 7, 12]).forEach((st, i) => tone(t + i * 0.12, 1.6, 392 * Math.pow(2, st / 12), null, "sine", 0.06, null, 0.9)); };
+      api.page = () => { if (!ready()) return; const t = ac.currentTime; noise(t, 0.18, 3000, 5000, 1.2, 0.05, "highpass"); noise(t + 0.12, 0.14, 4000, 2500, 1.2, 0.04, "highpass"); };
       api.jump = boots => { if (!ready()) return; const t = ac.currentTime; if (boots) { tone(t, 0.2, 260, 820, "triangle", 0.07); tone(t + 0.02, 0.12, 1400, 2400, "sine", 0.02); } noise(t, 0.05, 1600, 800, 1, 0.05); };
       api.rung = () => { if (!ready()) return; tone(ac.currentTime, 0.05, 240, 160, "triangle", 0.08); };
       api.bonk = () => { if (!ready()) return; const t = ac.currentTime; tone(t, 0.15, 120, 60, "sine", 0.25); noise(t, 0.1, 800, 300, 1, 0.1); };
@@ -3840,7 +4172,7 @@ window.plethoraBit = {
       api.craft = () => { if (!ready()) return; const t = ac.currentTime; [0, 4, 7, 12, 16].forEach((st, i) => tone(t + i * 0.09, 0.9, 330 * Math.pow(2, st / 12), null, "triangle", 0.09, null, 0.8)); noise(t, 0.3, 3000, 900, 2, 0.05); };
       api.click = () => { if (!ready()) return; tone(ac.currentTime, 0.04, 900, 600, "square", 0.035); };
       api.whoosh = () => { if (!ready()) return; noise(ac.currentTime, 0.25, 600, 2400, 2, 0.06); };
-      api.duckSplash = (x, z) => { if (!ready()) return; noise(ac.currentTime, 0.45, 2600, 400, 1, 0.3, "lowpass", atPos(x, 0, z, 1)); };
+      api.duckSplash = (x, z) => { if (!ready()) return; const t = ac.currentTime, p = atPos(x, 0, z, 1.5); noise(t, 0.4, 3000, 500, 0.8, 0.22, "lowpass", p); bubbles(t + 0.03, 8, 0.5, 300, 1400, 0.06, p); };
       api.squeak = (x, z, crushed) => { if (!ready()) return; tone(ac.currentTime, crushed ? 0.35 : 0.16, crushed ? 1400 : 1100, crushed ? 500 : 1700, "square", 0.05, atPos(x, 0.1, z, 1)); };
       api.bang = (x, z) => { if (!ready()) return; const t = ac.currentTime, p = atPos(x, 0.3, z, 1); noise(t, 0.25, 2600, 300, 0.7, 0.6, "lowpass", p); tone(t, 0.12, 180, 60, "square", 0.2, p); };
       api.bell = (x, z) => {
@@ -3861,9 +4193,22 @@ window.plethoraBit = {
       };
       api.fire = () => { if (!ready()) return; const t = ac.currentTime; noise(t, 0.5, 1800, 200, 0.8, 0.32, "lowpass"); tone(t, 0.25, 160, 50, "sawtooth", 0.18); };
       api.explode = (x, z) => { if (!ready()) return; const t = ac.currentTime, p = atPos(x, 0.5, z, 2); noise(t, 1.4, 1600, 60, 0.7, 0.9, "lowpass", p); tone(t, 0.9, 70, 28, "sine", 0.7, p); };
-      api.thunder = k => { if (!ready()) return; const t = ac.currentTime; noise(t, 3.5, 400, 40, 0.5, 0.5 * clamp(k, 0.3, 1), "lowpass", null, 0.9); tone(t, 2.5, 50, 28, "sine", 0.25 * clamp(k, 0.3, 1)); };
+      api.thunder = k => {
+        if (!ready()) return; const t = ac.currentTime, K = clamp(k, 0.25, 1);
+        if (K > 0.6) noise(t, 0.35, 5000, 1200, 0.7, 0.25 * K, "lowpass", null, 0.9);
+        noise(t + 0.05, 4.2, 420, 35, 0.5, 0.5 * K, "lowpass", null, 0.9);
+        noise(t + 0.9 + Math.random() * 0.5, 2.6, 260, 40, 0.5, 0.28 * K, "lowpass", null, 0.9);
+        tone(t, 3, 48, 26, "sine", 0.22 * K);
+      };
       api.beastClick = () => { if (!ready()) return; const t = ac.currentTime, p = atPos(C.x, C.y, C.z, 1, true); for (let k = 0; k < 7; k++) tone(t + k * 0.04, 0.012, 2800 + Math.random() * 1500, null, "square", 0.04, p); };
-      api.beastBreath = () => { if (!ready()) return; const t = ac.currentTime, p = atPos(C.x, 0.3, C.z, 3, true); noise(t, 1.8, 300, 900, 1.5, 0.18, "bandpass", p); noise(t + 1.6, 1.2, 900, 250, 1.5, 0.12, "bandpass", p); };
+      api.beastBreath = () => {
+        if (!ready()) return; const t = ac.currentTime, p = atPos(C.x, 0.3, C.z, 3.5, true);
+        // Water streaming off it as it rises, a long wet exhale, then it sinks gurgling.
+        swell(t, 1.2, 1400, 300, 0.2, "lowpass", p);
+        bubbles(t, 18, 1.1, 120, 700, 0.07, p);
+        noise(t + 0.9, 1.6, 300, 900, 1.5, 0.14, "bandpass", p);
+        bubbles(t + 2.6, 14, 1.0, 90, 420, 0.06, p);
+      };
       api.beastGrowl = () => { if (!ready()) return; const t = ac.currentTime, p = atPos(C.x, C.y, C.z, 2, true); noise(t, 1.5, 200, 120, 6, 0.32, "bandpass", p); tone(t, 1.4, 48, 34, "sawtooth", 0.24, p); };
       api.beastRoar = (x, z) => { if (!ready()) return; const t = ac.currentTime, p = atPos(x, 0.6, z, 2, true); noise(t, 1.0, 600, 150, 3, 0.6, "bandpass", p); tone(t, 0.9, 130, 55, "sawtooth", 0.4, p); tone(t, 0.7, 1900, 800, "sawtooth", 0.07, p); };
       api.beastBite = (x, z) => { if (!ready()) return; const t = ac.currentTime, p = atPos(x, 0.6, z, 2, true); noise(t, 0.8, 500, 200, 2.5, 0.5, "bandpass", p); tone(t + 0.5, 0.14, 200, 70, "square", 0.25, p); };
@@ -3899,8 +4244,38 @@ window.plethoraBit = {
 .sw-cm.poi em{font-style:normal;display:none;white-space:nowrap}
 .sw-cm.poi.near em{display:inline}
 .sw-cm.goal{width:12px;height:12px;border-radius:2px;background:#ffcf6a;transform:translate(-50%,-50%) rotate(45deg);box-shadow:0 0 10px #ffcf6a;opacity:1}
-.sw-obj{position:absolute;left:50%;top:calc(var(--sat) + 46px);transform:translateX(-50%);width:86vw;text-align:center;
+.sw-obj{position:absolute;left:50%;top:calc(var(--sat) + 46px);transform:translateX(-50%);width:86vw;text-align:center;pointer-events:auto!important;
   font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:19px;line-height:1.15;text-shadow:0 1px 10px rgba(0,0,0,.85)}
+.sw-obj small{font-family:Inter,system-ui,sans-serif;font-style:normal;font-size:12px;font-weight:600;color:#ffcf6a;letter-spacing:.04em}
+.sw-obj::after{content:"Journal";display:block;margin:4px auto 0;font-family:Inter,system-ui,sans-serif;font-style:normal;font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;opacity:.4}
+.sw-wp{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}
+.sw-wp i{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border:2px solid #ffcf6a;transform:rotate(45deg);box-shadow:0 0 12px rgba(255,207,106,.8);border-radius:2px}
+.sw-wp span{position:absolute;left:50%;top:12px;transform:translateX(-50%);font-size:11px;font-weight:700;color:#ffe6a8;white-space:nowrap;text-shadow:0 1px 6px #000}
+.sw-card{position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);text-align:center;width:88vw;opacity:0;transition:opacity 1s;pointer-events:none;text-shadow:0 2px 18px rgba(0,0,0,.95)}
+.sw-card.on{opacity:1}
+.sw-card em{display:block;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.42em;color:#8ff0d8;margin-bottom:8px}
+.sw-card b{display:block;font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:300;font-size:50px;line-height:1}
+.sw-card span{display:block;margin-top:12px;font-size:14px;opacity:.85}
+.sw-sheet{position:absolute;inset:0;z-index:16;pointer-events:auto!important;background:rgba(3,8,8,.9);overflow-y:auto;
+  padding:calc(var(--sat) + 26px) calc(var(--sar) + 22px) calc(var(--sab) + 26px) calc(var(--sal) + 22px)}
+.sw-sheet h2{margin:0 0 4px;font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:300;font-size:34px}
+.sw-sheet h3{margin:22px 0 8px;font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#8ff0d8}
+.sw-sheet p{margin:0 0 12px;font-size:14px;line-height:1.55;opacity:.86}
+.sw-sheet .sw-close{position:sticky;top:0;float:right;appearance:none;border:0;border-radius:12px;padding:8px 14px;font:inherit;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#d9ece6;background:rgba(255,255,255,.1)}
+.sw-goals{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.sw-goals li{display:flex;gap:10px;align-items:baseline;font-size:14px;line-height:1.4}
+.sw-goals li i{flex:none;width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.35);font-style:normal;font-size:11px;display:flex;align-items:center;justify-content:center}
+.sw-goals li.done{opacity:.55}
+.sw-goals li.done i{background:#62d6b8;box-shadow:none;color:#04140f}
+.sw-goals li.now i{box-shadow:inset 0 0 0 2px #ffcf6a}
+.sw-page{border-left:2px solid rgba(233,225,204,.4);padding-left:12px;margin:0 0 16px}
+.sw-page b{display:block;font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:19px;font-weight:400;margin-bottom:4px}
+.sw-reader{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(86vw,420px);z-index:14;pointer-events:auto!important;
+  background:linear-gradient(180deg,#e9e1cc,#d6ccb2);color:#2a2418;border-radius:6px;padding:22px 22px 18px;box-shadow:0 20px 60px rgba(0,0,0,.7);transform-origin:50% 50%}
+.sw-reader b{display:block;font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:24px;font-weight:400;margin-bottom:8px}
+.sw-reader p{margin:0;font-family:"Cormorant Garamond",Georgia,serif;font-size:19px;line-height:1.35}
+.sw-reader small{display:block;margin-top:12px;font-family:Inter,system-ui,sans-serif;font-size:11px;font-weight:600;letter-spacing:.08em;color:#6b5a32}
+.sw-stone{grid-column:1;grid-row:2;width:56px;height:56px;margin-bottom:6px}
 .sw-ear{position:absolute;left:50%;top:calc(var(--sat) + 74px);transform:translateX(-50%);display:flex;align-items:center;gap:8px;opacity:.9}
 .sw-ear i{width:9px;height:9px;border-radius:50%;background:#7fd8c8;opacity:.2;transition:opacity .4s,background .4s,box-shadow .4s}
 .sw-ear.l1 i{opacity:.95;background:#ffcf6a;box-shadow:0 0 12px #ffcf6a}
@@ -3947,6 +4322,10 @@ window.plethoraBit = {
 .sw-mapview h2{margin:0;font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:300;font-size:30px}
 .sw-mapview p{margin:0;font-size:12px;opacity:.6;letter-spacing:.06em}
 .sw-mapview svg{width:min(94vw,66vh);height:min(94vw,66vh);display:block;border-radius:14px;background:#050b0b;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
+.sw-mapview .ring{fill:none!important;stroke-width:.8;stroke:currentColor}
+.sw-mapview .k-coil.ring{stroke:#7fffd4}.sw-mapview .k-part.ring{stroke:#ffcf6a}.sw-mapview .k-rocket.ring{stroke:#ff6a4f}.sw-mapview .k-ducks.ring{stroke:#ffe14d}
+.sw-mapview .k-firecracker.ring{stroke:#ff9a3d}.sw-mapview .k-fuel.ring{stroke:#ff8a4c}.sw-mapview .k-key.ring{stroke:#e7cf72}.sw-mapview .k-note.ring{stroke:#e9e1cc}
+.sw .k-fuel{background:#ff8a4c;fill:#ff8a4c}.sw .k-key{background:#e7cf72;fill:#e7cf72}
 .sw-mapview text{font-family:Inter,system-ui,sans-serif;font-size:7px;font-weight:600;fill:#efe8d6;paint-order:stroke;stroke:#050b0b;stroke-width:2px}
 .sw-modal{position:absolute;inset:0;z-index:20;pointer-events:auto!important;display:flex;flex-direction:column;justify-content:flex-end;
   padding:calc(var(--sat) + 24px) calc(var(--sar) + 22px) calc(var(--sab) + 28px) calc(var(--sal) + 22px);
@@ -3982,12 +4361,17 @@ window.plethoraBit = {
   <div class="sw-inv" data-inv></div>
   <div class="sw-cross" data-cross></div>
   <div class="sw-toast" data-toast></div>
+  <div class="sw-card" data-card></div>
+  <div class="sw-wp" data-wp hidden><i></i><span data-wpd></span></div>
   <button class="sw-mapbtn" data-mapbtn aria-label="Map">&#9638;</button>
 </div>
+<div class="sw-reader" data-reader hidden></div>
+<div class="sw-sheet" data-sheet hidden></div>
 <div class="sw-stick" data-stick hidden><i data-knob></i></div>
 <div class="sw-btns" data-btns hidden>
   <button class="sw-btn sw-use" data-btn="use" hidden><em data-uselabel>Use</em></button>
   <button class="sw-btn sw-fire" data-btn="fire" hidden><span data-rocketcount>0</span><em>Fire</em></button>
+  <button class="sw-btn sw-stone" data-btn="stone"><em>Stone</em></button>
   <button class="sw-btn sw-duck" data-btn="duck"><span data-duckcount>2</span><em>Duck</em></button>
   <button class="sw-btn sw-jump" data-btn="jump"><em>Jump</em></button>
 </div>
@@ -4001,6 +4385,7 @@ window.plethoraBit = {
     const toastEl = $("[data-toast]"), crossEl = $("[data-cross]"), compassEl = $("[data-compass]"), mapSvg = $("[data-mapsvg]");
     const useBtn = $("[data-btn=use]"), useLabel = $("[data-uselabel]"), fireBtn = $("[data-btn=fire]"), duckBtn = $("[data-btn=duck]");
     const duckCount = $("[data-duckcount]"), rocketCount = $("[data-rocketcount]");
+    const wpEl = $("[data-wp]"), wpDist = $("[data-wpd]"), cardEl = $("[data-card]"), sheetEl = $("[data-sheet]"), readerEl = $("[data-reader]");
     function applySafeArea() {
       const sa = ctx.safeArea || {};
       root.style.setProperty("--sat", (sa.top || 0) + "px");
@@ -4044,26 +4429,86 @@ window.plethoraBit = {
         if (m.kind === "poi") { const near = vis && Math.abs(rel) < 0.14; if (near !== m.near) { m.near = near; m.el.classList.toggle("near", near); } }
       }
     }
-    function objective() {
-      const bench = POI.camp;
-      if (!state.boots) {
-        if (state.coils >= COILS_NEED) return { text: "Take the coils to the workbench at the Fishing Camp", at: bench };
-        return { text: `Find spring coils · ${state.coils} of ${COILS_NEED}`, at: null };
+    // The night in chapters. There is always somewhere to go next.
+    const CHAPTERS = ["The Landing", "Springheel", "High Ground", "Armed", "The Hunt", "Dawn"];
+    const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
+    function nearestItem(kind) {
+      let best = null, bd = 1e9;
+      for (const it of items) {
+        if (it.kind !== kind || it.taken || !(it.known || it.seen)) continue;
+        const d = Math.hypot(it.x - P.x, it.z - P.z);
+        if (d < bd) { bd = d; best = it; }
       }
+      return best;
+    }
+    function objective() {
+      const bench = BUILD.interact.find(i => i.kind === "bench");
+      const top = (BUILD.anchors.towertop || [{ x: POI.tower.x, y: 10, z: POI.tower.z }])[0];
+      if (state.won) return { ch: 5, text: "It is dead. Dawn is coming." };
+      if (state.escaped) return { ch: 5, text: "Out of the swamp. It is still in there." };
+      if (!state.pages[1]) {
+        const n1 = items.find(i => i.kind === "note" && i.page === 1 && !i.taken);
+        if (n1) return { ch: 0, text: "Pick up the page on the path", at: n1 };
+      }
+      if (!state.pages[2]) return { ch: 0, text: "Follow the lanterns to the Fishing Camp", at: bench };
+      if (!state.boots) {
+        if (state.coils >= COILS_NEED) return { ch: 1, text: "Make the spring boots at the workbench", at: bench };
+        return { ch: 1, text: `Find spring coils \u00b7 ${state.coils} of ${COILS_NEED}`, at: nearestItem("coil") };
+      }
+      if (!state.towerSeen) return { ch: 2, text: "Climb the Watchtower and look out", at: top };
       if (!state.bazooka) {
-        if (state.parts >= PARTS_NEED) return { text: "Take the parts to the workbench", at: bench };
-        return { text: `Find the bazooka's parts · ${state.parts} of ${PARTS_NEED}`, at: null };
+        if (state.parts >= PARTS_NEED) return { ch: 3, text: "Build the bazooka at the workbench", at: bench };
+        return { ch: 3, text: `Find bazooka parts \u00b7 ${state.parts} of ${PARTS_NEED}`, at: nearestItem("part") };
       }
       if (state.rockets <= 0) {
-        const left = items.some(i => i.kind === "rocket" && !i.taken);
-        return { text: left ? "Find rockets: the barge, the boathouse, the village" : "No rockets left. Survive.", at: null };
+        const it = nearestItem("rocket");
+        if (it || items.some(i => i.kind === "rocket" && !i.taken)) return { ch: 3, text: "Find a rocket", at: it };
+        const boat = BUILD.interact.find(i => i.kind === "boat");
+        return { ch: 4, text: state.fuel && state.key ? "No rockets left. Take the boat and go" : "No rockets left. Find fuel and the key, and leave", at: state.fuel && state.key ? boat : nearestItem(state.fuel ? "key" : "fuel") };
       }
-      return { text: `Lure it up. Shoot it while its head is out · ${state.hits} of ${CREATURE_HP}`, at: null };
+      if (state.ducks <= 0 && state.crackers <= 0) return { ch: 4, text: "Find a crate of ducks to lure it with", at: nearestItem("ducks") };
+      return { ch: 4, text: `Lure it up and shoot it \u00b7 ${state.hits} of ${CREATURE_HP}` };
     }
+    let shownChapter = -1, cardT = 0;
+    function chapterCard(ch, sub) {
+      toastEl.classList.remove("on"); toastT = 0;
+      cardEl.innerHTML = `<em>CHAPTER ${ROMAN[ch]}</em><b>${CHAPTERS[ch]}</b>${sub ? `<span>${sub}</span>` : ""}`;
+      cardEl.classList.add("on");
+      cardT = 4.2;
+      sfx.chime(true);
+    }
+    // Where the goal is: a diamond over it while it is in view, metres to it always.
+    const _wp = V3(), _wv = V3();
+    let distShown = null, wpShown = false;
+    function updateGuide() {
+      const g = goalPos;
+      if (!g || state.screen !== "play") {
+        if (wpShown) { wpShown = false; wpEl.hidden = true; }
+        if (distShown !== "") { distShown = ""; distEl().textContent = ""; }
+        return;
+      }
+      const d = Math.hypot(g.x - P.x, g.z - P.z);
+      const ds = d < 4 ? "" : ` \u00b7 ${Math.round(d)} m`;
+      if (ds !== distShown) { distShown = ds; distEl().textContent = ds; }
+      _wv.set(g.x, (g.y || 0) + 1.1, g.z).applyMatrix4(camera.matrixWorldInverse);
+      _wp.set(g.x, (g.y || 0) + 1.1, g.z).project(camera);
+      const on = _wv.z < -1 && Math.abs(_wp.x) < 0.94 && Math.abs(_wp.y) < 0.9 && d > 4;
+      if (on !== wpShown) { wpShown = on; wpEl.hidden = !on; }
+      if (on) {
+        wpEl.style.transform = `translate(${((_wp.x * 0.5 + 0.5) * ctx.width).toFixed(1)}px,${((0.5 - _wp.y * 0.5) * ctx.height).toFixed(1)}px)`;
+        wpDist.textContent = `${Math.round(d)} m`;
+      }
+    }
+    const distEl = () => objEl.querySelector("small") || objEl;
     function updateHud() {
       const o = objective();
-      objEl.textContent = o.text;
-      goalPos = o.at;
+      objEl.innerHTML = `${o.text}<small></small>`;
+      distShown = null;
+      goalPos = o.at || null;
+      if (o.ch > shownChapter && state.screen === "play") {
+        if (shownChapter >= 0 || o.ch > 0) chapterCard(o.ch, o.text);
+        shownChapter = o.ch;
+      }
       const chip = (kind, label, done) => `<div class="sw-chip${done ? " done" : ""}"><b class="k-${kind}"></b>${label}</div>`;
       invEl.innerHTML = [
         state.boots ? chip("coil", "Boots", true) : chip("coil", `${state.coils}/${COILS_NEED}`),
@@ -4079,11 +4524,35 @@ window.plethoraBit = {
       crossEl.classList.toggle("on", state.bazooka || state.aiming);
     }
     let toastT = 0, earT = 0;
-    function toast(title, sub, secs) {
-      toastEl.innerHTML = `<b>${title}</b>${sub ? `<span>${sub}</span>` : ""}`;
+    const toastQ = [];
+    function showToast(q) {
+      toastEl.innerHTML = `<b>${q.title}</b>${q.sub ? `<span>${q.sub}</span>` : ""}`;
       toastEl.classList.add("on");
-      toastT = secs || 3.4;
+      toastT = q.secs;
     }
+    function toast(title, sub, secs) {
+      const q = { title, sub, secs: secs || 3.4 };
+      if ((toastT <= 0.4 && cardT <= 0) || toastQ.length > 3) showToast(q); else toastQ.push(q);
+    }
+    function stepToasts(dt) {
+      if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove("on"); }
+      else if (toastQ.length && cardT <= 0) showToast(toastQ.shift());
+      if (cardT > 0) { cardT -= dt; if (cardT <= 0) cardEl.classList.remove("on"); }
+    }
+    // A hint is said once a run, the first time it is true.
+    function hint(key, title, sub, secs) {
+      if (state.hints[key]) return;
+      state.hints[key] = true;
+      toast(title, sub, secs || 5.5);
+    }
+    // A page of the journal, held up to read until you tap it away.
+    let readerT = 0;
+    function showPage(pg, marked) {
+      readerEl.innerHTML = `<b>${pg.t}</b><p>${pg.x}</p><small>${marked ? `${marked} ${marked === 1 ? "place" : "places"} marked on your map \u00b7 ` : ""}Tap to put it away</small>`;
+      readerEl.hidden = false;
+      readerT = 14;
+    }
+    function hidePage() { readerEl.hidden = true; readerT = 0; }
     function showEar(text, secs) {
       earText.textContent = text;
       earText.classList.add("on");
@@ -4131,9 +4600,11 @@ window.plethoraBit = {
         marks += `<circle cx="${p.x}" cy="${p.z}" r="2.2" fill="#ffcf6a"/><text x="${p.x}" y="${p.z - 4.5}" text-anchor="middle">${p.name}</text>`;
       }
       for (const it of items) {
-        if (it.taken || !it.seen) continue;
-        marks += `<circle class="k-${it.kind}" cx="${it.x.toFixed(1)}" cy="${it.z.toFixed(1)}" r="1.7" stroke="#050b0b" stroke-width=".6"/>`;
+        if (it.taken || !(it.seen || it.known)) continue;
+        if (it.seen) marks += `<circle class="k-${it.kind}" cx="${it.x.toFixed(1)}" cy="${it.z.toFixed(1)}" r="1.7" stroke="#050b0b" stroke-width=".6"/>`;
+        else marks += `<circle class="k-${it.kind} ring" cx="${it.x.toFixed(1)}" cy="${it.z.toFixed(1)}" r="1.9"/>`;
       }
+      if (goalPos) marks += `<rect x="${(goalPos.x - 2.4).toFixed(1)}" y="${(goalPos.z - 2.4).toFixed(1)}" width="4.8" height="4.8" transform="rotate(45 ${goalPos.x.toFixed(1)} ${goalPos.z.toFixed(1)})" fill="none" stroke="#ffcf6a" stroke-width="1"/>`;
       const ang = (-P.yaw * 180) / Math.PI;
       mapSvg.innerHTML = `<path d="${paths[1]}" fill="#0b1c1e"/><path d="${paths[2]}" fill="#1d3330"/><path d="${paths[3]}" fill="#3b4529"/>` +
         `<path d="${mapBuilt}" fill="rgba(220,190,140,.55)"/>${marks}` +
@@ -4221,7 +4692,7 @@ window.plethoraBit = {
     const release = e => {
       if (e.pointerId === stick.id) { stick.id = null; stickEl.hidden = true; stickEl.classList.remove("quiet"); }
       if (e.pointerId === lookPtr.id) lookPtr.id = null;
-      if (e.pointerId === duckPtr) { duckPtr = null; if (state.aiming) { state.aiming = false; throwLure(); updateHud(); } }
+      if (e.pointerId === duckPtr) { duckPtr = null; if (state.aiming) { const what = state.aiming; state.aiming = false; if (what === "stone") throwStone(); else throwLure(); updateHud(); } }
     };
     let duckPtr = null;
     ctx.listen(touchEl, "pointerup", release);
@@ -4239,22 +4710,57 @@ window.plethoraBit = {
       if (k === "jump") jump();
       else if (k === "fire") fire();
       else if (k === "use") useThing();
-      else if (k === "duck") {
-        if (state.ducks <= 0 && state.crackers <= 0) { toast("Out of ducks", "There are crates at the camps"); return; }
-        duckPtr = e.pointerId; state.aiming = true; updateHud();
+      else if (k === "duck" || k === "stone") {
+        if (k === "duck" && state.ducks <= 0 && state.crackers <= 0) { toast("Out of ducks", "There are crates at the camps and the shacks"); return; }
+        duckPtr = e.pointerId; state.aiming = k; updateHud();
         try { b.setPointerCapture(e.pointerId); } catch (err) { /* window listeners release it */ }
       }
       sfx.unlock();
     });
     ctx.listen(btnsEl, "pointerup", release);
     ctx.listen($("[data-mapbtn]"), "click", () => { if (state.screen === "play") openMap(); });
+    // The journal: what the night asks of you, and Eli's pages.
+    function journalHtml() {
+      const o = objective();
+      const nSeen = Object.keys(state.seen).length, nPOI = Object.keys(POI).length, nPages = Object.keys(state.pages).length;
+      const goals = [
+        { t: "Reach the Fishing Camp", done: !!state.pages[2] },
+        { t: `Spring coils: ${Math.min(state.coils, COILS_NEED)} of ${COILS_NEED}`, done: state.coils >= COILS_NEED || state.boots },
+        { t: "Make the spring boots", done: state.boots },
+        { t: "Look out from the Watchtower", done: state.towerSeen },
+        { t: `Bazooka parts: ${Math.min(state.parts, PARTS_NEED)} of ${PARTS_NEED}`, done: state.parts >= PARTS_NEED || state.bazooka },
+        { t: "Build the bazooka", done: state.bazooka },
+        { t: `Rockets: ${state.rockets} carried, ${state.rocketsFound} of 5 found`, done: state.rocketsFound >= 5 },
+        { t: `Hit it while its head is up: ${state.hits} of ${CREATURE_HP}`, done: state.hits >= CREATURE_HP }
+      ];
+      const side = [
+        { t: `Places found: ${nSeen} of ${nPOI}`, done: nSeen >= nPOI },
+        { t: `Journal pages: ${nPages} of ${PAGE_COUNT}`, done: nPages >= PAGE_COUNT },
+        { t: `Or leave: fuel${state.fuel ? " (have it)" : ""}, the key${state.key ? " (have it)" : ""}, the boat at the boathouse`, done: state.escaped }
+      ];
+      const now = goals.findIndex(g => !g.done);
+      const li = (g, cur) => `<li class="${g.done ? "done" : cur ? "now" : ""}"><i>${g.done ? "\u2713" : ""}</i><span>${g.t}</span></li>`;
+      const pages = Object.keys(state.pages).map(Number).sort((a, b) => a - b).map(n => `<div class="sw-page"><b>${PAGES[n].t}</b>${PAGES[n].x}</div>`).join("");
+      return `<button class="sw-close" data-close>Close</button><h2>Journal</h2><p>${o.text}</p>
+<h3>The night</h3><ul class="sw-goals">${goals.map((g, i) => li(g, i === now)).join("")}</ul>
+<h3>Besides</h3><ul class="sw-goals">${side.map(g => li(g, false)).join("")}</ul>
+<h3>Eli's pages</h3>${pages || "<p>None yet. He left his journal in pages across the swamp.</p>"}
+<h3>How it hears</h3><p>On land, nothing. Wading, every step: further the deeper and faster you go. Swimming carries furthest of all. Rotten planks creak down into the water unless you walk gently, and a landing thuds. Rain hides you. A stone, a duck, the bell or the generator draws it away from you.</p>`;
+    }
+    function openJournal() { sheetEl.innerHTML = journalHtml(); sheetEl.hidden = false; }
+    function closeJournal() { sheetEl.hidden = true; sheetEl.innerHTML = ""; }
+    ctx.listen(objEl, "click", () => { if (state.screen === "play") openJournal(); });
+    ctx.listen(sheetEl, "click", () => closeJournal());
+    ctx.listen(readerEl, "click", () => hidePage());
     ctx.listen(mapView, "click", () => closeMap());
     ctx.listen(window, "keydown", e => {
       if (e.repeat) return;
       input.keys[e.code] = true;
       if (state.screen === "play") {
         if (e.code === "Space") { e.preventDefault(); jump(); }
-        else if (e.code === "KeyQ") { if (state.ducks > 0 || state.crackers > 0) { state.aiming = true; updateHud(); } }
+        else if (e.code === "KeyQ") { if (state.ducks > 0 || state.crackers > 0) { state.aiming = "duck"; updateHud(); } }
+        else if (e.code === "KeyR") { state.aiming = "stone"; updateHud(); }
+        else if (e.code === "KeyJ") { if (sheetEl.hidden) openJournal(); else closeJournal(); }
         else if (e.code === "KeyE") useThing();
         else if (e.code === "KeyF" || e.code === "Enter") fire();
         else if (e.code === "KeyM") { if (mapView.hidden) openMap(); else closeMap(); }
@@ -4265,7 +4771,7 @@ window.plethoraBit = {
     });
     ctx.listen(window, "keyup", e => {
       input.keys[e.code] = false;
-      if (e.code === "KeyQ" && state.aiming) { state.aiming = false; throwLure(); updateHud(); }
+      if ((e.code === "KeyQ" || e.code === "KeyR") && state.aiming) { const what = state.aiming; state.aiming = false; if (what === "stone") throwStone(); else throwLure(); updateHud(); }
       if (e.code === "ShiftLeft" || e.code === "ShiftRight") input.sneakKey = false;
       if (e.code === "ArrowLeft") input.turnL = false;
       if (e.code === "ArrowRight") input.turnR = false;
@@ -4277,7 +4783,7 @@ window.plethoraBit = {
     function runBeats() { for (let i = beats.length - 1; i >= 0; i--) if (state.t >= beats[i].at) { const b = beats.splice(i, 1)[0]; b.fn(); } }
 
     /* ---- menus ---- */
-    const BUILD_TAG = "sw-b2";
+    const BUILD_TAG = "sw-b3";
     const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
     function menuHtml() {
       const best = state.best ? `<p class="sw-tag">Best: <b>${rankOf(state.best)}</b> &middot; ${state.best} pts${state.bestTime ? ` &middot; killed it in ${fmtTime(state.bestTime)}` : ""}</p>` : "";
@@ -4296,8 +4802,8 @@ ${best}
     function resultHtml(won) {
       const secs = Math.max(0, state.t - state.runStart), score = progressScore();
       return `<span class="sw-rank">${rankOf(score)}</span>
-<h1 class="sw-title sw-small">${won ? "Still<br>water." : "It heard<br>you."}</h1>
-<p class="sw-tag">${won ? "The swamp is quiet. Dawn is coming." : state.deathCause || "The water carried every step."}</p>
+<h1 class="sw-title sw-small">${won ? "Still<br>water." : state.escaped ? "Out." : "It heard<br>you."}</h1>
+<p class="sw-tag">${won ? "The swamp is quiet. Dawn is coming." : state.escaped ? "The motor carried you out. It is still in there." : state.deathCause || "The water carried every step."}</p>
 <ul class="sw-stats">
   <li><span>Progress</span><b>${score} pts</b></li>
   <li><span>Spring coils</span><b>${state.boots ? "Boots" : state.coils + " / " + COILS_NEED}</b></li>
@@ -4306,21 +4812,24 @@ ${best}
   <li><span>Hits on it</span><b>${state.hits} / ${CREATURE_HP}</b></li>
   <li><span>Time in the swamp</span><b>${fmtTime(secs)}</b></li>
 </ul>
-<button class="sw-go" data-go>Go back in</button>
-<div class="sw-row"><button class="sw-ghost" data-menu>Title</button></div>`;
+${won || state.escaped ? `<button class="sw-go" data-go>Go back in</button>
+<div class="sw-row"><button class="sw-ghost" data-menu>Title</button></div>` : `<button class="sw-go" data-wake>Wake at the camp</button>
+<div class="sw-row"><button class="sw-ghost" data-go>Start over</button><button class="sw-ghost" data-menu>Title</button></div>
+<p class="sw-build">Waking keeps what you found and costs 400 points</p>`}`;
     }
     function showModal(html) {
       modalEl.innerHTML = html;
       modalEl.hidden = false;
       hudEl.hidden = true; btnsEl.hidden = true; stickEl.hidden = true;
       stick.id = null; lookPtr.id = null; state.aiming = false;
-      closeMap();
+      closeMap(); closeJournal(); hidePage();
     }
     function hideModal() { modalEl.innerHTML = ""; modalEl.hidden = true; hudEl.hidden = false; btnsEl.hidden = false; }
     ctx.listen(modalEl, "click", e => {
-      const el = e.target && e.target.closest ? e.target.closest("[data-go],[data-menu],[data-sound],[data-haptics],[data-look]") : null;
+      const el = e.target && e.target.closest ? e.target.closest("[data-go],[data-wake],[data-menu],[data-sound],[data-haptics],[data-look]") : null;
       if (!el) return;
       sfx.unlock();
+      if (el.hasAttribute("data-wake")) { wakeAtCamp(); return; }
       if (el.hasAttribute("data-go")) { startRun(); return; }
       if (el.hasAttribute("data-menu")) { gotoMenu(); return; }
       if (el.hasAttribute("data-sound")) { state.sound = !state.sound; sfx.setEnabled(state.sound); }
@@ -4329,6 +4838,348 @@ ${best}
       save();
       showModal(menuHtml());
     });
+
+    /* ================================================================ *
+     * SET DRESSING
+     * Mist lying on the water, logs and stumps and stones, fungi that
+     * glow on the dead wood, moths round the lanterns.
+     * ================================================================ */
+    // A soft bank of mist: a noisy blob, densest low down, fading out at its edges.
+    const mistTex = (() => {
+      const W = 128, H = 64, d = new Uint8Array(W * H * 4), n = latticeNoise(301);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const u = x / (W - 1) * 2 - 1, v = y / (H - 1);
+        const edge = (1 - smooth(0.55, 1.0, Math.abs(u))) * smooth(0.0, 0.25, v) * (1 - smooth(0.45, 1.0, v));
+        const k = fbmOf(n, x / 22, y / 14, 4, 0) * 1.3 - 0.15;
+        const i = (y * W + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = 255;
+        d[i + 3] = clamp(edge * k, 0, 1) * 255;
+      }
+      return dataTex(d, W, H, { clamp: true });
+    })();
+    const mistMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false,
+      uniforms: { uTex: { value: mistTex }, uTime: SHARED.uTime, uFogA: SHARED.uFogA, uFogB: SHARED.uFogB, uMoonDir: SHARED.uMoonDir, uRain: { value: 0 } },
+      vertexShader: /* glsl */`
+        uniform float uTime;
+        attribute vec4 aMist;   // x, z, width, seed
+        varying vec2 vUv; varying float vA; varying vec3 vW;
+        void main() {
+          vUv = uv;
+          float w = aMist.z, h = w * 0.22;
+          vec3 c = vec3(aMist.x + sin(uTime * 0.02 + aMist.w * 6.3) * 4.0, 0.15 + aMist.w * 0.5, aMist.y + cos(uTime * 0.017 + aMist.w * 4.1) * 4.0);
+          // Face the camera about the vertical only, so the bank lies on the water.
+          vec3 toCam = cameraPosition - c; toCam.y = 0.0;
+          vec3 side = normalize(vec3(toCam.z, 0.0, -toCam.x) + vec3(1e-4, 0.0, 0.0));
+          vec3 p = c + side * (position.x * w) + vec3(0.0, (position.y + 0.5) * h, 0.0);
+          vW = p;
+          float d = length(cameraPosition.xz - c.xz);
+          vA = smoothstep(4.0, 18.0, d) * (1.0 - smoothstep(110.0, 150.0, d));
+          gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+        }`,
+      fragmentShader: /* glsl */`
+        uniform sampler2D uTex; uniform vec3 uFogA, uFogB, uMoonDir; uniform float uRain;
+        varying vec2 vUv; varying float vA; varying vec3 vW;
+        void main() {
+          float a = texture2D(uTex, vUv).a * vA * 0.3 * (1.0 - uRain * 0.6);
+          if (a < 0.004) discard;
+          vec3 dir = normalize(vW - cameraPosition);
+          float toward = pow(max(dot(dir, uMoonDir), 0.0), 3.0);
+          vec3 c = mix(uFogA * 1.35, uFogB * 0.9, 0.25 + toward * 0.45);
+          gl_FragColor = vec4(c, a);
+        }`
+    });
+    function buildMist(seed) {
+      const rng = mulberry32(seed ^ 0x3157), banks = [];
+      for (let k = 0; k < 6000 && banks.length < 150; k++) {
+        const x = 16 + rng() * (SIZE - 32), z = 16 + rng() * (SIZE - 32);
+        if (heightAt(swamp, x, z) > -0.3) continue;
+        if (banks.some(b => (b[0] - x) ** 2 + (b[1] - z) ** 2 < 100)) continue;
+        banks.push([x, z, 9 + rng() * 14, rng()]);
+      }
+      const base = new THREE.PlaneGeometry(1, 1);
+      const g = new THREE.InstancedBufferGeometry();
+      g.index = base.index;
+      g.setAttribute("position", base.attributes.position);
+      g.setAttribute("uv", base.attributes.uv);
+      g.setAttribute("aMist", new THREE.InstancedBufferAttribute(new Float32Array(banks.flat()), 4));
+      g.instanceCount = banks.length;
+      const m = new THREE.Mesh(g, mistMat);
+      m.frustumCulled = false;
+      m.renderOrder = 5;
+      return m;
+    }
+
+    // Fungi: little caps in clusters, glowing cyan and here and there violet.
+    // At night they are lights, not shapes, so each is a single point.
+    const fungusMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: { uScale: { value: 600 }, uTime: SHARED.uTime },
+      vertexShader: /* glsl */`
+        uniform float uScale, uTime;
+        attribute vec4 aF;   // size, rate, phase, violet
+        varying vec3 vC; varying float vA;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vC = aF.w > 0.5 ? vec3(0.7, 0.45, 1.0) : vec3(0.35, 1.0, 0.82);
+          vA = (0.72 + 0.28 * sin(uTime * (0.4 + aF.y) + aF.z * 30.0)) * (1.0 - smoothstep(35.0, 95.0, -mv.z));
+          gl_PointSize = aF.x * 0.2 * uScale / max(-mv.z, 0.3);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */`
+        varying vec3 vC; varying float vA;
+        void main() {
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          float core = 1.0 - smoothstep(0.12, 0.38, d), halo = exp(-d * d * 3.5) * 0.3;
+          gl_FragColor = vec4(vC * (core * 3.2 + halo) * vA, 1.0);
+        }`
+    });
+    // Logs, stumps and stones on the islands and in the shallows.
+    function logGeometry(rng) {
+      const pts = [], len = 3 + rng() * 4, r = 0.22 + rng() * 0.2;
+      for (let k = 0; k <= 5; k++) pts.push(V3((k / 5 - 0.5) * len, Math.sin(k * 1.3) * 0.04, (rng() - 0.5) * 0.25));
+      const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, r, 9, false);
+      const n = g.attributes.position.count, c = new Float32Array(n * 3).fill(0.85);
+      g.setAttribute("color", new THREE.BufferAttribute(c, 3));
+      return { g, len, r };
+    }
+    const rockMat = swampify(new THREE.MeshStandardMaterial({ color: 0x55534c, roughness: 0.92, flatShading: true }), {
+      key: "rock",
+      fMap: /* glsl */`
+        {
+          float n = texture2D(uNoise, vSWorld.xz * 0.7 + vSWorld.y * 0.3).r;
+          vec3 c = mix(vec3(0.16, 0.155, 0.14), vec3(0.3, 0.29, 0.27), n);
+          c = mix(c, vec3(0.05, 0.08, 0.035), (1.0 - smoothstep(0.0, 0.5, vSWorld.y + n * 0.4)) * 0.8);
+          diffuseColor.rgb = c;
+        }
+      `
+    });
+    function buildDressing(seed) {
+      const rng = mulberry32(seed ^ 0xd2e5);
+      const group = new THREE.Group();
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = V3(), e = new THREE.Euler();
+      const fungi = [];
+      // Fungi round the feet of the trees, on the shaded side.
+      for (const t of trees.pts) {
+        if (rng() > 0.8) continue;
+        const clusters = 2 + Math.floor(rng() * 3);
+        for (let c = 0; c < clusters; c++) {
+          const a = rng() * Math.PI * 2, rr = 0.55 * t.s + rng() * 0.25, y = t.y + 0.15 + rng() * 0.9;
+          const n = 3 + Math.floor(rng() * 5), violet = rng() < 0.18;
+          for (let k = 0; k < n; k++) {
+            const aa = a + (rng() - 0.5) * 0.5, yy = y + (rng() - 0.5) * 0.35;
+            if (yy < WATER_Y + 0.05) continue;
+            fungi.push({ x: t.x + Math.cos(aa) * (rr + 0.03), y: yy, z: t.z + Math.sin(aa) * (rr + 0.03), s: 0.6 + rng() * 0.9, ry: aa, tilt: 0.9, violet });
+          }
+        }
+      }
+      // Fallen logs: across the islands and half sunk at their edges.
+      const logs = [], logG = [logGeometry(mulberry32(seed + 71)), logGeometry(mulberry32(seed + 72)), logGeometry(mulberry32(seed + 73))];
+      for (let k = 0; k < 8000 && logs.length < 90; k++) {
+        const x = 14 + rng() * (SIZE - 28), z = 14 + rng() * (SIZE - 28), y = heightAt(swamp, x, z);
+        if (y < -0.7 || y > 1.2 || siteBlocked(x, z, 3.5)) continue;
+        if (logs.some(l => (l.x - x) ** 2 + (l.z - z) ** 2 < 64)) continue;
+        const v = logs.length % 3, ry = rng() * Math.PI;
+        logs.push({ x, z, y: Math.max(y, -0.35) + logG[v].r * 0.35, ry, v });
+        // Fungi along the top of the log.
+        if (rng() < 0.6) {
+          const n = 4 + Math.floor(rng() * 8), violet = rng() < 0.2;
+          for (let f = 0; f < n; f++) {
+            const u = (rng() - 0.5) * logG[v].len * 0.8;
+            const side = rng() < 0.5 ? 1 : -1;
+            const fx = x + Math.cos(ry) * u - Math.sin(ry) * side * logG[v].r * 0.6, fz = z - Math.sin(ry) * u - Math.cos(ry) * side * logG[v].r * 0.6;
+            fungi.push({ x: fx, y: Math.max(y, -0.35) + logG[v].r * 1.15, z: fz, s: 0.5 + rng() * 0.8, ry: rng() * 6, tilt: 0, violet });
+          }
+        }
+      }
+      for (let v = 0; v < 3; v++) {
+        const mine = logs.filter(l => l.v === v);
+        if (!mine.length) continue;
+        const im = new THREE.InstancedMesh(logG[v].g, barkMat, mine.length);
+        mine.forEach((l, k) => { e.set((rng() - 0.5) * 0.12, l.ry, (rng() - 0.5) * 0.1); q.setFromEuler(e); m4.compose(V3(l.x, l.y, l.z), q, s.set(1, 1, 1)); im.setMatrixAt(k, m4); });
+        im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = true; im.receiveShadow = true;
+        group.add(im);
+      }
+      // Stumps: short, flared, broken off; and stones.
+      const stumpG = new THREE.CylinderGeometry(0.32, 0.6, 1, 10, 2, false);
+      { const n = stumpG.attributes.position.count, c = new Float32Array(n * 3).fill(0.8); stumpG.setAttribute("color", new THREE.BufferAttribute(c, 3)); stumpG.translate(0, 0.5, 0); }
+      const stumps = [];
+      for (let k = 0; k < 6000 && stumps.length < 70; k++) {
+        const x = 14 + rng() * (SIZE - 28), z = 14 + rng() * (SIZE - 28), y = heightAt(swamp, x, z);
+        if (y < -1.1 || y > 1.3 || siteBlocked(x, z, 2.5)) continue;
+        stumps.push({ x, z, y: y - 0.2, h: 0.5 + rng() * 1.4, s: 0.6 + rng() * 0.6 });
+        if (rng() < 0.55) { const n = 3 + Math.floor(rng() * 5), a0 = rng() * 6; for (let f = 0; f < n; f++) { const a = a0 + f * 0.5; fungi.push({ x: x + Math.cos(a) * 0.36 * (0.6 + rng() * 0.6) * (0.6 + rng() * 0.6), y: Math.max(y, 0) + 0.25 + rng() * 0.5, z: z + Math.sin(a) * 0.36 * (0.6 + rng() * 0.6), s: 0.5 + rng() * 0.7, ry: a, tilt: 0.9, violet: rng() < 0.15 }); } }
+      }
+      {
+        const im = new THREE.InstancedMesh(stumpG, barkMat, stumps.length);
+        stumps.forEach((t, k) => { q.setFromAxisAngle(V3(0, 1, 0), rng() * 6); m4.compose(V3(t.x, t.y, t.z), q, s.set(t.s, t.h, t.s)); im.setMatrixAt(k, m4); });
+        im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = true; im.receiveShadow = true;
+        group.add(im);
+        for (const t of stumps) if (Math.max(heightAt(swamp, t.x, t.z), WATER_Y) + 0.4 < t.y + t.h) BUILD.colliders.push({ x: t.x, z: t.z, hx: 0.4 * t.s, hz: 0.4 * t.s, rot: 0, y0: t.y - 1, y1: t.y + t.h, floor: false, round: true });
+      }
+      const rocks = [];
+      for (let k = 0; k < 6000 && rocks.length < 160; k++) {
+        const x = 14 + rng() * (SIZE - 28), z = 14 + rng() * (SIZE - 28), y = heightAt(swamp, x, z);
+        if (y < -0.5 || y > 1.5 || insideBuilt(x, z, 0.8)) continue;
+        rocks.push({ x, z, y: y - 0.05, s: 0.15 + rng() * rng() * 0.6 });
+      }
+      {
+        const rg = new THREE.IcosahedronGeometry(1, 1), p = rg.attributes.position, rn = mulberry32(seed + 77);
+        for (let i = 0; i < p.count; i++) { const k = 0.75 + rn() * 0.4; p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.6, p.getZ(i) * k); }
+        rg.computeVertexNormals();
+        const im = new THREE.InstancedMesh(rg, rockMat, rocks.length);
+        rocks.forEach((r, k) => { e.set(rn() * 0.4, rn() * 6, rn() * 0.4); q.setFromEuler(e); m4.compose(V3(r.x, r.y, r.z), q, s.set(r.s * (1 + rn() * 0.6), r.s, r.s)); im.setMatrixAt(k, m4); });
+        im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.receiveShadow = true; im.castShadow = true;
+        group.add(im);
+      }
+      // All the fungi as one cloud of points.
+      let glow = null;
+      {
+        const pos = new Float32Array(fungi.length * 3), aF = new Float32Array(fungi.length * 4);
+        fungi.forEach((f, k) => {
+          pos[k * 3] = f.x; pos[k * 3 + 1] = f.y + 0.03; pos[k * 3 + 2] = f.z;
+          aF[k * 4] = f.s; aF[k * 4 + 1] = rng(); aF[k * 4 + 2] = rng(); aF[k * 4 + 3] = f.violet ? 1 : 0;
+        });
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        g.setAttribute("aF", new THREE.BufferAttribute(aF, 4));
+        glow = new THREE.Points(g, fungusMat);
+        glow.frustumCulled = false; glow.renderOrder = 6;
+        group.add(glow);
+      }
+      return { group, glow, fungi: fungi.length, logs: logs.length, stumps: stumps.length, rocks: rocks.length };
+    }
+
+    // Moths round every lantern, and a soft halo where the light meets the mist.
+    const mothMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: { uTime: SHARED.uTime, uScale: { value: 600 } },
+      vertexShader: /* glsl */`
+        uniform float uTime, uScale;
+        attribute vec4 aSeed;   // phase, radius, speed, kind (0 moth, 1 halo)
+        varying float vK; varying float vA;
+        void main() {
+          vec3 p = position;
+          vK = aSeed.w;
+          if (aSeed.w < 0.5) {
+            float t = uTime * aSeed.z + aSeed.x * 6.28;
+            p += vec3(cos(t) * aSeed.y, sin(t * 1.7) * 0.25 + sin(t * 5.3) * 0.05, sin(t * 1.3) * aSeed.y);
+            vA = 0.6 + 0.4 * sin(t * 17.0);
+          } else vA = 1.0;
+          vec4 mv = viewMatrix * vec4(p, 1.0);
+          float size = aSeed.w < 0.5 ? 0.05 : 1.7;
+          gl_PointSize = size * uScale / max(-mv.z, 0.3);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */`
+        varying float vK; varying float vA;
+        void main() {
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          if (vK < 0.5) { float a = (1.0 - smoothstep(0.3, 1.0, d)) * vA; gl_FragColor = vec4(vec3(1.0, 0.85, 0.6) * a * 2.6, 1.0); }
+          else { float a = exp(-d * d * 4.0) * (1.0 - smoothstep(0.7, 1.0, d)); gl_FragColor = vec4(vec3(1.0, 0.6, 0.26) * a * 0.12, 1.0); }
+        }`
+    });
+    function buildMoths() {
+      const pos = [], seeds = [];
+      for (const L of BUILD.lamps) {
+        if (L.gen) continue;
+        pos.push(L.x, L.y, L.z); seeds.push(0, 0, 0, 1);
+        const n = 4 + Math.floor(Math.random() * 4);
+        for (let k = 0; k < n; k++) { pos.push(L.x, L.y + 0.1, L.z); seeds.push(Math.random(), 0.25 + Math.random() * 0.45, 1.5 + Math.random() * 2.5, 0); }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute("aSeed", new THREE.Float32BufferAttribute(seeds, 4));
+      const pts = new THREE.Points(g, mothMat);
+      pts.frustumCulled = false; pts.renderOrder = 6;
+      return pts;
+    }
+
+    /* ================================================================ *
+     * THE OTHER WAY OUT
+     * Fuel, Eli's key and the boat in the boathouse. The outboard is the
+     * loudest thing in the swamp, so leaving is a race down the old canal.
+     * ================================================================ */
+    const boat = { g: null, home: null };
+    function buildBoat() {
+      const g = new THREE.Group();
+      const wood = new THREE.MeshLambertMaterial({ color: 0x3d2f22, emissive: 0x070504 });
+      const dark = new THREE.MeshLambertMaterial({ color: 0x24292b, emissive: 0x050606 });
+      const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+      add(new THREE.BoxGeometry(1.4, 0.1, 4.0), wood, 0, -0.02, 0);
+      for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.08, 0.42, 4.0), wood, s * 0.72, 0.18, 0);
+      add(new THREE.BoxGeometry(1.4, 0.42, 0.08), wood, 0, 0.18, -2.0);
+      add(new THREE.BoxGeometry(1.4, 0.42, 0.08), wood, 0, 0.18, 2.0);
+      add(new THREE.BoxGeometry(1.36, 0.05, 0.3), wood, 0, 0.24, 0.6);
+      add(new THREE.BoxGeometry(0.32, 0.5, 0.36), dark, 0, 0.45, 2.25);
+      add(new THREE.BoxGeometry(0.1, 0.5, 0.12), dark, 0, 0.08, 2.3);
+      add(new THREE.BoxGeometry(0.05, 0.05, 0.6), dark, 0, 0.62, 1.9);
+      const a = (BUILD.anchors.boat || [{ x: POI.boathouse.x, y: 0.1, z: POI.boathouse.z + 1 }])[0];
+      g.position.set(a.x, WATER_Y + 0.02, a.z);
+      scene.add(g);
+      boat.g = g; boat.home = { x: a.x, z: a.z };
+    }
+    // Out of the boathouse's water door, west along its channel into the
+    // lagoon, then south down the old canal and away.
+    const ESCAPE_PTS = [[0, 0], [0, 7], [-6, 10], [-14, 5], [-20, 4], [-36, 1], [-44, 4], [-52, 13], [-55, 23], [-56, 37], [-56, 46]];
+    function escapePath() {
+      const h = boat.home, pts = ESCAPE_PTS.map(([dx, dz]) => V3(h.x + dx, WATER_Y, h.z + dz));
+      const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
+      const len = curve.getLength();
+      return { curve, len };
+    }
+    let escapeRun = null;
+    const _ep = V3(), _et = V3();
+    function startEscape() {
+      if (escapeRun || !state.fuel || !state.key || state.screen !== "play") return;
+      const { curve, len } = escapePath();
+      escapeRun = { curve, len, s: 0, v: 0, t: 0, noiseT: 0, src: { x: boat.g.position.x, z: boat.g.position.z } };
+      Object.assign(P, { vx: 0, vy: 0, vz: 0, ladder: null, vault: null, ground: true, medium: "swim" });
+      state.aiming = false;
+      toast("The motor catches", "Everything in the water heard that. Go.", 4);
+      haptic("heavy");
+      // It hears the motor from anywhere, and it comes.
+      beastHear(boat.g.position.x, boat.g.position.z, 3, "motor", escapeRun.src);
+      updateHud();
+    }
+    function stepEscape(dt) {
+      const e = escapeRun;
+      e.t += dt;
+      P.px = P.x; P.py = P.y; P.pz = P.z;
+      if (!P.alive) { e.v = Math.max(0, e.v - dt * 4); if (e.v <= 0) sfx.stopMotor(); }
+      else e.v = Math.min(7.6, e.v + dt * (e.t < 1.2 ? 1.2 : 3.4));
+      e.s = Math.min(e.len, e.s + e.v * dt);
+      const u = e.s / e.len;
+      e.curve.getPointAt(u, _ep);
+      e.curve.getTangentAt(u, _et);
+      const heading = Math.atan2(_et.x, _et.z);
+      const bob = Math.sin(e.t * 9) * 0.02 * Math.min(1, e.v / 3);
+      boat.g.position.set(_ep.x, WATER_Y + 0.02 + bob, _ep.z);
+      boat.g.rotation.set(-0.05 * Math.min(1, e.v / 5), heading + Math.PI, Math.sin(e.t * 2.3) * 0.03);
+      e.src.x = _ep.x; e.src.z = _ep.z;
+      // You sit at the tiller, low over the water.
+      if (P.alive) { P.x = _ep.x - _et.x * 1.55; P.z = _ep.z - _et.z * 1.55; P.y = WATER_Y - 0.5; }
+      P.medium = "swim"; P.ground = true; P.moving = e.v;
+      e.noiseT -= dt;
+      if (e.noiseT <= 0 && P.alive) { e.noiseT = 0.4; beastHear(_ep.x, _ep.z, 3, "motor", e.src); addRipple(_ep.x - _et.x * 2.2, _ep.z - _et.z * 2.2, 0.03 + e.v * 0.005, 1); }
+      if (Math.random() < e.v * dt * 3) spawnParticle(_ep.x + (Math.random() - 0.5) * 1.2, 0.08, _ep.z + (Math.random() - 0.5) * 1.2, -_et.x * 1.5 + (Math.random() - 0.5) * 2, 0.8 + Math.random() * 1.5, -_et.z * 1.5 + (Math.random() - 0.5) * 2, 0.7, 0.05, [0.45, 0.7, 0.75]);
+      if (P.alive) sfx.motor(_ep.x, _ep.z, Math.min(1, e.v / 7.6));
+      if (P.alive && e.s >= e.len - 0.5) {
+        // Out under the dead trees, and the swamp is behind you.
+        escapeRun = null;
+        sfx.stopMotor();
+        state.escaped = true;
+        blackTarget = 0.85;
+        haptic("success");
+        after(1.6, () => finishRun(false));
+      }
+    }
+    function resetBoat() {
+      escapeRun = null;
+      sfx.stopMotor();
+      boat.g.position.set(boat.home.x, WATER_Y + 0.02, boat.home.z);
+      boat.g.rotation.set(0, 0, 0);
+    }
 
     /* ================================================================ *
      * STORAGE: a convenience, never a dependency
@@ -4363,7 +5214,7 @@ ${best}
     const SEED = 4;
     const lampGlowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.62, 0.25).multiplyScalar(14) });
     const windowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.55, 0.2).multiplyScalar(2.4), side: THREE.DoubleSide });
-    let trees = null, plants = null, cover = null;
+    let trees = null, plants = null, cover = null, dressing = null;
     function buildLights() {
       const g = new THREE.Group(), cage = [], wins = [], glows = [];
       for (const L of BUILD.lamps) {
@@ -4401,20 +5252,30 @@ ${best}
       plants = buildPlants(swamp, SEED); scene.add(plants.group);
       cover = buildCover(swamp, SEED); scene.add(cover.group);
       world.fireflies = buildFireflies(swamp, SEED); scene.add(world.fireflies);
+      dressing = buildDressing(SEED); scene.add(dressing.group);
+      indexColliders();
+      world.mist = buildMist(SEED); scene.add(world.mist);
       scene.add(finishBuild());
       scene.add(buildLights());
+      world.moths = buildMoths(); scene.add(world.moths);
       // Small things stay out of the mirror: it costs a second drawing.
-      hideInReflection.push(plants.group, cover.grassGroup, itemGroup, rain.pts, arc.pts, arc.ring);
+      hideInReflection.push(plants.group, cover.grassGroup, itemGroup, rain.pts, arc.pts, arc.ring, world.mist, world.moths, dressing.glow);
       buildNav();
       buildBeast();
+      buildBoat();
       beast.lureLight = new THREE.PointLight(0x7fffe0, 0, 7, 2);
       scene.add(beast.lureLight);
       buildMapBase();
     }
 
-    /* ---- the lamps: a few real lights, moved to the nearest ---- */
+    /* ---- the lamps: a few real lights, eased between the nearest ---- */
+    // Each real light is lent to one lantern and fades up there. When
+    // another lantern becomes clearly nearer, the light fades out first and
+    // only then moves: nothing jumps, so nothing flashes as you walk.
+    const slots = lampLights.map(light => ({ light, lamp: null, level: 0 }));
     const _lit = [], _hp = V3();
-    function updateLamps() {
+    const lampFlicker = (L, t) => 0.93 + 0.04 * Math.sin(t * 2.1 + L.flick) + 0.03 * Math.sin(t * 5.3 + L.flick * 1.7);
+    function updateLamps(dt) {
       const cam = camera.position, t = SHARED.uTime.value;
       _lit.length = 0;
       for (const L of BUILD.lamps) {
@@ -4422,21 +5283,36 @@ ${best}
         if (L.mesh) L.mesh.visible = on;
         if (!on) continue;
         L.d = (L.x - cam.x) ** 2 + (L.y - cam.y) ** 2 + (L.z - cam.z) ** 2;
+        L.held = false;
         _lit.push(L);
       }
-      _lit.sort((a, b) => a.d - b.d);
-      for (let i = 0; i < LAMP_POOL; i++) {
-        const L = _lit[i], light = lampLights[i];
-        if (!L) { light.intensity = 0; continue; }
-        const f = 0.85 + 0.1 * Math.sin(t * 9 + L.flick) + 0.05 * Math.sin(t * 23 + L.flick * 2);
-        light.position.set(L.x, L.y - 0.05, L.z);
-        light.intensity = 14 * L.k * f;
-        light.distance = 18 + L.k * 5;
+      for (const s of slots) if (s.lamp) s.lamp.held = true;
+      // A lantern that has a light keeps it until another is a good deal nearer.
+      _lit.sort((a, b) => a.d * (a.held ? 0.55 : 1) - b.d * (b.held ? 0.55 : 1));
+      const want = _lit.slice(0, slots.length);
+      for (const s of slots) {
+        const keep = s.lamp && want.includes(s.lamp) && (!s.lamp.gen || state.t < s.lamp.until);
+        s.level = keep ? Math.min(1, s.level + dt * 2.2) : Math.max(0, s.level - dt * 3);
+        if (!keep && s.level <= 0) s.lamp = null;
       }
-      // Glints on the water: your own lantern, its lure, the nearest lamps.
+      for (const L of want) {
+        if (slots.some(s => s.lamp === L)) continue;
+        const free = slots.find(s => !s.lamp);
+        if (free) { free.lamp = L; free.level = 0; }
+      }
+      for (const s of slots) {
+        const L = s.lamp;
+        if (!L) { s.light.intensity = 0; continue; }
+        const e = s.level * s.level * (3 - 2 * s.level);
+        s.light.position.set(L.x, L.y - 0.05, L.z);
+        s.light.intensity = 14 * L.k * lampFlicker(L, t) * e;
+        s.light.distance = 18 + L.k * 5;
+      }
+      // Glints on the water: your own lantern, its lure, the nearest lamps,
+      // fading with distance so that none of them pops in or out.
       let gi = 0;
       const carrying = state.screen === "play" && P.alive;
-      handLight.intensity = carrying ? 2.6 * (0.92 + 0.08 * Math.sin(t * 11)) : state.screen === "won" ? 1.5 : 0;
+      handLight.intensity = carrying ? 2.6 * (0.95 + 0.05 * Math.sin(t * 3.1)) : state.screen === "won" ? 1.5 : 0;
       lantern.visible = carrying;
       if (carrying && P.eyeY > WATER_Y + 1.2) {
         handLight.getWorldPosition(_hp);
@@ -4446,9 +5322,10 @@ ${best}
         glints.p[gi].set(beast.lurePos.x, beast.lurePos.y, beast.lurePos.z, 0.5);
         glints.c[gi].setRGB(0.4, 1.0, 0.85).multiplyScalar(0.3 + beast.glow.value * 0.5); gi++;
       }
+      _lit.sort((a, b) => a.d - b.d);
       for (let i = 0; gi < MAX_GLINT && i < _lit.length; i++, gi++) {
-        const L = _lit[i];
-        glints.p[gi].set(L.x, L.y, L.z, 1);
+        const L = _lit[i], fade = clamp(1.4 - Math.sqrt(L.d) / 45, 0, 1);
+        glints.p[gi].set(L.x, L.y, L.z, fade);
         glints.c[gi].copy(LOOK.lantern).multiplyScalar(2.2 * Math.min(L.k, 1.5));
       }
       for (; gi < MAX_GLINT; gi++) glints.p[gi].w = 0;
@@ -4541,8 +5418,12 @@ ${best}
       beats.length = 0;
       Object.assign(state, {
         screen: "play", runStart: state.t, coils: 0, parts: 0, rockets: 0, rocketsFound: 0, ducks: DUCKS_START, crackers: 0, boots: false, bazooka: false,
-        hits: 0, won: false, submitted: false, deathCause: "", seen: { landing: true }, hints: {}, aiming: false, bellT: -99, genT: -99, notes: 0, towerSeen: false
+        hits: 0, won: false, submitted: false, deathCause: "", seen: { landing: true }, hints: {}, aiming: false, bellT: -99, genT: -99, notes: 0, towerSeen: false,
+        pages: {}, fuel: false, key: false, escaped: false, deaths: 0
       });
+      shownChapter = -1;
+      toastQ.length = 0; toastT = 0;
+      hidePage();
       explored.fill(0);
       for (const d of ducks) scene.remove(d.mesh);
       ducks.length = 0;
@@ -4550,7 +5431,8 @@ ${best}
       rockets.length = 0;
       pBuf.live.length = 0;
       for (const L of BUILD.lamps) L.until = 0;
-      Object.assign(weather, { rain: 0, target: 0, next: 140 + Math.random() * 80, bolt: 8, flash: 0 });
+      Object.assign(weather, { rain: 0, target: 0, next: 140 + Math.random() * 80, bolt: 8, flash: 0, boltT: -99, warned: false });
+      resetBoat();
       placeItems();
       spawnPlayer();
       placeBeast(P.x, P.z, 75, 150);
@@ -4560,16 +5442,38 @@ ${best}
       hideModal();
       updateHud();
       exploreTick();
-      toast("The Landing", "Find five spring coils. Keep out of the water when you can.", 5);
-      after(6, () => { if (state.screen === "play" && !state.hints.move) { state.hints.move = true; toast("Wade slowly", "Push the stick only a little and your steps barely carry"); } });
+      chapterCard(0, "Something lives in the water. It cannot see you. It only hears.");
+      shownChapter = 0;
       if (track) track.reset();
       sfx.unlock();
       ctx.platform.start({ seed: SEED });
       if (ctx.platform.emit) ctx.platform.emit("run_start", { seed: SEED });
     }
+    // Waking at the camp: everything found is kept; the swamp keeps a little score.
+    function wakeAtCamp() {
+      beats.length = 0;
+      const bench = BUILD.interact.find(i => i.kind === "bench");
+      state.deaths++;
+      Object.assign(state, { screen: "play", submitted: false, deathCause: "", aiming: false });
+      resetBoat();
+      spawnPlayer();
+      const sx = bench.x + 1.5, sz = bench.z + 1.5;
+      const g = groundAt(sx, sz, 3).g;
+      Object.assign(P, { x: sx, y: g, z: sz, px: sx, py: g, pz: sz, eyeY: g + EYE });
+      for (const d of ducks) scene.remove(d.mesh);
+      ducks.length = 0;
+      placeBeast(P.x, P.z, 90, 160);
+      beast.open.value = 0;
+      blackA = 0.9; blackTarget = 0;
+      hideModal();
+      updateHud();
+      toast("You wake at the camp", "Soaked, shaking, and missing an hour. It is still out there.", 5);
+      ctx.platform.start({ seed: SEED });
+    }
     async function finishRun(won) {
       if (state.screen !== "play") return;
-      state.screen = won ? "won" : "dead";
+      const out = won || state.escaped;
+      state.screen = out ? "won" : "dead";
       const score = progressScore();
       // Read the clock once: the submits below wait on the network.
       const ms = Math.round((state.t - state.runStart) * 1000);
@@ -4578,8 +5482,8 @@ ${best}
       if (won && (!state.bestTime || secs < state.bestTime)) state.bestTime = secs;
       save();
       showModal(resultHtml(won));
-      if (won) sfx.win();
-      ctx.platform[won ? "complete" : "fail"]({ score, rank: rankOf(score), seconds: secs, hits: state.hits });
+      if (out) sfx.win();
+      ctx.platform[out ? "complete" : "fail"]({ score, rank: rankOf(score), seconds: secs, hits: state.hits, ending: won ? "slain" : state.escaped ? "escaped" : "taken" });
       if (!state.submitted) {
         state.submitted = true;
         if (track) {
@@ -4590,7 +5494,7 @@ ${best}
           try { await ctx.memory.record("fastest_slay").submit(ms, { label: fmtTime(secs) }); } catch (e) { /* no matter */ }
         }
         if (ctx.pulse && ctx.pulse.complete) {
-          ctx.pulse.complete({ score, result: won ? "won" : "lost", text: won ? `Killed the Listener in ${fmtTime(secs)} in Still Water` : `Reached ${rankOf(score)} in Still Water` });
+          ctx.pulse.complete({ score, result: out ? "won" : "lost", text: won ? `Killed the Listener in ${fmtTime(secs)} in Still Water` : state.escaped ? `Escaped the swamp by boat in ${fmtTime(secs)} in Still Water` : `Reached ${rankOf(score)} in Still Water` });
         }
       }
     }
@@ -4619,7 +5523,8 @@ ${best}
       beats.length = 0;
       setDawn(0);
       blackA = 0; blackTarget = 0;
-      Object.assign(weather, { rain: 0, target: 0, flash: 0 });
+      resetBoat();
+      Object.assign(weather, { rain: 0, target: 0, flash: 0, boltT: -99 });
       placeBeast(menuShot.fx, menuShot.fz, 0, 14);
       beast.open.value = 0;
       showModal(menuHtml());
@@ -4636,8 +5541,9 @@ ${best}
       state.t += dt;
       runBeats();
       if (state.screen === "play" || state.screen === "dead") {
-        if (P.alive) stepPlayer(dt, readMove());
-        else { P.px = P.x; P.py = P.y; P.pz = P.z; P.deathT += dt; }
+        if (escapeRun) stepEscape(dt);
+        if (!P.alive) { if (!escapeRun) { P.px = P.x; P.py = P.y; P.pz = P.z; } P.deathT += dt; }
+        else if (!escapeRun) stepPlayer(dt, readMove());
       }
       stepBeast(dt);
       stepItems(dt);
@@ -4648,6 +5554,7 @@ ${best}
     }
     function update(dtMs) {
       const dt = clamp(Number.isFinite(dtMs) ? dtMs : 16.7, 0, 100) / 1000;
+      frameDt = dt;
       if (state.screen === "play" && P.alive) {
         const sens = 0.0062 * state.look;
         P.tYaw -= input.lookDX * sens;
@@ -4656,14 +5563,17 @@ ${best}
         if (input.turnR) P.tYaw -= 2.4 * dt;
       }
       input.lookDX = 0; input.lookDY = 0;
-      acc += dt;
+      // The map and the journal stop the night while you read them.
+      const paused = !mapView.hidden || !sheetEl.hidden;
+      if (!paused) acc += dt;
       let n = 0;
       while (acc >= STEP && n < 6) { simStep(STEP); acc -= STEP; n++; }
       if (n === 6) acc = 0;
+      if (readerT > 0) { readerT -= dt; if (readerT <= 0) hidePage(); }
       stepParticles(dt);
       sfx.update(dt);
       // The overlay.
-      if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove("on"); }
+      stepToasts(dt);
       if (earT > 0) { earT -= dt; if (earT <= 0) earText.classList.remove("on"); }
       const playing = state.screen === "play";
       const hunted = C.alive && (C.state === "hunt" || (C.act && C.act.kind === "lunge"));
@@ -4689,13 +5599,45 @@ ${best}
       mFinal.uniforms.uFear.value = fear;
       if (state.screen === "menu") placeMenuCamera();
       else placeCamera(acc / STEP, dt);
+      camera.updateMatrixWorld();
       updateArc();
+      if (playing) { updateGuide(); if (!paused) checkHints(dt); }
     }
 
+    // First times: each said once a run, when it first matters.
+    let gapT = 0, hintGate = 0;
+    function gapAhead() {
+      if (!P.ground || P.medium !== "dry" || !groundAt(P.x, P.z, P.y).floor) return false;
+      const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+      let water = false;
+      for (const r of [1.2, 2.2, 3.2, 4.4]) {
+        const g = groundAt(P.x + fx * r, P.z + fz * r, P.y);
+        if (!g.floor && g.g < WATER_Y - 0.15) water = true;
+        else if (water && g.floor) return true;
+      }
+      return false;
+    }
+    function checkHints(dt) {
+      if (!P.alive) return;
+      hintGate += dt;
+      if (hintGate < 0.25) return;
+      hintGate = 0;
+      const dC = Math.hypot(C.x - P.x, C.z - P.z), since = state.t - state.runStart;
+      if (P.ground && !P.vault && P.medium !== "dry") hint("water", "In the water", "Every step here carries to it. Push the stick only a little to wade slowly, or get back on land.");
+      if (C.alive && C.state === "investigate") hint("heard", "It heard something", "Stand still. It only knows roughly where the sound was.");
+      if (C.alive && C.state === "hunt") hint("hunt", "It is coming", "Out of the water: land, or somewhere high. Now.");
+      if (C.alive && C.state !== "hunt" && dC < 18 && since > 25) hint("near", "The frogs have stopped", "It is close. If you are in the water, do not move.");
+      if (state.boots) hint("boots", "Spring boots", "The gaps in the boardwalks are nothing now. Landing still thuds.");
+      if (state.bazooka) hint("bazooka", "Loaded", "From somewhere dry, throw a duck into deep water. When its head comes up, fire.", 7);
+      if (since > 50) hint("stones", "Stones", "Hold STONE and let go to throw. A plop somewhere else draws it away from you.");
+      if (!state.hints.gap && gapAhead()) hint("gap", "The planks are gone", state.boots ? "Run at it and jump." : "Spring boots would clear this. Without them, it is a swim.");
+    }
+
+    let frameDt = 1 / 60;
     function render() {
       if (TEST && TEST.noRender) return;
       SHARED.uTime.value = state.t + acc;
-      updateLamps();
+      updateLamps(frameDt);
       updateShadow();
       // Small things past their distance are not drawn at all.
       const cp = camera.position;
@@ -4703,10 +5645,11 @@ ${best}
         const s = c.mesh.boundingSphere;
         c.mesh.visible = !s || s.center.distanceTo(cp) - s.radius < c.far;
       }
-      hemi.intensity = lerp(NIGHT.hemiI, DAWN.hemiI, state.dawn * state.dawn * (3 - 2 * state.dawn)) + weather.flash * 5;
-      mFinal.uniforms.uExposure.value = LOOK.exposure * (1 + weather.flash * 0.6);
+      hemi.intensity = lerp(NIGHT.hemiI, DAWN.hemiI, state.dawn * state.dawn * (3 - 2 * state.dawn)) + weather.flash * 2.2;
+      mFinal.uniforms.uExposure.value = LOOK.exposure * (1 + weather.flash * 0.25);
       const sc = flyMat.uniforms.uScale.value;
-      pMat.uniforms.uScale.value = sc; arc.mat.uniforms.uScale.value = sc; rain.mat.uniforms.uScale.value = sc;
+      pMat.uniforms.uScale.value = sc; arc.mat.uniforms.uScale.value = sc; rain.mat.uniforms.uScale.value = sc; mothMat.uniforms.uScale.value = sc; fungusMat.uniforms.uScale.value = sc;
+      mistMat.uniforms.uRain.value = weather.rain;
       // Resolution follows the frame rate: give pixels back if the phone
       // cannot keep up, and take them back once it can.
       const now = performance.now();
@@ -4750,7 +5693,8 @@ ${best}
       TEST.api = {
         THREE, scene, camera, renderer, P, C, state, items, ducks, rockets, BUILD, POI, beast, world, input, stick, weather, gfx, LOOK, cullables,
         get trees() { return trees; }, get plants() { return plants; }, get cover() { return cover; }, get menuShot() { return menuShot; },
-        startRun, finishRun, gotoMenu, killPlayer, jump, throwLure, fire, useThing, take, stepPlayer, update, render, resize, updateHud, openMap, paintMap,
+        startRun, finishRun, gotoMenu, killPlayer, jump, throwLure, throwStone, fire, useThing, take, stepPlayer, update, render, resize, updateHud, openMap, paintMap,
+        wakeAtCamp, objective, openJournal, closeJournal, showPage, hidePage, PAGES, startEscape, get escapeRun() { return escapeRun; },
         heightAt: (x, z) => heightAt(swamp, x, z), groundAt, mediumAt, navOk, NN, NAV, swimmable, nearestNav, centreOfCell, beastHear, placeBeast, setMind, goTo,
         hurtBeast, explode, setDawn, spawnPlayer, faceToward, explored, ladderNear, nearInteract, exploreTick, drawFrame
       };
