@@ -197,44 +197,57 @@ game plays on exactly as it would have.
 
 ## The look
 
-Low-poly in two dimensions, after the original. The ground is folded paper:
-every tile top is four or five flat facets around a jittered centre, each a
-step lighter or darker by the way it faces, and the water is the same in two
-blues with a pale shelf along the shore and a drifting glint. The world is a
-raised slab — every land tile draws its two front faces in the tribe's earth
-colour before its top, so an island floats with visible sides and coasts show
-a cliff where the sea sits a few pixels lower. Everything that stands on a
-tile is a stack of boxes, cones and faceted blobs lit from the upper left — a
-lighter face on the left, a darker one on the right, the lightest on top.
-Facets are stroked in their own colour so no hairline shows between them.
+Low-poly in three dimensions, after the original. The ground is folded
+paper: every tile top is four or five flat facets around a jittered centre,
+each a step lighter or darker by the way it faces, and the water is the same
+in two blues with a pale shelf along the shore and a drifting glint. The
+world is a raised slab — every land tile draws its two front faces in the
+tribe's earth colour before its top, so an island floats with visible sides
+and coasts show a cliff where the sea sits a few pixels lower.
+
+Everything that stands on a tile is a real mesh: boxes, cones, pyramids,
+frustums, low-poly spheres and thin sheets in world units (a tile is one by
+one, z is up), projected onto the 2:1 grid, each face lit by its normal
+against one light from the upper left and front, culled when it faces away
+from the camera, and painted back to front. The lighting is the same model
+for every object, which is what makes a tree, a house and a figure read as
+one scene. Facets are stroked in their own colour so no hairline shows
+between them. An object is rendered once per zoom step into a sprite on a
+shared atlas page and stamped with `drawImage` after that, so a screen full
+of trees costs a few hundred image draws rather than thousands of polygons;
+the atlas keeps its zoom bucket for the length of a pinch so a gesture never
+rebuilds every sprite. A browser without `OffscreenCanvas` draws the faces
+directly.
 
 Each tribe has its own field, forest, trunk, rock, earth and house colours, a
-tree style (three-tier pines, snow-capped pines, palms with faceted fronds,
-bare trees, three-layer canopies, flat acacias) and a boxy beast (boar, deer,
-bear, camel, horned, humped), and the land near each capital uses that
-tribe's set, so a snowbound Hjold valley, a Tiwa atoll and an ash-grey Grimm
-waste are told apart at a glance. Mountains are a ridge of two or three peaks,
-each a fan of facets with a ragged snow cap, mist drifting at the foot and
-ore crystals once Climbing is known. Fruit is three faceted fruits with leaf
-crowns, crops are rows of stalks with diamond heads, fish are angular white
-shapes in pairs. Farms, mines, lumber huts, ports, windmills with turning
-blades, forges with smoke, sawmills with a spinning blade, domed customs
-houses, tiered temples that gain gold trim as they age, obelisks and broken
-columns mark what has been built or found. Cities pack box houses with
-pyramid roofs around a stone plaza, two more than the level, gain a hall with
-a tower at level four and a keep with a tall tower at level seven, a ring of
-stone blocks when walled, and a waving pennant on the capital.
+tree style (three-tier pines, snow-capped pines, palms with sheet fronds and
+coconuts, bare trees, three-ball canopies, flat acacias) and a boxy beast
+(boar, deer, bear, camel, horned, humped), and the land near each capital
+uses that tribe's set, so a snowbound Hjold valley, a Tiwa atoll and an
+ash-grey Grimm waste are told apart at a glance. Mountains are a height
+field over the tile with two or three peaks, every triangle its own facet,
+snow above the line, mist drifting at the foot and ore crystals once
+Climbing is known. Fruit is three faceted balls with leaf cones, crops are
+rows of small cones, fish are angular white shapes in pairs. Farms, mines,
+lumber huts, ports, windmills with turning blades, forges with smoke,
+sawmills with a spinning blade, domed customs houses, tiered temples that
+gain gold trim as they age, obelisks and broken columns mark what has been
+built or found. Cities pack box houses with pyramid roofs around a stone
+plaza, two more than the level, gain a hall with a spired tower at level four
+and a keep with a tall tower at level seven, a ring of stone blocks when
+walled, and a waving pennant on the capital.
 
 Territory borders are low walls along the edge: a dark base band with blocks
 of the tribe colour on top, the way the original draws them. Units are blocky
 figures — a box body under a box head with two eyes on the lit face, small
-boxes for arms, a belt — with gear per type: an iron helm and club, a hooded
-archer with a bow, a defender behind a tall shield, a swordsman with helmet
-and buckler, a catapult with its crew, a rider on a striped horse, a knight
-on an armoured horse with lance and plume, a mind bender in a tall hat with a
-glowing staff, a grey giant half again as big. Boats carry the figure on a
-hull with a striped sail in the tribe colour; ships get a second sail;
-battleships are steel with a stack and guns. Every unit shows its hit points
+boxes for arms and legs, a belt — with gear per type: an iron helm and club,
+a hooded archer with a bow of sheets, a defender behind a tall shield with
+the tribe's mark, a swordsman with helmet, crest and buckler, a catapult with
+its crew, a rider on a striped horse, a knight on an armoured horse with
+lance and plume, a mind bender in a tall hat with a glowing staff, a grey
+giant half again as big. Boats carry the figure on a hull with a striped sail
+in the tribe colour; ships get a second sail; battleships are steel with a
+stack and guns. Every unit shows its hit points
 as a small number at the shoulder, white when whole and amber then red as it
 is hurt. The chosen unit stands in a breathing cyan glow; attack targets get a
 bullseye of red rings, conversion targets a purple one.
@@ -340,15 +353,17 @@ Three rounds, all reported as "unsupported remote resources", all found with
   0–100, and that one at least says so.
 - Caught by `check.py` before it reached the validator: the cloud texture
   was first painted on a `document.createElement("canvas")`, which the
-  validator rejects as raw canvas creation. It is an `OffscreenCanvas` now,
-  with a tile-by-tile fallback if a browser has none.
+  validator rejects as raw canvas creation. It is an `OffscreenCanvas` now
+  (as are the sprite atlas pages), with a tile-by-tile fallback if a browser
+  has none; the validator's scan accepts `OffscreenCanvas`.
 
 ## Verified
 
-- `_skills/sekai/scripts/check.py` passes. The draft on Plethora is the
-  previous build (uploaded 2026-10-20); the cloud-sea build is not uploaded
-  yet because the agent token expired, so the validator has not yet seen
-  `OffscreenCanvas` either.
+- `_skills/sekai/scripts/check.py` passes, the validator's source scan
+  accepts `OffscreenCanvas`, `createPattern` and `drawImage` from an
+  offscreen page, and the draft on Plethora is this build (uploaded
+  2026-10-20 after a fresh pairing; the previous agent token had expired
+  after a day).
 - The engine plays itself in node: `node thirty-turns/sim.js` (four quick
   games), `sim.js full` (36 games across every map size and type, all four
   modes and difficulties) or `sim.js trace` (one game's expansion, turn by

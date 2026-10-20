@@ -2609,13 +2609,229 @@ window.plethoraBit = {
     }
 
     // ====================================================================== //
+    // 7a. Meshes: low-poly solids projected onto the 2:1 world               //
+    // ====================================================================== //
+    // World units: a tile is 1 by 1 and z is up; a unit of height is TZ
+    // screen pixels at zoom 1, which is what makes a cube look like a cube in
+    // this projection. Every face is lit by its normal against one light from
+    // the upper left and front, culled when it faces away from the camera, and
+    // painted back to front. An object is rendered once per zoom step into a
+    // sprite and stamped with drawImage after that, so a screen full of trees
+    // costs a few hundred image draws rather than thousands of polygons.
+    const TZ = 42;
+    const LIGHT_DIR = [0.228, 0.608, 0.76];
+    const VIEW_DIR = [0.631, 0.631, 0.451];
+    const ISO_X = TW / 2, ISO_Y = TH / 2;
+    const projPt = (p, z) => [(p[0] - p[1]) * ISO_X * z, (p[0] + p[1]) * ISO_Y * z - p[2] * TZ * z];
+    // shade() for mesh colours: the same darken or lighten, but back to a hex
+    // string so the lit faces can be shaded again.
+    function hexShade(hex, k) {
+      const n = parseInt(hex.slice(1), 16);
+      let r = (n >> 16) & 255, gg = (n >> 8) & 255, b = n & 255;
+      if (k <= 1) { r = Math.round(r * k); gg = Math.round(gg * k); b = Math.round(b * k); }
+      else { r = Math.round(r + (255 - r) * (k - 1)); gg = Math.round(gg + (255 - gg) * (k - 1)); b = Math.round(b + (255 - b) * (k - 1)); }
+      const h = (v) => (v < 16 ? "0" : "") + v.toString(16);
+      return "#" + h(r) + h(gg) + h(b);
+    }
+    function normalOf(pts) {
+      const a = pts[0], b = pts[1], c = pts[2];
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      return [nx / len, ny / len, nz / len];
+    }
+    // Brightness from the normal: a top face comes out a touch lighter than
+    // the base colour, the front-left face is the base, the front-right is
+    // shaded, and slopes land in between.
+    function litColor(col, n) {
+      const d = n[0] * LIGHT_DIR[0] + n[1] * LIGHT_DIR[1] + n[2] * LIGHT_DIR[2];
+      return shade(col, clamp(0.5 + 0.8 * Math.max(0, d), 0.46, 1.3));
+    }
+    function depthOf(pts) {
+      let d = 0;
+      for (const p of pts) d += p[0] * VIEW_DIR[0] + p[1] * VIEW_DIR[1] + p[2] * VIEW_DIR[2];
+      return d / pts.length;
+    }
+    // Draw faces into a context with the object's ground point at (ox, oy).
+    // A face is { p: [[x, y, z], ...], c: colour } with two options: flat
+    // (painted as is, never culled) and two (two-sided, lit from either side).
+    function drawFaces(pg, faces, ox, oy, z) {
+      const list = [];
+      for (const f of faces) {
+        let n = normalOf(f.p);
+        if (!f.flat) {
+          const facing = n[0] * VIEW_DIR[0] + n[1] * VIEW_DIR[1] + n[2] * VIEW_DIR[2];
+          if (facing <= 0.01) { if (!f.two) continue; n = [-n[0], -n[1], -n[2]]; }
+        }
+        list.push({ f, n, d: depthOf(f.p) + (f.bias || 0) });
+      }
+      list.sort((a, b) => a.d - b.d);
+      for (const it of list) {
+        const col = it.f.flat ? it.f.c : litColor(it.f.c, it.n);
+        pg.fillStyle = col; pg.strokeStyle = col; pg.lineWidth = it.f.flat ? 0.2 : 0.7; pg.lineJoin = "round";
+        pg.beginPath();
+        for (let i = 0; i < it.f.p.length; i++) {
+          const q = projPt(it.f.p[i], z);
+          if (i) pg.lineTo(ox + q[0], oy + q[1]); else pg.moveTo(ox + q[0], oy + q[1]);
+        }
+        pg.closePath(); pg.fill(); pg.stroke();
+      }
+    }
+
+    // ---- Builders. All take world units and return faces with outward
+    // windings; cx, cy is the footprint centre and z0 the base height.
+    function mBox(cx, cy, z0, w, d, h, c, opts) {
+      const x0 = cx - w / 2, x1 = cx + w / 2, y0 = cy - d / 2, y1 = cy + d / 2, z1 = z0 + h;
+      const o = opts || {};
+      const out = [
+        { p: [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], c: o.top || c },
+        { p: [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], c: o.right || c },
+        { p: [[x1, y1, z0], [x0, y1, z0], [x0, y1, z1], [x1, y1, z1]], c: o.front || c },
+        { p: [[x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1]], c },
+        { p: [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], c }
+      ];
+      if (o.bias) for (const f of out) f.bias = o.bias;
+      return out;
+    }
+    function mPyramid(cx, cy, z0, w, d, h, c, lean) {
+      const x0 = cx - w / 2, x1 = cx + w / 2, y0 = cy - d / 2, y1 = cy + d / 2;
+      const a = [cx + (lean ? lean[0] : 0), cy + (lean ? lean[1] : 0), z0 + h];
+      const b = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]];
+      const out = [];
+      for (let k = 0; k < 4; k++) out.push({ p: [b[k], b[(k + 1) % 4], a], c });
+      return out;
+    }
+    function mCone(cx, cy, z0, r, h, c, seg, ry) {
+      const n = seg || 7, a = [cx, cy, z0 + h];
+      const out = [];
+      for (let k = 0; k < n; k++) {
+        const t0 = (k / n) * TAU, t1 = ((k + 1) / n) * TAU;
+        out.push({ p: [[cx + r * Math.cos(t0), cy + (ry || r) * Math.sin(t0), z0], [cx + r * Math.cos(t1), cy + (ry || r) * Math.sin(t1), z0], a], c });
+      }
+      return out;
+    }
+    function mFrustum(cx, cy, z0, r0, r1, h, c, seg, topCol) {
+      const n = seg || 7, z1 = z0 + h;
+      const out = [], top = [];
+      for (let k = 0; k < n; k++) {
+        const t0 = (k / n) * TAU, t1 = ((k + 1) / n) * TAU;
+        const P0 = [cx + r0 * Math.cos(t0), cy + r0 * Math.sin(t0), z0], P1 = [cx + r0 * Math.cos(t1), cy + r0 * Math.sin(t1), z0];
+        const Q0 = [cx + r1 * Math.cos(t0), cy + r1 * Math.sin(t0), z1], Q1 = [cx + r1 * Math.cos(t1), cy + r1 * Math.sin(t1), z1];
+        out.push({ p: [P0, P1, Q1, Q0], c });
+        top.push(Q0);
+      }
+      if (r1 > 0.001) out.push({ p: top, c: topCol || c });
+      return out;
+    }
+    // A low-poly ball: rings of quads between a bottom and a top point.
+    function mSphere(cx, cy, cz, r, c, seg, rings) {
+      const n = seg || 6, m = rings || 3;
+      const pt = (i, j) => {
+        const lat = -Math.PI / 2 + (i / m) * Math.PI, lon = (j / n) * TAU;
+        return [cx + r * Math.cos(lat) * Math.cos(lon), cy + r * Math.cos(lat) * Math.sin(lon), cz + r * Math.sin(lat)];
+      };
+      const out = [];
+      for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) {
+        const a = pt(i, j), b = pt(i, j + 1), cc = pt(i + 1, j + 1), d = pt(i + 1, j);
+        if (i === 0) out.push({ p: [a, b, cc], c });
+        else if (i === m - 1) out.push({ p: [a, b, cc], c });
+        else out.push({ p: [a, b, cc, d], c });
+      }
+      return out;
+    }
+    // A thin two-sided sheet from a to b, w wide across the direction up.
+    function mSheet(a, b, w, c, upx, upy, upz) {
+      const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+      let ux = upx == null ? 0 : upx, uy = upy == null ? 0 : upy, uz = upz == null ? 1 : upz;
+      // perpendicular to the direction and the given up vector
+      let px = dy * uz - dz * uy, py = dz * ux - dx * uz, pz = dx * uy - dy * ux;
+      const len = Math.hypot(px, py, pz) || 1;
+      px = px / len * w / 2; py = py / len * w / 2; pz = pz / len * w / 2;
+      return [{ p: [[a[0] - px, a[1] - py, a[2] - pz], [b[0] - px, b[1] - py, b[2] - pz], [b[0] + px, b[1] + py, b[2] + pz], [a[0] + px, a[1] + py, a[2] + pz]], c, two: true }];
+    }
+    // A soft shadow on the ground: a flat dark octagon.
+    function mShadow(cx, cy, rx, ry, a) {
+      const pts = [];
+      for (let k = 0; k < 8; k++) { const t = (k / 8) * TAU; pts.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t), 0.002]); }
+      return [{ p: pts, c: "rgba(10,20,30," + (a == null ? 0.2 : a) + ")", flat: true, bias: -5 }];
+    }
+    const mAll = (...lists) => [].concat(...lists);
+    function mMove(faces, dx, dy, dz) {
+      for (const f of faces) f.p = f.p.map((p) => [p[0] + dx, p[1] + dy, p[2] + (dz || 0)]);
+      return faces;
+    }
+    function mScale(faces, s, sz) {
+      for (const f of faces) f.p = f.p.map((p) => [p[0] * s, p[1] * s, p[2] * (sz == null ? s : sz)]);
+      return faces;
+    }
+
+    // ---- Sprites: an object rendered once per zoom step and stamped after.
+    // Sprites share a few atlas pages (one texture each) so the stamps come
+    // from a handful of sources rather than hundreds of little canvases.
+    const ATLAS = 2048;
+    const spriteCache = new Map();
+    let atlasPages = [], spriteBucket = 0, spritesOk = true;
+    function spriteZoom(z) {
+      // keep the bucket while a gesture is live or the zoom is close, so a
+      // pinch never rebuilds every sprite on every frame
+      const far = !spriteBucket || Math.abs(z - spriteBucket) / spriteBucket > 0.18;
+      if (far && (!gesture || !spriteBucket)) { spriteBucket = Math.max(0.3, Math.round(z * 20) / 20); spriteCache.clear(); atlasPages = []; }
+      return spriteBucket;
+    }
+    function atlasAlloc(w, h) {
+      let page = atlasPages[atlasPages.length - 1];
+      if (page && page.x + w > ATLAS) { page.x = 0; page.y += page.rowH; page.rowH = 0; }
+      if (!page || page.y + h > ATLAS) {
+        if (atlasPages.length >= 6) { spriteCache.clear(); atlasPages = []; }
+        const c = new OffscreenCanvas(ATLAS, ATLAS);
+        page = { c, pg: c.getContext("2d"), x: 0, y: 0, rowH: 0 };
+        atlasPages.push(page);
+      }
+      const slot = { page, sx: page.x, sy: page.y };
+      page.x += w; page.rowH = Math.max(page.rowH, h);
+      return slot;
+    }
+    function makeSprite(faces, zq) {
+      const dpr = seaDpr();
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      for (const f of faces) for (const p of f.p) {
+        const q = projPt(p, zq);
+        if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1];
+      }
+      const pad = 3;
+      const w = Math.ceil(x1 - x0) + pad * 2, h = Math.ceil(y1 - y0) + pad * 2;
+      const pw = Math.min(ATLAS, Math.ceil(w * dpr)), ph = Math.min(ATLAS, Math.ceil(h * dpr));
+      const slot = atlasAlloc(pw, ph);
+      const pg = slot.page.pg;
+      pg.save();
+      pg.translate(slot.sx, slot.sy);
+      pg.scale(dpr, dpr);
+      drawFaces(pg, faces, pad - x0, pad - y0, zq);
+      pg.restore();
+      return { page: slot.page, sx: slot.sx, sy: slot.sy, pw, ph, ax: x0 - pad, ay: y0 - pad, w, h };
+    }
+    // Stamp the object whose faces build() returns, with its ground point at
+    // (x, y) on screen. Without OffscreenCanvas the faces are drawn directly.
+    function stamp(key, x, y, z, build) {
+      if (!spritesOk || typeof OffscreenCanvas !== "function") { drawFaces(g, build(), x, y, z); return; }
+      try {
+        const zq = spriteZoom(z);
+        let sp = spriteCache.get(key);
+        if (!sp) { sp = makeSprite(build(), zq); spriteCache.set(key, sp); }
+        const sc = z / zq;
+        g.drawImage(sp.page.c, sp.sx, sp.sy, sp.pw, sp.ph, x + sp.ax * sc, y + sp.ay * sc, sp.w * sc, sp.h * sc);
+      } catch (_) { spritesOk = false; drawFaces(g, build(), x, y, z); }
+    }
+
+    // ====================================================================== //
     // 7b. Art: everything that stands on a tile                              //
     // ====================================================================== //
-    // Low-poly in two dimensions. The ground is a few flat facets around a
-    // jittered centre, so it folds like paper; every solid thing is a stack
-    // of boxes and cones lit from the upper left — a lighter face on the
-    // left, a darker one on the right. All functions take the tile centre in
-    // screen pixels and the zoom z; nothing here looks at the game state.
+    // The ground is a few flat facets around a jittered centre, so it folds
+    // like paper; everything that stands on it is a low-poly solid built from
+    // the mesh builders above, lit by one light and stamped as a sprite. All
+    // functions take the tile centre in screen pixels and the zoom z; nothing
+    // here looks at the game state.
 
     const LIGHT = 1.16, DARK = 0.74;
     function poly(pts, color) {
@@ -2646,37 +2862,10 @@ window.plethoraBit = {
       g.strokeStyle = color; g.lineWidth = w; g.lineCap = cap || "round";
       g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
     }
-    // A cone with a lit left face and a shaded right face.
+    // A cone with a lit left face and a shaded right face (the far-out map).
     function cone(x, y, w, h, light, dark) {
       poly([[x, y - h], [x - w / 2, y], [x, y + w * 0.1]], light);
       poly([[x, y - h], [x, y + w * 0.1], [x + w / 2, y]], dark);
-    }
-    // An isometric box standing on the ground at (x, y): footprint w wide and
-    // d deep on screen, h tall. Left face lit, right face shaded, top lightest.
-    function box(x, y, w, d, h, col, tones) {
-      const t = tones || [1.0, 0.72, 1.18];
-      const W = [x - w / 2, y], N = [x, y - d / 2], E = [x + w / 2, y], S = [x, y + d / 2];
-      facet([W, S, [S[0], S[1] - h], [W[0], W[1] - h]], shade(col, t[0]));
-      facet([S, E, [E[0], E[1] - h], [S[0], S[1] - h]], shade(col, t[1]));
-      facet([[W[0], W[1] - h], [N[0], N[1] - h], [E[0], E[1] - h], [S[0], S[1] - h]], shade(col, t[2]));
-    }
-    // A pyramid roof on top of a box of the same footprint.
-    function roof(x, y, w, d, h, rh, col) {
-      const W = [x - w / 2 - 1, y - h], E = [x + w / 2 + 1, y - h], S = [x, y + d / 2 + 0.5 - h], N = [x, y - d / 2 - 0.5 - h];
-      const A = [x, y - h - rh];
-      facet([W, S, A], shade(col, LIGHT));
-      facet([S, E, A], shade(col, DARK));
-      facet([W, A, N], shade(col, 1.3));
-      facet([N, A, E], shade(col, 0.95));
-    }
-    // A faceted blob: a hexagon split down the middle, lit on the left.
-    function blob(x, y, rw, rh, col, kL, kR) {
-      const T = [x, y - rh], B = [x, y + rh];
-      const UL = [x - rw, y - rh * 0.45], LL = [x - rw * 0.92, y + rh * 0.5];
-      const UR = [x + rw, y - rh * 0.45], LR = [x + rw * 0.92, y + rh * 0.5];
-      facet([T, UL, LL, B], shade(col, kL == null ? LIGHT : kL));
-      facet([T, B, LR, UR], shade(col, kR == null ? DARK : kR));
-      facet([T, [x - rw * 0.55, y - rh * 0.55], [x - rw * 0.2, y - rh * 0.1]], shade(col, 1.35));
     }
 
     // ---- Ground
@@ -2711,7 +2900,6 @@ window.plethoraBit = {
         facet([C, W, M], shade(base, 1 + k * (0.2 + j2 * 0.5)));
       }
     }
-    // sand: bitmask of edges touching water (1 TL, 2 TR, 4 BL, 8 BR); kept for the snow rim
     function artLandTop(cx, cy, z, color, seed, sand, snow, baseHex) {
       const hw = TW / 2 * z, hh = TH / 2 * z;
       g.fillStyle = color;
@@ -2768,7 +2956,7 @@ window.plethoraBit = {
     const SEA_FLOOR = "#808da1";
     const SEA_TONE = [["#8e9bae", "#8e9bae"], ["#b9c3cf", "#bfc8d3"], ["#e1e6ec", "#e9edf1"]];
     let seaCanvas = null, seaPat = null, seaPatZ = -1, seaOk = true;
-    // The backing-store scale of the main canvas, so the texture is as sharp as the screen.
+    // The backing-store scale of the main canvas, so textures are as sharp as the screen.
     const seaDpr = () => Math.min(3, Math.max(1, (canvas.width / Math.max(1, ctx.width)) || Number(ctx.dpr) || 1));
     function seaPeriod(z) { const k = clamp(Math.round(700 / (TW / 2 * z)), 8, 48); return k + (k & 1); }
     function seaPuffs(pg, cx, cy, z, seed, PW, PH) {
@@ -2864,68 +3052,70 @@ window.plethoraBit = {
       }
     }
 
+    // ====================================================================== //
+    // Meshes of the things on the map                                        //
+    // ====================================================================== //
+    const WOOD = "#8d6e4c", BARK = "#6b4a2a", STEEL = "#c9ced6", IRON = "#3b3b45", BONE = "#efe6d6", GOLD = "#ffd166";
+
     // ---- Trees
-    function artTree(x, y, z, tribe, h, seed) {
-      const style = tribe.tree || "cone";
-      const col = tribe.forest;
-      const trunk = tribe.trunk;
-      h *= 1.15;
-      const w = h * 0.62;
-      artShadow(x + 2 * z, y + 1 * z, z, w * 0.5 / z, w * 0.2 / z, 0.2);
+    function meshTree(style, forest, trunk, v) {
+      const s = 0.82 + v * 0.11;
+      let f;
       switch (style) {
         case "palm": {
-          const topX = x + 4 * z, topY = y - h * 0.82;
-          line(x, y, x + 2.4 * z, y - h * 0.45, trunk, 3.6 * z, "butt");
-          line(x + 2.4 * z, y - h * 0.45, topX, topY, trunk, 3 * z, "butt");
-          const n = 6;
-          for (let i = 0; i < n; i++) {
-            const a = -Math.PI * 0.98 + (i / (n - 1)) * Math.PI * 1.1 + (seed - 0.5) * 0.3;
-            const len = h * 0.5, wid = h * 0.13;
-            const ex = topX + Math.cos(a) * len, ey = topY + Math.sin(a) * len * 0.6 + h * 0.1;
-            const px = -Math.sin(a) * wid, py = Math.cos(a) * wid * 0.6;
-            const mid = [topX + Math.cos(a) * len * 0.5, topY + Math.sin(a) * len * 0.3 + h * 0.03];
-            facet([[topX, topY], [mid[0] + px, mid[1] + py], [ex, ey], [mid[0] - px * 0.4, mid[1] - py * 0.4]], shade(col, Math.cos(a) < 0 ? LIGHT : DARK));
+          f = mShadow(0.1, 0.05, 0.3, 0.22, 0.18);
+          for (let k = 0; k < 4; k++) f = mAll(f, mBox(0.03 + k * 0.045, 0, k * 0.19, 0.08, 0.08, 0.2, trunk));
+          const top = [0.2, 0, 0.78];
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * TAU + 0.4 + v * 0.3;
+            const tip = [top[0] + Math.cos(a) * 0.42, top[1] + Math.sin(a) * 0.42, top[2] - 0.14];
+            const mid = [top[0] + Math.cos(a) * 0.2, top[1] + Math.sin(a) * 0.2, top[2] + 0.04];
+            f = mAll(f, mSheet(top, mid, 0.1, forest), mSheet(mid, tip, 0.13, hexShade(forest, 0.92)));
           }
-          circle(topX - 2 * z, topY + 2.5 * z, 2.2 * z, "#6b4a2a"); circle(topX + 2.5 * z, topY + 3 * z, 2.2 * z, "#8a5f3b");
+          f = mAll(f, mSphere(0.17, 0.04, 0.74, 0.045, "#6b4a2a", 5, 2), mSphere(0.23, -0.04, 0.73, 0.045, "#8a5f3b", 5, 2));
           break;
         }
         case "round": {
-          // three faceted layers of canopy
-          box(x, y, 3.4 * z, 1.7 * z, h * 0.36, trunk, [0.95, 0.7, 1.1]);
-          blob(x + 0.5 * z, y - h * 0.4, w * 0.56, h * 0.26, col, 1.05, 0.7);
-          blob(x - 1 * z, y - h * 0.62, w * 0.5, h * 0.24, col, LIGHT, 0.78);
-          blob(x + 0.5 * z, y - h * 0.84, w * 0.36, h * 0.18, col, 1.26, 0.86);
+          f = mAll(mShadow(0.02, 0.02, 0.27, 0.2, 0.18),
+            mBox(0, 0, 0, 0.1, 0.1, 0.34, trunk),
+            mSphere(0, 0, 0.42, 0.25, forest, 6, 3),
+            mSphere(0.07, -0.05, 0.6, 0.2, hexShade(forest, 1.06), 6, 3),
+            mSphere(-0.04, 0.03, 0.76, 0.15, hexShade(forest, 1.12), 6, 3));
           break;
         }
         case "acacia": {
-          box(x, y, 3 * z, 1.5 * z, h * 0.74, trunk, [0.95, 0.7, 1.1]);
-          line(x, y - h * 0.5, x + 7 * z, y - h * 0.74, trunk, 2.2 * z);
-          const cy2 = y - h * 0.82;
-          facet([[x - w * 0.9, cy2], [x - w * 0.4, cy2 - h * 0.16], [x + 2 * z, cy2 - h * 0.2], [x + 2 * z, cy2 + h * 0.08]], shade(col, LIGHT));
-          facet([[x + 2 * z, cy2 - h * 0.2], [x + w * 0.5, cy2 - h * 0.14], [x + w * 0.95, cy2 + 0.5 * z], [x + 2 * z, cy2 + h * 0.08]], shade(col, DARK));
+          f = mAll(mShadow(0.05, 0.02, 0.36, 0.24, 0.16),
+            mBox(0, 0, 0, 0.07, 0.07, 0.62, trunk),
+            mSheet([0, 0, 0.45], [0.16, 0.04, 0.66], 0.05, trunk),
+            mFrustum(0.06, 0.02, 0.6, 0.1, 0.4, 0.12, forest, 8, hexShade(forest, 1.1)),
+            mCone(0.06, 0.02, 0.72, 0.4, 0.06, hexShade(forest, 1.15), 8));
           break;
         }
         case "dead": {
-          poly([[x - 2.4 * z, y], [x + 2.4 * z, y], [x + 1.1 * z, y - h * 0.9], [x - 1.1 * z, y - h * 0.9]], col);
-          line(x, y - h * 0.5, x - 8 * z, y - h * 0.8, col, 2.2 * z);
-          line(x, y - h * 0.36, x + 7 * z, y - h * 0.64, col, 2 * z);
-          line(x - 4.5 * z, y - h * 0.68, x - 8 * z, y - h * 0.94, col, 1.5 * z);
+          f = mAll(mShadow(0, 0, 0.14, 0.1, 0.14),
+            mBox(0, 0, 0, 0.09, 0.09, 0.78, forest),
+            mSheet([0, 0, 0.45], [-0.24, 0.06, 0.68], 0.05, forest),
+            mSheet([0, 0, 0.34], [0.22, -0.04, 0.56], 0.045, forest),
+            mSheet([-0.13, 0.03, 0.57], [-0.26, 0.08, 0.8], 0.035, forest));
           break;
         }
-        default: {   // cone, and snow-cone: three tiers
-          box(x, y, 3.6 * z, 1.8 * z, 5 * z, trunk, [0.95, 0.7, 1.1]);
-          const t0 = y - 3 * z;
-          cone(x, t0, w, h * 0.5, shade(col, LIGHT), shade(col, DARK));
-          cone(x, t0 - h * 0.3, w * 0.8, h * 0.46, shade(col, 1.1), shade(col, 0.7));
-          cone(x, t0 - h * 0.58, w * 0.56, h * 0.42, shade(col, LIGHT), shade(col, DARK));
-          poly([[x, t0 - h], [x - w * 0.2, t0 - h * 0.62], [x - w * 0.08, t0 - h * 0.6]], shade(col, 1.4));
-          if (style === "snow") {
-            cone(x, t0 - h * 0.58 - h * 0.42 + h * 0.2, w * 0.56 * 0.48, h * 0.2, "#ffffff", "#d8e2ea");
-            cone(x, t0 - h * 0.3 - h * 0.46 + h * 0.17, w * 0.8 * 0.36, h * 0.17, "#ffffff", "#d8e2ea");
-            cone(x, t0 - h * 0.5 + h * 0.14, w * 0.3, h * 0.14, "#ffffff", "#d8e2ea");
-          }
+        default: {   // cone and snow: three tiers
+          f = mAll(mShadow(0.02, 0.02, 0.3, 0.22, 0.18),
+            mBox(0, 0, 0, 0.09, 0.09, 0.14, trunk),
+            mCone(0, 0, 0.1, 0.28, 0.44, forest, 7),
+            mCone(0, 0, 0.36, 0.22, 0.4, hexShade(forest, 1.05), 7),
+            mCone(0, 0, 0.6, 0.15, 0.36, hexShade(forest, 1.1), 7));
+          if (style === "snow") f = mAll(f,
+            mCone(0, 0, 0.42, 0.095, 0.12, "#ffffff", 7),
+            mCone(0, 0, 0.64, 0.085, 0.12, "#ffffff", 7),
+            mCone(0, 0, 0.85, 0.07, 0.11, "#ffffff", 7));
         }
       }
+      return mScale(f, s, s);
+    }
+    function artTree(x, y, z, tribe, v) {
+      const style = tribe.tree || "cone";
+      stamp("tree|" + style + "|" + tribe.forest + "|" + tribe.trunk + "|" + v, x, y, z, () => meshTree(style, tribe.forest, tribe.trunk, v));
     }
     function artForest(cx, cy, z, tribe, seed, count) {
       const hw = TW / 2 * z, hh = TH / 2 * z;
@@ -2935,118 +3125,111 @@ window.plethoraBit = {
         const s = spots[k];
         const j1 = hash2(k * 31 + 7, Math.floor(seed * 1000)), j2 = hash2(k * 17 + 3, Math.floor(seed * 977));
         const u = s[0] + (j1 - 0.5) * 0.14, v = s[1] + (j2 - 0.5) * 0.14;
-        trees.push({ x: cx + (u - v) * hw, y: cy + (u + v) * hh + hh * 0.35, h: (TH * 0.9 + j1 * TH * 0.42) * z, j: j2 });
+        trees.push({ x: cx + (u - v) * hw, y: cy + (u + v) * hh, v: Math.floor(j2 * 4) });
       }
       trees.sort((a, b) => a.y - b.y);
-      for (const t of trees) artTree(t.x, t.y, z, tribe, t.h, t.j);
+      for (const t of trees) artTree(t.x, t.y, z, tribe, t.v);
     }
 
-    // ---- Mountain: a ridge of peaks, each a fan of facets, snow on top,
-    // mist at the foot.
-    function artMountain(cx, cy, z, tribe, seed, metal) {
-      const hw = TW / 2 * z, hh = TH / 2 * z;
-      const j = (k) => hash2(k * 13 + 1, Math.floor(seed * 1000));
-      const rock = tribe.rock;
-      const mh = TH * (1.45 + j(1) * 0.4) * z;
-      // peaks from back to front: [x, y, height factor, tone]
-      const peaks = [
-        [cx + hw * 0.36, cy - mh * 0.58, 0.58, 0.9],
-        [cx - hw * 0.42, cy - mh * 0.42, 0.42, 0.95],
-        [cx - hw * 0.06, cy - mh, 1.0, 1.0]
-      ];
-      if (j(2) > 0.55) peaks.splice(1, 1);
-      const baseY = cy + hh * 0.55;
-      for (const pk of peaks) {
-        const px = pk[0], py = pk[1], hf = pk[2], tone = pk[3];
-        const bw = hw * (0.55 + hf * 0.55);
-        const L = [px - bw, baseY - hh * 0.25 * hf], M = [px + bw * 0.12, baseY + hh * 0.2], R = [px + bw * 0.9, baseY - hh * 0.3];
-        const M2 = [px - bw * 0.42, baseY + hh * 0.02];
-        const A = [px, py];
-        facet([A, L, M2], shade(rock, 1.2 * tone));
-        facet([A, M2, M], shade(rock, 0.98 * tone));
-        facet([A, M, R], shade(rock, 0.66 * tone));
-        // a ridge line crease on the front facet
-        facet([A, M2, [px - bw * 0.1, baseY - hh * 0.1]], shade(rock, 1.07 * tone));
-        // snow cap with a ragged hem
-        const capK = 0.34 + j(3) * 0.1;
-        const lerp2 = (P, Q, t) => [P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t];
-        const CL = lerp2(A, L, capK), CM2 = lerp2(A, M2, capK * 1.15), CM = lerp2(A, M, capK), CR = lerp2(A, R, capK * 0.9);
-        facet([A, CL, [CL[0] + (CM2[0] - CL[0]) * 0.5, CL[1] + 3 * z], CM2], "#ffffff");
-        facet([A, CM2, [CM2[0] + (CM[0] - CM2[0]) * 0.5, CM2[1] + 2.5 * z], CM], "#eef2f6");
-        facet([A, CM, [CM[0] + (CR[0] - CM[0]) * 0.5, CM[1] + 3 * z], CR], "#cfd8e2");
+    // ---- Mountain: a height field over the tile, two or three peaks, snow
+    // above the line, every triangle its own facet.
+    function meshMountain(rock, v, metal) {
+      const j = (k) => hash2(k * 17 + 3, v * 131 + 7);
+      const peaks = [[-0.08 + (j(1) - 0.5) * 0.2, -0.06 + (j(2) - 0.5) * 0.2, 1.2 + j(3) * 0.45, 0.66], [0.3, 0.18, 0.7 + j(4) * 0.3, 0.46]];
+      if (j(5) > 0.45) peaks.push([-0.34, 0.3, 0.55 + j(6) * 0.3, 0.4]);
+      const N = 6, half = 0.56;
+      const H = [];
+      let maxH = 0;
+      for (let i = 0; i <= N; i++) {
+        H.push([]);
+        for (let k = 0; k <= N; k++) {
+          const x = -half + (i / N) * 2 * half, y = -half + (k / N) * 2 * half;
+          let h = 0;
+          for (const pk of peaks) { const d = Math.hypot(x - pk[0], y - pk[1]); h += Math.max(0, pk[2] * (1 - d / pk[3])); }
+          if (i === 0 || k === 0 || i === N || k === N) h = 0;
+          else h += (hash2(i * 7 + 1, k * 5 + v) - 0.5) * 0.1;
+          h = Math.max(0, h);
+          H[i].push(h);
+          if (h > maxH) maxH = h;
+        }
       }
-      // mist at the foot
-      const drift = Math.sin(ART_T * 0.4 + seed * 6) * 2 * z;
-      for (let k = 0; k < 4; k++) {
-        const mx = cx + (k - 1.5) * hw * 0.42 + drift * (k % 2 ? 1 : -1), my = baseY - hh * 0.1 + (k % 2) * 3 * z;
-        ellipse(mx, my, hw * 0.34, hh * 0.3, "rgba(255,255,255," + (0.22 + j(k + 4) * 0.12) + ")");
+      const f = [];
+      const snowLine = maxH * 0.7;
+      const P = (i, k) => [-half + (i / N) * 2 * half, -half + (k / N) * 2 * half, H[i][k]];
+      for (let i = 0; i < N; i++) for (let k = 0; k < N; k++) {
+        const a = P(i, k), b = P(i + 1, k), c = P(i + 1, k + 1), d = P(i, k + 1);
+        const tris = ((i + k + v) % 2) ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]];
+        for (const t of tris) {
+          const avg = (t[0][2] + t[1][2] + t[2][2]) / 3;
+          if (avg < 0.004) continue;
+          const col = avg > snowLine ? (avg > snowLine * 1.2 ? "#ffffff" : "#e9eef3") : hexShade(rock, 0.93 + hash2(i * 3 + k, v + 11) * 0.14);
+          f.push({ p: t, c: col });
+        }
       }
       if (metal) {
-        const ore = [[cx - hw * 0.5, cy + 3 * z], [cx - hw * 0.2, cy + 9 * z], [cx + hw * 0.14, cy + 4 * z]];
-        for (const o of ore) {
-          const x = o[0], y = o[1];
-          poly([[x, y - 9 * z], [x + 4.5 * z, y - 3 * z], [x + 3 * z, y + 2 * z], [x - 3 * z, y + 2 * z], [x - 4.5 * z, y - 3 * z]], "#2f3642");
-          poly([[x, y - 9 * z], [x - 4.5 * z, y - 3 * z], [x - 1 * z, y + 2 * z]], "#8d99ad");
-          poly([[x, y - 9 * z], [x - 1 * z, y + 2 * z], [x + 1.5 * z, y - 2 * z]], "#c3ccdb");
-          circle(x - 1.5 * z, y - 4 * z, 1 * z, "#ffffff");
+        for (const o of [[-0.3, 0.3], [-0.08, 0.42], [0.18, 0.34]]) {
+          f.push(...mCone(o[0], o[1], 0.02, 0.07, 0.18, "#8d99ad", 5), ...mCone(o[0] + 0.03, o[1] - 0.02, 0.02, 0.045, 0.12, "#c3ccdb", 5));
         }
+      }
+      return f;
+    }
+    function artMountain(cx, cy, z, tribe, seed, metal) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      const v = Math.floor(seed * 6);
+      stamp("mtn|" + tribe.rock + "|" + v + "|" + (metal ? 1 : 0), cx, cy, z, () => meshMountain(tribe.rock, v, metal));
+      // mist drifting at the foot
+      const drift = Math.sin(ART_T * 0.4 + seed * 6) * 2 * z;
+      for (let k = 0; k < 4; k++) {
+        const mx = cx + (k - 1.5) * hw * 0.42 + drift * (k % 2 ? 1 : -1), my = cy + hh * 0.45 + (k % 2) * 3 * z;
+        ellipse(mx, my, hw * 0.34, hh * 0.3, "rgba(255,255,255," + (0.2 + hash2(k + 4, Math.floor(seed * 100)) * 0.12) + ")");
       }
     }
 
     // ---- Resources
-    function artFruit(cx, cy, z, seed) {
-      // three faceted fruits with a leaf crown
-      const spots = [[-12, 0], [10, 4], [-1, 9]];
-      const tones = [["#ffb13a", "#e4821c", "#ffd27a"], ["#ff6b47", "#d33d22", "#ff9a7a"], ["#f7c948", "#d79a1c", "#ffe38a"]];
+    function meshFruit(v) {
+      const tones = [["#ffb13a", "#4f9d3a"], ["#ff6b47", "#3a7f2a"], ["#f7c948", "#4f9d3a"]];
+      let f = mShadow(0, 0.02, 0.36, 0.26, 0.14);
+      const spots = [[-0.2, 0.06], [0.16, 0.12], [-0.02, -0.18]];
       for (let k = 0; k < 3; k++) {
-        const x = cx + spots[k][0] * z, y = cy + spots[k][1] * z - 2 * z;
-        const r = (6 + hash2(k, Math.floor(seed * 100)) * 1.6) * z;
-        const t = tones[(k + Math.floor(seed * 3)) % 3];
-        artShadow(x + 1 * z, y + r * 0.9, z, r * 0.9 / z, r * 0.35 / z, 0.18);
-        facet([[x, y - r], [x - r * 0.9, y - r * 0.4], [x - r * 0.9, y + r * 0.45], [x, y + r]], t[0]);
-        facet([[x, y - r], [x, y + r], [x + r * 0.9, y + r * 0.45], [x + r * 0.9, y - r * 0.4]], t[1]);
-        facet([[x, y - r], [x - r * 0.5, y - r * 0.55], [x - r * 0.25, y - r * 0.1]], t[2]);
-        // leaf crown
-        poly([[x - 1 * z, y - r + 1 * z], [x - 4 * z, y - r - 5 * z], [x + 0.5 * z, y - r - 2 * z]], "#4f9d3a");
-        poly([[x - 0.5 * z, y - r + 1 * z], [x + 3.5 * z, y - r - 5.5 * z], [x + 2 * z, y - r - 1 * z]], "#3a7f2a");
+        const t = tones[(k + v) % 3];
+        const r = 0.09 + hash2(k, v) * 0.025;
+        f = mAll(f, mSphere(spots[k][0], spots[k][1], r, r, t[0], 6, 3), mCone(spots[k][0], spots[k][1], r * 1.85, 0.06, 0.1, t[1], 5));
       }
+      return f;
     }
-    function artCrop(cx, cy, z, seed) {
-      for (let r = -1; r <= 1; r++) {
-        for (let k = 0; k < 4; k++) {
-          const u = -0.3 + k * 0.2, v = r * 0.22;
-          const x = cx + (u - v) * (TW / 2) * z, y = cy + (u + v) * (TH / 2) * z + 2 * z;
-          line(x, y, x + 1 * z, y - 9 * z, "#9fb33a", 2 * z, "butt");
-          facet([[x + 1 * z, y - 14 * z], [x - 1.6 * z, y - 10 * z], [x + 1 * z, y - 6 * z]], "#f3cf4a");
-          facet([[x + 1 * z, y - 14 * z], [x + 1 * z, y - 6 * z], [x + 3.6 * z, y - 10 * z]], "#d9a82a");
-        }
+    function artFruit(cx, cy, z, seed) { const v = Math.floor(seed * 3); stamp("fruit|" + v, cx, cy, z, () => meshFruit(v)); }
+    function meshCrop() {
+      let f = [];
+      for (let r = -1; r <= 1; r++) for (let k = 0; k < 4; k++) {
+        f = mAll(f, mCone(-0.3 + k * 0.2, r * 0.22, 0, 0.055, 0.22 + ((k + r) % 2) * 0.04, (k + r) % 2 ? "#e8c63d" : "#cfae2e", 5));
       }
+      return f;
     }
-    // A boxy beast: body box, head box, legs, and whatever grows on its head.
+    function artCrop(cx, cy, z) { stamp("crop", cx, cy, z, meshCrop); }
+    // A boxy beast: body, head and snout boxes, legs, a mark on the back, and
+    // whatever grows on its head.
+    function meshAnimal(a) {
+      const body = a.body, mark = a.mark;
+      let f = mAll(mShadow(0.02, 0, 0.32, 0.18, 0.2),
+        mBox(0, 0, 0.14, 0.44, 0.22, 0.22, body),
+        mBox(-0.05, 0, 0.36, 0.26, 0.23, 0.02, mark),
+        mBox(0.3, 0, 0.26, 0.17, 0.16, 0.16, body),
+        mBox(0.4, 0, 0.27, 0.08, 0.1, 0.08, mark),
+        mBox(0.26, -0.06, 0.42, 0.04, 0.03, 0.06, body), mBox(0.26, 0.06, 0.42, 0.04, 0.03, 0.06, body),
+        mBox(-0.26, 0, 0.3, 0.1, 0.04, 0.04, hexShade(body, 0.8)));
+      for (const lx of [-0.15, 0.15]) for (const ly of [-0.07, 0.07]) f = mAll(f, mBox(lx, ly, 0, 0.07, 0.07, 0.14, hexShade(body, 0.85)));
+      // eyes
+      f.push({ p: [[0.34, 0.081, 0.36], [0.37, 0.081, 0.36], [0.37, 0.081, 0.39], [0.34, 0.081, 0.39]], c: "#222222", flat: true, bias: 1 });
+      if (a.horn === "antler") f = mAll(f, mSheet([0.28, -0.05, 0.42], [0.2, -0.14, 0.62], 0.03, BONE), mSheet([0.28, 0.05, 0.42], [0.2, 0.14, 0.62], 0.03, BONE),
+        mSheet([0.24, -0.1, 0.52], [0.3, -0.16, 0.6], 0.025, BONE), mSheet([0.24, 0.1, 0.52], [0.3, 0.16, 0.6], 0.025, BONE));
+      else if (a.horn === "horn") f = mAll(f, mBox(0.3, -0.06, 0.42, 0.03, 0.03, 0.12, BONE), mBox(0.3, 0.06, 0.42, 0.03, 0.03, 0.12, BONE));
+      else if (a.horn === "tusk") f = mAll(f, mSheet([0.44, 0.04, 0.26], [0.52, 0.07, 0.34], 0.025, BONE));
+      else if (a.horn === "hump") f = mAll(f, mSphere(-0.06, 0, 0.4, 0.11, body, 6, 3));
+      return f;
+    }
     function artAnimal(cx, cy, z, tribe, seed) {
       const a = tribe.animal || { body: "#5a4330", mark: "#8c6a4a", horn: "horn" };
-      const x = cx + (seed - 0.5) * 8 * z, y = cy + 4 * z;
-      const body = a.body, mark = a.mark;
-      artShadow(x + 1 * z, y + 1 * z, z, 12, 4.5, 0.2);
-      for (const lx of [-7, -3, 3, 7]) box(x + lx * z, y, 2.6 * z, 1.3 * z, 5 * z, body, [0.8, 0.58, 0.9]);
-      box(x, y - 4.5 * z, 18 * z, 7 * z, 8 * z, body);
-      facet([[x - 7 * z, y - 10 * z], [x + 1 * z, y - 10 * z], [x + 1 * z, y - 7 * z], [x - 7 * z, y - 7 * z]], mark);
-      box(x + 9.5 * z, y - 10 * z, 7 * z, 4 * z, 6 * z, body, [1.02, 0.74, 1.2]);
-      circle(x + 7.5 * z, y - 13.5 * z, 0.9 * z, "#111");
-      facet([[x + 6 * z, y - 16 * z], [x + 7.5 * z, y - 19.5 * z], [x + 9 * z, y - 16.5 * z]], shade(body, 0.85));
-      line(x - 9 * z, y - 9 * z, x - 12.5 * z, y - 5 * z, shade(body, 0.8), 1.6 * z);
-      const hx = x + 9.5 * z, hy = y - 16 * z;
-      const bone = "#efe6d6";
-      if (a.horn === "antler") {
-        line(hx - 1 * z, hy, hx - 3.5 * z, hy - 6 * z, bone, 1.5 * z); line(hx - 3.5 * z, hy - 3.5 * z, hx - 7 * z, hy - 6 * z, bone, 1.2 * z);
-        line(hx + 1 * z, hy, hx + 3.5 * z, hy - 6 * z, bone, 1.5 * z); line(hx + 3.5 * z, hy - 3.5 * z, hx + 7 * z, hy - 5.5 * z, bone, 1.2 * z);
-      } else if (a.horn === "horn") {
-        line(hx - 2 * z, hy, hx - 4.5 * z, hy - 5 * z, bone, 1.8 * z); line(hx + 2 * z, hy, hx + 4.5 * z, hy - 5 * z, bone, 1.8 * z);
-      } else if (a.horn === "tusk") {
-        line(x + 12 * z, y - 8 * z, x + 15 * z, y - 11 * z, bone, 1.8 * z);
-      } else if (a.horn === "hump") {
-        blob(x - 1 * z, y - 13 * z, 5 * z, 3.5 * z, body, 1.1, 0.75);
-      }
+      stamp("beast|" + a.body + "|" + a.mark + "|" + a.horn, cx + (seed - 0.5) * 8 * z, cy + 3 * z, z, () => meshAnimal(a));
     }
     function artFish(cx, cy, z, seed) {
       const spots = [[-9, -3], [8, 3], [-2, 8]];
@@ -3071,163 +3254,134 @@ window.plethoraBit = {
     }
 
     // ---- Buildings
-    function artHouse(x, y, z, w, h, wall, roofCol, opts) {
+    // A house: walls, a pyramid roof, a door on the lit face, a window on the shaded one.
+    function mHouse(cx, cy, w, d, h, wall, roofCol, opts) {
       const o = opts || {};
-      const d = w * 0.55;
-      box(x, y, w, d, h, wall, [1.0, 0.74, 1.08]);
-      roof(x, y, w, d, h, h * 0.55, roofCol);
-      // a door on the lit face and a window on the shaded one
-      rect(x - w * 0.3, y - h * 0.5, w * 0.13, h * 0.5 - d * 0.1, o.door || "#5a4030");
-      if (h > 9 * z) facet([[x + w * 0.14, y - h * 0.8 + d * 0.07], [x + w * 0.26, y - h * 0.8 + d * 0.13], [x + w * 0.26, y - h * 0.5 + d * 0.13], [x + w * 0.14, y - h * 0.5 + d * 0.07]], "#f6e3a0");
+      const f = mAll(mBox(cx, cy, 0, w, d, h, wall, { top: hexShade(wall, 0.96) }),
+        mPyramid(cx, cy, h, w + 0.03, d + 0.03, o.roofH || h * 0.62, roofCol));
+      const dy = cy + d / 2 + 0.003, dx = cx + w / 2 + 0.003;
+      f.push({ p: [[cx - w * 0.3, dy, 0], [cx - w * 0.08, dy, 0], [cx - w * 0.08, dy, h * 0.55], [cx - w * 0.3, dy, h * 0.55]], c: o.door || "#5a4030", bias: 0.3 });
+      if (h > 0.18) f.push({ p: [[dx, cy - d * 0.2, h * 0.45], [dx, cy + d * 0.1, h * 0.45], [dx, cy + d * 0.1, h * 0.72], [dx, cy - d * 0.2, h * 0.72]], c: "#f6e3a0", bias: 0.3 });
+      return f;
     }
-    function artHut(x, y, z, r, wall, roofCol) {   // village hut: a round wall and a thatch cone
-      ellipse(x, y, r, r * 0.5, shade(wall, 0.8));
-      rect(x - r, y - r * 0.8, r * 2, r * 0.8, wall);
-      halfDisc(x, y, r, shade(wall, 0.72), -Math.PI / 2);
-      rect(x - r * 0.9, y - r * 0.8, r * 1.8, r * 0.8, wall);
-      cone(x, y - r * 0.8, r * 2.4, r * 1.4, shade(roofCol, LIGHT), shade(roofCol, DARK));
-      rect(x - r * 0.2, y - r * 0.6, r * 0.4, r * 0.6, "#4a3a2a");
+    function mHut(cx, cy, r, wall, roofCol) {
+      const f = mAll(mFrustum(cx, cy, 0, r, r * 0.95, r * 0.9, wall, 7), mCone(cx, cy, r * 0.9, r * 1.35, r * 1.1, roofCol, 7));
+      f.push({ p: [[cx - r * 0.2, cy + r * 0.94, 0], [cx + r * 0.2, cy + r * 0.94, 0], [cx + r * 0.2, cy + r * 0.94, r * 0.6], [cx - r * 0.2, cy + r * 0.94, r * 0.6]], c: "#4a3a2a", bias: 0.3 });
+      return f;
     }
-    function artBuilding(kind, cx, cy, z, color, seed, extra) {
+    function mTower(cx, cy, w, h, wall, capCol, spire) {
+      const f = mBox(cx, cy, 0, w, w, h, wall, { top: hexShade(wall, 0.96) });
+      if (spire) f.push(...mCone(cx, cy, h, w * 0.75, w * 1.2, capCol, 6));
+      else f.push(...mPyramid(cx, cy, h, w + 0.03, w + 0.03, w * 0.7, capCol));
+      return f;
+    }
+    function meshBuilding(kind, color, lvl) {
       const wall = "#efe6d2";
-      if (kind !== B_RUIN && kind !== B_PORT) artShadow(cx + 2 * z, cy + 5 * z, z, 18, 7, 0.18);
       switch (kind) {
         case B_FARM: {
-          facet([[cx - 24 * z, cy], [cx - 4 * z, cy - 10 * z], [cx + 20 * z, cy + 2 * z], [cx, cy + 12 * z]], "#b8864f");
-          for (let k = 0; k < 4; k++) line(cx - 20 * z + k * 5 * z, cy + 2 * z + k * 2.5 * z, cx - 1 * z + k * 5 * z, cy - 7.5 * z + k * 2.5 * z, "#d2a26a", 1.4 * z);
-          for (let k = 0; k < 4; k++) for (let m = 0; m < 3; m++) {
-            const x = cx - 17 * z + k * 5 * z + m * 6 * z, y = cy + 1 * z + k * 2.5 * z - m * 3 * z;
-            cone(x, y, 3.4 * z, 4.5 * z, "#7fd05a", "#55a83a");
-          }
-          artHouse(cx + 15 * z, cy - 6 * z, z, 12 * z, 9 * z, wall, color);
-          break;
+          let f = [{ p: [[-0.42, -0.1, 0.004], [0.02, -0.42, 0.004], [0.42, 0.02, 0.004], [0.0, 0.42, 0.004]], c: "#b8864f", flat: true, bias: -4 }];
+          for (let k = 0; k < 4; k++) for (let m = 0; m < 3; m++) f = mAll(f, mCone(-0.3 + k * 0.17 + m * 0.07, -0.26 + m * 0.2 - k * 0.04, 0, 0.05, 0.13, m % 2 ? "#7fd05a" : "#55a83a", 5));
+          return mAll(f, mHouse(0.2, 0.18, 0.26, 0.22, 0.18, wall, color));
         }
-        case B_MINE: {
-          box(cx, cy + 4 * z, 22 * z, 11 * z, 11 * z, "#4a3d35", [0.95, 0.7, 1.05]);
-          g.fillStyle = "#15100d"; g.beginPath(); g.ellipse(cx - 6 * z, cy + 2 * z, 4.5 * z, 5.5 * z, 0, Math.PI, TAU); g.fill();
-          rect(cx - 11 * z, cy - 4 * z, 2.5 * z, 11 * z, "#8a6a44"); rect(cx - 1 * z, cy - 1 * z, 2.5 * z, 8 * z, "#8a6a44"); rect(cx - 12 * z, cy - 5 * z, 14 * z, 2.5 * z, "#8a6a44");
-          line(cx - 2 * z, cy + 10 * z, cx + 16 * z, cy + 16 * z, "#6a6a6a", 1.4 * z); line(cx + 2 * z, cy + 8 * z, cx + 20 * z, cy + 14 * z, "#6a6a6a", 1.4 * z);
-          box(cx + 13 * z, cy + 13 * z, 9 * z, 4.5 * z, 5 * z, "#4d4d55");
-          circle(cx + 10 * z, cy + 14 * z, 1.8 * z, "#222"); circle(cx + 15 * z, cy + 15.5 * z, 1.8 * z, "#222");
-          circle(cx + 11 * z, cy + 7 * z, 1.8 * z, "#ffd166"); circle(cx + 14.5 * z, cy + 6.5 * z, 1.8 * z, "#ffd166");
-          break;
-        }
+        case B_MINE: return mAll(mBox(0, 0.05, 0, 0.5, 0.3, 0.24, "#4a3d35"),
+          { p: [[-0.2, 0.203, 0], [-0.04, 0.203, 0], [-0.04, 0.203, 0.16], [-0.2, 0.203, 0.16]], c: "#15100d", flat: true, bias: 0.3 },
+          mBox(-0.22, 0.2, 0, 0.04, 0.04, 0.2, WOOD), mBox(-0.02, 0.2, 0, 0.04, 0.04, 0.2, WOOD), mBox(-0.12, 0.2, 0.19, 0.26, 0.05, 0.04, WOOD),
+          mBox(0.24, 0.28, 0, 0.22, 0.14, 0.1, "#4d4d55"), mSphere(0.2, 0.26, 0.14, 0.04, GOLD, 5, 2), mSphere(0.29, 0.3, 0.14, 0.04, GOLD, 5, 2));
         case B_LUMBER: {
-          artHouse(cx - 6 * z, cy + 5 * z, z, 18 * z, 11 * z, "#a97c50", "#6b4a2a");
-          for (let k = 0; k < 3; k++) { circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 2.9 * z, "#c9a070"); circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 1.4 * z, "#9a7448"); }
-          circle(cx + 17.5 * z, cy + 7 * z, 2.9 * z, "#c9a070"); circle(cx + 17.5 * z, cy + 7 * z, 1.4 * z, "#9a7448");
-          break;
+          const f = mHouse(-0.12, 0.05, 0.36, 0.3, 0.22, "#a97c50", BARK);
+          for (let k = 0; k < 3; k++) f.push(...mBox(0.26, 0.1, k * 0.07, 0.3, 0.07, 0.07, k % 2 ? "#c9a070" : "#b8905f"));
+          return f;
         }
         case B_PORT: {
-          for (let k = 0; k < 4; k++) rect(cx - 16 * z + k * 9 * z, cy + 1 * z, 2.6 * z, 7 * z, "#5e4630");
-          facet([[cx - 20 * z, cy - 2 * z], [cx + 20 * z, cy - 2 * z], [cx + 14 * z, cy + 4 * z], [cx - 14 * z, cy + 4 * z]], "#9c7a4e");
-          for (let k = 0; k < 6; k++) line(cx - 15 * z + k * 6 * z, cy - 1.5 * z, cx - 17 * z + k * 6 * z, cy + 3.5 * z, "#7a5a36", 1 * z);
-          artHouse(cx + 9 * z, cy - 3 * z, z, 13 * z, 9 * z, wall, color);
-          facet([[cx - 20 * z, cy + 8 * z], [cx - 6 * z, cy + 8 * z], [cx - 8 * z, cy + 12 * z], [cx - 18 * z, cy + 12 * z]], "#8a5f3b");
-          rect(cx - 13.5 * z, cy - 2 * z, 1.4 * z, 10 * z, "#5a4a3a");
-          break;
+          let f = [];
+          for (let k = 0; k < 4; k++) f = mAll(f, mBox(-0.3 + k * 0.2, 0.1, -0.1, 0.05, 0.05, 0.2, "#5e4630"));
+          return mAll(f, mBox(0, 0.1, 0.08, 0.8, 0.26, 0.04, "#9c7a4e"), mHouse(0.22, 0.02, 0.26, 0.22, 0.18, wall, color),
+            mBox(-0.28, 0.34, -0.03, 0.26, 0.12, 0.06, "#8a5f3b"), mBox(-0.28, 0.34, 0.03, 0.02, 0.02, 0.2, "#5a4a3a"));
         }
-        case B_WINDMILL: {
-          facet([[cx - 7 * z, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx - 4.5 * z, cy - 20 * z]], "#e6dcc8");
-          facet([[cx, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx, cy - 20 * z]], "#c9bda6");
-          cone(cx, cy - 20 * z, 15 * z, 8 * z, shade(color, LIGHT), shade(color, DARK));
-          rect(cx - 2 * z, cy - 3 * z, 4 * z, 7 * z, "#5a4030");
-          const hx = cx + 1 * z, hy = cy - 24 * z;
-          for (let k = 0; k < 4; k++) {
-            const a = k * Math.PI / 2 + ART_T * 0.6;
-            const ex = hx + Math.cos(a) * 15 * z, ey = hy + Math.sin(a) * 15 * z;
-            line(hx, hy, ex, ey, "#5a4a3a", 2 * z);
-            const px = -Math.sin(a) * 3.4 * z, py = Math.cos(a) * 3.4 * z;
-            poly([[hx + Math.cos(a) * 4 * z, hy + Math.sin(a) * 4 * z], [ex, ey], [ex + px, ey + py], [hx + Math.cos(a) * 4 * z + px, hy + Math.sin(a) * 4 * z + py]], "rgba(245,238,220,0.92)");
-          }
-          circle(hx, hy, 2 * z, "#3a2f28");
-          break;
-        }
-        case B_FORGE: {
-          artHouse(cx, cy + 5 * z, z, 24 * z, 14 * z, "#8f8a83", "#4a4440", { door: "#ff8c3a" });
-          circle(cx - 7 * z, cy - 2 * z, 7 * z, "rgba(255,140,58,0.28)");
-          box(cx + 9 * z, cy - 12 * z, 5 * z, 2.5 * z, 12 * z, "#5a5450");
-          { const dr = (ART_T * 4 + seed * 10) % 10;
-            circle(cx + 9.5 * z + dr * 0.3 * z, cy - 27 * z - dr * z, 3.6 * z, "rgba(230,230,235,0.55)");
-            circle(cx + 12 * z + dr * 0.5 * z, cy - 32 * z - dr * z, 4.2 * z, "rgba(230,230,235,0.4)");
-            circle(cx + 15 * z + dr * 0.7 * z, cy - 37 * z - dr * z, 4.8 * z, "rgba(230,230,235," + (0.25 * (1 - dr / 10)) + ")"); }
-          break;
-        }
-        case B_SAWMILL: {
-          artHouse(cx - 3 * z, cy + 5 * z, z, 22 * z, 12 * z, "#b48a5a", "#6b4a2a");
-          const sx = cx + 13 * z, sy = cy - 2 * z;
-          for (let k = 0; k < 12; k++) { const a = k * TAU / 12 + ART_T * 0.8; poly([[sx + Math.cos(a) * 6 * z, sy + Math.sin(a) * 6 * z], [sx + Math.cos(a + 0.26) * 7.6 * z, sy + Math.sin(a + 0.26) * 7.6 * z], [sx + Math.cos(a + 0.52) * 6 * z, sy + Math.sin(a + 0.52) * 6 * z]], "#8c8c8c"); }
-          circle(sx, sy, 6 * z, "#a5a5a5"); circle(sx, sy, 1.6 * z, "#444");
-          circle(cx - 14 * z, cy + 8 * z, 2.6 * z, "#c9a070"); circle(cx - 14 * z, cy + 8 * z, 1.3 * z, "#9a7448");
-          break;
-        }
-        case B_CUSTOMS: {
-          box(cx, cy + 4 * z, 28 * z, 14 * z, 13 * z, wall, [1.0, 0.76, 1.08]);
-          for (let k = -1; k <= 1; k += 2) rect(cx + k * 8 * z - 1.5 * z - 4 * z, cy - 9 * z + k * 2 * z, 3 * z, 12 * z, "#d9ceb6");
-          g.fillStyle = shade(color, LIGHT); g.beginPath(); g.arc(cx, cy - 9 * z, 13 * z, Math.PI, TAU); g.fill();
-          g.fillStyle = shade(color, DARK); g.beginPath(); g.arc(cx, cy - 9 * z, 13 * z, -Math.PI / 2, 0); g.lineTo(cx, cy - 9 * z); g.closePath(); g.fill();
-          circle(cx, cy - 23 * z, 2 * z, "#ffd166");
-          rect(cx - 10 * z, cy - 4 * z, 5 * z, 8 * z, "#5a4a3a");
-          break;
-        }
+        case B_WINDMILL: return mAll(mFrustum(0, 0, 0, 0.16, 0.12, 0.52, "#e6dcc8", 6, "#d5cab4"), mCone(0, 0, 0.52, 0.17, 0.16, color, 6),
+          { p: [[-0.05, 0.121, 0], [0.05, 0.121, 0], [0.05, 0.121, 0.16], [-0.05, 0.121, 0.16]], c: "#5a4030", flat: true, bias: 0.3 });
+        case B_FORGE: return mAll(mHouse(0, 0.02, 0.5, 0.34, 0.26, "#8f8a83", "#4a4440", { door: "#ff8c3a" }), mBox(0.16, -0.08, 0.26, 0.09, 0.09, 0.3, "#5a5450"));
+        case B_SAWMILL: return mAll(mHouse(-0.06, 0.04, 0.46, 0.3, 0.22, "#b48a5a", BARK), mBox(-0.28, 0.3, 0, 0.14, 0.14, 0.05, "#c9a070"), mBox(-0.28, 0.3, 0.05, 0.14, 0.14, 0.05, "#b8905f"));
+        case B_CUSTOMS: return mAll(mBox(0, 0, 0, 0.56, 0.36, 0.26, wall, { top: hexShade(wall, 0.96) }),
+          mBox(-0.18, 0.183, 0, 0.05, 0.02, 0.26, "#d9ceb6"), mBox(0.18, 0.183, 0, 0.05, 0.02, 0.26, "#d9ceb6"),
+          mSphere(0, 0, 0.26, 0.2, color, 8, 3), mSphere(0, 0, 0.48, 0.035, GOLD, 5, 2),
+          { p: [[-0.06, 0.183, 0], [0.06, 0.183, 0], [0.06, 0.183, 0.16], [-0.06, 0.183, 0.16]], c: "#5a4a3a", flat: true, bias: 0.3 });
         case B_TEMPLE: case B_FTEMPLE: case B_MTEMPLE: case B_WTEMPLE: {
           const col = kind === B_TEMPLE ? "#f1e6cf" : kind === B_FTEMPLE ? "#cfe8c4" : kind === B_MTEMPLE ? "#e4ecf2" : "#cfe3f1";
-          const lvl = extra || 1;
-          box(cx, cy + 5 * z, 32 * z, 16 * z, 4 * z, col, [0.86, 0.66, 0.96]);
-          box(cx, cy + 3 * z, 26 * z, 13 * z, 4 * z, col, [0.9, 0.7, 1.0]);
-          for (let k = -1; k <= 1; k++) box(cx + k * 8 * z, cy - 1 * z + k * 2 * z, 4 * z, 2 * z, 14 * z, col, [1.0, 0.76, 1.1]);
-          box(cx, cy - 1 * z, 28 * z, 14 * z, 3.5 * z, col, [0.95, 0.72, 1.05]);
-          roof(cx, cy - 1 * z, 28 * z, 14 * z, 3.5 * z, 10 * z, col);
-          if (lvl >= 3) rect(cx - 13 * z, cy - 19 * z, 26 * z, 1.5 * z, "#ffd166");
-          if (lvl >= 5) circle(cx, cy - 31 * z, 2.5 * z, "#ffd166");
-          break;
+          let f = mAll(mBox(0, 0, 0, 0.64, 0.5, 0.06, hexShade(col, 0.9)), mBox(0, 0, 0.06, 0.54, 0.4, 0.06, hexShade(col, 0.95)));
+          for (const c of [[-0.18, -0.12], [0.18, -0.12], [-0.18, 0.12], [0.18, 0.12]]) f = mAll(f, mBox(c[0], c[1], 0.12, 0.07, 0.07, 0.28, col));
+          f = mAll(f, mBox(0, 0, 0.4, 0.56, 0.42, 0.05, col), mPyramid(0, 0, 0.45, 0.58, 0.44, 0.2, hexShade(col, 0.97)));
+          if ((lvl || 1) >= 3) f = mAll(f, mBox(0, 0, 0.45, 0.57, 0.43, 0.02, GOLD));
+          if ((lvl || 1) >= 5) f = mAll(f, mSphere(0, 0, 0.68, 0.05, GOLD, 5, 2));
+          return f;
         }
         case B_MONUMENT: {
-          const k = (extra || 0) % 3;
-          box(cx, cy + 6 * z, 26 * z, 13 * z, 4 * z, "#9a9386", [0.92, 0.7, 1.02]);
-          box(cx, cy + 2 * z, 18 * z, 9 * z, 4 * z, "#b1aa9c", [0.92, 0.7, 1.02]);
-          box(cx, cy - 2 * z, 6 * z, 3 * z, 30 * z, "#d9d1c1", [1.0, 0.74, 1.1]);
-          if (k === 0) cone(cx, cy - 32 * z, 8 * z, 8 * z, "#ffd166", "#d9a93a");
-          else if (k === 1) { circle(cx, cy - 36 * z, 4.5 * z, "#5bc2ea"); halfDisc(cx, cy - 36 * z, 4.5 * z, "#2f7fcb"); }
-          else { cone(cx, cy - 31 * z, 7 * z, 10 * z, "#ff8c3a", "#e0552f"); }
-          break;
+          const k = (lvl || 0) % 3;
+          const f = mAll(mBox(0, 0, 0, 0.52, 0.4, 0.07, "#9a9386"), mBox(0, 0, 0.07, 0.36, 0.28, 0.06, "#b1aa9c"), mBox(0, 0, 0.13, 0.12, 0.1, 0.62, "#d9d1c1"));
+          if (k === 0) f.push(...mPyramid(0, 0, 0.75, 0.16, 0.14, 0.16, GOLD));
+          else if (k === 1) f.push(...mSphere(0, 0, 0.84, 0.1, "#5bc2ea", 6, 3));
+          else f.push(...mCone(0, 0, 0.75, 0.1, 0.24, "#ff8c3a", 6));
+          return f;
         }
         case B_RUIN: {
-          for (let k = -1; k <= 1; k++) {
-            const hgt = (8 + (k === 0 ? 9 : k === 1 ? 3 : 5)) * z;
-            box(cx + k * 9 * z, cy + 2 * z - k * 2 * z, 4.5 * z, 2.2 * z, hgt, "#a39b8f", [1.0, 0.74, 1.08]);
-            rect(cx + k * 9 * z - 2.8 * z, cy + 2 * z - k * 2 * z - hgt - 1.6 * z, 5.6 * z, 1.6 * z, "#b5ada0");
-          }
-          facet([[cx + 2 * z, cy + 5 * z], [cx + 16 * z, cy + 1 * z], [cx + 17 * z, cy + 4 * z], [cx + 3 * z, cy + 8 * z]], "#9a9388");
-          circle(cx - 12 * z, cy + 5 * z, 2 * z, "#8d8578"); circle(cx - 7 * z, cy + 7 * z, 1.5 * z, "#8d8578");
-          break;
+          const f = [];
+          for (const c of [[-0.22, 0.06, 0.3], [0, -0.1, 0.44], [0.22, 0.02, 0.2]]) f.push(...mBox(c[0], c[1], 0, 0.09, 0.09, c[2], "#a39b8f", { top: "#b5ada0" }));
+          f.push(...mBox(0.14, 0.26, 0, 0.36, 0.08, 0.08, "#9a9388"), ...mSphere(-0.3, 0.28, 0.04, 0.045, "#8d8578", 5, 2));
+          return f;
         }
-        default: break;
+        default: return [];
+      }
+    }
+    function artBuilding(kind, cx, cy, z, color, seed, extra) {
+      stamp("bld|" + kind + "|" + color + "|" + (extra || 0), cx, cy, z, () => meshBuilding(kind, color, extra));
+      // the moving parts, drawn over the sprite
+      if (kind === B_WINDMILL) {
+        const hx = cx + 1 * z, hy = cy - TZ * 0.56 * z;
+        for (let k = 0; k < 4; k++) {
+          const a = k * Math.PI / 2 + ART_T * 0.6;
+          const ex = hx + Math.cos(a) * 15 * z, ey = hy + Math.sin(a) * 15 * z;
+          line(hx, hy, ex, ey, "#5a4a3a", 2 * z);
+          const px = -Math.sin(a) * 3.4 * z, py = Math.cos(a) * 3.4 * z;
+          poly([[hx + Math.cos(a) * 4 * z, hy + Math.sin(a) * 4 * z], [ex, ey], [ex + px, ey + py], [hx + Math.cos(a) * 4 * z + px, hy + Math.sin(a) * 4 * z + py]], "rgba(245,238,220,0.92)");
+        }
+        circle(hx, hy, 2 * z, "#3a2f28");
+      } else if (kind === B_FORGE) {
+        const sx = cx + 9 * z, sy = cy - TZ * 0.56 * z;
+        const dr = (ART_T * 4 + seed * 10) % 10;
+        circle(sx + dr * 0.3 * z, sy - 3 * z - dr * z, 3.6 * z, "rgba(230,230,235,0.55)");
+        circle(sx + 2.5 * z + dr * 0.5 * z, sy - 8 * z - dr * z, 4.2 * z, "rgba(230,230,235,0.4)");
+        circle(sx + 5.5 * z + dr * 0.7 * z, sy - 13 * z - dr * z, 4.8 * z, "rgba(230,230,235," + (0.25 * (1 - dr / 10)) + ")");
+      } else if (kind === B_SAWMILL) {
+        const sx = cx + 13 * z, sy = cy - 2 * z;
+        for (let k = 0; k < 12; k++) { const a = k * TAU / 12 + ART_T * 0.8; poly([[sx + Math.cos(a) * 6 * z, sy + Math.sin(a) * 6 * z], [sx + Math.cos(a + 0.26) * 7.6 * z, sy + Math.sin(a + 0.26) * 7.6 * z], [sx + Math.cos(a + 0.52) * 6 * z, sy + Math.sin(a + 0.52) * 6 * z]], "#8c8c8c"); }
+        circle(sx, sy, 6 * z, "#a5a5a5"); circle(sx, sy, 1.6 * z, "#444");
       }
     }
 
-    // ---- Cities: a tight cluster of houses on a stone plaza, a hall with a
-    // tower from level four, a keep from level seven, walls as a ring of blocks.
-    function artWalls(cx, cy, z) {
-      const hw = TW / 2 * z * 0.92, hh = TH / 2 * z * 0.92;
-      const pts = [[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]];
-      const wallH = 8 * z;
-      // back walls first, then the two front walls as solid bands
-      facet([[cx - hw, cy], [cx, cy - hh], [cx, cy - hh + wallH * 0.75], [cx - hw, cy + wallH * 0.75]], "#a89c86");
-      facet([[cx, cy - hh], [cx + hw, cy], [cx + hw, cy + wallH * 0.75], [cx, cy - hh + wallH * 0.75]], "#8a7e6a");
-      facet([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + wallH], [cx - hw, cy + wallH]], "#bdb09a");
-      facet([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + wallH], [cx, cy + hh + wallH]], "#8f8370");
-      g.strokeStyle = "#e3d8c0"; g.lineWidth = 3.4 * z; g.lineJoin = "round";
-      g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < 4; i++) g.lineTo(pts[i][0], pts[i][1]); g.closePath(); g.stroke();
-      for (let e = 0; e < 4; e++) {
-        const a = pts[e], b = pts[(e + 1) % 4];
-        for (let k = 0; k < 5; k++) {
-          const t = (k + 0.5) / 5;
-          const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
-          box(x, y, 3.6 * z, 1.8 * z, 3.6 * z, "#e7dcc4", [1.0, 0.76, 1.08]);
+    // ---- Cities: houses packed around a plaza, a hall with a tower from level
+    // four, a keep from level seven, walls as a ring of blocks.
+    function meshCity(o) {
+      const spots = [[-0.04, -0.16], [-0.3, -0.04], [0.26, -0.1], [-0.22, 0.24], [0.28, 0.2], [0.02, -0.38], [-0.38, 0.1], [0.38, 0.02], [0.0, 0.3]];
+      const n = o.owned ? Math.min(9, o.level + 2) : 2;
+      let f = mShadow(0.02, 0.04, 0.5, 0.42, 0.14);
+      if (o.walls) {
+        const pts = [[0, -0.46], [0.46, 0], [0, 0.46], [-0.46, 0]];
+        for (let e = 0; e < 4; e++) {
+          const a = pts[e], b = pts[(e + 1) % 4];
+          for (let k = 0; k < 5; k++) { const t = (k + 0.5) / 5; f = mAll(f, mBox(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0, 0.09, 0.09, k % 2 ? 0.16 : 0.12, k % 2 ? "#e7dcc4" : "#d5c9ae")); }
         }
+        for (const c of pts) f = mAll(f, mBox(c[0], c[1], 0, 0.14, 0.14, 0.26, "#cfc2a8", { top: "#e7dcc4" }));
       }
-      for (const c of pts) box(c[0], c[1] + (c[1] > cy ? 2 : 0) * z, 6.5 * z, 3.2 * z, 11 * z, "#cfc2a8", [1.0, 0.74, 1.1]);
+      for (let k = 0; k < n; k++) {
+        const s = spots[k], jit = hash2(k * 7 + 1, o.v * 13 + 5);
+        if (!o.owned) { f = mAll(f, mHut(s[0], s[1], 0.15, "#b9a98a", "#c9a265")); continue; }
+        const big = k === 0;
+        if (big && o.level >= 7) f = mAll(f, mHouse(s[0], s[1], 0.42, 0.34, 0.3, o.wall, o.color), mTower(s[0] + 0.15, s[1] - 0.1, 0.16, 0.82, o.wall, o.color, false),
+          mBox(s[0] + 0.15, s[1] - 0.1, 0.82, 0.19, 0.19, 0.03, hexShade(o.wall, 0.9)));
+        else if (big && o.level >= 4) f = mAll(f, mHouse(s[0], s[1], 0.4, 0.32, 0.28, o.wall, o.color), mTower(s[0] + 0.14, s[1] - 0.08, 0.14, 0.56, o.wall, o.color, true));
+        else f = mAll(f, mHouse(s[0], s[1], (big ? 0.3 : 0.24 + jit * 0.06), (big ? 0.26 : 0.2 + jit * 0.05), (big ? 0.24 : 0.17 + jit * 0.07), o.wall, o.color));
+      }
+      return f;
     }
     function artCity(cx, cy, z, o) {
       const hw = TW / 2 * z, hh = TH / 2 * z;
@@ -3235,44 +3389,15 @@ window.plethoraBit = {
       g.fillStyle = o.owned ? "rgba(236,226,200,0.5)" : "rgba(255,255,255,0.14)";
       diamond(cx, cy, hw * 0.9, hh * 0.9); g.fill();
       if (o.owned) { g.strokeStyle = "rgba(120,100,70,0.35)"; g.lineWidth = 1.2 * z; diamond(cx, cy, hw * 0.9, hh * 0.9); g.stroke(); }
-      if (o.walls) artWalls(cx, cy, z);
-      artShadow(cx + 3 * z, cy + 6 * z, z, 26, 9, 0.16);
-      // houses pack around the centre, back to front
-      const spots = [[-0.04, -0.16], [-0.3, -0.04], [0.26, -0.1], [-0.22, 0.24], [0.28, 0.2], [0.02, -0.38], [-0.38, 0.1], [0.38, 0.02], [0.0, 0.3]];
-      const n = o.owned ? Math.min(9, o.level + 2) : 2;
-      const list = [];
-      for (let k = 0; k < n; k++) {
-        const s = spots[k];
-        list.push({ x: cx + (s[0] - s[1]) * hw, y: cy + (s[0] + s[1]) * hh + hh * 0.3, k });
-      }
-      list.sort((a, b) => a.y - b.y);
-      for (const h of list) {
-        if (!o.owned) { artHut(h.x, h.y + 2 * z, z, 7 * z, "#b9a98a", "#c9a265"); continue; }
-        const big = h.k === 0;
-        const jit = hash2(h.k * 7 + 1, Math.floor(o.seed * 100));
-        if (big && o.level >= 7) {
-          // the keep: a broad hall with a tall tower
-          artHouse(h.x, h.y + 4 * z, z, 24 * z, 16 * z, o.wall, o.color);
-          box(h.x + 9 * z, h.y + 2 * z, 10 * z, 5 * z, 40 * z, o.wall, [0.97, 0.72, 1.1]);
-          for (let q = 0; q < 3; q++) box(h.x + 5.5 * z + q * 3.5 * z, h.y - 38 * z + q * 1.2 * z, 2.2 * z, 1.1 * z, 3 * z, o.wall, [0.95, 0.7, 1.05]);
-          line(h.x + 9 * z, h.y - 42 * z, h.x + 9 * z, h.y - 52 * z, "#4a3a2a", 1.4 * z);
-          poly([[h.x + 9 * z, h.y - 52 * z], [h.x + 17 * z, h.y - 49.5 * z], [h.x + 9 * z, h.y - 47 * z]], o.color);
-        } else if (big && o.level >= 4) {
-          // the hall: a wide house with a tower and a spire
-          artHouse(h.x, h.y + 4 * z, z, 22 * z, 15 * z, o.wall, o.color);
-          box(h.x + 8 * z, h.y + 1 * z, 8 * z, 4 * z, 26 * z, o.wall, [0.97, 0.72, 1.1]);
-          cone(h.x + 8 * z, h.y - 25 * z, 12 * z, 10 * z, shade(o.color, LIGHT), shade(o.color, DARK));
-        } else {
-          artHouse(h.x, h.y + 3 * z, z, (big ? 16 : 12 + jit * 2) * z, (big ? 13 : 8.5 + jit * 3) * z, o.wall, o.color);
-        }
-      }
+      const v = Math.floor((o.seed || 0) * 4);
+      stamp("city|" + (o.owned ? o.level : "v") + "|" + (o.walls ? 1 : 0) + "|" + o.color + "|" + o.wall + "|" + v, cx, cy, z, () => meshCity({ level: o.level, owned: o.owned, walls: o.walls, color: o.color, wall: o.wall, v }));
       if (o.capital && o.owned) {
         const px = cx + hw * 0.56, py = cy - hh * 0.05;
         const wave = Math.sin((o.t || 0) * 2.6) * 2.4 * z;
         line(px, py + 4 * z, px, py - 36 * z, "#4a3a2a", 2 * z);
         poly([[px, py - 36 * z], [px + 15 * z, py - 31 * z + wave], [px, py - 25 * z]], shade(o.color, LIGHT));
         poly([[px, py - 36 * z], [px + 15 * z, py - 31 * z + wave], [px + 5 * z, py - 31 * z + wave * 0.4]], shade(o.color, DARK));
-        circle(px, py - 37 * z, 2.2 * z, "#ffd166");
+        circle(px, py - 37 * z, 2.2 * z, GOLD);
       }
       if (o.sieged) {
         g.strokeStyle = "#ff5a4e"; g.lineWidth = 2.5 * z;
@@ -3280,142 +3405,126 @@ window.plethoraBit = {
       }
     }
 
-    // ---- Units: blocky figures, a box body under a box head, a weapon in
-    // the right hand, lit from the upper left like everything else.
-    function artHorse(x, y, z, color, armored, stripes) {
-      const dark = shade(color, 0.72);
-      for (const lx of [-8, -4, 4, 8]) box(x + lx * z, y + 1 * z, 2.8 * z, 1.4 * z, 6 * z, color, [0.82, 0.6, 0.95]);
-      box(x, y - 4 * z, 24 * z, 9 * z, 9 * z, color);
-      if (stripes) for (let k = -2; k <= 2; k++) facet([[x + k * 4.5 * z - 1.2 * z, y - 7.5 * z - 4.5 * z], [x + k * 4.5 * z + 1 * z, y - 7.5 * z - 4.5 * z], [x + k * 4.5 * z + 0.4 * z, y - 7.5 * z + 4 * z], [x + k * 4.5 * z - 1.8 * z, y - 7.5 * z + 4 * z]], dark);
-      // neck and head
-      facet([[x + 8 * z, y - 12 * z], [x + 13 * z, y - 20 * z], [x + 18 * z, y - 18 * z], [x + 13 * z, y - 9 * z]], shade(color, 1.05));
-      box(x + 17 * z, y - 15 * z, 8 * z, 4 * z, 6 * z, color, [1.02, 0.74, 1.15]);
-      circle(x + 15.5 * z, y - 18.5 * z, 0.9 * z, "#111");
-      facet([[x + 11 * z, y - 20 * z], [x + 12.5 * z, y - 24 * z], [x + 14 * z, y - 20.5 * z]], dark);
-      // mane and tail
-      line(x + 10 * z, y - 13 * z, x + 14 * z, y - 21 * z, dark, 2.6 * z);
-      line(x - 12 * z, y - 10 * z, x - 16 * z, y - 2 * z, dark, 2.2 * z);
-      if (armored) { facet([[x - 10 * z, y - 13 * z], [x + 6 * z, y - 13 * z], [x + 6 * z, y - 8 * z], [x - 10 * z, y - 8 * z]], "#9aa3b2"); facet([[x - 10 * z, y - 8 * z], [x + 6 * z, y - 8 * z], [x + 6 * z, y - 6 * z], [x - 10 * z, y - 6 * z]], "#6f7784"); }
-    }
-    function artBoat(x, y, z, kind, color) {
-      if (kind === 3) {
-        facet([[x - 22 * z, y - 5 * z], [x + 22 * z, y - 5 * z], [x + 15 * z, y + 4 * z], [x - 15 * z, y + 4 * z]], "#7d8794");
-        facet([[x - 22 * z, y - 5 * z], [x + 22 * z, y - 5 * z], [x + 22 * z, y - 7.5 * z], [x - 22 * z, y - 7.5 * z]], "#a9b2bf");
-        box(x, y - 6 * z, 18 * z, 8 * z, 9 * z, "#9aa3b2");
-        box(x + 1 * z, y - 16 * z, 5 * z, 2.5 * z, 9 * z, "#5a6270");
-        circle(x + 1 * z, y - 28 * z, 2.8 * z, "rgba(200,200,205,0.6)"); circle(x + 4 * z, y - 32 * z, 3.4 * z, "rgba(200,200,205,0.4)");
-        box(x - 14 * z, y - 8 * z, 8 * z, 2.6 * z, 2.6 * z, "#3a3f47");
-        box(x + 14 * z, y - 8 * z, 8 * z, 2.6 * z, 2.6 * z, "#3a3f47");
-        return;
-      }
-      const big = kind === 2;
-      const hw2 = (big ? 21 : 17) * z;
-      facet([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2 * 0.7, y + 4 * z], [x - hw2 * 0.7, y + 4 * z]], "#8a5f3b");
-      facet([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2, y - 6.5 * z], [x - hw2, y - 6.5 * z]], "#b0804f");
-      line(x - hw2 * 0.6, y, x + hw2 * 0.6, y, "#5a3f28", 1.2 * z);
-      rect(x - 1 * z, y - 30 * z, 2 * z, 25 * z, "#5a4a3a");
-      // a striped sail in the tribe colour
-      const sw = (big ? 15 : 11) * z;
-      facet([[x + 1 * z, y - 29 * z], [x + sw, y - 15 * z], [x + 1 * z, y - 9 * z]], "#f3ead8");
-      for (let k = 0; k < 3; k++) {
-        const t0 = 0.1 + k * 0.3, t1 = t0 + 0.14;
-        poly([[x + 1 * z, y - 29 * z + 20 * z * t0], [x + 1 * z + (sw - 1 * z) * (t0 < 0.7 ? 1 : 1), y - 15 * z + 0 * t0], [x + 1 * z, y - 29 * z + 20 * z * t1]], color);
-      }
-      if (big) { facet([[x - 1 * z, y - 26 * z], [x - 11 * z, y - 14 * z], [x - 1 * z, y - 10 * z]], "#f3ead8"); }
-      poly([[x - 1 * z, y - 30 * z], [x - 7 * z, y - 27.5 * z], [x - 1 * z, y - 25 * z]], color);
-    }
-    const SKIN = "#f1d2b1", SKIN_D = "#d9b494";
-    function artUnit(cx, cy, z, o) {
-      const col = o.color, dark = shade(col, 0.72);
-      const x = cx, y = cy + 2 * z;
-      g.globalAlpha = o.dim ? 0.75 : 1;
-      ellipse(x, y + 3 * z, 13 * z, 5.5 * z, "rgba(0,0,0,0.3)");
-      let by = y;
-      if (o.boat) { artBoat(x, y, z, o.boat, col); by = y - 8 * z; }
-      const giant = o.type === "giant";
-      const s = (giant ? 1.55 : (o.boat ? 0.85 : 1)) * 1.1;
-      if (!o.boat && (o.type === "rider" || o.type === "knight")) { artHorse(x, y, z, o.type === "knight" ? "#7c8795" : "#e9e2d2", o.type === "knight", o.type === "rider"); by = y - 11 * z; }
-      if (o.type === "catapult" && !o.boat) {
-        box(x, by, 26 * z, 10 * z, 5 * z, "#6b4a2a");
-        circle(x - 9 * z, by + 2 * z, 4.2 * z, "#4a3a2a"); circle(x - 9 * z, by + 2 * z, 1.4 * z, "#8a6a4a");
-        circle(x + 9 * z, by + 2 * z, 4.2 * z, "#4a3a2a"); circle(x + 9 * z, by + 2 * z, 1.4 * z, "#8a6a4a");
-        box(x - 3 * z, by - 5 * z, 3 * z, 1.5 * z, 8 * z, "#8d6e4c"); box(x + 4 * z, by - 5 * z, 3 * z, 1.5 * z, 8 * z, "#8d6e4c");
-        line(x - 2 * z, by - 7 * z, x + 13 * z, by - 26 * z, "#8d6e4c", 2.8 * z);
-        circle(x + 13 * z, by - 26 * z, 3.8 * z, "#555"); circle(x + 12 * z, by - 27 * z, 1.3 * z, "#888");
-        by = by - 2 * z; o.small = true;
-      }
-      const bw = 10 * z * s, bd = 5 * z * s, bh = 10 * z * s;
-      const bx = o.small ? x - 15 * z : x;
-      const skin = giant ? "#b7bda8" : SKIN, skinD = giant ? "#949a86" : SKIN_D;
-      // legs, body box, a belt on the lit face
-      box(bx - bw * 0.22, by, bw * 0.34, bd * 0.34, 3 * z * s, "#3b3028", [0.9, 0.65, 1.0]);
-      box(bx + bw * 0.2, by + 1 * z * s, bw * 0.34, bd * 0.34, 3 * z * s, "#3b3028", [0.9, 0.65, 1.0]);
-      const bodyCol = o.hit ? "#ffffff" : col;
-      box(bx, by - 3 * z * s, bw, bd, bh, bodyCol, o.hit ? [1, 0.95, 1] : [1.0, 0.72, 1.16]);
-      rect(bx - bw / 2, by - 3 * z * s - bh * 0.38, bw / 2, 1.8 * z * s, o.hit ? "#ddd" : "#3b3028");
-      // arms as small boxes at the shoulders
-      box(bx - bw * 0.62, by - 3 * z * s - bh * 0.35, bw * 0.26, bd * 0.3, bh * 0.5, o.hit ? "#fff" : skin, [1.0, 0.75, 1.1]);
-      box(bx + bw * 0.6, by - 2 * z * s - bh * 0.35, bw * 0.26, bd * 0.3, bh * 0.5, o.hit ? "#fff" : skin, [1.0, 0.75, 1.1]);
-      // head box with two eyes on the lit face
-      const hw2 = 7.6 * z * s, hd = 3.8 * z * s, hh2 = 6.8 * z * s;
-      const hx = bx, hy = by - 3 * z * s - bh - 0.5 * z;
-      box(hx, hy, hw2, hd, hh2, o.hit ? "#ffffff" : skin, o.hit ? [1, 0.95, 1] : [1.0, 0.76, 1.12]);
-      circle(hx - hw2 * 0.34, hy - hh2 * 0.55 + hd * 0.12, 0.9 * z * s, "#222"); circle(hx - hw2 * 0.1, hy - hh2 * 0.55 + hd * 0.24, 0.9 * z * s, "#222");
-      artGear(o.type, hx, hy - hh2, hw2 / 2, hd, z * s, col, dark);
-      g.globalAlpha = 1;
-      if (o.vet) { circle(bx + bw / 2 + 2.5 * z, by - bh - 1 * z, 2.8 * z, "#ffd166"); circle(bx + bw / 2 + 2.5 * z, by - bh - 1 * z, 1.1 * z, "#fff3c0"); }
-      if (o.hp != null) {
-        // hit points as a small number at the shoulder, the way the original shows them
-        const hpx = bx - bw * 0.8 - 3 * z, hpy = hy - hh2 * 0.3;
-        outlinedText(String(o.hp), hpx, hpy, clamp(8.5 * z, 9, 12), o.hpFrac > 0.5 ? "#ffffff" : o.hpFrac > 0.25 ? "#ffd166" : "#ff7a6e", "right");
-      }
-    }
-    // Helmets and weapons. (hx, hy) is the top centre of the head box, hr its
-    // half width, hd its depth; z here already includes the unit's scale.
-    function artGear(type, hx, hy, hr, hd, z, col, dark) {
-      const steel = "#c9ced6", steelD = "#8d939c", iron = "#3b3b45", wood = "#8d6e4c";
-      const w = hr * 2 + 1.2 * z;
-      const helm = (c, h) => box(hx, hy + hd * 0.5 + 0.4 * z, w, hd + 0.8 * z, h, c, [1.0, 0.72, 1.18]);
-      const handX = hx + hr + 4 * z, handY = hy + 14 * z;
+    // ---- Units: blocky figures, a box body under a box head, gear per type,
+    // a mount or a boat when they have one.
+    const SKIN = "#f1d2b1";
+    function meshFigure(type, col, hit, giant) {
+      const C = hit ? "#ffffff" : col;
+      const skin = hit ? "#ffffff" : giant ? "#b7bda8" : SKIN;
+      const legs = hit ? "#dddddd" : "#3b3028";
+      let f = mAll(mBox(-0.06, 0, 0, 0.08, 0.08, 0.1, legs), mBox(0.06, 0, 0, 0.08, 0.08, 0.1, legs),
+        mBox(0, 0, 0.1, 0.24, 0.16, 0.26, C), mBox(0, 0, 0.19, 0.25, 0.17, 0.03, legs),
+        mBox(-0.165, 0, 0.17, 0.07, 0.07, 0.19, skin), mBox(0.165, 0, 0.17, 0.07, 0.07, 0.19, skin),
+        mBox(0, 0, 0.37, 0.22, 0.19, 0.2, skin));
+      // eyes on the lit face
+      const ey = 0.095 + 0.003;
+      f.push({ p: [[-0.065, ey, 0.45], [-0.025, ey, 0.45], [-0.025, ey, 0.49], [-0.065, ey, 0.49]], c: "#222222", flat: true, bias: 0.4 });
+      f.push({ p: [[0.02, ey, 0.45], [0.06, ey, 0.45], [0.06, ey, 0.49], [0.02, ey, 0.49]], c: "#222222", flat: true, bias: 0.4 });
+      const hx = 0.26, hz = 0.2;   // the right hand
       switch (type) {
         case "warrior":
-          helm(iron, 3.2 * z); rect(hx - hr * 0.55, hy + 1 * z, 1.4 * z, 4 * z, iron);
-          line(handX, handY + 6 * z, handX + 2 * z, hy - 3 * z, wood, 2.4 * z); blob(handX + 2.4 * z, hy - 4 * z, 3.2 * z, 3.4 * z, "#6e6e78", 1.1, 0.7);
+          f = mAll(f, mBox(0, 0, 0.56, 0.24, 0.21, 0.07, IRON), mBox(0, 0.1, 0.5, 0.03, 0.02, 0.08, IRON),
+            mBox(hx, 0, hz, 0.04, 0.04, 0.42, WOOD), mSphere(hx, 0, hz + 0.44, 0.07, "#6e6e78", 6, 3));
           break;
         case "rider":
-          helm(wood, 3 * z); line(handX, handY + 4 * z, handX + 3 * z, hy - 7 * z, iron, 1.7 * z);
+          f = mAll(f, mBox(0, 0, 0.56, 0.24, 0.21, 0.06, WOOD), mBox(hx, 0, hz - 0.05, 0.03, 0.03, 0.64, STEEL), mCone(hx, 0, hz + 0.59, 0.03, 0.07, "#eef1f5", 4));
           break;
         case "archer":
-          helm("#4f7a3a", 2.6 * z); cone(hx, hy + 1.2 * z, w, hr + 5 * z, "#5d8f45", "#3a5c2a");
-          g.strokeStyle = wood; g.lineWidth = 1.9 * z; g.beginPath(); g.arc(handX + 1 * z, handY - 2 * z, 8.5 * z, -Math.PI / 2 - 0.2, Math.PI / 2 + 0.2); g.stroke();
-          line(handX + 1 * z, handY - 10.5 * z, handX + 1 * z, handY + 6.5 * z, "#e9dcc8", 1 * z);
+          f = mAll(f, mCone(0, 0, 0.55, 0.16, 0.24, "#4f7a3a", 6),
+            mSheet([hx + 0.04, 0, hz - 0.1], [hx + 0.1, 0, hz + 0.12], 0.035, WOOD), mSheet([hx + 0.1, 0, hz + 0.12], [hx + 0.1, 0, hz + 0.36], 0.035, WOOD),
+            mSheet([hx + 0.1, 0, hz + 0.36], [hx + 0.04, 0, hz + 0.58], 0.035, WOOD), mSheet([hx + 0.04, 0, hz - 0.1], [hx + 0.04, 0, hz + 0.58], 0.012, "#e9dcc8"));
           break;
-        case "defender":
-          helm(steel, 3.4 * z); rect(hx - hr - 0.6 * z, hy + 2.5 * z, w, 1.6 * z, steelD);
-          facet([[hx - hr - 9 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 20 * z], [hx - hr - 5 * z, hy + 23 * z], [hx - hr - 9 * z, hy + 20 * z]], steel);
-          facet([[hx - hr - 5 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 20 * z], [hx - hr - 5 * z, hy + 23 * z]], steelD);
-          circle(hx - hr - 5 * z, hy + 13 * z, 2.4 * z, col);
+        case "defender": {
+          f = mAll(f, mBox(0, 0, 0.56, 0.25, 0.22, 0.08, STEEL), mBox(-0.21, 0, 0.08, 0.04, 0.3, 0.38, STEEL));
+          f.push({ p: [[-0.26, 0.153, 0.18], [-0.16, 0.153, 0.18], [-0.16, 0.153, 0.32], [-0.26, 0.153, 0.32]], c: col, flat: true, bias: 0.4 });
           break;
-        case "swordsman":
-          helm(steel, 3.4 * z); rect(hx - hr * 0.55, hy + 1 * z, 1.4 * z, 5 * z, steelD);
-          line(handX + 1 * z, handY + 2 * z, handX + 1 * z, hy - 9 * z, "#eef1f5", 2.4 * z, "butt"); rect(handX - 2.5 * z, handY + 1 * z, 7 * z, 2 * z, wood);
-          facet([[hx - hr - 8 * z, hy + 8 * z], [hx - hr - 1 * z, hy + 8 * z], [hx - hr - 1 * z, hy + 18 * z], [hx - hr - 8 * z, hy + 18 * z]], steel);
-          circle(hx - hr - 4.5 * z, hy + 13 * z, 2 * z, col);
+        }
+        case "swordsman": {
+          f = mAll(f, mBox(0, 0, 0.56, 0.25, 0.22, 0.08, STEEL), mBox(0, 0, 0.64, 0.04, 0.16, 0.06, col),
+            mBox(hx, 0, hz + 0.05, 0.03, 0.03, 0.5, "#eef1f5"), mBox(hx, 0, hz + 0.05, 0.12, 0.04, 0.03, WOOD),
+            mBox(-0.2, 0, 0.14, 0.04, 0.22, 0.26, STEEL));
+          f.push({ p: [[-0.23, 0.113, 0.22], [-0.17, 0.113, 0.22], [-0.17, 0.113, 0.3], [-0.23, 0.113, 0.3]], c: col, flat: true, bias: 0.4 });
           break;
-        case "catapult": helm(wood, 3 * z); break;
+        }
+        case "catapult": f = mAll(f, mBox(0, 0, 0.56, 0.24, 0.21, 0.06, WOOD)); break;
         case "knight":
-          helm(steel, 4 * z); rect(hx - hr - 0.6 * z, hy + 2.5 * z, w, 1.6 * z, steelD);
-          box(hx, hy - 3 * z, 2.4 * z, 1.2 * z, 7 * z, col, [1.0, 0.74, 1.2]);
-          line(handX, handY + 6 * z, handX + 3 * z, hy - 16 * z, "#e9dcc8", 2 * z); poly([[handX + 3 * z, hy - 16 * z], [handX + 1.5 * z, hy - 11 * z], [handX + 4.5 * z, hy - 11 * z]], steel);
+          f = mAll(f, mBox(0, 0, 0.56, 0.25, 0.22, 0.09, STEEL), mCone(0, 0, 0.65, 0.05, 0.2, col, 5),
+            mBox(hx, 0, hz - 0.1, 0.03, 0.03, 0.95, "#e9dcc8"), mCone(hx, 0, hz + 0.85, 0.035, 0.1, STEEL, 4));
           break;
         case "mindbender":
-          helm("#5b3a86", 2.6 * z); cone(hx, hy + 1.2 * z, w * 1.1, hr + 7 * z, "#6d47a0", "#3e2660");
-          line(handX, handY + 5 * z, handX, hy - 7 * z, wood, 1.7 * z); circle(handX, hy - 8.5 * z, 3.2 * z, "#c77dff"); circle(handX, hy - 8.5 * z, 6.5 * z, "rgba(199,125,255,0.25)");
+          f = mAll(f, mCone(0, 0, 0.55, 0.17, 0.36, "#5b3a86", 6),
+            mBox(hx, 0, hz - 0.05, 0.03, 0.03, 0.62, WOOD), mSphere(hx, 0, hz + 0.6, 0.065, "#c77dff", 6, 3));
           break;
         case "giant":
-          rect(hx - hr * 0.9, hy + 1.5 * z, hr * 1.8, 1.6 * z, "#3a3f38"); rect(hx - 1.2 * z, hy + 6 * z, 2.4 * z, 1.2 * z, "#3a3f38");
+          f = mAll(f, mBox(0, 0.1, 0.49, 0.2, 0.02, 0.03, "#3a3f38"));
           break;
         default: break;
+      }
+      return f;
+    }
+    function meshHorse(color, armored, stripes) {
+      const dark = hexShade(color, 0.72);
+      let f = mAll(mBox(0, 0, 0.24, 0.62, 0.24, 0.26, color),
+        mBox(0.3, 0, 0.42, 0.14, 0.14, 0.3, color), mBox(0.42, 0, 0.6, 0.24, 0.14, 0.14, color),
+        mBox(0.36, -0.05, 0.74, 0.03, 0.03, 0.06, dark), mBox(0.36, 0.05, 0.74, 0.03, 0.03, 0.06, dark),
+        mBox(0.3, 0, 0.72, 0.16, 0.05, 0.05, dark), mBox(-0.33, 0, 0.3, 0.06, 0.05, 0.2, dark));
+      for (const lx of [-0.2, 0.2]) for (const ly of [-0.08, 0.08]) f = mAll(f, mBox(lx, ly, 0, 0.08, 0.08, 0.24, hexShade(color, 0.9)));
+      f.push({ p: [[0.5, 0.071, 0.66], [0.53, 0.071, 0.66], [0.53, 0.071, 0.69], [0.5, 0.071, 0.69]], c: "#222222", flat: true, bias: 0.4 });
+      if (stripes) for (let k = -2; k <= 2; k++) f.push({ p: [[k * 0.11 - 0.025, 0.123, 0.26], [k * 0.11 + 0.025, 0.123, 0.26], [k * 0.11 + 0.025, 0.123, 0.48], [k * 0.11 - 0.025, 0.123, 0.48]], c: "#2b2b2b", flat: true, bias: 0.4 });
+      if (armored) f = mAll(f, mBox(-0.06, 0, 0.5, 0.44, 0.27, 0.05, "#9aa3b2"), mBox(0.44, 0, 0.74, 0.2, 0.12, 0.04, "#9aa3b2"));
+      return f;
+    }
+    function meshBoat(kind, color) {
+      if (kind === 3) return mAll(mBox(0, 0, -0.06, 0.9, 0.34, 0.12, "#7d8794", { top: "#a9b2bf" }), mBox(0, 0, 0.06, 0.44, 0.24, 0.18, "#9aa3b2"),
+        mBox(0.02, 0, 0.24, 0.1, 0.1, 0.18, "#5a6270"), mBox(-0.3, 0, 0.06, 0.16, 0.08, 0.05, "#3a3f47"), mBox(0.3, 0, 0.06, 0.16, 0.08, 0.05, "#3a3f47"));
+      const big = kind === 2;
+      const L = big ? 0.84 : 0.7;
+      const f = mAll(mBox(0, 0, -0.06, L, 0.28, 0.1, "#8a5f3b", { top: "#b0804f" }), mBox(0, 0, 0.04, L + 0.02, 0.3, 0.03, "#b0804f"),
+        mCone(L / 2, 0, -0.06, 0.08, 0.14, "#8a5f3b", 4, 0.14), mBox(0, 0, 0.07, 0.03, 0.03, 0.7, "#5a4a3a"));
+      const sail = (x0, dir) => {
+        f.push({ p: [[x0, 0, 0.74], [x0 + dir * (big ? 0.34 : 0.28), 0, 0.5], [x0, 0, 0.26]], c: "#f3ead8", two: true });
+        for (let k = 0; k < 3; k++) {
+          const t0 = 0.12 + k * 0.3, t1 = t0 + 0.14;
+          const zt0 = 0.74 - 0.48 * t0, zt1 = 0.74 - 0.48 * t1;
+          const w0 = (big ? 0.34 : 0.28) * (1 - Math.abs(zt0 - 0.5) / 0.24), w1 = (big ? 0.34 : 0.28) * (1 - Math.abs(zt1 - 0.5) / 0.24);
+          f.push({ p: [[x0, 0.004, zt0], [x0 + dir * w0, 0.004, zt0], [x0 + dir * w1, 0.004, zt1], [x0, 0.004, zt1]], c: color, two: true, bias: 0.2 });
+        }
+      };
+      sail(0.02, 1);
+      if (big) sail(-0.02, -1);
+      f.push({ p: [[0, 0, 0.78], [-0.1, 0, 0.74], [0, 0, 0.7]], c: color, two: true });
+      return f;
+    }
+    function meshUnit(o) {
+      const giant = o.type === "giant";
+      let f = [];
+      let base = 0, s = giant ? 1.5 : 1;
+      if (o.boat) { f = mAll(f, meshBoat(o.boat, o.color)); base = 0.08; s *= 0.85; }
+      else if (o.type === "rider" || o.type === "knight") { f = mAll(f, meshHorse(o.type === "knight" ? "#7c8795" : "#e9e2d2", o.type === "knight", o.type === "rider")); base = 0.5; s *= 0.9; }
+      let fx = 0;
+      if (o.type === "catapult" && !o.boat) {
+        f = mAll(f, mBox(0.1, 0, 0.06, 0.6, 0.3, 0.08, BARK), mBox(-0.1, 0, 0, 0.06, 0.2, 0.2, "#4a3a2a"), mBox(0.3, 0, 0, 0.06, 0.2, 0.2, "#4a3a2a"),
+          mBox(0.02, -0.06, 0.14, 0.05, 0.05, 0.2, WOOD), mBox(0.02, 0.06, 0.14, 0.05, 0.05, 0.2, WOOD),
+          mSheet([-0.04, 0, 0.16], [0.42, 0, 0.66], 0.06, WOOD), mSphere(0.42, 0, 0.7, 0.07, "#555555", 6, 3));
+        fx = -0.38; s *= 0.85;
+      }
+      const fig = meshFigure(o.type, o.color, o.hit, giant);
+      mScale(fig, s, s);
+      mMove(fig, fx, 0, base);
+      return mAll(f, fig);
+    }
+    function artUnit(cx, cy, z, o) {
+      const x = cx, y = cy + 2 * z;
+      g.globalAlpha = o.dim ? 0.75 : 1;
+      ellipse(x, y + 3 * z, (o.boat ? 18 : 13) * z, 5.5 * z, "rgba(0,0,0,0.3)");
+      stamp("unit|" + o.type + "|" + (o.boat || 0) + "|" + o.color + "|" + (o.hit ? 1 : 0), x, y, z, () => meshUnit(o));
+      if (o.type === "mindbender") circle(x + 10 * z, y - TZ * (0.8 + (o.boat ? 0.08 : 0)) * z, 7 * z, "rgba(199,125,255,0.28)");
+      g.globalAlpha = 1;
+      if (o.vet) { circle(x + 11 * z, y - 18 * z, 2.8 * z, GOLD); circle(x + 11 * z, y - 18 * z, 1.1 * z, "#fff3c0"); }
+      if (o.hp != null) {
+        // hit points as a small number at the shoulder, the way the original shows them
+        const lift = o.boat ? 4 : (o.type === "rider" || o.type === "knight") ? 22 : 0;
+        outlinedText(String(o.hp), x - 12 * z, y - 22 * z - lift * z, clamp(8.5 * z, 9, 12), o.hpFrac > 0.5 ? "#ffffff" : o.hpFrac > 0.25 ? "#ffd166" : "#ff7a6e", "right");
       }
     }
 
