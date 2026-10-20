@@ -164,3 +164,8 @@ constraint is the easy half; not quietly routing around it is the point.
   Sandboxes block those hosts, and a failed library load can abort the page's
   init, leaving a blank screen that looks like a failed recovery when the
   recovery was fine.
+
+- `upload.py` can come back with `FAILED  Request deadline exceeded.` on a
+  big source (260 KB took one such failure). It is the server's own deadline,
+  not a validation verdict: run the same upload again before bisecting
+  anything — the retry went through at once.

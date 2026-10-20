@@ -356,6 +356,9 @@ Three rounds, all reported as "unsupported remote resources", all found with
   validator rejects as raw canvas creation. It is an `OffscreenCanvas` now
   (as are the sprite atlas pages), with a tile-by-tile fallback if a browser
   has none; the validator's scan accepts `OffscreenCanvas`.
+- Not a rejection, but it looks like one: the first upload of the mesh build
+  came back `Request deadline exceeded.` The same upload a minute later went
+  through. Retry once before bisecting.
 
 ## Verified
 
