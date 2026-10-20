@@ -132,7 +132,11 @@ python3 scripts/upload.py <repo>/<bit-name>
 
 `check.py` verifies the manifest and scans for constructs the upload validator
 rejects. Its value is that the validator's own error message names the wrong
-cause almost every time, so catching things locally saves a bisect.
+cause almost every time, so catching things locally saves a bisect. When the
+upload is still refused with the "unsupported remote resources" message, run
+`python3 scripts/bisect.py <repo>/<bit-name>`: it minimises the source against
+the real validator (nothing is created) and prints the statements the
+rejection needs, which is usually two that only fail together.
 
 If pairing is needed, `python3 scripts/upload.py pair` mints a code. Only mint
 one when the creator says they are at their phone — codes last ten minutes, and
@@ -181,6 +185,7 @@ scripts/grab.py       recover a game from its link, print the porting brief
 scripts/preview.js    run the recovered original standalone, screenshot it
 scripts/icons.js      inline lucide icon geometry; reports icons that do not exist
 scripts/check.py      manifest + validator pre-flight; gates the upload
+scripts/bisect.py     when the validator still says "remote resources": finds the statements it means
 scripts/upload.py     pair once, then upload drafts; warns about duplicates
 harness/run.js        drive a bit headlessly against a strict mock ctx
 harness/scenarios/    example scenario to copy

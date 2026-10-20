@@ -121,6 +121,10 @@ hard way, documented where they bit:
   see [`heartwood/`](heartwood#what-the-upload-validator-rejects).
 - `const ph = <call expression>` — the local's name alone. See
   [`pixel-fog/`](pixel-fog).
+- The canvas context's name bound to anything else anywhere in the file, and a
+  local bound to a `ctx.…()` call in one function while a same-named local is
+  indexed in another — see [`thirty-turns/`](thirty-turns#what-the-upload-validator-rejected).
+  `_skills/sekai/scripts/bisect.py` finds these automatically.
 
 A rejected upload creates nothing, so probe uploads are free; unreachable code
 is still scanned; and constructs that merely *look* exotic are usually fine if

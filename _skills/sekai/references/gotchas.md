@@ -83,7 +83,23 @@ for diagnosis. Known triggers, none of which are about remote resources:
 See the root `README.md` "Upload-validator gotchas" section, which links to the
 bits where each was found.
 
-**How to bisect a rejection cheaply.** A rejected upload creates nothing, so
+- A **percent tuning knob** takes values between 0 and 1, not 0 and 100. This
+  one at least comes back with its own message.
+- **The canvas context's name must be bound to nothing else in the file.**
+  `const g = canvas.getContext("2d")` plus `const g = gameRng(S)` in some
+  unrelated engine function made every `g.font = …` unresolvable, and the
+  rejection named remote resources. Same family: a local bound to a `ctx.…()`
+  call in one function (`const p = ctx.music.sting(name)`) and a different
+  `p` indexed with `[…]` in another. Constants really are resolved without
+  scope; give the context and every ctx-bound local a name used nowhere else.
+
+**How to bisect a rejection cheaply.** `scripts/bisect.py <bit-dir>` does it:
+delta debugging over the top-level statements of `init(ctx)`, with the global
+renamed on every probe so nothing is created. It found all three pairs above
+in about ninety probes each. Two things it embodies that a hand bisect gets
+wrong: probes must *parse* (a slice cut mid-function only gets a lenient text
+scan and comes back clean, so a line-range bisect reports "fails only
+together" everywhere), and the answer is often two statements, not one. A rejected upload creates nothing, so
 probe uploads are free. Make every probe fail a *later* check than the resource
 scan — rename `window.plethoraBit` to something else, so a source that clears
 the scan fails on "must define window.plethoraBit" instead. Then the two

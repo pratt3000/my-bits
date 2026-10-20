@@ -272,9 +272,25 @@ builds and the end of a turn. Nothing plays before the first gesture.
   canvas fonts name a literal family stack, and there are no gradients, so
   none of the validator traps recorded in the root README apply.
 
+## What the upload validator rejected
+
+Three rounds, all reported as "unsupported remote resources", all found with
+`_skills/sekai/scripts/bisect.py` rather than by hand:
+
+- The engine opened its random generator as `const g = gameRng(S)` in four
+  functions, and the renderer's context is `const g = canvas.getContext("2d")`.
+  The validator resolves constants without scope, so every `g.font = …` became
+  unresolvable. The engine's handle is now `dice`.
+- `const p = ctx.music.sting(name)` in `sting()` plus a different `p` indexed
+  as `p[0]` in `artCloud()` and then in `drawUnit()`. Every local bound to a
+  `ctx.…()` result now has a name used nowhere else.
+- Before those, the manifest itself: a `percent` tuning knob takes 0–1, not
+  0–100, and that one at least says so.
+
 ## Verified
 
-- `_skills/sekai/scripts/check.py` passes.
+- `_skills/sekai/scripts/check.py` passes, and the draft is on Plethora
+  (uploaded 2026-10-20).
 - The engine plays itself in node: `node thirty-turns/sim.js` (four quick
   games), `sim.js full` (36 games across every map size and type, all four
   modes and difficulties) or `sim.js trace` (one game's expansion, turn by

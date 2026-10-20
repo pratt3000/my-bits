@@ -716,15 +716,15 @@ window.plethoraBit = {
     }
     // The Explorer reward: a wandering scout that reveals the land around.
     function explorerReveal(S, p, x, y) {
-      const g = gameRng(S);
+      const dice = gameRng(S);
       let cx = x, cy = y;
       for (let step = 0; step < 15; step++) {
-        const d = g.rng.pick(DIRS8);
+        const d = dice.rng.pick(DIRS8);
         const nx = clamp(cx + d[0], 0, S.n - 1), ny = clamp(cy + d[1], 0, S.n - 1);
         cx = nx; cy = ny;
         revealArea(S, p, cx, cy, 1);
       }
-      g.done();
+      dice.done();
     }
 
     // ------------------------------------------------------------ economy
@@ -1078,7 +1078,7 @@ window.plethoraBit = {
       const i = tIdx(S, u.x, u.y);
       S.bld[i] = B_NONE;
       const pl = S.players[u.owner];
-      const g = gameRng(S);
+      const dice = gameRng(S);
       const options = [];
       const water = isWater(S.terrain[i]);
       if (water && u.boat && u.boat < 3) options.push("battleship", "battleship", "battleship");
@@ -1088,7 +1088,7 @@ window.plethoraBit = {
       if (TECH_IDS.some((t) => techAvailable(S, u.owner, t))) options.push("tech", "tech");
       if (!water) options.push("giant");
       options.push("explorer", "explorer");
-      const pick = g.rng.pick(options);
+      const pick = dice.rng.pick(options);
       let detail = "";
       if (pick === "stars") { pl.stars += WHALE_STARS; detail = "+" + WHALE_STARS + " stars"; emit(S, { t: "stars", p: u.owner, n: WHALE_STARS, x: u.x, y: u.y }); }
       else if (pick === "pop") {
@@ -1097,7 +1097,7 @@ window.plethoraBit = {
         addPop(S, best, 3); detail = "+3 population for " + best.name;
       } else if (pick === "tech") {
         const avail = TECH_IDS.filter((t) => techAvailable(S, u.owner, t));
-        const t = g.rng.pick(avail);
+        const t = dice.rng.pick(avail);
         pl.techs.push(t); detail = TECHS[t].name + " discovered";
         emit(S, { t: "research", p: u.owner, tech: t });
         checkTasks(S, u.owner);
@@ -1111,7 +1111,7 @@ window.plethoraBit = {
         else { pl.stars += WHALE_STARS; detail = "+" + WHALE_STARS + " stars"; }
       } else if (pick === "battleship") { u.boat = 3; detail = "The wreck becomes a Battleship"; }
       else { explorerReveal(S, u.owner, u.x, u.y); detail = "The land around is revealed"; }
-      g.done();
+      dice.done();
       u.moved = true; u.attacked = true;
       emit(S, { t: "ruin", u: u.id, x: u.x, y: u.y, reward: pick, detail, p: u.owner });
       return { reward: pick, detail };
@@ -1431,11 +1431,11 @@ window.plethoraBit = {
 
     function aiPickReward(S, c, level) {
       const p = c.owner;
-      const g = gameRng(S);
+      const dice = gameRng(S);
       const threat = !!enemyNear(S, p, c.x, c.y, 3);
       let pick;
       switch (Math.min(5, level)) {
-        case 2: pick = (S.turn <= 6 && g.rng() < 0.35) ? "explorer" : "workshop"; break;
+        case 2: pick = (S.turn <= 6 && dice.rng() < 0.35) ? "explorer" : "workshop"; break;
         case 3: pick = (threat || (c.capital && S.mode !== "perfection" && S.turn > 8)) ? "walls" : "resources"; break;
         case 4: {
           let gain = 0;
@@ -1452,11 +1452,11 @@ window.plethoraBit = {
         }
         default: {
           const war = S.mode === "domination" || S.mode === "might" || threat;
-          pick = war || (S.players[p].met.length && g.rng() < 0.4) ? "superunit" : "park";
+          pick = war || (S.players[p].met.length && dice.rng() < 0.4) ? "superunit" : "park";
           if (pick === "superunit" && unitAt(S, c.x, c.y) && !freeNeighbour(S, c.x, c.y)) pick = "park";
         }
       }
-      g.done();
+      dice.done();
       return pick;
     }
     function freeNeighbour(S, x, y) {
@@ -1835,9 +1835,9 @@ window.plethoraBit = {
     function aiTurn(S, p) {
       const pl = S.players[p];
       if (!pl.alive || S.over) return;
-      const g = gameRng(S);
+      const dice = gameRng(S);
       const diff = diffById(pl.ai || "normal");
-      const A = { rng: g.rng, diff, reserved: new Set(), sloppy: () => g.rng() < diff.sloppy };
+      const A = { rng: dice.rng, diff, reserved: new Set(), sloppy: () => dice.rng() < diff.sloppy };
       // Buy before moving so fresh walls and units count, then again after.
       aiEconomy(S, p, A);
       const mine = S.units.filter((u) => u.owner === p && !u.dead);
@@ -1845,7 +1845,7 @@ window.plethoraBit = {
       mine.sort((a, b) => unitStats(b).atk - unitStats(a).atk);
       for (const u of mine) if (!u.dead && !S.over) aiUnitTurn(S, u, A);
       aiEconomy(S, p, A);
-      g.done();
+      dice.done();
     }
 
     // ====================================================================== //
@@ -1977,7 +1977,7 @@ window.plethoraBit = {
       try { const r = thunk(); if (r && typeof r.catch === "function") r.catch(() => {}); } catch (_) { /* unsupported here */ }
     }
     function tune(id, dflt) {
-      try { const v = ctx.tune && ctx.tune.get ? ctx.tune.get(id) : undefined; return v === undefined || v === null ? dflt : v; }
+      try { const knob = ctx.tune && ctx.tune.get ? ctx.tune.get(id) : undefined; return knob === undefined || knob === null ? dflt : knob; }
       catch (_) { return dflt; }
     }
     let ANIM_SPEED = clamp(Number(tune("anim_speed", 1)) || 1, 0.4, 2.5);
@@ -2633,10 +2633,10 @@ window.plethoraBit = {
       const hw = TW / 2 * z, hh = TH / 2 * z;
       const puffs = [[-0.36, -0.02, 0.9], [0.0, -0.3, 1.0], [0.36, 0.02, 0.9], [0.02, 0.26, 0.95], [-0.2, 0.14, 0.8], [0.22, -0.12, 0.85]];
       for (let k = 0; k < puffs.length; k++) {
-        const p = puffs[k];
+        const puff = puffs[k];
         const j = hash2(k + 1, Math.floor(seed * 997));
-        const x = cx + p[0] * hw * 1.15 + (j - 0.5) * 6 * z, y = cy + p[1] * hh * 1.3 + (j - 0.5) * 4 * z;
-        const r = p[2] * hh * (0.95 + j * 0.3);
+        const x = cx + puff[0] * hw * 1.15 + (j - 0.5) * 6 * z, y = cy + puff[1] * hh * 1.3 + (j - 0.5) * 4 * z;
+        const r = puff[2] * hh * (0.95 + j * 0.3);
         if (layer === 0) circle(x, y + 2 * z, r * 1.02, "#2f3645");
         else if (layer === 1) circle(x - r * 0.08, y - r * 0.18, r * 0.86, "#414b5e");
         else circle(x - r * 0.28, y - r * 0.46, r * 0.4, "#56627a");
@@ -3200,13 +3200,13 @@ window.plethoraBit = {
       if (!ctx.capabilities.backgroundMusic || !V.soundOn || musicHandle) return;
       try {
         await ctx.music.unlock();
-        musicHandle = await ctx.music.play({ preset: "cozy", volume: clamp(Number(tune("music_volume", 30)) / 100, 0, 1) * 0.9, fadeInMs: 1800, intensity: 0.3, density: 0.4 });
+        musicHandle = await ctx.music.play({ preset: "cozy", volume: clamp(Number(tune("music_volume", 0.3)), 0, 1) * 0.9, fadeInMs: 1800, intensity: 0.3, density: 0.4 });
       } catch (_) { musicHandle = null; }
     }
     function stopMusic() { if (!musicHandle) return; try { ctx.music.stop({ fadeOutMs: 600 }); } catch (_) {} musicHandle = null; }
     function sting(name) {
       if (!V.soundOn || !ctx.capabilities.backgroundMusic) return;
-      try { const p = ctx.music.sting(name); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+      try { const stingResult = ctx.music.sting(name); if (stingResult && stingResult.catch) stingResult.catch(() => {}); } catch (_) {}
     }
     function ensureAudio() {
       if (ac || !ctx.capabilities.audio) return;
@@ -3867,8 +3867,8 @@ window.plethoraBit = {
       for (const b of bots) if (order.indexOf(b.ai) > order.indexOf(diff)) diff = b.ai;
       try {
         if (S.mode === "perfection" && S.turnLimit === 30) {
-          const r = await ctx.memory.record("perfection").submit(me.score, { label: me.score.toLocaleString() + " pts", dimensions: { difficulty: diff } });
-          if (r && r.isPersonalBest) { V.recordNote = "A new personal best on the " + diff + " board."; if (V.panel === "over") openPanel("over"); }
+          const submitted = await ctx.memory.record("perfection").submit(me.score, { label: me.score.toLocaleString() + " pts", dimensions: { difficulty: diff } });
+          if (submitted && submitted.isPersonalBest) { V.recordNote = "A new personal best on the " + diff + " board."; if (V.panel === "over") openPanel("over"); }
         }
         if (won && S.mode !== "perfection") {
           await ctx.memory.record("conquest").submit(S.turn, { label: "turn " + S.turn, dimensions: { difficulty: diff } });
@@ -3904,8 +3904,8 @@ window.plethoraBit = {
     async function loadSaved() {
       let data = null;
       if (ctx.capabilities.storage) {
-        try { const v = ctx.storage.get(SAVE_KEY); data = v && typeof v.then === "function" ? await v : v; } catch (_) { data = null; }
-        try { const st = ctx.storage.get(SETTINGS_KEY); const s2 = st && typeof st.then === "function" ? await st : st; if (s2 && typeof s2.sound === "boolean") V.soundOn = s2.sound; } catch (_) {}
+        try { const stored = ctx.storage.get(SAVE_KEY); data = stored && typeof stored.then === "function" ? await stored : stored; } catch (_) { data = null; }
+        try { const storedSettings = ctx.storage.get(SETTINGS_KEY); const settings = storedSettings && typeof storedSettings.then === "function" ? await storedSettings : storedSettings; if (settings && typeof settings.sound === "boolean") V.soundOn = settings.sound; } catch (_) {}
       }
       if (!data && ctx.game && ctx.game.progress) {
         try {

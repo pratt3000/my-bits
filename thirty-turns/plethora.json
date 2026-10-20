@@ -85,8 +85,12 @@
   "tuning": {
     "schemaVersion": 1,
     "groups": {
-      "difficulty": { "label": "Difficulty" },
-      "feel": { "label": "Feel" }
+      "difficulty": {
+        "label": "Difficulty"
+      },
+      "feel": {
+        "label": "Feel"
+      }
     },
     "knobs": {
       "ai_bonus_stars": {
@@ -125,10 +129,10 @@
       "music_volume": {
         "label": "Music volume",
         "type": "percent",
-        "default": 30,
+        "default": 0.3,
         "min": 0,
-        "max": 100,
-        "step": 5,
+        "max": 1,
+        "step": 0.05,
         "group": "feel",
         "intent": "audio",
         "apply": "restart"
