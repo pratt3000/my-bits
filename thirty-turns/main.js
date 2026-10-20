@@ -2037,7 +2037,7 @@ window.plethoraBit = {
       const lim = n * TW * 0.55;
       cam.x = clamp(cam.x, -lim, lim);
       cam.y = clamp(cam.y, -TH, n * TH + TH);
-      cam.z = clamp(cam.z, 0.42, 2.4);
+      cam.z = clamp(cam.z, 0.42, 2.8);
     }
 
     // ---- UI state
@@ -2118,33 +2118,61 @@ window.plethoraBit = {
     // ====================================================================== //
     // The scene                                                              //
     // ====================================================================== //
+    // The visible range of tile diagonals (tx+ty) and anti-diagonals (tx-ty),
+    // from the screen corners, so the cloud sea can be drawn to the edge of
+    // the screen whatever the map size. tx = (d + e) / 2, ty = (d - e) / 2.
+    function visibleRange(w, h, z) {
+      const u0 = (-w * 0.1 - w / 2) / z + cam.x, u1 = (w * 1.1 - w / 2) / z + cam.x;
+      const v0 = (-h * 0.1 - h / 2) / z + cam.y, v1 = (h * 1.15 - h / 2) / z + cam.y;
+      return { d0: Math.floor(2 * v0 / TH) - 2, d1: Math.ceil(2 * v1 / TH) + 3, e0: Math.floor(2 * u0 / TW) - 2, e1: Math.ceil(2 * u1 / TW) + 2 };
+    }
+
     function drawScene(nowMs) {
       const w = W(), h = H();
-      g.fillStyle = "#171d29";
+      g.fillStyle = "#2a3140";
       g.fillRect(0, 0, w, h);
-      if (!S || V.hideMap) return;
-      const n = S.n, z = cam.z;
+      const n = S ? S.n : 0, z = cam.z;
       const hw = (TW / 2) * z, hh = (TH / 2) * z;
-      const curP = S.cur;
+      const curP = S ? S.cur : -1;
       const sel = V.sel;
       const low = z < 0.62;
       const drop = WATER_DROP * z;
-
+      const hidden = !S || V.hideMap;
+      const seen = (i) => !hidden && viewerExplored(i);
+      const vr = visibleRange(w, h, z);
       // Tiles off screen are skipped; the margin covers tall objects.
       const onScreen = (sx, sy) => sx > -TW * z * 1.5 && sx < w + TW * z * 1.5 && sy > -TH * z * 3 && sy < h + TH * z * 2.2;
-      const at = (tx, ty) => (inBounds(S, tx, ty) ? ty * n + tx : -1);
+      const at = (tx, ty) => (S && inBounds(S, tx, ty) ? ty * n + tx : -1);
       const landAt = (tx, ty) => { const j = at(tx, ty); return j >= 0 && !isWater(S.terrain[j]); };
 
-      // Pass 1: ground. Every tile draws its two front faces, then its top; the
-      // tiles in front cover the faces unless they sit lower (water) or are
-      // off the map, which is where the cliffs and the island's edge show.
-      for (let d = 0; d <= 2 * n - 2; d++) {
+      // Pass 0: the cloud sea under everything; the known world is drawn on
+      // top of it and so becomes a hole in the clouds.
+      if (!artSeaFill(w, h, z)) {
+        const sea = [];
+        for (let d = vr.d0; d <= vr.d1; d++) {
+          const txLo = Math.ceil((d + vr.e0) / 2), txHi = Math.floor((d + vr.e1) / 2);
+          for (let tx = txLo; tx <= txHi; tx++) {
+            const ty = d - tx, i = at(tx, ty);
+            if (i >= 0 && seen(i)) continue;
+            const p = toScreen(tx, ty);
+            if (onScreen(p[0], p[1])) sea.push(p[0], p[1], hash2(tx * 7 + 1, ty * 3 + 2));
+          }
+        }
+        artSeaTiles(sea, z);
+      }
+      if (hidden) return;
+
+      // Pass 1: ground. Every explored tile draws its two front faces, then
+      // its top; the tiles in front cover the faces unless they sit lower
+      // (water) or are unexplored, which is where the cliffs and the island's
+      // edge show. The backdrop already is the floor of the cloud sea.
+      for (let d = Math.max(0, vr.d0); d <= Math.min(2 * n - 2, vr.d1); d++) {
         for (let tx = Math.max(0, d - n + 1); tx <= Math.min(n - 1, d); tx++) {
           const ty = d - tx;
           const i = ty * n + tx;
+          if (!seen(i)) continue;
           const p = toScreen(tx, ty);
           if (!onScreen(p[0], p[1])) continue;
-          if (!viewerExplored(i)) { artFog(p[0], p[1], z, hash2(tx * 7 + 1, ty * 3 + 2)); continue; }
           const t = S.terrain[i];
           const tr = tribeByIndex(S.biome[i]);
           if (isWater(t)) {
@@ -2176,11 +2204,21 @@ window.plethoraBit = {
           }
         }
       }
+      // The fog tiles along the edge of the known world, for the lit cloud
+      // bank drawn after the objects.
+      const clouds = [];
+      for (let ty = -1; ty <= n; ty++) for (let tx = -1; tx <= n; tx++) {
+        const i = at(tx, ty);
+        if (i >= 0 && seen(i)) continue;
+        const p = toScreen(tx, ty);
+        if (!onScreen(p[0], p[1])) continue;
+        for (const dd of DIRS8) { const j = at(tx + dd[0], ty + dd[1]); if (j >= 0 && seen(j)) { clouds.push([p[0], p[1], hash2(tx * 3, ty * 5)]); break; } }
+      }
       // Pass 1.5: roads, borders, highlights
       g.lineWidth = Math.max(1.2, 2 * z);
       for (let ty = 0; ty < n; ty++) for (let tx = 0; tx < n; tx++) {
         const i = ty * n + tx;
-        if (!viewerExplored(i)) continue;
+        if (!seen(i)) continue;
         const p = toScreen(tx, ty);
         if (!onScreen(p[0], p[1])) continue;
         const owner = tilePlayer(S, i);
@@ -2220,20 +2258,15 @@ window.plethoraBit = {
         diamond(p[0], p[1] + dy, hw - 1, hh - 0.5); g.stroke();
       }
 
-      // Pass 2: objects and units back to front; fog tiles along the edge of
-      // the known world are remembered for the cloud bank drawn afterwards.
+      // Pass 2: objects and units back to front.
       const units = S.units;
-      const clouds = [];
-      for (let d = 0; d <= 2 * n - 2; d++) {
+      for (let d = Math.max(0, vr.d0); d <= Math.min(2 * n - 2, vr.d1); d++) {
         for (let tx = Math.max(0, d - n + 1); tx <= Math.min(n - 1, d); tx++) {
           const ty = d - tx;
           const i = ty * n + tx;
+          if (!seen(i)) continue;
           const p = toScreen(tx, ty);
           if (!onScreen(p[0], p[1])) continue;
-          if (!viewerExplored(i)) {
-            for (const dd of DIRS8) { const j = at(tx + dd[0], ty + dd[1]); if (j >= 0 && viewerExplored(j)) { clouds.push([p[0], p[1], hash2(tx * 3, ty * 5)]); break; } }
-            continue;
-          }
           if (low) drawTileObjectsLow(i, tx, ty, p, z); else drawTileObjects(i, tx, ty, p, z);
         }
         for (const u of units) {
@@ -2241,7 +2274,7 @@ window.plethoraBit = {
           const ux = pos ? pos.x : u.x, uy = pos ? pos.y : u.y;
           if (Math.round(ux + uy) !== d) continue;
           const ti = Math.round(uy) * n + Math.round(ux);
-          if (!viewerExplored(ti) && !(pos && viewerExplored(u.y * n + u.x))) continue;
+          if (!seen(ti) && !(pos && seen(u.y * n + u.x))) continue;
           const p = toScreen(ux, uy);
           if (!onScreen(p[0], p[1])) continue;
           drawUnit(u, p, z, u === sel);
@@ -2269,7 +2302,7 @@ window.plethoraBit = {
       if (z >= 0.55) {
         for (const c of S.cities) {
           const i = c.y * n + c.x;
-          if (!viewerExplored(i)) continue;
+          if (!seen(i)) continue;
           const p = toScreen(c.x, c.y);
           if (!onScreen(p[0], p[1])) continue;
           drawCityLabel(c, p, z);
@@ -2613,6 +2646,9 @@ window.plethoraBit = {
       g.fillStyle = color;
       diamond(cx, cy, hw + 0.7, hh + 0.5);
       g.fill();
+      // a soft lit upper-left and shaded lower-right, so the ground reads as a surface
+      poly([[cx - hw, cy], [cx, cy - hh], [cx + hw, cy]], "rgba(255,255,255,0.07)");
+      poly([[cx - hw, cy], [cx + hw, cy], [cx, cy + hh]], "rgba(0,0,0,0.05)");
       if (sand) {
         // a beach strip inside each shore edge
         const E = [[[-hw, 0], [0, -hh]], [[0, -hh], [hw, 0]], [[-hw, 0], [0, hh]], [[0, hh], [hw, 0]]];
@@ -2673,16 +2709,87 @@ window.plethoraBit = {
         }
       }
     }
-    function artFog(cx, cy, z, seed) {
-      g.fillStyle = "#1f2532";
-      diamond(cx, cy, TW / 2 * z + 0.7, TH / 2 * z + 0.5);
-      g.fill();
-      // a sparse cloud texture deep inside the unknown, cheap enough for every tile
-      if (seed < 0.4) {
-        const hh = TH / 2 * z, hw = TW / 2 * z;
-        const x = cx + (seed - 0.2) * hw * 1.6, y = cy + (hash2(Math.floor(seed * 500), 3) - 0.5) * hh;
-        const r = hh * (0.55 + seed);
-        circle(x, y, r, "#262d3b"); circle(x + r * 0.9, y + r * 0.15, r * 0.8, "#262d3b"); circle(x + r * 0.3, y - r * 0.35, r * 0.65, "#2b3341");
+    // The cloud sea: every unexplored tile, on the map or beyond it, carries
+    // three puffs lit from the upper left. The puffs are the same at every
+    // zoom, so they are painted once per zoom step into a small canvas that
+    // repeats across the screen; the whole sea is then one fill per frame.
+    const SEA_SPOTS = [[-0.3, -0.08], [0.22, -0.18], [0.0, 0.24]];
+    let seaCanvas = null, seaPat = null, seaPatZ = -1, seaOk = true;
+    // The backing-store scale of the main canvas, so the texture is as sharp as the screen.
+    const seaDpr = () => Math.min(3, Math.max(1, (canvas.width / Math.max(1, ctx.width)) || Number(ctx.dpr) || 1));
+    function seaPeriod(z) { const k = clamp(Math.round(700 / (TW / 2 * z)), 8, 48); return k + (k & 1); }
+    function seaPuffs(pg, cx, cy, z, seed, PW, PH) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      const dot = (x, y, r, col) => {
+        if (x + r < 0 || x - r > PW || y + r < 0 || y - r > PH) return;
+        pg.fillStyle = col; pg.beginPath(); pg.arc(x, y, r, 0, TAU); pg.fill();
+      };
+      // zoomed far out, two bigger puffs per tile keep the sea from turning to noise
+      const count = z < 0.7 ? 2 : 3, grow = z < 0.7 ? 1.35 : 1;
+      for (let k = 0; k < count; k++) {
+        const j = hash2(k * 7 + 3, Math.floor(seed * 911));
+        const x = cx + SEA_SPOTS[k][0] * hw * 1.2 + (j - 0.5) * 10 * z, y = cy + SEA_SPOTS[k][1] * hh * 1.2 + (j - 0.5) * 6 * z;
+        const r = hh * (0.78 + j * 0.4) * grow;
+        dot(x, y + 3 * z, r, "#313948");
+        dot(x - r * 0.08, y - r * 0.1, r * 0.92, j > 0.5 ? "#454f63" : "#414b5e");
+        dot(x - r * 0.32, y - r * 0.42, r * 0.44, j > 0.5 ? "#616d86" : "#5a667d");
+      }
+    }
+    function buildSeaPattern(z) {
+      const dpr = seaDpr();
+      const K = seaPeriod(z);
+      const PW = K * TW / 2 * z, PH = K * TH / 2 * z;
+      // a fresh canvas each time: its context starts with an identity transform
+      seaCanvas = new OffscreenCanvas(Math.max(1, Math.round(PW * dpr)), Math.max(1, Math.round(PH * dpr)));
+      const pg = seaCanvas.getContext("2d");
+      pg.scale(dpr, dpr);
+      pg.fillStyle = "#2a3140"; pg.fillRect(0, 0, PW, PH);
+      // Tile (tx, ty) sits at ((tx - ty) * TW / 2, (tx + ty) * TH / 2); over
+      // one period e = tx - ty and d = tx + ty run 0..K-1 with equal parity.
+      // Two rows and columns beyond the period are drawn too, back to front,
+      // so the puffs crossing an edge continue in the same order on the
+      // other side and the repeat is seamless.
+      for (let d = -2; d < K + 2; d++) for (let e = -2 + ((d + 2) & 1); e < K + 2; e += 2) {
+        const we = ((e % K) + K) % K, wd = ((d % K) + K) % K;
+        seaPuffs(pg, e * TW / 2 * z, d * TH / 2 * z, z, hash2(we + 11, wd + 5), PW, PH);
+      }
+      seaPat = g.createPattern(seaCanvas, "repeat");
+      seaPatZ = z;
+    }
+    // Fill the screen with the sea, aligned to the tile lattice and drifting
+    // a few pixels over a minute. Returns false on a browser without
+    // OffscreenCanvas, where the sea is drawn tile by tile instead.
+    function artSeaFill(w, h, z) {
+      if (!seaOk || typeof OffscreenCanvas !== "function") return false;
+      try {
+        const zq = Math.max(0.3, Math.round(z * 20) / 20);
+        if (!seaPat || seaPatZ !== zq) buildSeaPattern(zq);
+        const dpr = seaDpr(), sc = z / zq;
+        const K = seaPeriod(zq), PW = K * TW / 2 * z, PH = K * TH / 2 * z;
+        const sx0 = w / 2 - cam.x * z + Math.sin(ART_T * 0.11) * 6 * z, sy0 = h / 2 - cam.y * z + Math.cos(ART_T * 0.07) * 3 * z;
+        const ox = ((sx0 % PW) + PW) % PW, oy = ((sy0 % PH) + PH) % PH;
+        g.save();
+        g.translate(ox, oy);
+        g.scale(sc / dpr, sc / dpr);
+        g.fillStyle = seaPat;
+        g.fillRect(-ox * dpr / sc, -oy * dpr / sc, w * dpr / sc, h * dpr / sc);
+        g.restore();
+        return true;
+      } catch (_) { seaOk = false; try { g.restore(); } catch (_e) {} return false; }
+    }
+    // The same sea drawn tile by tile, for a runtime without patterns.
+    function artSeaTiles(tiles, z) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      for (let k = 0; k < tiles.length; k += 3) {
+        const cx = tiles[k], cy = tiles[k + 1], seed = tiles[k + 2];
+        for (let q = 0; q < 3; q++) {
+          const j = hash2(q * 7 + 3, Math.floor(seed * 911));
+          const x = cx + SEA_SPOTS[q][0] * hw * 1.2 + (j - 0.5) * 10 * z, y = cy + SEA_SPOTS[q][1] * hh * 1.2 + (j - 0.5) * 6 * z;
+          const r = hh * (0.78 + j * 0.4);
+          circle(x, y + 3 * z, r, "#313948");
+          circle(x - r * 0.08, y - r * 0.1, r * 0.92, j > 0.5 ? "#454f63" : "#414b5e");
+          circle(x - r * 0.32, y - r * 0.42, r * 0.44, j > 0.5 ? "#616d86" : "#5a667d");
+        }
       }
     }
     // Cloud banks are drawn in three layers over every fog tile that borders
@@ -2696,9 +2803,9 @@ window.plethoraBit = {
         const j = hash2(k + 1, Math.floor(seed * 997));
         const x = cx + puff[0] * hw * 1.15 + (j - 0.5) * 6 * z, y = cy + puff[1] * hh * 1.3 + (j - 0.5) * 4 * z;
         const r = puff[2] * hh * (0.95 + j * 0.3);
-        if (layer === 0) circle(x, y + 2 * z, r * 1.02, "#2f3645");
-        else if (layer === 1) circle(x - r * 0.08, y - r * 0.18, r * 0.86, "#414b5e");
-        else circle(x - r * 0.28, y - r * 0.46, r * 0.4, "#56627a");
+        if (layer === 0) circle(x, y + 2 * z, r * 1.02, "#2d3443");
+        else if (layer === 1) circle(x - r * 0.08, y - r * 0.18, r * 0.86, "#48526a");
+        else circle(x - r * 0.28, y - r * 0.46, r * 0.4, "#66738d");
       }
     }
 
@@ -3274,7 +3381,7 @@ window.plethoraBit = {
     const CSS = `
       .tt * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
       .tt { font-family: ${FONT}; color: #f3efe6; }
-      .tt .glass { background: rgba(14,19,28,0.78); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      .tt .glass { background: rgba(14,19,28,0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         border: 1px solid rgba(255,255,255,0.09); box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
       .tt .hud { position: absolute; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; }
       .tt .pill { display: flex; align-items: center; gap: 8px; padding: 8px 13px 8px 10px; border-radius: 16px; font-size: 13px; font-weight: 700; white-space: nowrap; }
@@ -3315,8 +3422,8 @@ window.plethoraBit = {
       .tt .stat { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: 0.85; margin-right: 9px; }
       .tt .bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,0.12); overflow: hidden; }
       .tt .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #ffd166, #ffb347); border-radius: 4px; }
-      .tt .panel { position: absolute; inset: 0; display: none; pointer-events: auto; background: rgba(8,11,17,0.84);
-        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+      .tt .panel { position: absolute; inset: 0; display: none; pointer-events: auto; background: rgba(8,11,17,0.9);
+        overflow-y: auto; -webkit-overflow-scrolling: touch; }
       .tt .panel .inner { max-width: 520px; margin: 0 auto; animation: rise 0.26s ease-out; }
       .tt .sheet { position: absolute; left: 8px; right: 8px; border-radius: 20px; padding: 10px 12px 10px; pointer-events: none; display: none; animation: rise 0.2s ease-out; }
       .tt .sheet .head { display: flex; align-items: center; gap: 10px; }
@@ -3918,7 +4025,8 @@ window.plethoraBit = {
       const h = S.players.findIndex((q) => q.human);
       V.viewer = h >= 0 ? h : 0;
       const cap = S.cities[V.viewer];
-      centerOn(cap.x, cap.y, 1.15);
+      centerOn(cap.x, cap.y, START_ZOOM);
+      cam.y += SHEET_LIFT / cam.z;
       closePanel();
       deselect();
       updateHud(true);
@@ -3938,7 +4046,8 @@ window.plethoraBit = {
       V.viewer = nextHuman();
       V.lastHuman = humans().length > 1 ? -1 : S.cur;
       const cap = S.cities.find((c) => c.owner === V.viewer && c.capital) || S.cities[0];
-      centerOn(cap.x, cap.y, 1.15);
+      centerOn(cap.x, cap.y, START_ZOOM);
+      cam.y += SHEET_LIFT / cam.z;
       closePanel();
       deselect();
       updateHud(true);
@@ -3963,7 +4072,7 @@ window.plethoraBit = {
       banner("");
       if (S.turn === 1 || humans().length > 1) {
         const cap = S.cities.find((c) => c.owner === S.cur && c.capital);
-        if (cap) panTo(cap.x, cap.y, cam.z, 500);
+        if (cap) { panTo(cap.x, cap.y, cam.z, 500); cam.ty += SHEET_LIFT / cam.tz; }
       }
       deselect(); updateHud(true);
       try { if (S.mode === "perfection") ctx.platform.setProgress(clamp((S.turn - 1) / S.turnLimit, 0, 1)); } catch (_) {}
@@ -4096,6 +4205,10 @@ window.plethoraBit = {
     // ====================================================================== //
     // Input on the map                                                       //
     // ====================================================================== //
+    // The first view: close enough that a unit is a character, with the
+    // capital sitting above the action sheet rather than behind it.
+    const START_ZOOM = Math.min(1.6, Math.max(1.2, W() / 300));
+    const SHEET_LIFT = 70;
     const pointers = new Map();
     let gesture = null;
     function firstGesture() {
@@ -4132,7 +4245,7 @@ window.plethoraBit = {
         const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
         const cx = (pts[0].x + pts[1].x) / 2, cy = (pts[0].y + pts[1].y) / 2;
         const before = toWorld(cx, cy);
-        cam.z = clamp(gesture.z0 * (d / Math.max(1, gesture.d0)), 0.42, 2.4);
+        cam.z = clamp(gesture.z0 * (d / Math.max(1, gesture.d0)), 0.42, 2.8);
         const after = toWorld(cx, cy);
         cam.x += before[0] - after[0]; cam.y += before[1] - after[1];
         cam.x -= (cx - gesture.cx) / cam.z; cam.y -= (cy - gesture.cy) / cam.z;
@@ -4158,7 +4271,7 @@ window.plethoraBit = {
     ctx.listen(canvas, "wheel", (e) => {
       e.preventDefault();
       const before = toWorld(e.offsetX, e.offsetY);
-      cam.z = clamp(cam.z * (e.deltaY < 0 ? 1.1 : 0.9), 0.42, 2.4);
+      cam.z = clamp(cam.z * (e.deltaY < 0 ? 1.1 : 0.9), 0.42, 2.8);
       const after = toWorld(e.offsetX, e.offsetY);
       cam.x += before[0] - after[0]; cam.y += before[1] - after[1];
       clampCamera(); V.dirty = true;
@@ -4167,7 +4280,7 @@ window.plethoraBit = {
     // ====================================================================== //
     // Frame loop and boot                                                    //
     // ====================================================================== //
-    let lastW = -1, lastH = -1, ambientAcc = 0;
+    let lastW = -1, lastH = -1, ambientAcc = 0, drawMs = 0;
     ctx.onFrame((dtMs) => {
       const dt = Math.min(100, dtMs || 16);
       ART_T += dt / 1000;
@@ -4188,10 +4301,12 @@ window.plethoraBit = {
         V.incomeFlash = 0;
       }
       // Ambient motion (water, flags, smoke, the selection pulse) at a gentle rate.
+      // A frame that takes long to draw (a big map on a big screen) animates
+      // at half the rate rather than stalling the input.
       ambientAcc += dt;
-      if (ambientAcc > 70 && S && !V.hideMap && !V.panel) { ambientAcc = 0; V.dirty = true; }
+      if (ambientAcc > (drawMs > 14 ? 140 : 70) && S && !V.hideMap && !V.panel) { ambientAcc = 0; V.dirty = true; }
       if (S && V.screen === "play") updateHud(false);
-      if (V.dirty) { V.dirty = false; drawScene(performance.now()); }
+      if (V.dirty) { V.dirty = false; const t0 = performance.now(); drawScene(t0); drawMs = drawMs * 0.7 + (performance.now() - t0) * 0.3; }
     });
 
     // Tuning knobs the creator can turn at draft time.

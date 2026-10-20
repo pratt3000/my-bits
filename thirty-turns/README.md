@@ -226,10 +226,24 @@ Boats carry the figure on a hull with mast and sail; ships get a second sail;
 battleships are steel with a stack and guns. Hit points show as a bar when
 below full.
 
-Fog is a cloud bank: unexplored tiles are a dark slab, and the ones that
-border the known world are covered in puffs drawn in three layers (bodies,
-tops, highlights) so neighbouring tiles merge into one bank. Below 0.62 zoom
-every tile drops to one shape so a Massive map stays cheap.
+Fog is a sea of clouds. Everything unexplored — on the map and beyond its
+edges, to the corners of the screen — is covered in puffs lit from the upper
+left, so the known world sits in a hole in the clouds and the screen is never
+empty. The puffs are the same at every zoom, so they are painted once per
+zoom step into a small `OffscreenCanvas` and repeated across the screen as a
+pattern: one fill per frame instead of a few thousand arcs. (The texture is
+seamless because the rows beyond its period are painted too, back to front,
+so a puff crossing an edge continues in the same stacking order on the other
+side.) The sea drifts a few pixels over a minute. A browser without
+`OffscreenCanvas` draws the same puffs tile by tile. The fog tiles that
+border the known world get a brighter bank on top, drawn in three layers
+(bodies, tops, highlights) so neighbouring tiles merge into one rim. Land
+tops carry a faint lit upper half and shaded lower half. Below 0.62 zoom
+every object drops to one shape so a Massive map stays cheap.
+
+A turn opens close in — zoom 1.2 to 1.6 by screen width, with the capital
+sitting above the action sheet rather than behind it — so a unit is a
+character rather than a dot.
 
 Bot turns are replayed as scenes: moves slide along their path, hits flash and
 float their damage, deaths fade, and anything outside the viewer's fog is
@@ -241,9 +255,13 @@ The canvas asks for a three-times backing store in CSS coordinates
 (`maxDpr: 3, coordinateSpace: "css"`), which is the SDK's opt-in for a crisp
 surface when every draw call already uses `ctx.width`/`ctx.height` pixels; the
 default backing store is CSS-sized and blurs on a phone. A little ambient
-motion runs at about fourteen frames a second while the map is up: water
-sparkles drift, the capital's pennant waves, forge smoke rises, the selection
-ring breathes. The camera glides to the capital at the start of a turn.
+motion runs at about fourteen frames a second while the map is up (seven when
+a frame takes longer than fourteen milliseconds to draw): water sparkles
+drift, the capital's pennant waves, forge smoke rises, the selection ring
+breathes, the clouds drift. The camera glides to the capital at the start of
+a turn. The HUD pills and the action sheet are frosted glass; the full-screen
+panels are not, because a backdrop blur over the whole canvas is the one
+thing a software renderer cannot keep up with.
 
 ### Interface
 
@@ -306,11 +324,17 @@ Three rounds, all reported as "unsupported remote resources", all found with
   `ctx.…()` result now has a name used nowhere else.
 - Before those, the manifest itself: a `percent` tuning knob takes 0–1, not
   0–100, and that one at least says so.
+- Caught by `check.py` before it reached the validator: the cloud texture
+  was first painted on a `document.createElement("canvas")`, which the
+  validator rejects as raw canvas creation. It is an `OffscreenCanvas` now,
+  with a tile-by-tile fallback if a browser has none.
 
 ## Verified
 
-- `_skills/sekai/scripts/check.py` passes, and the draft is on Plethora
-  (uploaded 2026-10-20).
+- `_skills/sekai/scripts/check.py` passes. The draft on Plethora is the
+  previous build (uploaded 2026-10-20); the cloud-sea build is not uploaded
+  yet because the agent token expired, so the validator has not yet seen
+  `OffscreenCanvas` either.
 - The engine plays itself in node: `node thirty-turns/sim.js` (four quick
   games), `sim.js full` (36 games across every map size and type, all four
   modes and difficulties) or `sim.js trace` (one game's expansion, turn by
@@ -323,7 +347,10 @@ Three rounds, all reported as "unsupported remote resources", all found with
   move → city and tech panels → end turn with bot replays; harvest → level-up
   → reward; six turns of play, quit, continue; a two-human pass-and-play
   start; a Tiny Domination game against two Crazy bots played out by ending
-  turns; portrait and landscape.
+  turns; portrait and landscape. The harness's software renderer manages
+  about eight frames a second on this bit (the mockup page draws a phone
+  frame in 40–60 ms there, and a 1920×1080 desktop frame in about 150 ms);
+  the scenarios wait at least 700 ms before each screenshot for that reason.
 
 ## Divergence from the original
 
