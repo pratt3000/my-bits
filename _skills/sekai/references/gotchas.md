@@ -43,6 +43,26 @@ the documented contract. This bug passed every headless run because the harness
 mock had `storage` as `async` when the contract says otherwise. A mock that is
 kinder than reality is worse than no mock.
 
+### A flick in the harness is slower than it looks
+
+**Symptom:** a bit that reads flick speed from pointer events ignores every
+drag the scenario sends, or reads one as absurdly fast, while the same code is
+fine on a phone.
+
+`page.mouse.move()` waits for the renderer to acknowledge each event. Under
+software rendering a frame can take most of a second, so a scenario's "220 ms"
+six-point drag really takes four to eight seconds and the event timestamps say
+so — the bit is right to call it slow. `run.js` now sends mouse events over
+CDP without awaiting them one by one, stamped with the real send time, which
+is what a finger looks like: events arrive on a real clock and the renderer
+coalesces them behind a slow frame. Two things to carry into the bit itself:
+measure speed from `event.timeStamp`, never from a clock read in the handler
+(handlers run late when frames are slow), and unpack `getCoalescedEvents()`
+so a batched move still yields real samples. Found with `crumple/`.
+
+Also: a six-point drag has five sleeps, so its real duration is 5/6 of `ms`,
+and a scenario can set `"dpr": 1` to render four times fewer pixels.
+
 ### Anything that only appears on device
 
 The harness runs desktop Chromium. Things it cannot tell you about: real audio

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Crumple",
+  "description": "Paper toss, the office classic, in 3D. A crumpled sheet sits on your desk and a wastepaper bin waits across the room: flick up to throw, flick faster to throw further, angle the flick to aim, and read the yellow arrow, because a desk fan is blowing and the number next to it is how hard. Five sheets a level, three in the bin to clear it, and the bin backs off a little further every time, from an open-plan office down to a basement and on to a bowling-alley bar. Endless mode counts a streak until you miss. Baskets pay cash for new paper and bins in the shop. Real physics: the bin is a cone with a lip, so rim shots rattle in or spin out, and a paper ball flops instead of rolling.",
+  "tags": [
+    "3d",
+    "game",
+    "arcade",
+    "paper-toss",
+    "office",
+    "physics",
+    "flick",
+    "shop",
+    "leaderboard"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [
+    "three@0.164.1"
+  ],
+  "memory": {
+    "records": {
+      "level": {
+        "label": "Highest Level",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      },
+      "endless": {
+        "label": "Longest Streak",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "daily",
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "global",
+          "following"
+        ],
+        "dedupe": "best_per_user"
+      }
+    }
+  },
+  "onboarding": {
+    "kind": "immersive",
+    "version": 1
+  }
+}

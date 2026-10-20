@@ -57,7 +57,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   const page = await browser.newPage({
     viewport: scenario.viewport || { width: 390, height: 844 },
-    deviceScaleFactor: 2,
+    deviceScaleFactor: scenario.dpr || 2,
     hasTouch: true,
     isMobile: true
   });
@@ -98,14 +98,39 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   };
 
   // --- gesture primitives ---------------------------------------------------
-  async function down(x, y) { await page.mouse.move(x, y); await page.mouse.down(); }
-  async function up(x, y) { if (x != null) await page.mouse.move(x, y); await page.mouse.up(); }
+  // Mouse events go straight to the browser over CDP and are NOT awaited one by
+  // one. page.mouse.move() waits for the renderer to acknowledge each event, and
+  // under software rendering a frame can take most of a second, so a "220 ms"
+  // flick would really take several seconds and every event timestamp with it.
+  // Firing them on a real clock and letting the renderer catch up (coalescing
+  // moves, as a phone does) is what a finger actually looks like to the bit.
+  const cdp = await page.context().newCDPSession(page);
+  const pending = [];
+  let mx = 0, my = 0, held = false;
+  function send(type, x, y) {
+    mx = x; my = y;
+    // Stamped with the real send time, so the DOM timeStamps keep the real
+    // spacing even when the renderer coalesces a whole flick into one frame.
+    const p = cdp.send("Input.dispatchMouseEvent", {
+      type, x, y, button: "left", clickCount: 1, buttons: held ? 1 : 0, timestamp: Date.now() / 1000
+    });
+    pending.push(p.catch((e) => problems.push("input: " + e.message)));
+  }
+  async function settle() { const ps = pending.splice(0); await Promise.all(ps); }
+  async function down(x, y) { send("mouseMoved", x, y); held = true; send("mousePressed", x, y); }
+  async function move(x, y) { send("mouseMoved", x, y); }
+  async function up(x, y) {
+    if (x != null) send("mouseMoved", x, y);
+    send("mouseReleased", mx, my);
+    held = false;
+    await settle();
+  }
 
   async function drag(points, ms) {
     const per = Math.max(8, (ms || 600) / Math.max(1, points.length));
     await down(points[0][0], points[0][1]);
     for (let i = 1; i < points.length; i++) {
-      await page.mouse.move(points[i][0], points[i][1]);
+      await move(points[i][0], points[i][1]);
       await sleep(per);
     }
     await up();
@@ -118,7 +143,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const pt = (i) => [cx + Math.cos((i / steps) * Math.PI * 2 * dir - Math.PI / 2) * r,
                        cy + Math.sin((i / steps) * Math.PI * 2 * dir - Math.PI / 2) * r];
     await down(...pt(0));
-    for (let i = 1; i <= total; i++) { await page.mouse.move(...pt(i)); await sleep(per); }
+    for (let i = 1; i <= total; i++) { await move(...pt(i)); await sleep(per); }
     await up();
   }
 
@@ -139,8 +164,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       if (step.press) { await down(step.press[0], step.press[1]); await sleep(step.hold || 900); await up(); }
       // held gestures, so a scenario can screenshot mid-drag
       if (step.down) { await down(step.down[0], step.down[1]); await sleep(step.after || 120); }
-      if (step.moveTo) { await page.mouse.move(step.moveTo[0], step.moveTo[1]); await sleep(step.after || 120); }
-      if (step.up) { await page.mouse.up(); await sleep(step.after || 120); }
+      if (step.moveTo) { await move(step.moveTo[0], step.moveTo[1]); await sleep(step.after || 120); }
+      if (step.up) { await up(); await sleep(step.after || 120); }
       if (step.drag) await drag(step.drag, step.ms);
       if (step.circle) await circle(step.circle);
       if (step.zigzag) await zigzag(step.zigzag);

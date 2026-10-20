@@ -47,6 +47,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`first-rakhi/`](first-rakhi)           | Tear a strip from a woven sari, thread by thread, and bind a cut with it. |
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
+| [`crumple/`](crumple)                   | Paper toss in 3D — flick a crumpled sheet into the bin across the office, through the fan's wind. |
 
 ### Rakshabandhan set
 

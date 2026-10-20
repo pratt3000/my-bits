@@ -1,0 +1,271 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "steps": [
+    {
+      "wait": 3500
+    },
+    {
+      "screenshot": "01-title"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"levels\"]').click()"
+    },
+    {
+      "wait": 1300
+    },
+    {
+      "screenshot": "02-aim"
+    },
+    {
+      "drag": [
+        [
+          195,
+          612
+        ],
+        [
+          195,
+          564
+        ],
+        [
+          195,
+          516
+        ],
+        [
+          195,
+          468
+        ],
+        [
+          195,
+          420
+        ],
+        [
+          195,
+          372
+        ]
+      ],
+      "ms": 263
+    },
+    {
+      "wait": 420
+    },
+    {
+      "screenshot": "03-flight"
+    },
+    {
+      "wait": 3200
+    },
+    {
+      "screenshot": "04-landing"
+    },
+    {
+      "wait": 4500
+    },
+    {
+      "drag": [
+        [
+          195,
+          612
+        ],
+        [
+          195,
+          564
+        ],
+        [
+          195,
+          516
+        ],
+        [
+          195,
+          468
+        ],
+        [
+          195,
+          420
+        ],
+        [
+          195,
+          372
+        ]
+      ],
+      "ms": 220
+    },
+    {
+      "wait": 3600
+    },
+    {
+      "screenshot": "05-long"
+    },
+    {
+      "wait": 4500
+    },
+    {
+      "drag": [
+        [
+          195,
+          612
+        ],
+        [
+          195,
+          576
+        ],
+        [
+          195,
+          540
+        ],
+        [
+          195,
+          504
+        ],
+        [
+          195,
+          468
+        ],
+        [
+          195,
+          432
+        ]
+      ],
+      "ms": 263
+    },
+    {
+      "wait": 3600
+    },
+    {
+      "screenshot": "06-short"
+    },
+    {
+      "wait": 4500
+    },
+    {
+      "drag": [
+        [
+          195,
+          612
+        ],
+        [
+          195,
+          564
+        ],
+        [
+          195,
+          516
+        ],
+        [
+          195,
+          468
+        ],
+        [
+          195,
+          420
+        ],
+        [
+          195,
+          372
+        ]
+      ],
+      "ms": 263
+    },
+    {
+      "wait": 8000
+    },
+    {
+      "drag": [
+        [
+          195,
+          612
+        ],
+        [
+          195,
+          564
+        ],
+        [
+          195,
+          516
+        ],
+        [
+          195,
+          468
+        ],
+        [
+          195,
+          420
+        ],
+        [
+          195,
+          372
+        ]
+      ],
+      "ms": 263
+    },
+    {
+      "wait": 8000
+    },
+    {
+      "screenshot": "07-level-card"
+    },
+    {
+      "eval": "var b=document.querySelector('[data-act=\"next\"]')||document.querySelector('[data-act=\"retry\"]'); if(b) b.click();"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "screenshot": "08-next-level"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"shop\"]').click()"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "09-shop"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"close\"]').click()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "eval": "document.querySelector('.cr-pause').click()"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "10-pause"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"resume\"]').click()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "resize": [
+        360,
+        780
+      ]
+    },
+    {
+      "screenshot": "11-resized"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "markVisualReady"
+    },
+    {
+      "expectEvent": "start"
+    },
+    {
+      "expectEvent": "interact"
+    }
+  ],
+  "dpr": 1
+}
