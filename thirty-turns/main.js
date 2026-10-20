@@ -1982,7 +1982,10 @@ window.plethoraBit = {
     }
     let ANIM_SPEED = clamp(Number(tune("anim_speed", 1)) || 1, 0.4, 2.5);
 
-    const canvas = ctx.createCanvas2D({ touchAction: "none" });
+    // A high-resolution backing store in CSS coordinates: everything here draws
+    // in ctx.width/ctx.height pixels, which is exactly the opt-in the SDK asks for.
+    const canvas = ctx.createCanvas2D({ touchAction: "none", maxDpr: 3, coordinateSpace: "css" });
+    let ART_T = 0;                // seconds, for the small ambient motions
     const g = canvas.getContext("2d");
     // Older WebViews have no roundRect; give this context one.
     if (typeof g.roundRect !== "function") {
@@ -2000,7 +2003,7 @@ window.plethoraBit = {
 
     // ---- Camera. World units are CSS pixels at zoom 1; tiles are 2:1 diamonds.
     const TW = 76, TH = 38;
-    const cam = { x: 0, y: 0, z: 1 };
+    const cam = { x: 0, y: 0, z: 1, tx: null, ty: null, tz: null, t: 0, dur: 0, fx: 0, fy: 0, fz: 1 };
     const W = () => ctx.width, H = () => ctx.height;
     const toScreen = (tx, ty) => [W() / 2 + ((tx - ty) * (TW / 2) - cam.x) * cam.z, H() / 2 + ((tx + ty) * (TH / 2) - cam.y) * cam.z];
     function toTile(sx, sy) {
@@ -2010,7 +2013,23 @@ window.plethoraBit = {
     function centerOn(tx, ty, zoom) {
       cam.x = (tx - ty) * (TW / 2);
       cam.y = (tx + ty) * (TH / 2);
+      cam.tx = null;
       if (zoom) cam.z = zoom;
+    }
+    // Glide the camera to a tile over a few hundred milliseconds.
+    function panTo(tx, ty, zoom, ms) {
+      cam.fx = cam.x; cam.fy = cam.y; cam.fz = cam.z;
+      cam.tx = (tx - ty) * (TW / 2); cam.ty = (tx + ty) * (TH / 2); cam.tz = zoom || cam.z;
+      cam.t = 0; cam.dur = ms || 420;
+    }
+    function tickCamera(dt) {
+      if (cam.tx == null) return false;
+      cam.t += dt;
+      const k = clamp(cam.t / cam.dur, 0, 1);
+      const e = 1 - Math.pow(1 - k, 3);
+      cam.x = lerp(cam.fx, cam.tx, e); cam.y = lerp(cam.fy, cam.ty, e); cam.z = lerp(cam.fz, cam.tz, e);
+      if (k >= 1) cam.tx = null;
+      return true;
     }
     function clampCamera() {
       if (!S) return;
@@ -2093,7 +2112,7 @@ window.plethoraBit = {
     function tileColor(i) {
       const tr = tribeByIndex(S.biome[i]);
       const j = hash2(i % S.n, (i - (i % S.n)) / S.n);
-      return shade(tr.field, 0.95 + j * 0.08);
+      return shade(tr.field, 0.975 + j * 0.05);
     }
 
     // ====================================================================== //
@@ -2138,10 +2157,17 @@ window.plethoraBit = {
             artWaterTop(p[0], p[1] + drop, z, t === OCEAN, coast, hash2(tx + 7, ty + 3));
           } else {
             const col = tileColor(i);
-            const lipL = at(tx, ty + 1) >= 0 && isWater(S.terrain[at(tx, ty + 1)]) ? "#d8c48a" : shade(tr.field, 0.72);
-            const lipR = at(tx + 1, ty) >= 0 && isWater(S.terrain[at(tx + 1, ty)]) ? "#cbb67c" : shade(tr.field, 0.6);
+            const wL = at(tx, ty + 1) >= 0 && isWater(S.terrain[at(tx, ty + 1)]);
+            const wR = at(tx + 1, ty) >= 0 && isWater(S.terrain[at(tx + 1, ty)]);
+            const lipL = wL ? "#d8c48a" : shade(tr.field, 0.72);
+            const lipR = wR ? "#cbb67c" : shade(tr.field, 0.6);
             artSides(p[0], p[1], z, tr.earth || "#7b5438", TILE_T, lipL, lipR);
-            artLandTop(p[0], p[1], z, col);
+            let sand = 0;
+            if (at(tx - 1, ty) >= 0 && isWater(S.terrain[at(tx - 1, ty)])) sand |= 1;
+            if (at(tx, ty - 1) >= 0 && isWater(S.terrain[at(tx, ty - 1)])) sand |= 2;
+            if (wL) sand |= 4;
+            if (wR) sand |= 8;
+            artLandTop(p[0], p[1], z, col, hash2(tx * 5 + 2, ty * 7 + 1), sand, tr.snow, tr.field);
           }
           const owner = tilePlayer(S, i);
           if (owner >= 0) {
@@ -2232,8 +2258,9 @@ window.plethoraBit = {
         for (const t of V.targets.concat(V.converts)) {
           const p = toScreen(t.x, t.y);
           const dy = isWater(S.terrain[t.y * n + t.x]) ? drop : 0;
+          const pk = 1 + 0.05 * Math.sin(ART_T * 7);
           g.strokeStyle = V.converts.indexOf(t) >= 0 ? "#c77dff" : "#ff5a4e"; g.lineWidth = 3;
-          diamond(p[0], p[1] + dy, hw - 2, hh - 1); g.stroke();
+          diamond(p[0], p[1] + dy, (hw - 2) * pk, (hh - 1) * pk); g.stroke();
           g.fillStyle = V.converts.indexOf(t) >= 0 ? "rgba(199,125,255,0.18)" : "rgba(255,90,78,0.2)";
           diamond(p[0], p[1] + dy, hw - 2, hh - 1); g.fill();
         }
@@ -2294,7 +2321,7 @@ window.plethoraBit = {
       if (c) {
         const ctr = c.owner >= 0 ? tribeByIndex(S.players[c.owner].tribe) : null;
         artCity(cx, cy, z, { level: c.level, capital: c.capital, walls: c.walls, owned: c.owner >= 0,
-          color: ctr ? ctr.color : "#8a7f70", wall: ctr ? ctr.wall : "#cfc6b4", sieged: sieged(S, c) });
+          color: ctr ? ctr.color : "#8a7f70", wall: ctr ? ctr.wall : "#cfc6b4", sieged: sieged(S, c), t: ART_T + seed * 7 });
         return;
       }
       if (t === MOUNTAIN) {
@@ -2382,8 +2409,11 @@ window.plethoraBit = {
       const onWater = isWater(S.terrain[Math.round(u.y) * S.n + Math.round(u.x)]);
       const y = p[1] + (onWater ? WATER_DROP * z : 0);
       if (selected) {
-        g.strokeStyle = "#ffe066"; g.lineWidth = 3;
-        diamond(p[0], y, TW * 0.46 * z, TH * 0.46 * z); g.stroke();
+        const k = 1 + 0.06 * Math.sin(ART_T * 6);
+        g.strokeStyle = "rgba(255,224,102,0.55)"; g.lineWidth = 6;
+        diamond(p[0], y, TW * 0.47 * z * k, TH * 0.47 * z * k); g.stroke();
+        g.strokeStyle = "#ffe066"; g.lineWidth = 2.5;
+        diamond(p[0], y, TW * 0.47 * z * k, TH * 0.47 * z * k); g.stroke();
       }
       artUnit(p[0], y, z, { type: u.type, boat: u.boat, color: tr.color, hpFrac: u.hp / maxHp(u), vet: u.vet,
         dim: u.owner === S.cur && u.moved && u.attacked && !u.dead, hit: !!V.flash.get(u.id) });
@@ -2577,10 +2607,37 @@ window.plethoraBit = {
       if (lipL) poly([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + lip], [cx - hw, cy + lip]], lipL);
       if (lipR) poly([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + lip], [cx, cy + hh + lip]], lipR);
     }
-    function artLandTop(cx, cy, z, color) {
+    // sand: bitmask of edges touching water (1 TL, 2 TR, 4 BL, 8 BR)
+    function artLandTop(cx, cy, z, color, seed, sand, snow, baseHex) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
       g.fillStyle = color;
-      diamond(cx, cy, TW / 2 * z + 0.7, TH / 2 * z + 0.5);
+      diamond(cx, cy, hw + 0.7, hh + 0.5);
       g.fill();
+      if (sand) {
+        // a beach strip inside each shore edge
+        const E = [[[-hw, 0], [0, -hh]], [[0, -hh], [hw, 0]], [[-hw, 0], [0, hh]], [[0, hh], [hw, 0]]];
+        for (let e = 0; e < 4; e++) {
+          if (!(sand & (1 << e))) continue;
+          const a = E[e][0], b = E[e][1];
+          const f = 0.74;
+          poly([[cx + a[0], cy + a[1]], [cx + b[0], cy + b[1]], [cx + b[0] * f, cy + b[1] * f], [cx + a[0] * f, cy + a[1] * f]], snow ? "#dfe6ea" : "#e3cf98");
+        }
+      }
+      if (z >= 0.85 && seed > 0.35) {
+        // a few grass tufts, or pebbles on snow
+        const k = Math.floor(seed * 3) + 1;
+        for (let i = 0; i < k; i++) {
+          const jx = hash2(i * 13 + 1, Math.floor(seed * 1000)), jy = hash2(i * 7 + 5, Math.floor(seed * 777));
+          const u = (jx - 0.5) * 0.7, v = (jy - 0.5) * 0.7;
+          const x = cx + (u - v) * hw, y = cy + (u + v) * hh;
+          if (snow) { ellipse(x, y, 2.2 * z, 1.1 * z, "rgba(255,255,255,0.55)"); continue; }
+          const tuft = shade(baseHex || "#8fcf6a", 0.78);
+          line(x, y, x - 1.6 * z, y - 3.6 * z, tuft, 1.1 * z); line(x, y, x + 0.4 * z, y - 4.2 * z, tuft, 1.1 * z); line(x, y, x + 2 * z, y - 3.2 * z, tuft, 1.1 * z);
+        }
+      }
+    }
+    function artShadow(x, y, z, rx, ry, a) {
+      ellipse(x, y, rx * z, ry * z, "rgba(10,20,30," + (a || 0.22) + ")");
     }
     // coast: bitmask of edges touching land — 1 top-left, 2 top-right, 4 bottom-left, 8 bottom-right
     function artWaterTop(cx, cy, z, deep, coast, seed) {
@@ -2588,13 +2645,15 @@ window.plethoraBit = {
       g.fillStyle = deep ? WATER.deep : WATER.shallow;
       diamond(cx, cy, hw + 0.7, hh + 0.5);
       g.fill();
-      // sparkle
+      // sparkles that drift slowly
       const k = seed;
-      g.strokeStyle = deep ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.28)";
+      const ph = Math.sin(ART_T * 0.9 + seed * 9);
+      const sx = ph * hw * 0.08;
+      g.strokeStyle = deep ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.3)";
       g.lineWidth = Math.max(1, 1.3 * z); g.lineCap = "round";
       g.beginPath();
-      g.moveTo(cx - hw * 0.45, cy + hh * (0.05 - k * 0.3)); g.lineTo(cx - hw * 0.15, cy + hh * (0.05 - k * 0.3));
-      g.moveTo(cx + hw * 0.1, cy + hh * (0.4 - k * 0.25)); g.lineTo(cx + hw * 0.45, cy + hh * (0.4 - k * 0.25));
+      g.moveTo(cx - hw * 0.45 + sx, cy + hh * (0.05 - k * 0.3)); g.lineTo(cx - hw * 0.15 + sx, cy + hh * (0.05 - k * 0.3));
+      g.moveTo(cx + hw * 0.1 - sx, cy + hh * (0.4 - k * 0.25)); g.lineTo(cx + hw * 0.45 - sx, cy + hh * (0.4 - k * 0.25));
       g.stroke();
       if (!coast) return;
       // foam along the shore, two lines inset from the edge
@@ -2648,7 +2707,9 @@ window.plethoraBit = {
       const style = tribe.tree || "cone";
       const light = shade(tribe.forest, LIGHT), dark = shade(tribe.forest, DARK);
       const trunk = tribe.trunk;
+      h *= 1.08;
       const w = h * 0.58;
+      artShadow(x + 2 * z, y + 1 * z, z, w * 0.5 / z, w * 0.2 / z, 0.2);
       switch (style) {
         case "palm": {
           const topX = x + 3 * z, topY = y - h * 0.8;
@@ -2693,6 +2754,7 @@ window.plethoraBit = {
           rect(x - 1.7 * z, y - 3 * z, 3.4 * z, 5 * z, trunk);
           cone(x, y - 2 * z, w, h * 0.66, light, dark);
           cone(x, y - 2 * z - h * 0.4, w * 0.74, h * 0.6, light, dark);
+          poly([[x, y - 2 * z - h], [x - w * 0.37, y - 2 * z - h * 0.4], [x - w * 0.22, y - 2 * z - h * 0.4]], shade(tribe.forest, 1.32));
           if (style === "snow") {
             cone(x, y - 2 * z - h * 0.4 - h * 0.6 + h * 0.26, w * 0.74 * 0.43, h * 0.26, "#ffffff", "#dde5ec");
             cone(x, y - 2 * z - h * 0.66 + h * 0.2, w * 0.33, h * 0.2, "#ffffff", "#dde5ec");
@@ -2788,6 +2850,7 @@ window.plethoraBit = {
       const a = tribe.animal || { body: "#5a4330", mark: "#8c6a4a", horn: "horn" };
       const x = cx + (seed - 0.5) * 10 * z, y = cy + 3 * z;
       const body = a.body, mark = a.mark;
+      artShadow(x + 1 * z, y + 2 * z, z, 11, 4, 0.2);
       // legs, body, belly, head
       for (const lx of [-6, -3, 3, 6]) rect(x + lx * z - 1 * z, y - 3 * z, 2.2 * z, 5 * z, shade(body, 0.8));
       ellipse(x, y - 6 * z, 9 * z, 5 * z, body);
@@ -2854,6 +2917,7 @@ window.plethoraBit = {
     }
     function artBuilding(kind, cx, cy, z, color, seed, extra) {
       const wall = "#efe6d2";
+      if (kind !== B_RUIN && kind !== B_PORT) artShadow(cx + 2 * z, cy + 5 * z, z, 18, 7, 0.18);
       switch (kind) {
         case B_FARM: {
           poly([[cx - 24 * z, cy], [cx - 4 * z, cy - 10 * z], [cx + 20 * z, cy + 2 * z], [cx, cy + 12 * z]], "#b8864f");
@@ -2910,7 +2974,10 @@ window.plethoraBit = {
           artHouse(cx, cy + 5 * z, z, 24 * z, 14 * z, "#8f8a83", "#4a4440", { door: "#ff8c3a" });
           circle(cx - 6 * z, cy - 2 * z, 7 * z, "rgba(255,140,58,0.28)");
           rect(cx + 7 * z, cy - 24 * z, 5 * z, 12 * z, "#5a5450");
-          circle(cx + 9.5 * z, cy - 27 * z, 3.6 * z, "rgba(200,200,205,0.55)"); circle(cx + 12 * z, cy - 32 * z, 4.2 * z, "rgba(200,200,205,0.4)"); circle(cx + 15 * z, cy - 37 * z, 4.8 * z, "rgba(200,200,205,0.25)");
+          { const dr = (ART_T * 4 + seed * 10) % 10;
+            circle(cx + 9.5 * z + dr * 0.3 * z, cy - 27 * z - dr * z, 3.6 * z, "rgba(200,200,205,0.5)");
+            circle(cx + 12 * z + dr * 0.5 * z, cy - 32 * z - dr * z, 4.2 * z, "rgba(200,200,205,0.36)");
+            circle(cx + 15 * z + dr * 0.7 * z, cy - 37 * z - dr * z, 4.8 * z, "rgba(200,200,205," + (0.22 * (1 - dr / 10)) + ")"); }
           break;
         }
         case B_SAWMILL: {
@@ -2999,6 +3066,7 @@ window.plethoraBit = {
       diamond(cx, cy, hw * 0.9, hh * 0.9); g.fill();
       if (o.owned) { g.strokeStyle = "rgba(120,100,70,0.35)"; g.lineWidth = 1.2 * z; diamond(cx, cy, hw * 0.9, hh * 0.9); g.stroke(); }
       if (o.walls) artWalls(cx, cy, z);
+      artShadow(cx + 3 * z, cy + 6 * z, z, 26, 9, 0.16);
       const spots = [[-0.04, -0.16], [-0.26, -0.02], [0.24, -0.08], [-0.2, 0.24], [0.26, 0.22], [0.02, -0.34], [-0.32, 0.1], [0.32, 0.04]];
       const n = o.owned ? Math.min(8, o.level) : 2;
       const list = [];
@@ -3010,7 +3078,15 @@ window.plethoraBit = {
       for (const h of list) {
         if (!o.owned) { artHut(h.x, h.y + 2 * z, z, 6.5 * z, "#b9a98a", "#c9a265"); continue; }
         const big = h.k === 0;
-        if (big && o.level >= 4) {
+        if (big && o.level >= 7) {
+          // the keep: a broad hall and a tall crenellated tower
+          artHouse(h.x, h.y + 4 * z, z, 22 * z, 15 * z, o.wall, o.color);
+          rect(h.x + 5 * z, h.y - 36 * z, 9 * z, 26 * z, shade(o.wall, 0.95));
+          rect(h.x + 10 * z, h.y - 36 * z, 4 * z, 26 * z, shade(o.wall, 0.72));
+          for (let q = 0; q < 3; q++) rect(h.x + 5 * z + q * 3.4 * z, h.y - 39 * z, 2.2 * z, 3.5 * z, shade(o.wall, 0.9));
+          line(h.x + 9.5 * z, h.y - 39 * z, h.x + 9.5 * z, h.y - 48 * z, "#4a3a2a", 1.4 * z);
+          poly([[h.x + 9.5 * z, h.y - 48 * z], [h.x + 17 * z, h.y - 45.5 * z], [h.x + 9.5 * z, h.y - 43 * z]], o.color);
+        } else if (big && o.level >= 4) {
           // the hall: a wide house with a tower
           artHouse(h.x, h.y + 4 * z, z, 20 * z, 14 * z, o.wall, o.color);
           rect(h.x + 6 * z, h.y - 26 * z, 7 * z, 16 * z, shade(o.wall, 0.95));
@@ -3022,9 +3098,10 @@ window.plethoraBit = {
       }
       if (o.capital && o.owned) {
         const px = cx + hw * 0.52, py = cy - hh * 0.1;
+        const wave = Math.sin((o.t || 0) * 2.6) * 2.2 * z;
         line(px, py + 4 * z, px, py - 34 * z, "#4a3a2a", 2 * z);
-        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z], [px, py - 24 * z]], shade(o.color, LIGHT));
-        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z], [px + 5 * z, py - 29 * z]], shade(o.color, DARK));
+        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z + wave], [px, py - 24 * z]], shade(o.color, LIGHT));
+        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z + wave], [px + 5 * z, py - 29 * z + wave * 0.4]], shade(o.color, DARK));
         circle(px, py - 35 * z, 2 * z, "#ffd166");
       }
       if (o.sieged) {
@@ -3077,7 +3154,7 @@ window.plethoraBit = {
       let by = y;
       if (o.boat) { artBoat(x, y, z, o.boat, col); by = y - 8 * z; }
       const giant = o.type === "giant";
-      const s = giant ? 1.5 : (o.boat ? 0.85 : 1);
+      const s = (giant ? 1.5 : (o.boat ? 0.85 : 1)) * 1.12;
       if (!o.boat && (o.type === "rider" || o.type === "knight")) { artHorse(x, y, z, o.type === "knight" ? "#7c8795" : "#8b5e3c", o.type === "knight"); by = y - 9 * z; }
       if (o.type === "catapult" && !o.boat) {
         rect(x - 13 * z, by - 5 * z, 26 * z, 5 * z, "#6b4a2a");
@@ -3162,35 +3239,133 @@ window.plethoraBit = {
     // ====================================================================== //
     // 8. HUD, panels, input, turn flow, sound, saving                        //
     // ====================================================================== //
-    const BTN = "pointer-events:auto;border:none;cursor:pointer;border-radius:12px;padding:9px 13px;font-family:" + FONT +
-      ";font-weight:700;font-size:13px;line-height:1.15;background:rgba(22,28,38,0.86);color:#f3efe6;" +
-      "box-shadow:0 2px 10px rgba(0,0,0,0.45);white-space:nowrap;";
-    const BIG = "pointer-events:auto;border:none;cursor:pointer;border-radius:14px;padding:12px 18px;font-family:" + FONT +
-      ";font-weight:800;font-size:15px;color:#1a1408;background:#ffd166;box-shadow:0 3px 14px rgba(0,0,0,0.5);";
-    const CARD = "background:rgba(28,34,46,0.96);border-radius:16px;padding:14px 16px;margin:10px 0;box-shadow:0 4px 18px rgba(0,0,0,0.4);";
-    const CHIP = "pointer-events:auto;border:none;cursor:pointer;border-radius:999px;padding:7px 12px;font-family:" + FONT +
-      ";font-weight:700;font-size:12.5px;margin:3px;background:rgba(255,255,255,0.1);color:#f3efe6;";
-    const CHIP_ON = CHIP + "background:#ffd166;color:#1a1408;";
+    // The interface is DOM inside the bit's own root, styled by one style
+    // block (classes, keyframes and press states), with inline SVG icons. One
+    // delegated click listener handles every button through data-act.
 
+    const ICON = {
+      star: "M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9z",
+      flask: "M9 3h6v2h-1v4.4l5.6 9.4A2 2 0 0 1 17.9 22H6.1a2 2 0 0 1-1.7-3.2L10 9.4V5H9zm3 8.5L8.6 17h6.8z",
+      menu: "M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z",
+      trophy: "M7 3h10v2h3v3a5 5 0 0 1-4.2 4.9A5.5 5.5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5.5 5.5 0 0 1 8.2 12.9 5 5 0 0 1 4 8V5h3zm-1 4v1a3 3 0 0 0 2 2.8V7zm12 0h-2v3.8A3 3 0 0 0 18 8z",
+      arrow: "M5 11h10.2l-3.6-3.6L13 6l6 6-6 6-1.4-1.4 3.6-3.6H5z",
+      sword: "M14.5 3l6.5 6.5-1.4 1.4-1.1-1.1-6 6 1.6 1.6-1.4 1.4-1.6-1.6L8.3 20 4 15.7l3.2-3.2L5.6 11 7 9.6l1.6 1.6 6-6-1.1-1.1z",
+      shield: "M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5z",
+      flag: "M5 3h2v18H5zm3 1h10l-2.5 4L18 12H8z",
+      hammer: "M14 4l6 6-2 2-1.5-1.5L8 19l-3-3 8.5-8.5L12 6z",
+      coin: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 3a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm-1 2h2v1.2c1.2.3 2 1.1 2 2.3h-2c0-.5-.4-.7-1-.7s-1 .2-1 .6c0 .4.4.6 1.3.8 1.6.4 2.7 1 2.7 2.4 0 1.2-.8 2-2 2.3V17h-2v-1.1c-1.3-.3-2.1-1.1-2.1-2.4h2c0 .5.5.8 1.1.8s1-.2 1-.6c0-.5-.5-.7-1.4-.9-1.5-.4-2.6-1-2.6-2.3 0-1.2.8-2 2-2.3z",
+      heart: "M12 21s-7.5-4.6-9.3-9.4C1.5 8.3 3.6 5 7 5c2 0 3.4 1 5 2.8C13.6 6 15 5 17 5c3.4 0 5.5 3.3 4.3 6.6C19.5 16.4 12 21 12 21z",
+      city: "M3 21V9l5-3v3l4-2v4l4-2v11zm2-2h2v-2H5zm4 0h2v-2H9zm4 0h2v-2h-2zm4 0h2v-2h-2zM5 15h2v-2H5zm4 0h2v-2H9zm4 0h2v-2h-2zm4 0h2v-2h-2z",
+      eye: "M12 5c5 0 9 4 10 7-1 3-5 7-10 7S3 15 2 12c1-3 5-7 10-7zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z",
+      play: "M7 4l13 8-13 8z",
+      users: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 19c0-3 3-5 7-5s7 2 7 5v1H2zm15 1v-1c0-1.8-.8-3.3-2.1-4.3 3.2.1 7.1 1.6 7.1 4.3v1z",
+      book: "M4 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4zm16 0h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z",
+      chart: "M4 20V10h3v10zm6.5 0V4h3v16zm6.5 0v-7h3v7z",
+      close: "M6.2 4.8L12 10.6l5.8-5.8 1.4 1.4-5.8 5.8 5.8 5.8-1.4 1.4-5.8-5.8-5.8 5.8-1.4-1.4 5.8-5.8-5.8-5.8z",
+      back: "M19 11H8.8l3.6-3.6L11 6l-6 6 6 6 1.4-1.4L8.8 13H19z",
+      sound: "M4 9v6h4l5 4V5L8 9zm11.5 3a3.5 3.5 0 0 0-2-3.2v6.4a3.5 3.5 0 0 0 2-3.2zm-2-7.2v2.1A5.5 5.5 0 0 1 17.5 12a5.5 5.5 0 0 1-4 5.1v2.1A7.5 7.5 0 0 0 19.5 12a7.5 7.5 0 0 0-6-7.2z",
+      boot: "M7 3h6v8l6 3v4H7v-3h3v-2H7z",
+      scroll: "M6 3h12a2 2 0 0 1 2 2v2h-2V5H8v12h8v-2h2v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 4h6v2H9zm0 4h6v2H9z",
+      bolt: "M13 2L4 14h6l-1 8 9-12h-6z",
+      check: "M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.4z"
+    };
+    const svg = (name, size, color) => `<svg class="ic" viewBox="0 0 24 24" width="${size || 18}" height="${size || 18}" aria-hidden="true"><path fill="${color || "currentColor"}" d="${ICON[name]}"/></svg>`;
+
+    const CSS = `
+      .tt * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      .tt { font-family: ${FONT}; color: #f3efe6; }
+      .tt .glass { background: rgba(14,19,28,0.78); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.09); box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
+      .tt .hud { position: absolute; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; }
+      .tt .pill { display: flex; align-items: center; gap: 8px; padding: 8px 13px 8px 10px; border-radius: 16px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+      .tt .pill .muted { opacity: 0.68; font-weight: 600; }
+      .tt .pill .gold { color: #ffd166; font-weight: 900; font-size: 16px; }
+      .tt .emblem { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); box-shadow: inset -4px -4px 0 rgba(0,0,0,0.22), 0 0 0 2px rgba(255,255,255,0.14); flex: none; }
+      .tt .ic { display: inline-block; vertical-align: -3px; flex: none; }
+      .tt .btn { pointer-events: auto; border: 1px solid rgba(255,255,255,0.1); background: rgba(30,37,50,0.94); color: #f3efe6;
+        font-family: ${FONT}; font-weight: 700; font-size: 13px; line-height: 1.15; padding: 10px 14px; border-radius: 14px;
+        display: inline-flex; align-items: center; gap: 7px; cursor: pointer; white-space: nowrap; box-shadow: 0 3px 12px rgba(0,0,0,0.35);
+        transition: transform 0.08s ease, filter 0.15s ease; }
+      .tt .btn:active { transform: scale(0.95); filter: brightness(1.15); }
+      .tt .btn.round { width: 42px; height: 42px; padding: 0; justify-content: center; border-radius: 50%; }
+      .tt .btn.primary { background: linear-gradient(180deg, #ffd97a, #f2b53c); color: #221a06; border-color: rgba(255,255,255,0.3);
+        box-shadow: 0 6px 20px rgba(242,181,60,0.38), inset 0 1px 0 rgba(255,255,255,0.5); font-weight: 900; font-size: 15px; padding: 12px 18px; }
+      .tt .btn.accent { background: linear-gradient(180deg, #4f9df2, #2f7fd6); border-color: rgba(255,255,255,0.22); box-shadow: 0 5px 16px rgba(47,127,214,0.38); }
+      .tt .btn.danger { background: linear-gradient(180deg, #ff7a6e, #e0493d); border-color: rgba(255,255,255,0.22); }
+      .tt .btn.ghost { background: rgba(255,255,255,0.08); box-shadow: none; }
+      .tt .btn.dim { opacity: 0.42; }
+      .tt .btn.wide { min-width: 240px; justify-content: center; }
+      .tt .btn .sub { display: block; font-size: 11px; font-weight: 600; opacity: 0.7; margin-top: 2px; }
+      .tt .chip { pointer-events: auto; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.08); color: #f3efe6;
+        font-family: ${FONT}; font-weight: 700; font-size: 12.5px; padding: 8px 12px; border-radius: 999px; margin: 3px; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px; transition: transform 0.08s ease; }
+      .tt .chip:active { transform: scale(0.95); }
+      .tt .chip.on { background: #ffd166; color: #1a1408; border-color: #ffd166; box-shadow: 0 3px 12px rgba(255,209,102,0.35); }
+      .tt .card { background: rgba(22,28,39,0.96); border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; padding: 14px 16px; margin: 10px 0;
+        box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+      .tt .card.tinted { border-left: 4px solid var(--c, #ffd166); }
+      .tt .h1 { font-size: 26px; font-weight: 900; letter-spacing: 0.2px; margin: 4px 0 6px; line-height: 1.15; }
+      .tt .h2 { font-size: 15px; font-weight: 800; margin: 0 0 4px; }
+      .tt .small { font-size: 12.5px; opacity: 0.78; line-height: 1.45; }
+      .tt .label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; opacity: 0.6; margin: 14px 0 4px; }
+      .tt .row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid rgba(255,255,255,0.07); }
+      .tt .row:first-child { border-top: none; }
+      .tt .grow { flex: 1; min-width: 0; }
+      .tt .stat { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: 0.85; margin-right: 9px; }
+      .tt .bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,0.12); overflow: hidden; }
+      .tt .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #ffd166, #ffb347); border-radius: 4px; }
+      .tt .panel { position: absolute; inset: 0; display: none; pointer-events: auto; background: rgba(8,11,17,0.84);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+      .tt .panel .inner { max-width: 520px; margin: 0 auto; animation: rise 0.26s ease-out; }
+      .tt .sheet { position: absolute; left: 8px; right: 8px; border-radius: 20px; padding: 10px 12px 10px; pointer-events: none; display: none; animation: rise 0.2s ease-out; }
+      .tt .sheet .head { display: flex; align-items: center; gap: 10px; }
+      .tt .sheet .title { font-size: 15px; font-weight: 900; }
+      .tt .sheet .info { font-size: 12px; opacity: 0.78; margin-top: 2px; line-height: 1.35; }
+      .tt .sheet .actions { display: flex; gap: 7px; overflow-x: auto; padding: 8px 2px 2px; pointer-events: auto; scrollbar-width: none; }
+      .tt .sheet .actions::-webkit-scrollbar { display: none; }
+      .tt .toast { position: absolute; left: 50%; transform: translateX(-50%); max-width: 86%; padding: 10px 16px; border-radius: 16px;
+        font-weight: 700; font-size: 13px; opacity: 0; transition: opacity 0.25s; pointer-events: none; text-align: center; }
+      .tt .banner { position: absolute; left: 50%; transform: translateX(-50%); padding: 9px 16px; border-radius: 999px; font-weight: 800; font-size: 13px; display: none; pointer-events: none; }
+      .tt .banner i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ffd166; margin-left: 3px; animation: blink 1.2s infinite; }
+      .tt .banner i:nth-child(2) { animation-delay: 0.2s; } .tt .banner i:nth-child(3) { animation-delay: 0.4s; }
+      .tt .hero { text-align: center; padding-top: 10vh; }
+      .tt .hero .title { font-size: 48px; font-weight: 900; letter-spacing: 1px; line-height: 1; text-shadow: 0 6px 24px rgba(0,0,0,0.7), 0 2px 0 rgba(255,209,102,0.35); }
+      .tt .hero .rule { width: 110px; height: 3px; background: linear-gradient(90deg, transparent, #ffd166, transparent); margin: 14px auto; }
+      .tt .vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.5) 100%); }
+      .tt .reward { pointer-events: auto; flex: 1; background: rgba(22,28,39,0.96); border: 1px solid rgba(255,255,255,0.1); border-radius: 18px;
+        padding: 18px 12px; color: #f3efe6; font-family: ${FONT}; cursor: pointer; text-align: center; transition: transform 0.08s ease; box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+      .tt .reward:active { transform: scale(0.96); }
+      .tt .podium { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid rgba(255,255,255,0.07); }
+      .tt .rank { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; background: rgba(255,255,255,0.1); flex: none; }
+      .tt .rank.one { background: #ffd166; color: #1a1408; }
+      .tt .tribe-card { display: flex; align-items: center; gap: 10px; }
+      .tt .swatch { width: 38px; height: 38px; border-radius: 12px; flex: none; box-shadow: inset -6px -6px 0 rgba(0,0,0,0.2), 0 3px 10px rgba(0,0,0,0.4); }
+      @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+      @keyframes blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+      @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+    `;
+
+    ui.className = "tt";
     ui.innerHTML =
-      `<div data-el="hud" style="position:absolute;left:${sa.left + 8}px;right:${sa.right + 8}px;top:${sa.top + 6}px;display:none;align-items:flex-start;justify-content:space-between;gap:8px;pointer-events:none;"></div>` +
-      `<div data-el="banner" style="position:absolute;left:50%;transform:translateX(-50%);top:${sa.top + 104}px;padding:8px 16px;border-radius:999px;background:rgba(22,28,38,0.9);font-weight:700;font-size:13px;display:none;pointer-events:none;box-shadow:0 3px 14px rgba(0,0,0,0.5);"></div>` +
-      `<div data-el="toast" style="position:absolute;left:50%;transform:translateX(-50%);top:${sa.top + 146}px;max-width:84%;text-align:center;padding:9px 15px;border-radius:14px;background:rgba(18,22,30,0.92);font-weight:600;font-size:13px;opacity:0;transition:opacity 0.25s;pointer-events:none;box-shadow:0 3px 14px rgba(0,0,0,0.5);"></div>` +
-      `<div data-el="bottom" style="position:absolute;left:${sa.left + 8}px;right:${sa.right + 8}px;bottom:${sa.bottom + 10}px;display:none;flex-direction:column;gap:8px;pointer-events:none;">` +
-        `<div data-el="info" style="font-size:12.5px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.9);padding:0 4px;min-height:16px;"></div>` +
-        `<div style="display:flex;align-items:flex-end;gap:8px;">` +
-          `<div data-el="actions" style="flex:1;display:flex;gap:7px;overflow-x:auto;pointer-events:auto;padding:4px 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;"></div>` +
-          `<button data-act="endturn" data-el="end" style="${BIG}flex:none;">End turn</button>` +
-        `</div>` +
+      `<style>${CSS}</style>` +
+      `<div class="vignette"></div>` +
+      `<div data-el="hud" class="hud" style="left:${sa.left + 8}px;right:${sa.right + 8}px;top:${sa.top + 8}px;"></div>` +
+      `<div data-el="banner" class="banner glass" style="top:${sa.top + 108}px;"></div>` +
+      `<div data-el="toast" class="toast glass" style="top:${sa.top + 150}px;"></div>` +
+      `<div data-el="sheet" class="sheet glass" style="bottom:${sa.bottom + 10}px;">` +
+        `<div class="head"><div class="grow"><div data-el="title" class="title"></div><div data-el="info" class="info"></div></div>` +
+        `<button data-act="endturn" data-el="end" class="btn primary">End turn ${svg("arrow", 18)}</button></div>` +
+        `<div data-el="actions" class="actions"></div>` +
       `</div>` +
-      `<div data-el="panel" style="position:absolute;inset:0;display:none;pointer-events:auto;background:rgba(10,14,20,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>`;
+      `<div data-el="panel" class="panel"></div>`;
 
     const el = (n) => ui.querySelector('[data-el="' + n + '"]');
-    const hudEl = el("hud"), bannerEl = el("banner"), toastEl = el("toast"), bottomEl = el("bottom"), infoEl = el("info"),
-      actionsEl = el("actions"), endBtn = el("end"), panelEl = el("panel");
+    const hudEl = el("hud"), bannerEl = el("banner"), toastEl = el("toast"), sheetEl = el("sheet"), titleEl = el("title"),
+      infoEl = el("info"), actionsEl = el("actions"), endBtn = el("end"), panelEl = el("panel");
 
     function toast(msg) { toastEl.textContent = msg; toastEl.style.opacity = "1"; V.toastT = 2800; }
-    function banner(msg) { bannerEl.textContent = msg || ""; bannerEl.style.display = msg ? "block" : "none"; }
+    function banner(msg) { bannerEl.innerHTML = msg ? esc(msg) + " <i></i><i></i><i></i>" : ""; bannerEl.style.display = msg ? "block" : "none"; }
 
     // ====================================================================== //
     // Sound: a music bed from the runtime, short synthesised cues of our own  //
@@ -3256,12 +3431,12 @@ window.plethoraBit = {
     }
 
     // ====================================================================== //
-    // HUD                                                                    //
+    // HUD and the action sheet                                               //
     // ====================================================================== //
     let hudKey = "";
     function updateHud(force) {
-      if (!S || V.screen !== "play") { hudEl.style.display = "none"; bottomEl.style.display = "none"; return; }
-      hudEl.style.display = "flex"; bottomEl.style.display = "flex";
+      if (!S || V.screen !== "play") { hudEl.style.display = "none"; sheetEl.style.display = "none"; return; }
+      hudEl.style.display = "flex"; sheetEl.style.display = "block";
       const p = V.viewer >= 0 ? V.viewer : S.cur;
       const pl = S.players[p];
       const tr = tribeByIndex(pl.tribe);
@@ -3273,55 +3448,53 @@ window.plethoraBit = {
       const inc = playerIncome(S, p);
       const score = computeScore(S, p);
       hudEl.innerHTML =
-        `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">` +
-          `<div style="display:flex;align-items:center;gap:7px;background:rgba(22,28,38,0.86);border-radius:999px;padding:6px 12px 6px 7px;box-shadow:0 2px 10px rgba(0,0,0,0.45);">` +
-            `<span style="width:16px;height:16px;border-radius:50%;background:${tr.color};display:inline-block;box-shadow:inset -4px -3px 0 rgba(0,0,0,0.25);"></span>` +
-            `<span style="font-weight:800;font-size:13px;">${esc(tr.name)}</span>` +
-            `<span style="opacity:0.75;font-size:12px;">Turn ${S.turn}${limit}</span>` +
-          `</div>` +
-          `<div style="display:flex;align-items:center;gap:10px;background:rgba(22,28,38,0.86);border-radius:999px;padding:6px 12px;box-shadow:0 2px 10px rgba(0,0,0,0.45);">` +
-            `<span style="font-weight:800;font-size:15px;color:#ffd166;">★ ${pl.stars}</span>` +
-            `<span style="opacity:0.8;font-size:12px;">+${inc} / turn</span>` +
-            `<span style="opacity:0.8;font-size:12px;">${score.toLocaleString()} pts</span>` +
-          `</div>` +
+        `<div style="display:flex;flex-direction:column;gap:7px;align-items:flex-start;">` +
+          `<div class="pill glass"><span class="emblem" style="background:${tr.color}">${esc(tr.name[0])}</span><span>${esc(tr.name)}</span><span class="muted">Turn ${S.turn}${limit}</span></div>` +
+          `<div class="pill glass">${svg("star", 17, "#ffd166")}<span class="gold">${pl.stars}</span><span class="muted">+${inc}</span>` +
+            `<span style="width:1px;height:16px;background:rgba(255,255,255,0.15);"></span>${svg("trophy", 16, "#cfd6e2")}<span class="muted">${score.toLocaleString()}</span></div>` +
         `</div>` +
-        `<div style="display:flex;gap:7px;">` +
-          `<button data-act="tech" style="${BTN}">Tech</button>` +
-          `<button data-act="gamemenu" style="${BTN}">≡</button>` +
+        `<div style="display:flex;gap:8px;">` +
+          `<button data-act="tech" class="btn round glass" aria-label="Technology">${svg("flask", 20)}</button>` +
+          `<button data-act="gamemenu" class="btn round glass" aria-label="Menu">${svg("menu", 20)}</button>` +
         `</div>`;
       endBtn.style.opacity = isHumanTurn() ? "1" : "0.45";
-      endBtn.textContent = S.over ? "Results" : "End turn";
+      endBtn.innerHTML = S.over ? "Results " + svg("trophy", 18) : "End turn " + svg("arrow", 18);
     }
 
-    // ---- Action bar
-    function setActions(info, buttons) {
-      infoEl.textContent = info || "";
+    function setSheet(title, info, buttons) {
+      titleEl.innerHTML = title || "";
+      infoEl.innerHTML = info || "";
       actionsEl.innerHTML = buttons.map((b) =>
-        `<button data-act="${esc(b.act)}" style="${BTN}${b.on === false ? "opacity:0.45;" : ""}${b.accent ? "background:#2f7fd6;" : ""}">${esc(b.label)}</button>`).join("");
+        `<button data-act="${esc(b.act)}" class="btn${b.on === false ? " dim" : ""}${b.accent ? " accent" : ""}${b.danger ? " danger" : ""}">${b.icon ? svg(b.icon, 16) : ""}${esc(b.label)}</button>`).join("");
+      actionsEl.style.display = buttons.length ? "flex" : "none";
     }
+    const stat = (icon, s) => `<span class="stat">${svg(icon, 13)}${esc(s)}</span>`;
     function refreshActions() {
       if (!S || V.screen !== "play") return;
-      if (!isHumanTurn()) { setActions(V.busy ? "" : "", []); return; }
+      if (!isHumanTurn()) { setSheet(V.busy ? "" : "", "", []); return; }
       const p = S.cur, pl = S.players[p];
       const u = V.sel;
       if (u && !u.dead) {
         const st = unitStats(u);
         const btns = [];
-        if (canCapture(S, u)) { const c = cityAt(S, u.x, u.y); btns.push({ act: "unit:capture", label: c.owner < 0 ? "Capture village" : "Capture city", accent: true }); }
-        if (canExamine(S, u)) btns.push({ act: "unit:examine", label: "Examine ruins", accent: true });
-        if (canRecover(S, u)) btns.push({ act: "unit:recover", label: "Recover +" + (tilePlayer(S, tIdx(S, u.x, u.y)) === p ? 4 : 2) });
-        if (canHeal(S, u)) btns.push({ act: "unit:heal", label: "Heal others" });
-        if (canPromote(u)) btns.push({ act: "unit:promote", label: "Promote ★" });
-        for (const b of boatUpgrades(S, u)) btns.push({ act: "unit:upgrade:" + b.kind, label: b.name + " ★" + b.cost, on: b.can });
-        if (canDisband(S, u)) btns.push({ act: "unit:disband", label: "Disband +" + Math.floor(UNITS[u.type].cost / 2) + "★" });
+        if (canCapture(S, u)) { const c = cityAt(S, u.x, u.y); btns.push({ act: "unit:capture", label: c.owner < 0 ? "Capture village" : "Capture city", accent: true, icon: "flag" }); }
+        if (canExamine(S, u)) btns.push({ act: "unit:examine", label: "Examine ruins", accent: true, icon: "eye" });
+        if (canRecover(S, u)) btns.push({ act: "unit:recover", label: "Recover +" + (tilePlayer(S, tIdx(S, u.x, u.y)) === p ? 4 : 2), icon: "heart" });
+        if (canHeal(S, u)) btns.push({ act: "unit:heal", label: "Heal others", icon: "heart" });
+        if (canPromote(u)) btns.push({ act: "unit:promote", label: "Promote", icon: "star" });
+        for (const b of boatUpgrades(S, u)) btns.push({ act: "unit:upgrade:" + b.kind, label: b.name + " ★" + b.cost, on: b.can, icon: "hammer" });
         const uc = cityAt(S, u.x, u.y);
-        if (uc && uc.owner === p) btns.push({ act: "city:here", label: uc.name + " · train" });
-        btns.push({ act: "unit:done", label: "Done" });
-        let info = unitName(u) + "  " + u.hp + "/" + maxHp(u) + " hp · atk " + st.atk + " · def " + st.def + " · mv " + st.mv + (st.rng > 1 ? " · range " + st.rng : "");
-        if (V.converts.length) info += " · tap an enemy to convert";
-        else if (V.targets.length) info += " · tap a red tile to attack";
-        else if (V.reach && V.reach.size) info += " · tap a lit tile to move";
-        setActions(info, btns);
+        if (uc && uc.owner === p) btns.push({ act: "city:here", label: uc.name + " · train", icon: "city" });
+        if (canDisband(S, u)) btns.push({ act: "unit:disband", label: "Disband +" + Math.floor(UNITS[u.type].cost / 2) + "★", icon: "coin" });
+        btns.push({ act: "unit:done", label: "Done", icon: "check" });
+        let hint = "";
+        if (V.converts.length) hint = "Tap a purple tile to convert.";
+        else if (V.targets.length && V.reach && V.reach.size) hint = "Tap a lit tile to move or a red tile to attack.";
+        else if (V.targets.length) hint = "Tap a red tile to attack.";
+        else if (V.reach && V.reach.size) hint = "Tap a lit tile to move.";
+        else hint = "This unit has acted this turn.";
+        setSheet(esc(unitName(u)) + (u.vet ? " ★" : ""),
+          stat("heart", u.hp + "/" + maxHp(u)) + stat("sword", String(st.atk)) + stat("shield", String(st.def)) + stat("boot", String(st.mv)) + (st.rng > 1 ? stat("bolt", "range " + st.rng) : "") + "<br>" + esc(hint), btns);
         return;
       }
       if (V.selTile >= 0) {
@@ -3329,21 +3502,24 @@ window.plethoraBit = {
         const c = S.center[i] >= 0 ? S.cities[S.center[i]] : null;
         const acts = tileActions(S, p, x, y);
         const btns = acts.map((a) => ({
-          act: "tile:" + a.id, on: a.can,
+          act: "tile:" + a.id, on: a.can, icon: a.id === "harvest" || a.id === "whale" ? "coin" : a.id === "road" || a.id === "bridge" ? "boot" : "hammer",
           label: a.name + (a.cost ? " ★" + a.cost : "") + (a.pop ? " +" + a.pop + " pop" : "") + (a.stars ? " +" + a.stars + "★" : "")
         }));
-        if (c && c.owner === p) btns.unshift({ act: "city:open", label: c.name + " · train units", accent: true });
-        let info = TERRAIN_NAME[S.terrain[i]];
-        if (S.res[i]) info += " · " + RES_NAME[S.res[i]];
-        if (S.bld[i] && BLD[S.bld[i]]) info += " · " + BLD[S.bld[i]].name + (BLD[S.bld[i]].temple ? " (level " + templeLevel(S, i) + ")" : "");
+        if (c && c.owner === p) btns.unshift({ act: "city:open", label: "Train units", accent: true, icon: "city" });
+        let title = TERRAIN_NAME[S.terrain[i]];
+        let info = "";
+        if (S.res[i]) title = RES_NAME[S.res[i]] + " · " + title;
+        if (S.bld[i] && BLD[S.bld[i]]) title = BLD[S.bld[i]].name + (BLD[S.bld[i]].temple ? " (level " + templeLevel(S, i) + ")" : "") + " · " + TERRAIN_NAME[S.terrain[i]];
         const tc = tileCity(S, i);
-        if (tc) info += " · " + (tc.owner === p ? "your land" : tribeName(tc.owner) + " land") + " (" + tc.name + ")";
-        if (c && c.owner !== p) info = (c.owner < 0 ? "Village" : tribeName(c.owner) + " city " + c.name) + " · move a unit here, then capture next turn";
-        if (!acts.length && !c && tc && tc.owner === p && S.res[i]) info += " · needs " + neededTech(S.res[i]);
-        setActions(info, btns);
+        if (c) title = (c.owner < 0 ? "Village" : esc(c.name) + (c.capital ? " ★" : "")) + (c.owner >= 0 && c.owner !== p ? " · " + tribeName(c.owner) : "");
+        if (c && c.owner !== p) info = "Move a unit here, then capture it next turn.";
+        else if (c) info = "Level " + c.level + " · " + c.pop + "/" + (c.level + 1) + " population · +" + cityIncome(S, c) + " a turn";
+        else if (tc) info = (tc.owner === p ? "Your land, " : tribeName(tc.owner) + " land, ") + esc(tc.name) + (!acts.length && tc.owner === p && S.res[i] ? " · needs " + neededTech(S.res[i]) : "");
+        else info = "Unclaimed land.";
+        setSheet(title, info, btns);
         return;
       }
-      setActions("Tap a unit to move it, a tile to work it, or a city to train.", []);
+      setSheet("Your move", "Tap a unit to move it, a tile to work it, or a city to train.", []);
     }
     const neededTech = (r) => ({ 1: "Organization", 2: "Farming", 3: "Hunting", 4: "Fishing", 5: "Mining", 6: "Whaling" }[r] || "");
 
@@ -3447,60 +3623,61 @@ window.plethoraBit = {
       V.panel = name; V.panelArg = arg;
       panelEl.style.display = "block";
       panelEl.scrollTop = 0;
-      panelEl.innerHTML = `<div style="max-width:520px;margin:0 auto;padding:${sa.top + 14}px 14px ${sa.bottom + 24}px;">` + panelHtml(name, arg) + `</div>`;
+      panelEl.innerHTML = `<div class="inner" style="padding:${sa.top + 14}px 14px ${sa.bottom + 28}px;">` + panelHtml(name, arg) + `</div>`;
       V.dirty = true;
     }
     function closePanel() { V.panel = null; panelEl.style.display = "none"; panelEl.innerHTML = ""; V.dirty = true; }
-    const h1 = (s) => `<div style="font-size:24px;font-weight:900;letter-spacing:0.3px;margin:6px 0 10px;">${esc(s)}</div>`;
-    const small = (s) => `<div style="font-size:12.5px;opacity:0.78;line-height:1.45;">${s}</div>`;
-    const row = (label, btns) => `<div style="margin:10px 0 2px;font-size:12px;opacity:0.7;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;">${esc(label)}</div><div>${btns}</div>`;
-    const chip = (act, label, on) => `<button data-act="${esc(act)}" style="${on ? CHIP_ON : CHIP}">${esc(label)}</button>`;
-    const closeBtn = (label) => `<div style="text-align:center;margin-top:16px;"><button data-act="close" style="${BIG}">${esc(label || "Close")}</button></div>`;
+    const h1 = (s) => `<div class="h1">${esc(s)}</div>`;
+    const small = (s) => `<div class="small">${s}</div>`;
+    const label = (s) => `<div class="label">${esc(s)}</div>`;
+    const chip = (act, text, on, icon) => `<button data-act="${esc(act)}" class="chip${on ? " on" : ""}">${icon ? svg(icon, 14) : ""}${esc(text)}</button>`;
+    const closeBtn = (text, icon) => `<div style="text-align:center;margin-top:18px;"><button data-act="close" class="btn primary">${svg(icon || "check", 16)}${esc(text || "Done")}</button></div>`;
+    const modeBlurb = (id) => (MODES.find((m) => m.id === id) || MODES[0]).blurb;
 
     function panelHtml(name, arg) {
       switch (name) {
         case "menu": {
           const has = !!(S && !S.over && V.screen === "play") || !!savedGame;
-          return `<div style="text-align:center;padding-top:11vh;">` +
-            `<div style="font-size:30px;color:#ffd166;letter-spacing:6px;margin-bottom:-6px;text-shadow:0 3px 12px rgba(0,0,0,0.6);">★ ★ ★</div>` +
-            `<div style="font-size:46px;font-weight:900;letter-spacing:1.5px;line-height:1.05;text-shadow:0 4px 18px rgba(0,0,0,0.7),0 1px 0 rgba(255,209,102,0.35);">Thirty Turns</div>` +
-            `<div style="width:120px;height:3px;background:#ffd166;border-radius:2px;margin:12px auto 14px;opacity:0.9;"></div>` +
-            `<div style="font-size:14px;opacity:0.85;margin:0 18px 26px;line-height:1.45;">Grow a tribe from one village to an empire — in thirty turns, or until nobody else is left.</div>` +
-            (has ? `<div style="margin:8px;"><button data-act="menu:continue" style="${BIG}min-width:220px;">Continue game</button></div>` : "") +
-            `<div style="margin:8px;"><button data-act="menu:new" style="${BIG}min-width:220px;${has ? "background:rgba(255,255,255,0.14);color:#f3efe6;" : ""}">New game</button></div>` +
-            `<div style="margin:8px;"><button data-act="menu:help" style="${BTN}min-width:220px;">How to play</button></div>` +
-            `<div style="margin:8px;"><button data-act="menu:board" style="${BTN}min-width:220px;">Leaderboards</button></div>` +
-            `</div>`;
+          return `<div class="hero">` +
+            `<div style="color:#ffd166;letter-spacing:8px;font-size:22px;margin-bottom:4px;">${svg("star", 22, "#ffd166")}${svg("star", 28, "#ffd166")}${svg("star", 22, "#ffd166")}</div>` +
+            `<div class="title">Thirty Turns</div>` +
+            `<div class="rule"></div>` +
+            `<div class="small" style="margin:0 20px 26px;">Grow a tribe from one village to an empire — in thirty turns, or until nobody else is left.</div>` +
+            `<div style="display:flex;flex-direction:column;gap:10px;align-items:center;">` +
+            (has ? `<button data-act="menu:continue" class="btn primary wide">${svg("play", 18)}Continue game</button>` : "") +
+            `<button data-act="menu:new" class="btn ${has ? "" : "primary "}wide">${svg("flag", 18)}New game</button>` +
+            `<button data-act="menu:help" class="btn ghost wide">${svg("book", 18)}How to play</button>` +
+            `<button data-act="menu:board" class="btn ghost wide">${svg("chart", 18)}Leaderboards</button>` +
+            `</div></div>`;
         }
         case "setup": {
           const size = MAP_SIZES.find((s) => s.id === setup.size) || MAP_SIZES[2];
           const maxP = size.maxPlayers;
           while (setup.players.length > maxP) setup.players.pop();
-          const kinds = [["human", "Human"], ["easy", "Easy bot"], ["normal", "Normal bot"], ["hard", "Hard bot"], ["crazy", "Crazy bot"]];
+          const kinds = [["human", "Human"], ["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"], ["crazy", "Crazy"]];
           const prow = setup.players.map((pp, k) => {
             const tr = tribeByIndex(pp.tribe);
-            return `<div style="${CARD}padding:10px 12px;display:flex;flex-direction:column;gap:6px;">` +
-              `<div style="display:flex;align-items:center;gap:8px;">` +
-                `<button data-act="setup:tribe:${k}:-1" style="${CHIP}">◀</button>` +
-                `<span style="width:14px;height:14px;border-radius:50%;background:${tr.color};display:inline-block;"></span>` +
-                `<span style="font-weight:800;flex:1;">${esc(tr.name)} <span style="opacity:0.7;font-weight:600;font-size:12px;">· ${esc(tr.tech ? "starts with " + TECHS[tr.tech].name : "starts with a level 3 capital")}</span></span>` +
-                `<button data-act="setup:tribe:${k}:1" style="${CHIP}">▶</button>` +
-                (setup.players.length > 2 ? `<button data-act="setup:remp:${k}" style="${CHIP}">✕</button>` : "") +
+            return `<div class="card tinted" style="--c:${tr.color};padding:10px 12px;">` +
+              `<div class="tribe-card">` +
+                `<button data-act="setup:tribe:${k}:-1" class="btn round ghost" aria-label="Previous tribe">${svg("back", 18)}</button>` +
+                `<div class="swatch" style="background:${tr.color};"></div>` +
+                `<div class="grow"><div class="h2">${esc(tr.name)}</div><div class="small">${esc(tr.tech ? "Starts with " + TECHS[tr.tech].name : "Starts with a level 3 capital")}</div></div>` +
+                `<button data-act="setup:tribe:${k}:1" class="btn round ghost" aria-label="Next tribe">${svg("arrow", 18)}</button>` +
+                (setup.players.length > 2 ? `<button data-act="setup:remp:${k}" class="btn round ghost" aria-label="Remove">${svg("close", 16)}</button>` : "") +
               `</div>` +
-              `<div>${kinds.map((kd) => chip("setup:kind:" + k + ":" + kd[0], kd[1], pp.kind === kd[0])).join("")}</div>` +
+              `<div style="margin-top:6px;">${kinds.map((kd) => chip("setup:kind:" + k + ":" + kd[0], kd[1], pp.kind === kd[0], kd[0] === "human" ? "users" : null)).join("")}</div>` +
             `</div>`;
           }).join("");
           return h1("New game") +
-            row("Mode", MODES.map((m) => chip("setup:mode:" + m.id, m.name, setup.mode === m.id)).join("")) +
-            small(esc(MODES.find((m) => m.id === setup.mode).blurb)) +
-            (setup.mode === "perfection" ? row("Turns", [20, 30, 40, 50].map((n) => chip("setup:limit:" + n, String(n), setup.limit === n)).join("")) : "") +
-            row("Map size", MAP_SIZES.map((s) => chip("setup:size:" + s.id, s.name + " " + s.n + "²", setup.size === s.id)).join("")) +
-            row("Map type", MAP_TYPES.map((t) => chip("setup:type:" + t.id, t.name, setup.type === t.id)).join("")) +
-            row("Tribes (" + setup.players.length + " of " + maxP + ")", "") + prow +
-            (setup.players.length < maxP ? `<button data-act="setup:addp" style="${BTN}">+ Add a tribe</button>` : "") +
-            `<div style="display:flex;gap:10px;justify-content:center;margin-top:18px;">` +
-              `<button data-act="setup:back" style="${BTN}">Back</button>` +
-              `<button data-act="setup:start" style="${BIG}">Start</button>` +
+            label("Mode") + `<div>${MODES.map((m) => chip("setup:mode:" + m.id, m.name, setup.mode === m.id)).join("")}</div>` + small(esc(modeBlurb(setup.mode))) +
+            (setup.mode === "perfection" ? label("Turns") + `<div>${[20, 30, 40, 50].map((n) => chip("setup:limit:" + n, String(n), setup.limit === n)).join("")}</div>` : "") +
+            label("Map size") + `<div>${MAP_SIZES.map((s) => chip("setup:size:" + s.id, s.name + " " + s.n + "²", setup.size === s.id)).join("")}</div>` +
+            label("Map type") + `<div>${MAP_TYPES.map((t) => chip("setup:type:" + t.id, t.name, setup.type === t.id)).join("")}</div>` +
+            label("Tribes · " + setup.players.length + " of " + maxP) + prow +
+            (setup.players.length < maxP ? `<button data-act="setup:addp" class="btn ghost">${svg("users", 16)}Add a tribe</button>` : "") +
+            `<div style="display:flex;gap:10px;justify-content:center;margin-top:20px;">` +
+              `<button data-act="setup:back" class="btn ghost">${svg("back", 16)}Back</button>` +
+              `<button data-act="setup:start" class="btn primary">${svg("play", 18)}Start</button>` +
             `</div>` + small("Two or more humans play pass-and-play on this phone. Bots fill the rest.");
         }
         case "tech": {
@@ -3511,16 +3688,16 @@ window.plethoraBit = {
             const avail = techAvailable(S, p, t);
             const cost = techCost(S, p, t);
             const can = avail && pl.stars >= cost;
-            return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,0.07);margin-left:${(d.tier - 1) * 16}px;">` +
-              `<div style="flex:1;"><div style="font-weight:800;${have ? "color:#9be37d;" : avail ? "" : "opacity:0.5;"}">${esc(d.name)} <span style="opacity:0.6;font-weight:600;font-size:11px;">T${d.tier}</span></div>` +
-              `<div style="font-size:12px;opacity:0.75;">${esc(d.blurb)}</div></div>` +
-              (have ? `<span style="color:#9be37d;font-weight:800;">✓</span>` :
-                `<button data-act="tech:${t}" style="${BTN}${can ? "background:#2f7fd6;" : "opacity:0.45;"}">★ ${cost}</button>`) +
+            return `<div class="row" style="margin-left:${(d.tier - 1) * 18}px;${d.tier > 1 ? "border-left:2px solid rgba(255,255,255,0.08);padding-left:10px;" : ""}">` +
+              `<div class="grow"><div class="h2" style="${have ? "color:#9be37d;" : avail ? "" : "opacity:0.5;"}">${esc(d.name)} <span class="small" style="display:inline;">T${d.tier}</span></div>` +
+              `<div class="small">${esc(d.blurb)}</div></div>` +
+              (have ? `<span style="color:#9be37d;">${svg("check", 20, "#9be37d")}</span>` :
+                `<button data-act="tech:${t}" class="btn${can ? " accent" : " dim"}">${svg("star", 14, can ? "#fff" : "#ffd166")}${cost}</button>`) +
             `</div>`;
           };
-          const branch = (root) => item(root) + techChildren(root).map((c) => item(c) + techChildren(c).map(item).join("")).join("");
-          return h1("Technology") + small(`★ ${pl.stars} available · a technology costs ${TECH_BASE} + tier × your cities${hasTech(S, p, "philosophy") ? ", minus " + Math.round(PHILOSOPHY_DISCOUNT * 100) + "% for Philosophy" : ""}.`) +
-            `<div style="${CARD}">` + TECH_ROOTS.map(branch).join("") + `</div>` + closeBtn();
+          const branch = (root) => `<div class="card">` + item(root) + techChildren(root).map((c) => item(c) + techChildren(c).map(item).join("")).join("") + `</div>`;
+          return h1("Technology") + small(`${svg("star", 13, "#ffd166")} ${pl.stars} available · a technology costs ${TECH_BASE} + tier × your cities${hasTech(S, p, "philosophy") ? ", minus " + Math.round(PHILOSOPHY_DISCOUNT * 100) + "% for Philosophy" : ""}.`) +
+            TECH_ROOTS.map(branch).join("") + closeBtn("Back to the map", "back");
         }
         case "city": {
           const c = arg, p = c.owner;
@@ -3530,98 +3707,98 @@ window.plethoraBit = {
             if (st === null) return "";
             const can = st === "ok";
             const why = st === "occupied" ? "tile occupied" : st === "full" ? "city full" : st === "stars" ? "not enough stars" : "";
-            return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,0.07);">` +
-              `<div style="flex:1;"><div style="font-weight:800;">${esc(d.name)}</div><div style="font-size:12px;opacity:0.75;">hp ${d.hp} · atk ${d.atk} · def ${d.def} · mv ${d.mv}${d.rng > 1 ? " · range " + d.rng : ""}${d.skills ? " · " + d.skills.split(" ").join(", ") : ""}</div></div>` +
-              `<button data-act="train:${t}" style="${BTN}${can ? "background:#2f7fd6;" : "opacity:0.45;"}">★ ${d.cost}</button>` +
-              (why ? `<div style="font-size:11px;opacity:0.6;width:60px;">${why}</div>` : "") +
+            return `<div class="row">` +
+              `<div class="grow"><div class="h2">${esc(d.name)}</div><div class="small">${stat("heart", String(d.hp))}${stat("sword", String(d.atk))}${stat("shield", String(d.def))}${stat("boot", String(d.mv))}${d.rng > 1 ? stat("bolt", "range " + d.rng) : ""}${d.skills ? " · " + esc(d.skills.split(" ").join(", ")) : ""}</div></div>` +
+              (why ? `<span class="small" style="width:70px;text-align:right;">${why}</span>` : "") +
+              `<button data-act="train:${t}" class="btn${can ? " accent" : " dim"}">${svg("star", 14, can ? "#fff" : "#ffd166")}${d.cost}</button>` +
             `</div>`;
           }).join("");
           const inc = cityIncome(S, c);
-          return h1(c.name + (c.capital ? " ★" : "")) +
-            `<div style="${CARD}">` +
-              `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;">` +
-                `<span>Level <b>${c.level}</b></span><span>Population <b>${c.pop} / ${c.level + 1}</b></span><span>Income <b>+${inc}</b></span>` +
-                `<span>Units <b>${cityUnits(S, c)} / ${unitCap(c)}</b></span>${c.walls ? "<span>City wall</span>" : ""}${c.workshop ? "<span>Workshop</span>" : ""}${c.parks ? "<span>Parks " + c.parks + "</span>" : ""}${c.border > 1 ? "<span>Wide borders</span>" : ""}` +
-              `</div>` +
-              small("Work the tiles inside the border to add population. Each level adds a star every turn and room for one more unit.") +
+          const tr = tribeByIndex(S.players[p].tribe);
+          return `<div class="card tinted" style="--c:${tr.color};">` +
+              `<div class="tribe-card"><div class="swatch" style="background:${tr.color};"></div><div class="grow"><div class="h1" style="margin:0;">${esc(c.name)}${c.capital ? " ★" : ""}</div><div class="small">Level ${c.level} · +${inc} stars a turn · units ${cityUnits(S, c)} of ${unitCap(c)}${c.walls ? " · walled" : ""}${c.workshop ? " · workshop" : ""}${c.parks ? " · parks " + c.parks : ""}${c.border > 1 ? " · wide borders" : ""}</div></div></div>` +
+              `<div class="label">Population ${c.pop} of ${c.level + 1}</div><div class="bar"><i style="width:${Math.round(100 * c.pop / (c.level + 1))}%"></i></div>` +
+              `<div class="small" style="margin-top:8px;">Work the tiles inside the border to add population. Each level adds a star every turn and room for one more unit.</div>` +
             `</div>` +
-            `<div style="${CARD}"><div style="font-weight:800;margin-bottom:4px;">Train</div>${units}</div>` + closeBtn();
+            `<div class="card"><div class="label" style="margin-top:0;">Train</div>${units}</div>` + closeBtn("Back to the map", "back");
         }
         case "reward": {
           const c = S.cities[arg.city];
           const opts = rewardsFor(arg.level);
+          const icons = { workshop: "hammer", explorer: "eye", walls: "shield", resources: "star", popgrowth: "users", border: "flag", park: "heart", superunit: "sword" };
           return `<div style="padding-top:14vh;text-align:center;">` + h1(c.name + " reached level " + arg.level) + small("Choose a reward") +
-            `<div style="display:flex;gap:10px;margin-top:14px;">` + opts.map((o) =>
-              `<button data-act="reward:${o.id}" style="${BIG}flex:1;background:rgba(28,34,46,0.96);color:#f3efe6;padding:18px 12px;text-align:center;">` +
-                `<div style="font-size:16px;">${esc(o.name)}</div><div style="font-size:12px;opacity:0.75;font-weight:600;margin-top:6px;">${esc(o.blurb)}</div></button>`).join("") +
+            `<div style="display:flex;gap:10px;margin-top:16px;">` + opts.map((o) =>
+              `<button data-act="reward:${o.id}" class="reward"><div style="color:#ffd166;margin-bottom:6px;">${svg(icons[o.id] || "star", 28, "#ffd166")}</div>` +
+                `<div class="h2" style="font-size:16px;">${esc(o.name)}</div><div class="small">${esc(o.blurb)}</div></button>`).join("") +
             `</div></div>`;
         }
         case "pass": {
           const tr = tribeByIndex(S.players[S.cur].tribe);
-          return `<div style="text-align:center;padding-top:24vh;">` +
-            `<div style="width:54px;height:54px;border-radius:50%;background:${tr.color};margin:0 auto 14px;box-shadow:0 4px 18px rgba(0,0,0,0.5);"></div>` +
+          return `<div class="hero" style="padding-top:22vh;">` +
+            `<div class="swatch" style="width:72px;height:72px;border-radius:50%;margin:0 auto 16px;background:${tr.color};"></div>` +
             h1("Pass the phone") + small("It is the <b>" + esc(tr.name) + "</b> turn. Only they should look.") +
-            `<div style="margin-top:22px;"><button data-act="pass:go" style="${BIG}min-width:200px;">I am the ${esc(tr.name)}</button></div></div>`;
+            `<div style="margin-top:24px;"><button data-act="pass:go" class="btn primary wide">${svg("users", 18)}I am the ${esc(tr.name)}</button></div></div>`;
         }
         case "over": {
           refreshScores(S);
           const ranked = S.players.slice().sort((a, b) => (b.alive - a.alive) || (b.score - a.score));
           const rows = ranked.map((pl, k) => {
             const tr = tribeByIndex(pl.tribe);
-            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,0.07);${pl.alive ? "" : "opacity:0.5;"}">` +
-              `<span style="font-weight:900;width:22px;">${k + 1}</span>` +
-              `<span style="width:14px;height:14px;border-radius:50%;background:${tr.color};display:inline-block;"></span>` +
-              `<span style="flex:1;font-weight:800;">${esc(tr.name)} <span style="font-weight:600;opacity:0.7;font-size:12px;">${pl.human ? "human" : pl.ai + " bot"}${pl.alive ? "" : " · fallen"}</span></span>` +
-              `<span style="font-size:12px;opacity:0.8;">${numCities(S, pl.id)} cities</span>` +
-              `<span style="font-weight:800;">${pl.score.toLocaleString()}</span></div>`;
+            return `<div class="podium" style="${pl.alive ? "" : "opacity:0.5;"}">` +
+              `<span class="rank${k === 0 ? " one" : ""}">${k + 1}</span>` +
+              `<span class="emblem" style="background:${tr.color}">${esc(tr.name[0])}</span>` +
+              `<span class="grow"><b>${esc(tr.name)}</b> <span class="small" style="display:inline;">${pl.human ? "human" : pl.ai + " bot"}${pl.alive ? "" : " · fallen"}</span></span>` +
+              `<span class="small">${numCities(S, pl.id)} cities</span>` +
+              `<b>${pl.score.toLocaleString()}</b></div>`;
           }).join("");
           const w = S.winner >= 0 ? S.players[S.winner] : null;
           const title = w ? (w.human ? (S.players.filter((q) => q.human).length > 1 ? tribeName(w.id) + " win" : "Victory") : "Defeat") : "Game over";
           const sub = w ? ("The " + tribeName(w.id) + (S.mode === "perfection" ? " scored highest after " + S.turnLimit + " turns." : S.mode === "glory" ? " reached " + GLORY_SCORE.toLocaleString() + " points." : S.mode === "might" ? " hold every capital." : " are the last tribe standing.")) : "";
-          return `<div style="padding-top:8vh;">` + h1(title) + small(esc(sub) + " Turn " + S.turn + ".") +
-            `<div style="${CARD}">${rows}</div>` +
+          return `<div style="padding-top:8vh;"><div style="text-align:center;color:#ffd166;">${svg("trophy", 40, w && w.human ? "#ffd166" : "#8c93a1")}</div>` + `<div class="h1" style="text-align:center;font-size:34px;">${esc(title)}</div>` + `<div class="small" style="text-align:center;">${esc(sub)} Turn ${S.turn}.</div>` +
+            `<div class="card">${rows}</div>` +
             (V.recordNote ? small(V.recordNote) : "") +
             `<div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap;">` +
-              `<button data-act="over:again" style="${BIG}">Play again</button>` +
-              `<button data-act="over:menu" style="${BTN}">Main menu</button>` +
-              `<button data-act="close" style="${BTN}">Look at the map</button>` +
+              `<button data-act="over:again" class="btn primary">${svg("play", 16)}Play again</button>` +
+              `<button data-act="over:menu" class="btn ghost">${svg("menu", 16)}Main menu</button>` +
+              `<button data-act="close" class="btn ghost">${svg("eye", 16)}Look at the map</button>` +
             `</div></div>`;
         }
         case "gamemenu": {
-          return `<div style="padding-top:10vh;text-align:center;">` + h1("Paused") +
-            `<div style="margin:8px;"><button data-act="close" style="${BIG}min-width:220px;">Resume</button></div>` +
-            `<div style="margin:8px;"><button data-act="game:tasks" style="${BTN}min-width:220px;">Tasks and monuments</button></div>` +
-            `<div style="margin:8px;"><button data-act="game:help" style="${BTN}min-width:220px;">How to play</button></div>` +
-            `<div style="margin:8px;"><button data-act="game:sound" style="${BTN}min-width:220px;">Sound: ${V.soundOn ? "on" : "off"}</button></div>` +
-            `<div style="margin:8px;"><button data-act="menu:board" style="${BTN}min-width:220px;">Leaderboards</button></div>` +
-            `<div style="margin:8px;"><button data-act="game:quit" style="${BTN}min-width:220px;">Save and leave</button></div>` +
-            `</div>`;
+          return `<div class="hero" style="padding-top:10vh;">` + h1("Paused") +
+            `<div style="display:flex;flex-direction:column;gap:10px;align-items:center;margin-top:10px;">` +
+            `<button data-act="close" class="btn primary wide">${svg("play", 18)}Resume</button>` +
+            `<button data-act="game:tasks" class="btn ghost wide">${svg("scroll", 18)}Tasks and monuments</button>` +
+            `<button data-act="game:help" class="btn ghost wide">${svg("book", 18)}How to play</button>` +
+            `<button data-act="game:sound" class="btn ghost wide">${svg("sound", 18)}Sound: ${V.soundOn ? "on" : "off"}</button>` +
+            `<button data-act="menu:board" class="btn ghost wide">${svg("chart", 18)}Leaderboards</button>` +
+            `<button data-act="game:quit" class="btn ghost wide">${svg("flag", 18)}Save and leave</button>` +
+            `</div></div>`;
         }
         case "tasks": {
           const p = V.viewer >= 0 ? V.viewer : S.cur, pl = S.players[p];
-          const rows = TASKS.map((t) => `<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,0.07);">` +
-            `<span style="width:22px;font-weight:900;color:${pl.built[t.id] ? "#ffd166" : pl.tasks[t.id] ? "#9be37d" : "rgba(255,255,255,0.3)"};">${pl.built[t.id] ? "★" : pl.tasks[t.id] ? "✓" : "○"}</span>` +
-            `<div><div style="font-weight:800;">${esc(t.name)}</div><div style="font-size:12px;opacity:0.75;">${esc(t.desc)}${pl.tasks[t.id] && !pl.built[t.id] ? " · ready to build on any empty tile you own" : ""}</div></div></div>`).join("");
-          return h1("Tasks") + small("Finish a task and its monument becomes free to build: +3 population and +" + MONUMENT_SCORE + " score.") + `<div style="${CARD}">${rows}</div>` + closeBtn("Back");
+          const rows = TASKS.map((t) => `<div class="row">` +
+            `<span style="color:${pl.built[t.id] ? "#ffd166" : pl.tasks[t.id] ? "#9be37d" : "rgba(255,255,255,0.3)"};">${svg(pl.built[t.id] ? "star" : pl.tasks[t.id] ? "check" : "scroll", 20)}</span>` +
+            `<div class="grow"><div class="h2">${esc(t.name)}</div><div class="small">${esc(t.desc)}${pl.tasks[t.id] && !pl.built[t.id] ? " · ready to build on any empty tile you own" : ""}</div></div></div>`).join("");
+          return h1("Tasks") + small("Finish a task and its monument becomes free to build: +3 population and +" + MONUMENT_SCORE + " score.") + `<div class="card">${rows}</div>` + closeBtn("Back", "back");
         }
-        case "help": return h1("How to play") + helpHtml() + closeBtn("Back");
+        case "help": return h1("How to play") + helpHtml() + closeBtn("Back", "back");
         case "board": {
           const diff = arg || "normal";
           return h1("Leaderboards") +
             `<div>${DIFFICULTIES.map((d) => chip("board:" + d.id, d.name, diff === d.id)).join("")}</div>` +
-            `<div data-el="boardbody" style="${CARD}">Loading…</div>` + small("Perfection scores after the final turn, single player against bots of that difficulty.") + closeBtn("Back");
+            `<div data-el="boardbody" class="card">Loading…</div>` + small("Perfection scores after the final turn, single player against bots of that difficulty.") + closeBtn("Back", "back");
         }
         default: return "";
       }
     }
     function helpHtml() {
-      const card = (t, b) => `<div style="${CARD}"><div style="font-weight:800;margin-bottom:4px;">${esc(t)}</div>${small(b)}</div>`;
-      return card("Turns and stars", "Every turn your cities pay stars. Spend them on technology, on working the land, and on units. Tap <b>End turn</b> when you are done.") +
-        card("Cities", "Harvest fruit, hunt animals, fish, farm and mine inside a city's border to add population. Fill the bar and the city levels up: it earns one more star a turn, supports one more unit, and lets you pick a reward.") +
-        card("Units", "Tap a unit, then a lit tile to move or a red tile to attack. Moving into a forest, a mountain, or next to an enemy ends the move. Stand on a village or an enemy city for a turn, then capture it. A unit that does nothing can recover health.") +
-        card("Combat", "Damage depends on attack, defence and remaining health. Defenders fight back if you are in their reach. Units in their own city defend harder, and much harder behind a wall.") +
-        card("Technology", "Five roots, each with two branches. Costs rise with the number of cities you own. Tribes start with one technology already known.") +
-        card("Winning", "<b>Perfection</b>: highest score after the final turn. <b>Domination</b>: last tribe standing. <b>Glory</b>: first to " + GLORY_SCORE.toLocaleString() + " points. <b>Might</b>: hold every capital.");
+      const card = (icon, t, b) => `<div class="card"><div class="h2">${svg(icon, 16, "#ffd166")} ${esc(t)}</div>${small(b)}</div>`;
+      return card("star", "Turns and stars", "Every turn your cities pay stars. Spend them on technology, on working the land, and on units. Tap <b>End turn</b> when you are done.") +
+        card("city", "Cities", "Harvest fruit, hunt animals, fish, farm and mine inside a city's border to add population. Fill the bar and the city levels up: it earns one more star a turn, supports one more unit, and lets you pick a reward.") +
+        card("boot", "Units", "Tap a unit, then a lit tile to move or a red tile to attack. Moving into a forest, a mountain, or next to an enemy ends the move. Stand on a village or an enemy city for a turn, then capture it. A unit that does nothing can recover health.") +
+        card("sword", "Combat", "Damage depends on attack, defence and remaining health. Defenders fight back if you are in their reach. Units in their own city defend harder, and much harder behind a wall.") +
+        card("flask", "Technology", "Five roots, each with two branches. Costs rise with the number of cities you own. Tribes start with one technology already known.") +
+        card("trophy", "Winning", "<b>Perfection</b>: highest score after the final turn. <b>Domination</b>: last tribe standing. <b>Glory</b>: first to " + GLORY_SCORE.toLocaleString() + " points. <b>Might</b>: hold every capital.");
     }
     async function fillBoard(diff) {
       const host = panelEl.querySelector('[data-el="boardbody"]');
@@ -3634,9 +3811,9 @@ window.plethoraBit = {
       if (!panelEl.querySelector('[data-el="boardbody"]')) return;
       if (rows === null) { host.innerHTML = small("Leaderboards are not available right now."); return; }
       if (!rows.length) { host.innerHTML = small("No scores yet. Finish a Perfection game to post one."); return; }
-      host.innerHTML = rows.slice(0, 20).map((r, k) => {
-        const who = (r.user && (r.user.handle || r.user.displayName || r.user.username)) || r.handle || r.displayName || "someone";
-        return `<div style="display:flex;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,0.07);${r.self ? "color:#ffd166;" : ""}"><span style="width:24px;font-weight:900;">${r.rank || k + 1}</span><span style="flex:1;">${esc(who)}</span><span style="font-weight:800;">${esc(r.label || r.value)}</span></div>`;
+      host.innerHTML = rows.slice(0, 20).map((row, k) => {
+        const who = (row.user && (row.user.handle || row.user.displayName || row.user.username)) || row.handle || row.displayName || "someone";
+        return `<div class="podium" style="${row.self ? "color:#ffd166;" : ""}"><span class="rank${k === 0 ? " one" : ""}">${row.rank || k + 1}</span><span class="grow">${esc(who)}</span><b>${esc(row.label || row.value)}</b></div>`;
       }).join("");
     }
 
@@ -3698,9 +3875,9 @@ window.plethoraBit = {
         case "size": setup.size = parts[2]; break;
         case "type": setup.type = parts[2]; break;
         case "limit": setup.limit = Number(parts[2]); break;
-        case "addp": { const used = setup.players.map((p) => p.tribe); let t = 0; while (used.indexOf(t) >= 0 && t < TRIBES.length - 1) t++; setup.players.push({ tribe: t, kind: "normal" }); break; }
+        case "addp": { const used = setup.players.map((q) => q.tribe); let t = 0; while (used.indexOf(t) >= 0 && t < TRIBES.length - 1) t++; setup.players.push({ tribe: t, kind: "normal" }); break; }
         case "remp": setup.players.splice(k, 1); break;
-        case "tribe": { const used = setup.players.map((p) => p.tribe); let t = setup.players[k].tribe; for (let s = 0; s < TRIBES.length; s++) { t = (t + Number(parts[3]) + TRIBES.length) % TRIBES.length; if (used.indexOf(t) < 0) break; } setup.players[k].tribe = t; break; }
+        case "tribe": { const used = setup.players.map((q) => q.tribe); let t = setup.players[k].tribe; for (let s = 0; s < TRIBES.length; s++) { t = (t + Number(parts[3]) + TRIBES.length) % TRIBES.length; if (used.indexOf(t) < 0) break; } setup.players[k].tribe = t; break; }
         case "kind": setup.players[k].kind = parts[3]; break;
         case "back": openPanel("menu"); return;
         case "start": startGame(buildCfg()); return;
@@ -3714,18 +3891,18 @@ window.plethoraBit = {
       return {
         n: size.n, mapType: setup.type, mode: setup.mode, seed: (Math.random() * 4294967295) >>> 0,
         turnLimit: setup.mode === "perfection" ? (Number(tune("turn_limit", 0)) || setup.limit) : ENDLESS_CAP,
-        players: setup.players.map((p) => ({ tribe: p.tribe, human: p.kind === "human", ai: p.kind === "human" ? null : p.kind }))
+        players: setup.players.map((q) => ({ tribe: q.tribe, human: q.kind === "human", ai: q.kind === "human" ? null : q.kind }))
       };
     }
 
     // ====================================================================== //
     // Turn flow                                                              //
     // ====================================================================== //
-    const humans = () => (S ? S.players.filter((p) => p.human) : []);
+    const humans = () => (S ? S.players.filter((q) => q.human) : []);
     const nextHuman = () => {
       if (!S) return 0;
       for (let k = 0; k < S.players.length; k++) { const q = (S.cur + k) % S.players.length; if (S.players[q].human && S.players[q].alive) return q; }
-      const any = S.players.findIndex((p) => p.human);
+      const any = S.players.findIndex((q) => q.human);
       return any >= 0 ? any : 0;
     };
 
@@ -3733,12 +3910,12 @@ window.plethoraBit = {
       lastCfg = cfg;
       S = generateWorld(cfg);
       V.recordNote = "";
-      V.screen = "play"; V.demo = false; V.hideMap = false; V.busy = false;
+      V.screen = "play"; V.demo = false; V.hideMap = false; V.busy = false; V.reported = false;
       V.replay = []; V.vis.clear(); V.ghosts.clear(); V.flash.clear(); V.floats = []; V.pendingMoves.clear();
       V.lastHuman = -1;
       firstTurn(S);
       S.events.length = 0;
-      const h = S.players.findIndex((p) => p.human);
+      const h = S.players.findIndex((q) => q.human);
       V.viewer = h >= 0 ? h : 0;
       const cap = S.cities[V.viewer];
       centerOn(cap.x, cap.y, 1.15);
@@ -3756,7 +3933,7 @@ window.plethoraBit = {
       const loaded = savedGame ? deserialize(savedGame) : null;
       if (!loaded) { openPanel("setup"); return; }
       S = loaded;
-      V.screen = "play"; V.demo = false; V.hideMap = false; V.busy = false; V.recordNote = "";
+      V.screen = "play"; V.demo = false; V.hideMap = false; V.busy = false; V.recordNote = ""; V.reported = false;
       V.replay = []; V.vis.clear(); V.ghosts.clear(); V.flash.clear(); V.floats = []; V.pendingMoves.clear();
       V.viewer = nextHuman();
       V.lastHuman = humans().length > 1 ? -1 : S.cur;
@@ -3772,8 +3949,8 @@ window.plethoraBit = {
     function advance() {
       if (!S) return;
       if (S.over) { showGameOver(); return; }
-      const p = curPlayer();
-      if (!p.human) { runAi(); return; }
+      const q = curPlayer();
+      if (!q.human) { runAi(); return; }
       if (humans().length > 1 && V.lastHuman !== S.cur) {
         V.hideMap = true; V.viewer = S.cur; deselect(); updateHud(true);
         openPanel("pass");
@@ -3786,7 +3963,7 @@ window.plethoraBit = {
       banner("");
       if (S.turn === 1 || humans().length > 1) {
         const cap = S.cities.find((c) => c.owner === S.cur && c.capital);
-        if (cap) centerOn(cap.x, cap.y, cam.z);
+        if (cap) panTo(cap.x, cap.y, cam.z, 500);
       }
       deselect(); updateHud(true);
       try { if (S.mode === "perfection") ctx.platform.setProgress(clamp((S.turn - 1) / S.turnLimit, 0, 1)); } catch (_) {}
@@ -3811,7 +3988,7 @@ window.plethoraBit = {
       V.busy = true;
       deselect();
       V.viewer = nextHuman();
-      banner(tribeName(S.cur) + " are thinking…");
+      banner(tribeName(S.cur) + " are thinking");
       updateHud(true);
       ctx.timeout(() => {
         if (!S || S.over || V.screen !== "play") { V.busy = false; banner(""); if (S && S.over) showGameOver(); return; }
@@ -3860,7 +4037,7 @@ window.plethoraBit = {
       openPanel("over");
     }
     async function submitRecords(me, won) {
-      const bots = S.players.filter((p) => p.ai);
+      const bots = S.players.filter((q) => q.ai);
       if (!bots.length) return;
       const order = ["easy", "normal", "hard", "crazy"];
       let diff = "easy";
@@ -3894,10 +4071,10 @@ window.plethoraBit = {
       if (progressToo && humans().length === 1 && ctx.game && ctx.game.progress) {
         const me = humans()[0];
         const size = JSON.stringify(data).length;
-        const label = tribeName(me.id) + " · turn " + S.turn + (S.mode === "perfection" ? " of " + S.turnLimit : "") + " · " + MODES.find((m) => m.id === S.mode).name;
+        const text = tribeName(me.id) + " · turn " + S.turn + (S.mode === "perfection" ? " of " + S.turnLimit : "") + " · " + MODES.find((m) => m.id === S.mode).name;
         const percent = S.mode === "perfection" ? Math.round(clamp((S.turn - 1) / S.turnLimit, 0, 0.99) * 100) : Math.min(95, Math.round(numCities(S, me.id) / Math.max(1, S.cities.length) * 100));
         const state = size < 7600 ? data : { v: 1, ref: "storage", n: S.n, turn: S.turn };
-        fireAndForget(() => ctx.game.progress.save("main", { state, label, percent, dimensions: { mode: S.mode } }));
+        fireAndForget(() => ctx.game.progress.save("main", { state, label: text, percent, dimensions: { mode: S.mode } }));
       }
     }
     function saveSettings() { if (ctx.capabilities.storage) fireAndForget(() => ctx.storage.set(SETTINGS_KEY, { sound: V.soundOn })); }
@@ -3932,6 +4109,7 @@ window.plethoraBit = {
     ctx.listen(canvas, "pointerdown", (e) => {
       firstGesture();
       try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      cam.tx = null;
       pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY, sx: e.offsetX, sy: e.offsetY });
       if (pointers.size === 1) gesture = { kind: "tap", moved: false, lastX: e.offsetX, lastY: e.offsetY };
       else if (pointers.size === 2) {
@@ -3973,7 +4151,7 @@ window.plethoraBit = {
         else if (V.screen === "play") onTapTile(t[0], t[1]);
       }
       if (pointers.size === 0) gesture = null;
-      else if (pointers.size === 1) { const p = Array.from(pointers.values())[0]; gesture = { kind: "pan", moved: true, lastX: p.x, lastY: p.y }; }
+      else if (pointers.size === 1) { const q = Array.from(pointers.values())[0]; gesture = { kind: "pan", moved: true, lastX: q.x, lastY: q.y }; }
     }
     ctx.listen(canvas, "pointerup", endPointer);
     ctx.listen(canvas, "pointercancel", endPointer);
@@ -3989,12 +4167,14 @@ window.plethoraBit = {
     // ====================================================================== //
     // Frame loop and boot                                                    //
     // ====================================================================== //
-    let lastW = -1, lastH = -1;
+    let lastW = -1, lastH = -1, ambientAcc = 0;
     ctx.onFrame((dtMs) => {
       const dt = Math.min(100, dtMs || 16);
+      ART_T += dt / 1000;
       if (ctx.width !== lastW || ctx.height !== lastH) { lastW = ctx.width; lastH = ctx.height; V.dirty = true; }
       if (V.toastT > 0) { V.toastT -= dt; if (V.toastT <= 0) toastEl.style.opacity = "0"; }
       if (V.demo && S) { cam.x += dt * 0.012; cam.y += dt * 0.004; const lim = S.n * TW * 0.3; if (cam.x > lim) { cam.x = -lim; } if (cam.y > S.n * TH * 0.8) cam.y = S.n * TH * 0.2; V.dirty = true; }
+      if (tickCamera(dt)) V.dirty = true;
       tickReplay(dt);
       if (!V.replay.length && V.afterReplay) { const fn = V.afterReplay; V.afterReplay = null; fn(); }
       if (V.floats.length) {
@@ -4007,6 +4187,9 @@ window.plethoraBit = {
         if (cap) floatText(cap.x, cap.y, "+" + V.incomeFlash + "★", "#ffd166", 0, -30);
         V.incomeFlash = 0;
       }
+      // Ambient motion (water, flags, smoke, the selection pulse) at a gentle rate.
+      ambientAcc += dt;
+      if (ambientAcc > 70 && S && !V.hideMap && !V.panel) { ambientAcc = 0; V.dirty = true; }
       if (S && V.screen === "play") updateHud(false);
       if (V.dirty) { V.dirty = false; drawScene(performance.now()); }
     });

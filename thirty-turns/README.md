@@ -237,6 +237,26 @@ skipped. Long turns are compressed so nobody waits more than a few seconds.
 Pass-and-play shows a curtain between turns and each player sees only their
 own fog.
 
+The canvas asks for a three-times backing store in CSS coordinates
+(`maxDpr: 3, coordinateSpace: "css"`), which is the SDK's opt-in for a crisp
+surface when every draw call already uses `ctx.width`/`ctx.height` pixels; the
+default backing store is CSS-sized and blurs on a phone. A little ambient
+motion runs at about fourteen frames a second while the map is up: water
+sparkles drift, the capital's pennant waves, forge smoke rises, the selection
+ring breathes. The camera glides to the capital at the start of a turn.
+
+### Interface
+
+DOM inside the bit's root, styled by one `<style>` block in that root (classes,
+keyframes and press states; inline SVG icons; no images). A glass HUD carries
+the tribe emblem and turn, stars and income, and the score; two round buttons
+open the technology tree and the menu. The bottom is an action sheet: what is
+selected, its stats as icon pairs, a one-line hint, and the actions as chips,
+with the gold End turn button in its header. Panels are blurred overlays with
+cards: a hero menu, tribe cards with a colour swatch in setup, the technology
+tree as five branch cards with tier indents, a city sheet with a population
+bar and the training list, reward cards with icons, a podium at the end.
+
 ## Sound
 
 A `cozy` music bed from `ctx.music` with stings for captures, research, level
