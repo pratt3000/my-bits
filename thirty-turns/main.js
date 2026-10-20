@@ -152,51 +152,51 @@ window.plethoraBit = {
     // colour, a biome palette and generation weights for the land around its
     // capital. `syl` are syllables for city names.
     const TRIBES = [
-      { id: "verdane", name: "Verdane", tech: "organization", color: "#3b7dd8", dark: "#24518f",
+      { id: "verdane", tree: "cone", wall: "#f3efe6", earth: "#7b5438", animal: { body: "#5a4330", mark: "#8c6a4a", horn: "tusk" }, name: "Verdane", tech: "organization", color: "#3b7dd8", dark: "#24518f",
         field: "#8fcf6a", forest: "#3e9b4a", trunk: "#6b4a2a", rock: "#9aa0a6",
         gen: { forest: 1.0, mountain: 0.8, fruit: 1.6, crop: 0.8, animal: 0.8, metal: 0.8, fish: 1.0 },
         syl: ["li", "re", "pa", "fim", "to", "mo", "ca", "lu", "ne", "sa", "vi", "do"] },
-      { id: "hjold", name: "Hjold", tech: "hunting", color: "#3a3f47", dark: "#1d2024",
+      { id: "hjold", tree: "snow", wall: "#a97c50", earth: "#6a5646", animal: { body: "#e9eef2", mark: "#c9d2da", horn: "antler" }, name: "Hjold", tech: "hunting", color: "#3a3f47", dark: "#1d2024",
         field: "#e6ecef", forest: "#2f5d3a", trunk: "#4a3526", rock: "#8e969c", snow: true,
         gen: { forest: 1.8, mountain: 1.1, fruit: 0.5, crop: 0.3, animal: 1.7, metal: 1.0, fish: 0.9 },
         syl: ["bae", "rg", "off", "ul", "ha", "gr", "im", "ske", "nor", "vik", "ol", "fjo"] },
-      { id: "saharn", name: "Saharn", tech: "riding", color: "#e2c046", dark: "#9c8220",
+      { id: "saharn", tree: "cone", wall: "#f3e3b8", earth: "#a8824e", animal: { body: "#c9a36a", mark: "#e3c48e", horn: "hump" }, name: "Saharn", tech: "riding", color: "#e2c046", dark: "#9c8220",
         field: "#e8d9a0", forest: "#8fae4e", trunk: "#8a6a3a", rock: "#b8a888",
         gen: { forest: 0.35, mountain: 0.5, fruit: 1.0, crop: 0.9, animal: 0.6, metal: 0.6, fish: 0.6 },
         syl: ["ou", "ma", "ji", "ta", "ke", "sa", "ha", "ra", "zu", "mi", "nu", "ba"] },
-      { id: "tiwa", name: "Tiwa", tech: "fishing", color: "#39b54a", dark: "#1f7a2c",
+      { id: "tiwa", tree: "palm", wall: "#f5e6c0", earth: "#b08d5e", animal: { body: "#3f7f4a", mark: "#7fbf6a", horn: "none" }, name: "Tiwa", tech: "fishing", color: "#39b54a", dark: "#1f7a2c",
         field: "#6fc96b", forest: "#2e8b57", trunk: "#7a5a2a", rock: "#8fa39a", palm: true,
         gen: { forest: 1.0, mountain: 0.5, fruit: 1.2, crop: 0.6, animal: 0.6, metal: 0.5, fish: 2.0, water: 1.6 },
         syl: ["ki", "ko", "ha", "wa", "lo", "ma", "nu", "ti", "pa", "ae", "ola", "ni"] },
-      { id: "fennow", name: "Fennow", tech: "archery", color: "#c8762a", dark: "#7f4612",
+      { id: "fennow", tree: "cone", wall: "#e8dcc0", earth: "#7b5438", animal: { body: "#8a5a2b", mark: "#c98a4a", horn: "antler" }, name: "Fennow", tech: "archery", color: "#c8762a", dark: "#7f4612",
         field: "#a7bf5a", forest: "#c9783a", trunk: "#5c3a1e", rock: "#9a948a",
         gen: { forest: 1.7, mountain: 0.7, fruit: 1.3, crop: 0.5, animal: 1.3, metal: 0.7, fish: 0.8 },
         syl: ["hoo", "dri", "ck", "wen", "ash", "fel", "ber", "mor", "ly", "dun", "oak", "tam"] },
-      { id: "aurelle", name: "Aurelle", tech: null, color: "#8e44ad", dark: "#5b2a73", capitalLevel: 3,
+      { id: "aurelle", tree: "round", wall: "#efe3f2", earth: "#6e5470", animal: { body: "#5b3a86", mark: "#9a7ac2", horn: "horn" }, name: "Aurelle", tech: null, color: "#8e44ad", dark: "#5b2a73", capitalLevel: 3,
         field: "#b48bd8", forest: "#5b3a86", trunk: "#3a2250", rock: "#a897b4",
         gen: { forest: 0.9, mountain: 0.8, fruit: 1.4, crop: 0.8, animal: 0.8, metal: 0.9, fish: 0.9 },
         syl: ["lux", "ido", "or", "au", "rel", "vi", "sel", "ame", "tho", "ris", "ena", "ul"] },
-      { id: "grimm", name: "Grimm", tech: "smithery", color: "#8c1f2e", dark: "#4d1119",
+      { id: "grimm", tree: "dead", wall: "#8a8187", earth: "#4b4349", animal: { body: "#2e2a30", mark: "#5a4f5a", horn: "horn" }, name: "Grimm", tech: "smithery", color: "#8c1f2e", dark: "#4d1119",
         field: "#8c8c90", forest: "#4d4a52", trunk: "#2d2a30", rock: "#5e5a66", dead: true,
         gen: { forest: 0.8, mountain: 1.3, fruit: 0.25, crop: 0.9, animal: 0.4, metal: 2.0, fish: 0.6 },
         syl: ["ven", "gir", "mor", "ska", "dro", "th", "ul", "grim", "ash", "nak", "vor", "ek"] },
-      { id: "sabu", name: "Sabu", tech: "farming", color: "#f0932b", dark: "#a35d12",
+      { id: "sabu", tree: "acacia", wall: "#e9d9b0", earth: "#9c7a42", animal: { body: "#c08a3a", mark: "#f0c07a", horn: "horn" }, name: "Sabu", tech: "farming", color: "#f0932b", dark: "#a35d12",
         field: "#d9c66a", forest: "#6c8f3b", trunk: "#7a5a2a", rock: "#a8987a",
         gen: { forest: 0.6, mountain: 0.7, fruit: 0.9, crop: 1.9, animal: 0.9, metal: 0.6, fish: 0.7 },
         syl: ["ze", "ba", "si", "ka", "lu", "mo", "nde", "ya", "tu", "wa", "ngo", "ri"] },
-      { id: "aiyun", name: "Aiyun", tech: "meditation", color: "#2ab7c9", dark: "#15727e",
+      { id: "aiyun", tree: "snow", wall: "#e4eef2", earth: "#6e6a6a", animal: { body: "#d9d2c4", mark: "#f4efe6", horn: "horn" }, name: "Aiyun", tech: "meditation", color: "#2ab7c9", dark: "#15727e",
         field: "#c8dfd0", forest: "#4e8a6a", trunk: "#5a4a3a", rock: "#b9c4cc", snow: true,
         gen: { forest: 0.9, mountain: 1.9, fruit: 1.1, crop: 0.5, animal: 0.7, metal: 1.1, fish: 0.7 },
         syl: ["ai", "mo", "li", "tsu", "yan", "ko", "ren", "shi", "an", "pei", "lun", "mei"] },
-      { id: "quill", name: "Quill", tech: "shields", color: "#0e7c66", dark: "#064a3c",
+      { id: "quill", tree: "round", wall: "#e9e2c8", earth: "#6f5036", animal: { body: "#2f6b3a", mark: "#8fd07a", horn: "none" }, name: "Quill", tech: "shields", color: "#0e7c66", dark: "#064a3c",
         field: "#7bc47f", forest: "#1f6f4a", trunk: "#5a3e24", rock: "#9aa89c",
         gen: { forest: 1.4, mountain: 0.7, fruit: 1.5, crop: 0.6, animal: 1.0, metal: 0.7, fish: 0.9 },
         syl: ["que", "tza", "li", "xo", "chi", "tla", "pan", "ame", "cu", "ya", "tec", "oa"] },
-      { id: "yoruk", name: "Yoruk", tech: "roads", color: "#b5457a", dark: "#6e2448",
+      { id: "yoruk", tree: "cone", wall: "#e3d2b0", earth: "#8a6a42", animal: { body: "#7a4b2a", mark: "#b88a5a", horn: "horn" }, name: "Yoruk", tech: "roads", color: "#b5457a", dark: "#6e2448",
         field: "#c9a77a", forest: "#8b5a2b", trunk: "#4e2f14", rock: "#a89078",
         gen: { forest: 0.6, mountain: 0.9, fruit: 1.2, crop: 1.0, animal: 0.9, metal: 0.8, fish: 0.6 },
         syl: ["ya", "da", "kk", "or", "tur", "kem", "al", "bay", "sar", "uz", "gol", "ir"] },
-      { id: "shen", name: "Shen", tech: "climbing", color: "#e04848", dark: "#8e2222",
+      { id: "shen", tree: "round", wall: "#efe3cf", earth: "#7b5438", animal: { body: "#2b2b2b", mark: "#f2f2f2", horn: "none" }, name: "Shen", tech: "climbing", color: "#e04848", dark: "#8e2222",
         field: "#a9c76b", forest: "#d9534f", trunk: "#5a3a2a", rock: "#8e8a8a",
         gen: { forest: 1.0, mountain: 1.7, fruit: 1.1, crop: 0.6, animal: 0.8, metal: 1.5, fish: 0.8 },
         syl: ["xin", "xi", "shen", "lo", "pu", "jia", "tai", "wu", "ming", "hua", "zhi", "cao"] }
@@ -2090,14 +2090,10 @@ window.plethoraBit = {
     }
 
     // ---- Tile palette: land colour comes from the tribe whose land it is.
-    const WATER_SHALLOW = "#4db8e2", WATER_DEEP = "#2b6fb8";
     function tileColor(i) {
-      const t = S.terrain[i];
-      if (t === SHALLOW) return WATER_SHALLOW;
-      if (t === OCEAN) return WATER_DEEP;
       const tr = tribeByIndex(S.biome[i]);
       const j = hash2(i % S.n, (i - (i % S.n)) / S.n);
-      return shade(tr.field, 0.94 + j * 0.1);
+      return shade(tr.field, 0.95 + j * 0.08);
     }
 
     // ====================================================================== //
@@ -2105,49 +2101,56 @@ window.plethoraBit = {
     // ====================================================================== //
     function drawScene(nowMs) {
       const w = W(), h = H();
-      g.fillStyle = "#1a2230";
+      g.fillStyle = "#171d29";
       g.fillRect(0, 0, w, h);
-      if (!S || V.hideMap) { drawBackdrop(nowMs); return; }
+      if (!S || V.hideMap) return;
       const n = S.n, z = cam.z;
       const hw = (TW / 2) * z, hh = (TH / 2) * z;
       const curP = S.cur;
       const sel = V.sel;
+      const low = z < 0.62;
+      const drop = WATER_DROP * z;
 
-      // Visible tile range by scanning diagonals; cull tiles off screen.
-      const onScreen = (sx, sy) => sx > -TW * z * 1.5 && sx < w + TW * z * 1.5 && sy > -TH * z * 3 && sy < h + TH * z * 2;
+      // Tiles off screen are skipped; the margin covers tall objects.
+      const onScreen = (sx, sy) => sx > -TW * z * 1.5 && sx < w + TW * z * 1.5 && sy > -TH * z * 3 && sy < h + TH * z * 2.2;
+      const at = (tx, ty) => (inBounds(S, tx, ty) ? ty * n + tx : -1);
+      const landAt = (tx, ty) => { const j = at(tx, ty); return j >= 0 && !isWater(S.terrain[j]); };
 
-      // Pass 1: ground
+      // Pass 1: ground. Every tile draws its two front faces, then its top; the
+      // tiles in front cover the faces unless they sit lower (water) or are
+      // off the map, which is where the cliffs and the island's edge show.
       for (let d = 0; d <= 2 * n - 2; d++) {
         for (let tx = Math.max(0, d - n + 1); tx <= Math.min(n - 1, d); tx++) {
           const ty = d - tx;
           const i = ty * n + tx;
           const p = toScreen(tx, ty);
           if (!onScreen(p[0], p[1])) continue;
-          if (!viewerExplored(i)) {
-            g.fillStyle = (hash2(tx, ty) < 0.5) ? "#232b36" : "#262f3b";
-            diamond(p[0], p[1], hw + 0.6, hh + 0.4); g.fill();
-            continue;
-          }
-          g.fillStyle = tileColor(i);
-          diamond(p[0], p[1], hw + 0.6, hh + 0.4); g.fill();
+          if (!viewerExplored(i)) { artFog(p[0], p[1], z, hash2(tx * 7 + 1, ty * 3 + 2)); continue; }
           const t = S.terrain[i];
-          if (isWater(t) && z > 0.6) {
-            // a couple of wave ticks
-            g.strokeStyle = "rgba(255,255,255,0.22)"; g.lineWidth = 1;
-            const k = hash2(tx + 7, ty + 3);
-            g.beginPath();
-            g.moveTo(p[0] - hw * 0.35, p[1] + hh * (0.1 - k * 0.3)); g.lineTo(p[0] - hw * 0.05, p[1] + hh * (0.1 - k * 0.3));
-            g.moveTo(p[0] + hw * 0.1, p[1] + hh * (0.35 - k * 0.2)); g.lineTo(p[0] + hw * 0.4, p[1] + hh * (0.35 - k * 0.2));
-            g.stroke();
+          const tr = tribeByIndex(S.biome[i]);
+          if (isWater(t)) {
+            artSides(p[0], p[1] + drop, z, t === OCEAN ? WATER.sideDeep : WATER.side, TILE_T - WATER_DROP, null, null);
+            let coast = 0;
+            if (landAt(tx - 1, ty)) coast |= 1;
+            if (landAt(tx, ty - 1)) coast |= 2;
+            if (landAt(tx, ty + 1)) coast |= 4;
+            if (landAt(tx + 1, ty)) coast |= 8;
+            artWaterTop(p[0], p[1] + drop, z, t === OCEAN, coast, hash2(tx + 7, ty + 3));
+          } else {
+            const col = tileColor(i);
+            const lipL = at(tx, ty + 1) >= 0 && isWater(S.terrain[at(tx, ty + 1)]) ? "#d8c48a" : shade(tr.field, 0.72);
+            const lipR = at(tx + 1, ty) >= 0 && isWater(S.terrain[at(tx + 1, ty)]) ? "#cbb67c" : shade(tr.field, 0.6);
+            artSides(p[0], p[1], z, tr.earth || "#7b5438", TILE_T, lipL, lipR);
+            artLandTop(p[0], p[1], z, col);
           }
           const owner = tilePlayer(S, i);
           if (owner >= 0) {
-            g.fillStyle = rgba(tribeByIndex(S.players[owner].tribe).color, owner === curP ? 0.2 : 0.14);
-            diamond(p[0], p[1], hw, hh); g.fill();
+            g.fillStyle = rgba(tribeByIndex(S.players[owner].tribe).color, owner === curP ? 0.16 : 0.11);
+            diamond(p[0], p[1] + (isWater(t) ? drop : 0), hw, hh); g.fill();
           }
         }
       }
-      // Pass 1.5: borders, roads, highlights
+      // Pass 1.5: roads, borders, highlights
       g.lineWidth = Math.max(1.2, 2 * z);
       for (let ty = 0; ty < n; ty++) for (let tx = 0; tx < n; tx++) {
         const i = ty * n + tx;
@@ -2158,15 +2161,16 @@ window.plethoraBit = {
         if (S.road[i]) drawRoad(tx, ty, p, hw, hh);
         if (owner >= 0) {
           const col = tribeByIndex(S.players[owner].tribe).color;
-          g.strokeStyle = rgba(col, 0.9);
+          const dy = isWater(S.terrain[i]) ? drop : 0;
+          g.strokeStyle = rgba(col, 0.95);
+          g.lineWidth = Math.max(1.2, 2.2 * z);
           g.beginPath();
-          // four edges; draw the ones facing a different owner
-          const nb = [[0, -1, [-hw, 0, 0, -hh]], [1, 0, [0, -hh, hw, 0]], [0, 1, [hw, 0, 0, hh]], [-1, 0, [0, hh, -hw, 0]]];
+          const nb = [[-1, 0, [-hw, 0, 0, -hh]], [0, -1, [0, -hh, hw, 0]], [1, 0, [0, hh, hw, 0]], [0, 1, [-hw, 0, 0, hh]]];
           for (const e of nb) {
             const xx = tx + e[0], yy = ty + e[1];
             const other = inBounds(S, xx, yy) ? tilePlayer(S, yy * n + xx) : -1;
             if (other === owner) continue;
-            g.moveTo(p[0] + e[2][0], p[1] + e[2][1]); g.lineTo(p[0] + e[2][2], p[1] + e[2][3]);
+            g.moveTo(p[0] + e[2][0] * 0.96, p[1] + dy + e[2][1] * 0.96); g.lineTo(p[0] + e[2][2] * 0.96, p[1] + dy + e[2][3] * 0.96);
           }
           g.stroke();
         }
@@ -2175,29 +2179,37 @@ window.plethoraBit = {
         for (const i of V.reach.keys()) {
           const tx = i % n, ty = (i - tx) / n;
           const p = toScreen(tx, ty);
-          g.fillStyle = "rgba(255,255,255,0.28)";
-          diamond(p[0], p[1], hw - 2, hh - 1); g.fill();
+          const dy = isWater(S.terrain[i]) ? drop : 0;
+          g.fillStyle = "rgba(255,255,255,0.3)";
+          diamond(p[0], p[1] + dy, hw - 2, hh - 1); g.fill();
+          g.strokeStyle = "rgba(255,255,255,0.7)"; g.lineWidth = 1.5;
+          diamond(p[0], p[1] + dy, hw - 3, hh - 1.5); g.stroke();
         }
       }
       if (V.selTile >= 0 && !sel) {
         const tx = V.selTile % n, ty = (V.selTile - tx) / n;
         const p = toScreen(tx, ty);
+        const dy = isWater(S.terrain[V.selTile]) ? drop : 0;
         g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 2.5;
-        diamond(p[0], p[1], hw - 1, hh - 0.5); g.stroke();
+        diamond(p[0], p[1] + dy, hw - 1, hh - 0.5); g.stroke();
       }
 
-      // Pass 2: objects, back to front
+      // Pass 2: objects and units back to front; fog tiles along the edge of
+      // the known world are remembered for the cloud bank drawn afterwards.
       const units = S.units;
+      const clouds = [];
       for (let d = 0; d <= 2 * n - 2; d++) {
         for (let tx = Math.max(0, d - n + 1); tx <= Math.min(n - 1, d); tx++) {
           const ty = d - tx;
           const i = ty * n + tx;
-          if (!viewerExplored(i)) continue;
           const p = toScreen(tx, ty);
           if (!onScreen(p[0], p[1])) continue;
-          drawTileObjects(i, tx, ty, p, z);
+          if (!viewerExplored(i)) {
+            for (const dd of DIRS8) { const j = at(tx + dd[0], ty + dd[1]); if (j >= 0 && viewerExplored(j)) { clouds.push([p[0], p[1], hash2(tx * 3, ty * 5)]); break; } }
+            continue;
+          }
+          if (low) drawTileObjectsLow(i, tx, ty, p, z); else drawTileObjects(i, tx, ty, p, z);
         }
-        // units on this diagonal (by their display position)
         for (const u of units) {
           const pos = V.vis.get(u.id);
           const ux = pos ? pos.x : u.x, uy = pos ? pos.y : u.y;
@@ -2206,20 +2218,24 @@ window.plethoraBit = {
           if (!viewerExplored(ti) && !(pos && viewerExplored(u.y * n + u.x))) continue;
           const p = toScreen(ux, uy);
           if (!onScreen(p[0], p[1])) continue;
-          drawUnit(u, p, z, u === sel, nowMs);
+          drawUnit(u, p, z, u === sel);
         }
         for (const gh of V.ghosts.values()) {
           if (Math.round(gh.x + gh.y) !== d) continue;
           const p = toScreen(gh.x, gh.y);
-          drawUnit(gh, p, z, false, nowMs);
+          drawUnit(gh, p, z, false);
         }
       }
-      // attack targets
+      if (clouds.length && !low) for (let layer = 0; layer < 3; layer++) for (const c of clouds) artCloud(c[0], c[1], z, c[2], layer);
+      // attack and convert targets
       if (sel) {
         for (const t of V.targets.concat(V.converts)) {
           const p = toScreen(t.x, t.y);
+          const dy = isWater(S.terrain[t.y * n + t.x]) ? drop : 0;
           g.strokeStyle = V.converts.indexOf(t) >= 0 ? "#c77dff" : "#ff5a4e"; g.lineWidth = 3;
-          diamond(p[0], p[1], hw - 2, hh - 1); g.stroke();
+          diamond(p[0], p[1] + dy, hw - 2, hh - 1); g.stroke();
+          g.fillStyle = V.converts.indexOf(t) >= 0 ? "rgba(199,125,255,0.18)" : "rgba(255,90,78,0.2)";
+          diamond(p[0], p[1] + dy, hw - 2, hh - 1); g.fill();
         }
       }
       // Pass 3: labels and floats
@@ -2241,18 +2257,10 @@ window.plethoraBit = {
       }
     }
 
-    // Menu backdrop: the demo world drifting behind the title.
-    function drawBackdrop(nowMs) {
-      if (!S) return;
-      // (hideMap: a pass-and-play curtain) — draw nothing but the slate.
-    }
-
     function drawRoad(tx, ty, p, hw, hh) {
-      g.strokeStyle = "#c9a76a";
-      g.lineWidth = Math.max(2, 6 * cam.z);
-      g.lineCap = "round";
+      const z = cam.z;
       let any = false;
-      g.beginPath();
+      const segs = [];
       for (const d of DIRS8) {
         const xx = tx + d[0], yy = ty + d[1];
         if (!inBounds(S, xx, yy)) continue;
@@ -2260,60 +2268,69 @@ window.plethoraBit = {
         const rl = S.road[j] || (S.center[j] >= 0 && S.cities[S.center[j]].owner >= 0);
         if (!rl) continue;
         const q = toScreen(xx, yy);
-        g.moveTo(p[0], p[1]); g.lineTo((p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
+        segs.push([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]);
         any = true;
       }
-      if (!any) { g.moveTo(p[0] - hw * 0.3, p[1]); g.lineTo(p[0] + hw * 0.3, p[1]); }
-      g.stroke();
+      if (!any) segs.push([p[0] - hw * 0.3, p[1]], [p[0] + hw * 0.3, p[1]]);
+      for (let pass = 0; pass < 2; pass++) {
+        g.strokeStyle = pass ? "#d4b57a" : "#a8885a";
+        g.lineWidth = Math.max(1.5, (pass ? 4 : 7) * z);
+        g.lineCap = "round";
+        g.beginPath();
+        for (const s of segs) { g.moveTo(p[0], p[1]); g.lineTo(s[0], s[1]); }
+        g.stroke();
+      }
     }
 
+    const hasTechView = (t) => V.viewer < 0 || (S && S.players[V.viewer] && hasTech(S, V.viewer, t));
     function drawTileObjects(i, tx, ty, p, z) {
       const t = S.terrain[i], r = S.res[i], b = S.bld[i];
-      if (z < 0.62) { drawTileObjectsLow(i, tx, ty, p, z); return; }
       const tr = tribeByIndex(S.biome[i]);
-      const j1 = hash2(tx * 3 + 1, ty * 5 + 2), j2 = hash2(tx * 7 + 3, ty * 11 + 5);
-      const cx = p[0], cy = p[1];
+      const seed = hash2(tx * 3 + 1, ty * 5 + 2);
+      const cx = p[0], cy = p[1] + (isWater(t) ? WATER_DROP * z : 0);
       const c = S.center[i] >= 0 ? S.cities[S.center[i]] : null;
-      if (c) { drawCity(c, cx, cy, z); if (r === R_NONE && !b) { /* city tile shows nothing else */ } }
+      const ownerP = tilePlayer(S, i);
+      const ownerColor = ownerP >= 0 ? tribeByIndex(S.players[ownerP].tribe).color : "#8a7f70";
+      if (c) {
+        const ctr = c.owner >= 0 ? tribeByIndex(S.players[c.owner].tribe) : null;
+        artCity(cx, cy, z, { level: c.level, capital: c.capital, walls: c.walls, owned: c.owner >= 0,
+          color: ctr ? ctr.color : "#8a7f70", wall: ctr ? ctr.wall : "#cfc6b4", sieged: sieged(S, c) });
+        return;
+      }
       if (t === MOUNTAIN) {
-        const mh = TH * 1.35 * z, mw = TW * 0.62 * z;
-        const rock = tr.rock, dark = shade(rock, 0.72);
-        g.fillStyle = rock;
-        g.beginPath(); g.moveTo(cx - mw / 2, cy + TH * 0.2 * z); g.lineTo(cx - mw * 0.1, cy - mh); g.lineTo(cx + mw / 2, cy + TH * 0.25 * z); g.closePath(); g.fill();
-        g.fillStyle = dark;
-        g.beginPath(); g.moveTo(cx - mw * 0.1, cy - mh); g.lineTo(cx + mw / 2, cy + TH * 0.25 * z); g.lineTo(cx + mw * 0.12, cy + TH * 0.1 * z); g.closePath(); g.fill();
-        g.fillStyle = "#f4f7fa";
-        g.beginPath(); g.moveTo(cx - mw * 0.1, cy - mh); g.lineTo(cx - mw * 0.1 + mw * 0.17, cy - mh * 0.66); g.lineTo(cx - mw * 0.1 - mw * 0.12, cy - mh * 0.7); g.closePath(); g.fill();
-        if (r === R_METAL && hasTechView("climbing")) {
-          for (let k = 0; k < 3; k++) {
-            const ox = (k - 1) * 7 * z + (j1 - 0.5) * 6 * z, oy = -TH * (0.15 + k * 0.12) * z;
-            g.fillStyle = k === 1 ? "#ffe066" : "#e2b84a";
-            diamond(cx + ox, cy + oy, 3.2 * z, 4.5 * z); g.fill();
-          }
+        artMountain(cx, cy, z, tr, seed, r === R_METAL && hasTechView("climbing"));
+        if (b === B_MINE) artBuilding(B_MINE, cx, cy + 4 * z, z, ownerColor, seed);
+        else if (b === B_MTEMPLE) artBuilding(B_MTEMPLE, cx, cy - TH * 0.4 * z, z, ownerColor, seed, templeLevel(S, i));
+        return;
+      }
+      if (t === FOREST) {
+        if (b === B_LUMBER || b === B_FTEMPLE) {
+          artForest(cx, cy, z, tr, seed, 1);
+          artBuilding(b, cx, cy, z, ownerColor, seed, templeLevel(S, i));
+        } else {
+          artForest(cx, cy, z, tr, seed, r === R_ANIMAL ? 2 : 3 + (seed > 0.55 ? 1 : 0));
+          if (r === R_ANIMAL) artAnimal(cx, cy, z, tr, seed);
         }
-        if (b === B_MINE) drawMine(cx, cy, z);
-        else if (b === B_MTEMPLE) drawTemple(cx, cy - TH * 0.5 * z, z, "#d9e4ea");
-      }
-      if (t === FOREST && b !== B_LUMBER && b !== B_FTEMPLE) {
-        drawTrees(cx, cy, z, tr, 2 + (j1 > 0.5 ? 1 : 0), j1, j2, r === R_ANIMAL);
-      }
-      if (t === FOREST && r === R_ANIMAL) drawAnimal(cx + (j2 - 0.5) * 14 * z, cy + 2 * z, z, tr);
-      if (t === FIELD && !c) {
-        if (r === R_FRUIT) drawFruit(cx, cy, z, j1);
-        else if (r === R_CROP) drawCrop(cx, cy, z);
+        return;
       }
       if (isWater(t)) {
-        if (r === R_FISH) drawFish(cx, cy, z, j1);
-        else if (r === R_WHALE) drawWhale(cx, cy, z);
+        if (b === B_PORT) artBuilding(B_PORT, cx, cy, z, ownerColor, seed);
+        else if (b === B_WTEMPLE) artBuilding(B_WTEMPLE, cx, cy, z, ownerColor, seed, templeLevel(S, i));
+        else if (b === B_RUIN) artBuilding(B_RUIN, cx, cy, z, ownerColor, seed);
+        else if (r === R_FISH) artFish(cx, cy, z, seed);
+        else if (r === R_WHALE) artWhale(cx, cy, z);
+        return;
       }
-      if (b && !c) drawBuilding(b, i, cx, cy, z, tr);
+      // fields
+      if (b) artBuilding(b, cx, cy, z, ownerColor, seed, b === B_TEMPLE ? templeLevel(S, i) : S.lvl[i]);
+      else if (r === R_FRUIT) artFruit(cx, cy, z, seed);
+      else if (r === R_CROP) artCrop(cx, cy, z, seed);
     }
-    const hasTechView = (t) => V.viewer < 0 || (S && S.players[V.viewer] && hasTech(S, V.viewer, t));
     // Far out, every tile gets one shape: enough to read the map, cheap enough for 900 tiles.
     function drawTileObjectsLow(i, tx, ty, p, z) {
       const t = S.terrain[i], r = S.res[i], b = S.bld[i];
       const tr = tribeByIndex(S.biome[i]);
-      const cx = p[0], cy = p[1];
+      const cx = p[0], cy = p[1] + (isWater(t) ? WATER_DROP * z : 0);
       const c = S.center[i] >= 0 ? S.cities[S.center[i]] : null;
       if (c) {
         const owned = c.owner >= 0;
@@ -2323,8 +2340,8 @@ window.plethoraBit = {
         if (c.walls) { g.strokeStyle = "#b9ab93"; g.lineWidth = 3 * z; diamond(cx, cy, TW * 0.42 * z, TH * 0.42 * z); g.stroke(); }
         return;
       }
-      if (t === MOUNTAIN) { tri(cx, cy + TH * 0.2 * z, TW * 0.55 * z, TH * 1.2 * z, tr.rock); tri(cx, cy - TH * 0.75 * z, TW * 0.16 * z, TH * 0.25 * z, "#f4f7fa"); }
-      else if (t === FOREST) { tri(cx, cy + 4 * z, 22 * z, TH * 1.1 * z, tr.forest); }
+      if (t === MOUNTAIN) { cone(cx, cy + TH * 0.2 * z, TW * 0.55 * z, TH * 1.2 * z, shade(tr.rock, LIGHT), shade(tr.rock, DARK)); tri(cx, cy - TH * 0.75 * z, TW * 0.16 * z, TH * 0.25 * z, "#f4f7fa"); }
+      else if (t === FOREST) { cone(cx, cy + 4 * z, 22 * z, TH * 1.1 * z, shade(tr.forest, LIGHT), shade(tr.forest, DARK)); }
       if (r === R_FRUIT) circle(cx + 10 * z, cy + 6 * z, 4 * z, "#ff6b4a");
       else if (r === R_CROP) rect(cx - 10 * z, cy + 2 * z, 20 * z, 4 * z, "#e4c43f");
       else if (r === R_ANIMAL) circle(cx + 8 * z, cy + 6 * z, 4 * z, "#5a4330");
@@ -2337,179 +2354,10 @@ window.plethoraBit = {
         rect(cx - 7 * z, cy - 8 * z, 14 * z, 10 * z, col);
       }
     }
-
-    function drawTrees(cx, cy, z, tr, count, j1, j2, sparse) {
-      const spots = [[-0.28, -0.05], [0.22, 0.08], [-0.02, 0.26]];
-      for (let k = 0; k < count; k++) {
-        const sp = spots[k];
-        const x = cx + sp[0] * TW * z * 0.8 + (hash2(k + 11, j1 * 99) - 0.5) * 6 * z;
-        const y = cy + sp[1] * TH * z * 0.8;
-        const h = (TH * 0.95 + hash2(k, j2 * 50) * TH * 0.35) * z;
-        if (tr.palm) {
-          rect(x - 1.5 * z, y - h * 0.7, 3 * z, h * 0.7, tr.trunk);
-          g.fillStyle = tr.forest;
-          for (let f = 0; f < 5; f++) {
-            const a = -Math.PI / 2 + (f - 2) * 0.55;
-            g.beginPath(); g.ellipse(x + Math.cos(a) * 7 * z, y - h * 0.7 + Math.sin(a) * 5 * z, 8 * z, 3 * z, a, 0, TAU); g.fill();
-          }
-        } else if (tr.dead) {
-          rect(x - 1.5 * z, y - h * 0.8, 3 * z, h * 0.8, tr.forest);
-          g.strokeStyle = tr.forest; g.lineWidth = 2 * z;
-          g.beginPath(); g.moveTo(x, y - h * 0.5); g.lineTo(x - 7 * z, y - h * 0.75); g.moveTo(x, y - h * 0.38); g.lineTo(x + 6 * z, y - h * 0.6); g.stroke();
-        } else {
-          rect(x - 1.6 * z, y - 4 * z, 3.2 * z, 5 * z, tr.trunk);
-          tri(x, y - 3 * z, 16 * z, h, tr.forest);
-          tri(x, y - 3 * z - h * 0.35, 12 * z, h * 0.7, shade(tr.forest, 1.12));
-          if (tr.snow) tri(x, y - 3 * z - h * 0.55, 8 * z, h * 0.42, "#f2f6f8");
-        }
-      }
-    }
-    function drawAnimal(x, y, z, tr) {
-      const body = tr.snow ? "#8a6f52" : "#5a4330";
-      g.fillStyle = body;
-      g.beginPath(); g.ellipse(x, y - 5 * z, 7 * z, 4.5 * z, 0, 0, TAU); g.fill();
-      circle(x + 6 * z, y - 8 * z, 3.4 * z, body);
-      rect(x - 5 * z, y - 2 * z, 2 * z, 4 * z, body); rect(x + 2 * z, y - 2 * z, 2 * z, 4 * z, body);
-      g.strokeStyle = "#e9dcc8"; g.lineWidth = 1.3 * z;
-      g.beginPath(); g.moveTo(x + 7 * z, y - 11 * z); g.lineTo(x + 9 * z, y - 14 * z); g.moveTo(x + 5 * z, y - 11 * z); g.lineTo(x + 4 * z, y - 14 * z); g.stroke();
-    }
-    function drawFruit(cx, cy, z, j) {
-      const spots = [[-10, -2], [8, 3], [-1, 8]];
-      for (let k = 0; k < 3; k++) {
-        const x = cx + spots[k][0] * z, y = cy + spots[k][1] * z - 4 * z;
-        circle(x, y, 6.5 * z, "#4f9a3a");
-        circle(x - 2 * z, y - 2 * z, 2.1 * z, "#ff6b4a");
-        circle(x + 2.5 * z, y + 0.5 * z, 2.1 * z, "#ffb347");
-        if (j > 0.4) circle(x - 0.5 * z, y + 2.5 * z, 1.8 * z, "#ff6b4a");
-      }
-    }
-    function drawCrop(cx, cy, z) {
-      g.strokeStyle = "#e4c43f"; g.lineWidth = 2.2 * z;
-      for (let k = -1; k <= 1; k++) {
-        g.beginPath();
-        g.moveTo(cx - 16 * z + k * 4 * z, cy + k * 6 * z); g.lineTo(cx + 16 * z + k * 4 * z, cy + k * 6 * z);
-        g.stroke();
-      }
-      g.fillStyle = "#f5d75a";
-      for (let k = 0; k < 6; k++) circle(cx - 14 * z + k * 5.6 * z, cy - 5 * z + (k % 2) * 3 * z, 1.6 * z, "#f5d75a");
-    }
-    function drawFish(cx, cy, z, j) {
-      const col = "#dfe9f3";
-      for (let k = 0; k < 2; k++) {
-        const x = cx + (k ? 9 : -8) * z, y = cy + (k ? 4 : -2) * z;
-        g.fillStyle = col;
-        g.beginPath(); g.ellipse(x, y, 6 * z, 2.6 * z, 0, 0, TAU); g.fill();
-        tri(x - 6 * z, y + 2.5 * z, 5 * z, 5 * z, col);
-      }
-    }
-    function drawWhale(cx, cy, z) {
-      g.fillStyle = "#2d3e5a";
-      g.beginPath(); g.ellipse(cx, cy - 2 * z, 15 * z, 6 * z, 0, Math.PI, TAU); g.fill();
-      tri(cx + 15 * z, cy - 1 * z, 8 * z, 7 * z, "#2d3e5a");
-      g.strokeStyle = "rgba(230,245,255,0.8)"; g.lineWidth = 1.5 * z;
-      g.beginPath(); g.moveTo(cx - 6 * z, cy - 8 * z); g.lineTo(cx - 8 * z, cy - 15 * z); g.moveTo(cx - 6 * z, cy - 8 * z); g.lineTo(cx - 3 * z, cy - 14 * z); g.stroke();
-    }
-    function drawMine(cx, cy, z) {
-      rect(cx - 9 * z, cy - 6 * z, 18 * z, 12 * z, "#3a2f28");
-      g.fillStyle = "#1c1612"; g.beginPath(); g.arc(cx, cy, 6 * z, Math.PI, TAU); g.fill();
-      rect(cx - 10 * z, cy - 8 * z, 20 * z, 3 * z, "#6b5a4a");
-      rect(cx + 7 * z, cy + 2 * z, 7 * z, 4 * z, "#8b6d4f");
-    }
-    function drawTemple(cx, cy, z, col) {
-      rect(cx - 12 * z, cy + 2 * z, 24 * z, 4 * z, shade(col, 0.75));
-      for (let k = -1; k <= 1; k++) rect(cx + k * 8 * z - 2 * z, cy - 14 * z, 4 * z, 16 * z, col);
-      tri(cx, cy - 14 * z, 30 * z, 10 * z, shade(col, 0.85));
-    }
-    function drawHouse(x, y, z, w, h, wall, roof) {
-      rect(x - w / 2, y - h, w, h, wall);
-      rect(x - w / 2, y - h, w * 0.5, h, shade(wall, 0.82));
-      tri(x, y - h, w * 1.25, h * 0.75, roof);
-    }
-    function drawBuilding(b, i, cx, cy, z, tr) {
-      const col = tribeByIndex(S.players[Math.max(0, tilePlayer(S, i))].tribe);
-      const wall = "#e8dcc4", roof = tilePlayer(S, i) >= 0 ? col.color : "#8a7f70";
-      switch (b) {
-        case B_FARM:
-          rect(cx - 18 * z, cy - 4 * z, 36 * z, 10 * z, "#b68a4e");
-          g.strokeStyle = "#7fbf3f"; g.lineWidth = 2 * z;
-          for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(cx - 15 * z + k * 9 * z, cy - 3 * z); g.lineTo(cx - 15 * z + k * 9 * z, cy + 5 * z); g.stroke(); }
-          drawHouse(cx + 14 * z, cy - 2 * z, z, 10 * z, 8 * z, wall, roof);
-          break;
-        case B_LUMBER:
-          drawHouse(cx - 6 * z, cy + 4 * z, z, 16 * z, 11 * z, "#a97c50", "#6b4a2a");
-          for (let k = 0; k < 3; k++) circle(cx + 12 * z, cy + 2 * z - k * 4.5 * z, 2.6 * z, "#c9a070");
-          break;
-        case B_PORT:
-          rect(cx - 16 * z, cy - 2 * z, 32 * z, 6 * z, "#8a6a44");
-          for (let k = 0; k < 4; k++) rect(cx - 14 * z + k * 9 * z, cy + 3 * z, 2.5 * z, 5 * z, "#5e4630");
-          drawHouse(cx + 8 * z, cy - 2 * z, z, 12 * z, 9 * z, wall, roof);
-          break;
-        case B_WINDMILL:
-          rect(cx - 5 * z, cy - 18 * z, 10 * z, 22 * z, "#e3d7c2");
-          tri(cx, cy - 18 * z, 14 * z, 8 * z, roof);
-          g.strokeStyle = "#5a4a3a"; g.lineWidth = 2 * z;
-          g.beginPath(); g.moveTo(cx - 12 * z, cy - 30 * z); g.lineTo(cx + 12 * z, cy - 6 * z); g.moveTo(cx + 12 * z, cy - 30 * z); g.lineTo(cx - 12 * z, cy - 6 * z); g.stroke();
-          break;
-        case B_FORGE:
-          drawHouse(cx, cy + 4 * z, z, 22 * z, 14 * z, "#8f8a83", "#4a4440");
-          rect(cx + 5 * z, cy - 20 * z, 5 * z, 10 * z, "#5a5450");
-          circle(cx + 7.5 * z, cy - 24 * z, 3.5 * z, "rgba(200,200,200,0.5)");
-          circle(cx - 4 * z, cy - 1 * z, 2.5 * z, "#ff8c3a");
-          break;
-        case B_SAWMILL:
-          drawHouse(cx, cy + 4 * z, z, 22 * z, 12 * z, "#b48a5a", "#6b4a2a");
-          circle(cx + 12 * z, cy - 4 * z, 5 * z, "#8c8c8c"); circle(cx + 12 * z, cy - 4 * z, 1.5 * z, "#444");
-          break;
-        case B_CUSTOMS:
-          rect(cx - 12 * z, cy - 10 * z, 24 * z, 14 * z, wall);
-          g.fillStyle = roof; g.beginPath(); g.arc(cx, cy - 10 * z, 12 * z, Math.PI, TAU); g.fill();
-          rect(cx - 3 * z, cy - 6 * z, 6 * z, 10 * z, "#5a4a3a");
-          break;
-        case B_TEMPLE: drawTemple(cx, cy, z, "#f1e6cf"); break;
-        case B_FTEMPLE: drawTemple(cx, cy, z, "#cfe8c4"); break;
-        case B_WTEMPLE: drawTemple(cx, cy, z, "#cfe3f1"); break;
-        case B_MONUMENT:
-          rect(cx - 10 * z, cy + 2 * z, 20 * z, 4 * z, "#8c8578");
-          rect(cx - 3.5 * z, cy - 26 * z, 7 * z, 28 * z, "#d9d2c4");
-          tri(cx, cy - 26 * z, 7 * z, 6 * z, "#f0c75e");
-          break;
-        case B_RUIN:
-          for (let k = -1; k <= 1; k++) rect(cx + k * 9 * z - 2 * z, cy - (8 + (k === 0 ? 6 : 2)) * z, 4 * z, (10 + (k === 0 ? 6 : 2)) * z, "#9a9388");
-          rect(cx - 12 * z, cy + 1 * z, 24 * z, 3 * z, "#7f786d");
-          break;
-        default: break;
-      }
-    }
-    function drawCity(c, cx, cy, z) {
-      const owned = c.owner >= 0;
-      const tr = owned ? tribeByIndex(S.players[c.owner].tribe) : null;
-      const roof = owned ? tr.color : "#8a7f70";
-      const wall = owned ? "#efe6d2" : "#cfc6b4";
-      if (c.walls) {
-        g.strokeStyle = "#b9ab93"; g.lineWidth = 4 * z;
-        diamond(cx, cy, TW * 0.42 * z, TH * 0.42 * z); g.stroke();
-      }
-      const n = owned ? Math.min(8, c.level) : 2;
-      const spots = [[0, 0], [-14, -7], [14, -7], [-14, 8], [14, 8], [0, -14], [0, 14], [-26, 0]];
-      for (let k = n - 1; k >= 0; k--) {
-        const sp = spots[k];
-        const big = k === 0 && owned;
-        drawHouse(cx + sp[0] * z, cy + sp[1] * z + (big ? 6 : 4) * z, z, (big ? 15 : 10) * z, (big ? 13 : 8) * z, wall, roof);
-      }
-      if (c.capital && owned) {
-        rect(cx - 1 * z, cy - 32 * z, 2 * z, 22 * z, "#5a4a3a");
-        g.fillStyle = tr.color;
-        g.beginPath(); g.moveTo(cx, cy - 32 * z); g.lineTo(cx + 12 * z, cy - 28 * z); g.lineTo(cx, cy - 24 * z); g.closePath(); g.fill();
-      }
-      if (sieged(S, c)) {
-        g.strokeStyle = "#ff5a4e"; g.lineWidth = 2 * z;
-        diamond(cx, cy, TW * 0.46 * z, TH * 0.46 * z); g.stroke();
-      }
-    }
     function drawCityLabel(c, p, z) {
       const owned = c.owner >= 0;
       const tr = owned ? tribeByIndex(S.players[c.owner].tribe) : null;
-      const y = p[1] - (c.capital ? 36 : 24) * z - 10;
+      const y = p[1] - (c.capital ? 44 : 30) * z - 10;
       const label = owned ? c.name : "Village";
       const size = clamp(11 * Math.sqrt(z), 9, 15);
       g.font = "700 " + size.toFixed(1) + "px -apple-system,system-ui,sans-serif";
@@ -2521,7 +2369,6 @@ window.plethoraBit = {
         circle(p[0] - pillW / 2 + 11, y, 7.5, tr.color);
         text(String(c.level), p[0] - pillW / 2 + 11, y + 0.5, 9.5, "#fff");
         text(label, p[0] + 11, y + 0.5, size, "#fff");
-        // population pips
         const need = c.level + 1;
         const bw = Math.min(pillW - 8, need * 6);
         for (let k = 0; k < need; k++) {
@@ -2530,102 +2377,16 @@ window.plethoraBit = {
         }
       } else text(label, p[0], y + 0.5, size, "#eee");
     }
-
-    // ---- Units
-    function drawUnit(u, p, z, selected, nowMs) {
+    function drawUnit(u, p, z, selected) {
       const tr = tribeByIndex(S.players[u.owner].tribe);
-      const col = tr.color;
-      const x = p[0], y = p[1] + 2 * z;
-      const dim = (u.owner === S.cur && u.moved && u.attacked && !u.dead) ? 0.55 : 1;
-      const hit = V.flash.get(u.id);
+      const onWater = isWater(S.terrain[Math.round(u.y) * S.n + Math.round(u.x)]);
+      const y = p[1] + (onWater ? WATER_DROP * z : 0);
       if (selected) {
         g.strokeStyle = "#ffe066"; g.lineWidth = 3;
-        diamond(x, p[1], TW * 0.46 * z, TH * 0.46 * z); g.stroke();
+        diamond(p[0], y, TW * 0.46 * z, TH * 0.46 * z); g.stroke();
       }
-      g.globalAlpha = dim;
-      // shadow
-      g.fillStyle = "rgba(0,0,0,0.28)";
-      g.beginPath(); g.ellipse(x, y + 2 * z, 11 * z, 5 * z, 0, 0, TAU); g.fill();
-      if (u.boat) {
-        g.fillStyle = "#7a5636";
-        g.beginPath(); g.moveTo(x - 17 * z, y - 4 * z); g.lineTo(x + 17 * z, y - 4 * z); g.lineTo(x + 11 * z, y + 4 * z); g.lineTo(x - 11 * z, y + 4 * z); g.closePath(); g.fill();
-        rect(x - 1 * z, y - 24 * z, 2 * z, 20 * z, "#5a4a3a");
-        g.fillStyle = u.boat === 3 ? "#c9ced6" : "#f3ead8";
-        g.beginPath(); g.moveTo(x + 1 * z, y - 23 * z); g.lineTo(x + (u.boat === 1 ? 9 : 13) * z, y - 12 * z); g.lineTo(x + 1 * z, y - 9 * z); g.closePath(); g.fill();
-        if (u.boat === 3) { rect(x - 9 * z, y - 10 * z, 8 * z, 5 * z, "#8d939c"); }
-      }
-      const giant = u.type === "giant";
-      const s = giant ? 1.45 : 1;
-      const bodyH = 13 * z * s, bodyW = 11 * z * s;
-      const by = y - (u.boat ? 6 : 1) * z;
-      // body
-      g.fillStyle = hit ? "#ffffff" : col;
-      g.beginPath(); g.roundRect(x - bodyW / 2, by - bodyH, bodyW, bodyH, 3 * z); g.fill();
-      // head
-      circle(x, by - bodyH - 4.5 * z * s, 5 * z * s, hit ? "#ffffff" : "#f1d2b1");
-      drawUnitGear(u, x, by - bodyH - 4.5 * z * s, z * s, col);
-      g.globalAlpha = 1;
-      if (u.vet) circle(x + bodyW / 2 + 2 * z, by - bodyH + 1 * z, 2.2 * z, "#ffd166");
-      // hp bar
-      const mh = maxHp(u);
-      if (u.hp < mh) {
-        const bw = 22 * z, bx = x - bw / 2, bby = y + 6 * z;
-        rect(bx, bby, bw, 3.5 * z, "rgba(0,0,0,0.6)");
-        const k = clamp(u.hp / mh, 0, 1);
-        rect(bx, bby, bw * k, 3.5 * z, k > 0.5 ? "#6ddb6d" : k > 0.25 ? "#ffd166" : "#ff5a4e");
-      }
-    }
-    function drawUnitGear(u, hx, hy, z, col) {
-      const dark = "#3b3b45";
-      switch (u.type) {
-        case "warrior":
-          rect(hx + 6 * z, hy - 2 * z, 2 * z, 12 * z, dark); circle(hx + 7 * z, hy - 3 * z, 2.5 * z, "#8d6e4c");
-          g.fillStyle = dark; g.beginPath(); g.arc(hx, hy - 1 * z, 5.2 * z, Math.PI, TAU); g.fill();
-          break;
-        case "rider":
-          g.fillStyle = "#8d6e4c"; g.beginPath(); g.ellipse(hx, hy + 14 * z, 12 * z, 5 * z, 0, 0, TAU); g.fill();
-          circle(hx + 11 * z, hy + 10 * z, 3.5 * z, "#8d6e4c");
-          rect(hx + 5 * z, hy - 4 * z, 1.6 * z, 12 * z, dark);
-          break;
-        case "archer":
-          g.strokeStyle = "#8d6e4c"; g.lineWidth = 1.8 * z;
-          g.beginPath(); g.arc(hx + 7 * z, hy + 4 * z, 7 * z, -Math.PI / 2 - 0.3, Math.PI / 2 + 0.3); g.stroke();
-          g.beginPath(); g.moveTo(hx + 7 * z, hy - 3 * z); g.lineTo(hx + 7 * z, hy + 11 * z); g.stroke();
-          g.fillStyle = "#4f7a3a"; g.beginPath(); g.moveTo(hx - 5 * z, hy - 2 * z); g.lineTo(hx + 1 * z, hy - 9 * z); g.lineTo(hx + 5 * z, hy - 2 * z); g.closePath(); g.fill();
-          break;
-        case "defender":
-          g.fillStyle = "#c9ced6"; g.beginPath(); g.roundRect(hx - 12 * z, hy + 2 * z, 9 * z, 13 * z, 3 * z); g.fill();
-          circle(hx - 7.5 * z, hy + 8 * z, 2 * z, col);
-          g.fillStyle = dark; g.beginPath(); g.arc(hx, hy - 1 * z, 5.2 * z, Math.PI, TAU); g.fill();
-          break;
-        case "swordsman":
-          rect(hx + 6 * z, hy - 6 * z, 2.2 * z, 15 * z, "#e6e9ee"); rect(hx + 3 * z, hy + 5 * z, 8 * z, 2 * z, "#8d6e4c");
-          g.fillStyle = "#c9ced6"; g.beginPath(); g.roundRect(hx - 12 * z, hy + 3 * z, 8 * z, 11 * z, 3 * z); g.fill();
-          g.fillStyle = "#c9ced6"; g.beginPath(); g.arc(hx, hy - 1 * z, 5.4 * z, Math.PI, TAU); g.fill();
-          break;
-        case "catapult":
-          rect(hx - 12 * z, hy + 8 * z, 24 * z, 5 * z, "#6b4a2a");
-          circle(hx - 8 * z, hy + 14 * z, 3.5 * z, "#4a3a2a"); circle(hx + 8 * z, hy + 14 * z, 3.5 * z, "#4a3a2a");
-          g.strokeStyle = "#8d6e4c"; g.lineWidth = 2.5 * z; g.beginPath(); g.moveTo(hx - 4 * z, hy + 9 * z); g.lineTo(hx + 10 * z, hy - 8 * z); g.stroke();
-          circle(hx + 10 * z, hy - 8 * z, 3 * z, "#555");
-          break;
-        case "knight":
-          g.fillStyle = "#8d6e4c"; g.beginPath(); g.ellipse(hx, hy + 14 * z, 13 * z, 5.5 * z, 0, 0, TAU); g.fill();
-          circle(hx + 12 * z, hy + 9 * z, 3.8 * z, "#8d6e4c");
-          rect(hx + 5 * z, hy - 12 * z, 1.8 * z, 22 * z, "#e6e9ee");
-          g.fillStyle = "#c9ced6"; g.beginPath(); g.arc(hx, hy - 1 * z, 5.4 * z, Math.PI, TAU); g.fill();
-          rect(hx - 1 * z, hy - 10 * z, 2 * z, 5 * z, col);
-          break;
-        case "mindbender":
-          rect(hx + 6 * z, hy - 8 * z, 1.6 * z, 20 * z, "#8d6e4c"); circle(hx + 6.8 * z, hy - 9 * z, 3 * z, "#c77dff");
-          g.fillStyle = "#5b3a86"; g.beginPath(); g.arc(hx, hy - 1 * z, 5.4 * z, Math.PI, TAU); g.fill();
-          break;
-        case "giant":
-          g.fillStyle = dark; g.beginPath(); g.arc(hx, hy - 1 * z, 5.4 * z, Math.PI, TAU); g.fill();
-          rect(hx - 9 * z, hy + 1 * z, 18 * z, 2.5 * z, dark);
-          break;
-        default: break;
-      }
+      artUnit(p[0], y, z, { type: u.type, boat: u.boat, color: tr.color, hpFrac: u.hp / maxHp(u), vet: u.vet,
+        dim: u.owner === S.cur && u.moved && u.attacked && !u.dead, hit: !!V.flash.get(u.id) });
     }
 
     // ====================================================================== //
@@ -2645,7 +2406,6 @@ window.plethoraBit = {
       return true;
     };
     const tribeName = (p) => tribeByIndex(S.players[p].tribe).name;
-    const viewerIs = (p) => V.viewer === p;
 
     /** Turn the engine's event list into scenes the viewer should watch. */
     function harvestEvents() {
@@ -2667,7 +2427,19 @@ window.plethoraBit = {
             scenes.push({ ev, dur: Math.max(1, ev.path.length - 1) * 150 });
             break;
           }
-          case "attack": scenes.push({ ev, dur: 420 }); break;
+          case "attack": {
+            scenes.push({ ev, dur: 420 });
+            if (ev.advanced != null) {
+              const u = S.units.find((q) => q.id === ev.a);
+              if (u) {
+                const from = ev.ay * S.n + ev.ax;
+                if (!V.vis.has(u.id) && !V.pendingMoves.has(u.id)) V.vis.set(u.id, { x: ev.ax, y: ev.ay });
+                V.pendingMoves.add(u.id);
+                scenes.push({ ev: { t: "move", u: u.id, from, to: ev.advanced, path: [from, ev.advanced], p: ev.p, silent: true }, dur: 150 });
+              }
+            }
+            break;
+          }
           case "death": {
             const u = ev.unit;
             if (u) V.ghosts.set(ev.u, u);
@@ -2695,7 +2467,7 @@ window.plethoraBit = {
           if (!u) { sc.dur = 0; break; }
           sc.unit = u;
           sc.path = ev.path.map((i) => [i % S.n, (i - (i % S.n)) / S.n]);
-          if (mine) sfx("step");
+          if (mine && !ev.silent) sfx("step");
           break;
         }
         case "attack": {
@@ -2757,6 +2529,634 @@ window.plethoraBit = {
         if (sc) { sc.started = true; sc.t = 0; startScene(sc); }
       }
       V.dirty = true;
+    }
+
+    // ====================================================================== //
+    // 7b. Art: everything that stands on a tile                              //
+    // ====================================================================== //
+    // Low-poly in two dimensions. Every solid thing is drawn as a few flat
+    // facets lit from the upper left — a lighter face on the left, a darker
+    // one on the right — which is what makes a cone read as a tree and a
+    // stack of quads read as a house. All functions take the tile centre in
+    // screen pixels and the zoom z; nothing here looks at the game state.
+
+    const LIGHT = 1.16, DARK = 0.74;
+    function poly(pts, color) {
+      g.fillStyle = color;
+      g.beginPath();
+      g.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+      g.closePath();
+      g.fill();
+    }
+    function ellipse(x, y, rx, ry, color, rot) {
+      g.fillStyle = color; g.beginPath(); g.ellipse(x, y, rx, ry, rot || 0, 0, TAU); g.fill();
+    }
+    function halfDisc(x, y, r, color, rot) {   // right half of a disc (rotated), for shading round things
+      g.fillStyle = color; g.beginPath(); g.arc(x, y, r, (rot || 0) - Math.PI / 2, (rot || 0) + Math.PI / 2); g.closePath(); g.fill();
+    }
+    function line(x1, y1, x2, y2, color, w, cap) {
+      g.strokeStyle = color; g.lineWidth = w; g.lineCap = cap || "round";
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    }
+    // A cone with a lit left face and a shaded right face.
+    function cone(x, y, w, h, light, dark) {
+      poly([[x, y - h], [x - w / 2, y], [x, y + w * 0.1]], light);
+      poly([[x, y - h], [x, y + w * 0.1], [x + w / 2, y]], dark);
+    }
+
+    // ---- Ground
+    const WATER = { shallow: "#5cc4ea", deep: "#2f7fcb", side: "#1d5290", sideDeep: "#174378" };
+    const TILE_T = 14, WATER_DROP = 5;        // land thickness, how far the sea sits below the land
+
+    function artSides(cx, cy, z, earth, thick, lipL, lipR) {
+      const hw = TW / 2 * z, hh = TH / 2 * z, t = thick * z;
+      poly([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + t], [cx - hw, cy + t]], shade(earth, 0.98));
+      poly([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + t], [cx, cy + hh + t]], shade(earth, 0.7));
+      const lip = 2.4 * z;
+      if (lipL) poly([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + lip], [cx - hw, cy + lip]], lipL);
+      if (lipR) poly([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + lip], [cx, cy + hh + lip]], lipR);
+    }
+    function artLandTop(cx, cy, z, color) {
+      g.fillStyle = color;
+      diamond(cx, cy, TW / 2 * z + 0.7, TH / 2 * z + 0.5);
+      g.fill();
+    }
+    // coast: bitmask of edges touching land — 1 top-left, 2 top-right, 4 bottom-left, 8 bottom-right
+    function artWaterTop(cx, cy, z, deep, coast, seed) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      g.fillStyle = deep ? WATER.deep : WATER.shallow;
+      diamond(cx, cy, hw + 0.7, hh + 0.5);
+      g.fill();
+      // sparkle
+      const k = seed;
+      g.strokeStyle = deep ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.28)";
+      g.lineWidth = Math.max(1, 1.3 * z); g.lineCap = "round";
+      g.beginPath();
+      g.moveTo(cx - hw * 0.45, cy + hh * (0.05 - k * 0.3)); g.lineTo(cx - hw * 0.15, cy + hh * (0.05 - k * 0.3));
+      g.moveTo(cx + hw * 0.1, cy + hh * (0.4 - k * 0.25)); g.lineTo(cx + hw * 0.45, cy + hh * (0.4 - k * 0.25));
+      g.stroke();
+      if (!coast) return;
+      // foam along the shore, two lines inset from the edge
+      const E = [[[-hw, 0], [0, -hh]], [[0, -hh], [hw, 0]], [[-hw, 0], [0, hh]], [[0, hh], [hw, 0]]];
+      for (let e = 0; e < 4; e++) {
+        if (!(coast & (1 << e))) continue;
+        const a = E[e][0], b = E[e][1];
+        const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        for (let pass = 0; pass < 2; pass++) {
+          const f = pass ? 0.72 : 0.9;
+          g.strokeStyle = pass ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.55)";
+          g.lineWidth = Math.max(1, (pass ? 1.5 : 2.4) * z);
+          g.beginPath();
+          g.moveTo(cx + mx + (a[0] - mx) * f, cy + my + (a[1] - my) * f);
+          g.lineTo(cx + mx + (b[0] - mx) * f, cy + my + (b[1] - my) * f);
+          g.stroke();
+        }
+      }
+    }
+    function artFog(cx, cy, z, seed) {
+      g.fillStyle = "#1f2532";
+      diamond(cx, cy, TW / 2 * z + 0.7, TH / 2 * z + 0.5);
+      g.fill();
+      // a sparse cloud texture deep inside the unknown, cheap enough for every tile
+      if (seed < 0.4) {
+        const hh = TH / 2 * z, hw = TW / 2 * z;
+        const x = cx + (seed - 0.2) * hw * 1.6, y = cy + (hash2(Math.floor(seed * 500), 3) - 0.5) * hh;
+        const r = hh * (0.55 + seed);
+        circle(x, y, r, "#262d3b"); circle(x + r * 0.9, y + r * 0.15, r * 0.8, "#262d3b"); circle(x + r * 0.3, y - r * 0.35, r * 0.65, "#2b3341");
+      }
+    }
+    // Cloud banks are drawn in three layers over every fog tile that borders
+    // the known world: dark bodies, then lighter tops, then highlights, so the
+    // puffs of neighbouring tiles merge into one bank instead of a row of balls.
+    function artCloud(cx, cy, z, seed, layer) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      const puffs = [[-0.36, -0.02, 0.9], [0.0, -0.3, 1.0], [0.36, 0.02, 0.9], [0.02, 0.26, 0.95], [-0.2, 0.14, 0.8], [0.22, -0.12, 0.85]];
+      for (let k = 0; k < puffs.length; k++) {
+        const p = puffs[k];
+        const j = hash2(k + 1, Math.floor(seed * 997));
+        const x = cx + p[0] * hw * 1.15 + (j - 0.5) * 6 * z, y = cy + p[1] * hh * 1.3 + (j - 0.5) * 4 * z;
+        const r = p[2] * hh * (0.95 + j * 0.3);
+        if (layer === 0) circle(x, y + 2 * z, r * 1.02, "#2f3645");
+        else if (layer === 1) circle(x - r * 0.08, y - r * 0.18, r * 0.86, "#414b5e");
+        else circle(x - r * 0.28, y - r * 0.46, r * 0.4, "#56627a");
+      }
+    }
+
+    // ---- Trees
+    function artTree(x, y, z, tribe, h, seed) {
+      const style = tribe.tree || "cone";
+      const light = shade(tribe.forest, LIGHT), dark = shade(tribe.forest, DARK);
+      const trunk = tribe.trunk;
+      const w = h * 0.58;
+      switch (style) {
+        case "palm": {
+          const topX = x + 3 * z, topY = y - h * 0.8;
+          line(x, y, x + 2.2 * z, y - h * 0.45, trunk, 3.2 * z);
+          line(x + 2.2 * z, y - h * 0.45, topX, topY, trunk, 2.6 * z);
+          const n = 6;
+          for (let i = 0; i < n; i++) {
+            const a = -Math.PI * 0.95 + (i / (n - 1)) * Math.PI * 1.05 + (seed - 0.5) * 0.3;
+            const len = h * 0.46, wid = h * 0.13;
+            const ex = topX + Math.cos(a) * len * 0.5, ey = topY + Math.sin(a) * len * 0.5 + h * 0.08;
+            ellipse(ex, ey, len * 0.5, wid, Math.cos(a) < 0 ? light : dark, a);
+          }
+          circle(topX - 2 * z, topY + 2 * z, 2 * z, "#6b4a2a"); circle(topX + 2.5 * z, topY + 2.5 * z, 2 * z, "#6b4a2a");
+          break;
+        }
+        case "round": {
+          h *= 0.82;
+          const r = h * 0.34, cy2 = y - h * 0.62;
+          rect(x - 1.7 * z, y - h * 0.5, 3.4 * z, h * 0.5, trunk);
+          circle(x - r * 0.55, cy2 + r * 0.25, r * 0.75, shade(tribe.forest, 0.92));
+          circle(x + r * 0.6, cy2 + r * 0.3, r * 0.72, dark);
+          circle(x, cy2 - r * 0.1, r, light);
+          halfDisc(x, cy2 - r * 0.1, r, shade(tribe.forest, 0.86));
+          circle(x - r * 0.38, cy2 - r * 0.45, r * 0.3, shade(tribe.forest, 1.4));
+          break;
+        }
+        case "acacia": {
+          rect(x - 1.5 * z, y - h * 0.78, 3 * z, h * 0.78, trunk);
+          line(x, y - h * 0.5, x + 6 * z, y - h * 0.72, trunk, 2 * z);
+          ellipse(x + 2 * z, y - h * 0.82, h * 0.5, h * 0.16, light);
+          g.fillStyle = dark; g.beginPath(); g.ellipse(x + 2 * z, y - h * 0.82, h * 0.5, h * 0.16, 0, -Math.PI / 2, Math.PI / 2); g.closePath(); g.fill();
+          break;
+        }
+        case "dead": {
+          poly([[x - 2.2 * z, y], [x + 2.2 * z, y], [x + 1 * z, y - h * 0.85], [x - 1 * z, y - h * 0.85]], tribe.forest);
+          line(x, y - h * 0.5, x - 7 * z, y - h * 0.78, tribe.forest, 2 * z);
+          line(x, y - h * 0.36, x + 6 * z, y - h * 0.62, tribe.forest, 1.8 * z);
+          line(x - 4 * z, y - h * 0.66, x - 7 * z, y - h * 0.9, tribe.forest, 1.4 * z);
+          break;
+        }
+        default: {   // cone, and snow-cone
+          rect(x - 1.7 * z, y - 3 * z, 3.4 * z, 5 * z, trunk);
+          cone(x, y - 2 * z, w, h * 0.66, light, dark);
+          cone(x, y - 2 * z - h * 0.4, w * 0.74, h * 0.6, light, dark);
+          if (style === "snow") {
+            cone(x, y - 2 * z - h * 0.4 - h * 0.6 + h * 0.26, w * 0.74 * 0.43, h * 0.26, "#ffffff", "#dde5ec");
+            cone(x, y - 2 * z - h * 0.66 + h * 0.2, w * 0.33, h * 0.2, "#ffffff", "#dde5ec");
+          }
+        }
+      }
+    }
+    function artForest(cx, cy, z, tribe, seed, count) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      const spots = [[-0.26, -0.24], [0.26, -0.2], [-0.22, 0.26], [0.26, 0.26], [0.0, 0.02]];
+      const trees = [];
+      for (let k = 0; k < count; k++) {
+        const s = spots[k];
+        const j1 = hash2(k * 31 + 7, Math.floor(seed * 1000)), j2 = hash2(k * 17 + 3, Math.floor(seed * 977));
+        const u = s[0] + (j1 - 0.5) * 0.14, v = s[1] + (j2 - 0.5) * 0.14;
+        trees.push({ x: cx + (u - v) * hw, y: cy + (u + v) * hh + hh * 0.35, h: (TH * 0.95 + j1 * TH * 0.5) * z, j: j2 });
+      }
+      trees.sort((a, b) => a.y - b.y);
+      for (const t of trees) artTree(t.x, t.y, z, tribe, t.h, t.j);
+    }
+
+    // ---- Mountain
+    function artMountain(cx, cy, z, tribe, seed, metal) {
+      const mh = TH * (1.2 + seed * 0.25) * z, mw = TW * 0.62 * z;
+      const rock = tribe.rock;
+      const A = [cx - 3 * z, cy - mh];
+      const BL = [cx - mw / 2, cy + 3 * z], BM = [cx - mw * 0.04, cy + 9 * z], BR = [cx + mw / 2, cy + 0.5 * z];
+      // sometimes a lesser peak behind, to the right
+      if (seed > 0.45) {
+        const A2 = [cx + mw * 0.3, cy - mh * 0.55];
+        poly([A2, [cx + mw * 0.04, cy + 4 * z], [cx + mw * 0.24, cy + 6 * z]], shade(rock, 0.95));
+        poly([A2, [cx + mw * 0.24, cy + 6 * z], [cx + mw * 0.56, cy - 1 * z]], shade(rock, 0.62));
+      }
+      // main peak: three facets
+      poly([A, BL, BM], shade(rock, LIGHT));
+      poly([A, BM, BR], shade(rock, DARK));
+      poly([A, BM, [cx + mw * 0.1, cy + 6 * z]], shade(rock, 0.9));
+      // snow cap with a ragged hem
+      const capK = 0.36;
+      const hem = (P, Q, kinks) => {
+        const pts = [];
+        for (let i = 0; i <= kinks; i++) {
+          const t = i / kinks;
+          const px = P[0] + (Q[0] - P[0]) * t, py = P[1] + (Q[1] - P[1]) * t;
+          pts.push([px, py + (i % 2 ? 2.5 * z : -1.5 * z)]);
+        }
+        return pts;
+      };
+      const CL = [A[0] + (BL[0] - A[0]) * capK, A[1] + (BL[1] - A[1]) * capK];
+      const CM = [A[0] + (BM[0] - A[0]) * capK, A[1] + (BM[1] - A[1]) * capK];
+      const CR = [A[0] + (BR[0] - A[0]) * capK, A[1] + (BR[1] - A[1]) * capK];
+      poly([A].concat(hem(CL, CM, 3)), "#ffffff");
+      poly([A].concat(hem(CM, CR, 3)), "#d9e2ea");
+      if (metal) {
+        const ore = [[cx - mw * 0.3, cy + 1 * z], [cx - mw * 0.12, cy + 7 * z], [cx + mw * 0.08, cy + 3 * z]];
+        for (const o of ore) {
+          const x = o[0], y = o[1];
+          poly([[x, y - 8 * z], [x + 4 * z, y - 3 * z], [x + 3 * z, y + 2 * z], [x - 3 * z, y + 2 * z], [x - 4 * z, y - 3 * z]], "#2f3642");
+          poly([[x, y - 8 * z], [x - 4 * z, y - 3 * z], [x - 1 * z, y + 2 * z]], "#8d99ad");
+          circle(x - 1.5 * z, y - 3.5 * z, 1 * z, "#e8f0ff");
+        }
+      }
+    }
+
+    // ---- Resources
+    function artFruit(cx, cy, z, seed) {
+      const spots = [[-11, -1], [9, 4], [-1, 9]];
+      const berries = ["#ff5f3f", "#ffb03a", "#ff7a5a"];
+      for (let k = 0; k < 3; k++) {
+        const x = cx + spots[k][0] * z, y = cy + spots[k][1] * z - 4 * z;
+        const r = (6.5 + hash2(k, Math.floor(seed * 100)) * 1.5) * z;
+        circle(x, y, r, "#5aa83f");
+        halfDisc(x, y, r, "#3f8a2f");
+        circle(x - r * 0.3, y - r * 0.3, r * 0.3, "#7cc45a");
+        circle(x - 2 * z, y - 1.5 * z, 2 * z, berries[k]);
+        circle(x + 2.5 * z, y + 0.5 * z, 2 * z, berries[(k + 1) % 3]);
+        circle(x - 0.5 * z, y + 2.5 * z, 1.8 * z, berries[(k + 2) % 3]);
+        circle(x - 2.6 * z, y - 2.2 * z, 0.7 * z, "#fff3e0");
+      }
+    }
+    function artCrop(cx, cy, z, seed) {
+      for (let r = -1; r <= 1; r++) {
+        for (let k = 0; k < 4; k++) {
+          const u = -0.3 + k * 0.2, v = r * 0.22;
+          const x = cx + (u - v) * (TW / 2) * z, y = cy + (u + v) * (TH / 2) * z + 2 * z;
+          line(x, y, x + 1 * z, y - 9 * z, "#c9a73a", 1.6 * z);
+          ellipse(x + 1.2 * z, y - 10 * z, 2.2 * z, 3.6 * z, "#efcf52", 0.2);
+          circle(x + 0.6 * z, y - 11 * z, 0.9 * z, "#fff0a8");
+        }
+      }
+    }
+    function artAnimal(cx, cy, z, tribe, seed) {
+      const a = tribe.animal || { body: "#5a4330", mark: "#8c6a4a", horn: "horn" };
+      const x = cx + (seed - 0.5) * 10 * z, y = cy + 3 * z;
+      const body = a.body, mark = a.mark;
+      // legs, body, belly, head
+      for (const lx of [-6, -3, 3, 6]) rect(x + lx * z - 1 * z, y - 3 * z, 2.2 * z, 5 * z, shade(body, 0.8));
+      ellipse(x, y - 6 * z, 9 * z, 5 * z, body);
+      ellipse(x - 1 * z, y - 4.5 * z, 6 * z, 2.4 * z, mark);
+      circle(x + 8.5 * z, y - 9.5 * z, 4 * z, body);
+      ellipse(x + 11 * z, y - 8.5 * z, 2.6 * z, 1.8 * z, mark);
+      circle(x + 9.5 * z, y - 10.5 * z, 0.9 * z, "#111");
+      ellipse(x + 6.5 * z, y - 12.5 * z, 1.6 * z, 2.2 * z, body, -0.4);
+      line(x - 9 * z, y - 7 * z, x - 12 * z, y - 4 * z, body, 1.5 * z);
+      const hx = x + 8.5 * z, hy = y - 13 * z;
+      if (a.horn === "antler") {
+        line(hx - 1 * z, hy, hx - 3 * z, hy - 5 * z, "#e9dcc8", 1.3 * z); line(hx - 3 * z, hy - 3 * z, hx - 6 * z, hy - 5 * z, "#e9dcc8", 1.1 * z);
+        line(hx + 1 * z, hy, hx + 3 * z, hy - 5 * z, "#e9dcc8", 1.3 * z); line(hx + 3 * z, hy - 3 * z, hx + 6 * z, hy - 4.5 * z, "#e9dcc8", 1.1 * z);
+      } else if (a.horn === "horn") {
+        line(hx - 1.5 * z, hy, hx - 3.5 * z, hy - 4 * z, "#e9dcc8", 1.6 * z); line(hx + 1.5 * z, hy, hx + 3.5 * z, hy - 4 * z, "#e9dcc8", 1.6 * z);
+      } else if (a.horn === "tusk") {
+        line(x + 11 * z, y - 7 * z, x + 13 * z, y - 9.5 * z, "#f4efe6", 1.5 * z);
+      } else if (a.horn === "hump") {
+        ellipse(x - 1 * z, y - 10 * z, 4.5 * z, 3.5 * z, body);
+      }
+    }
+    function artFish(cx, cy, z, seed) {
+      const spots = [[-9, -2], [8, 4], [-2, 7]];
+      for (let k = 0; k < 2 + (seed > 0.6 ? 1 : 0); k++) {
+        const x = cx + spots[k][0] * z, y = cy + spots[k][1] * z;
+        g.strokeStyle = "rgba(255,255,255,0.35)"; g.lineWidth = z;
+        g.beginPath(); g.ellipse(x, y + 1 * z, 9 * z, 3.5 * z, 0, 0, TAU); g.stroke();
+        ellipse(x, y, 6 * z, 2.6 * z, "#eef4f9");
+        poly([[x - 5.5 * z, y], [x - 9.5 * z, y - 3 * z], [x - 9.5 * z, y + 3 * z]], "#d9e4ee");
+        circle(x + 3.2 * z, y - 0.6 * z, 0.8 * z, "#223");
+        ellipse(x + 1 * z, y + 0.8 * z, 3 * z, 1 * z, "#c6d6e6");
+      }
+    }
+    function artWhale(cx, cy, z) {
+      ellipse(cx, cy, 16 * z, 7 * z, "#2d3e5a");
+      ellipse(cx + 2 * z, cy + 2 * z, 12 * z, 3 * z, "#4a5f80");
+      poly([[cx + 14 * z, cy - 1 * z], [cx + 22 * z, cy - 6 * z], [cx + 24 * z, cy + 1 * z], [cx + 17 * z, cy + 2 * z]], "#2d3e5a");
+      circle(cx - 9 * z, cy - 2 * z, 1 * z, "#dde");
+      g.strokeStyle = "rgba(230,245,255,0.85)"; g.lineWidth = 1.5 * z;
+      g.beginPath(); g.moveTo(cx - 5 * z, cy - 7 * z); g.lineTo(cx - 8 * z, cy - 15 * z); g.moveTo(cx - 5 * z, cy - 7 * z); g.lineTo(cx - 2 * z, cy - 14 * z); g.stroke();
+      circle(cx - 9 * z, cy - 16 * z, 1.2 * z, "rgba(230,245,255,0.8)"); circle(cx - 1 * z, cy - 15.5 * z, 1.2 * z, "rgba(230,245,255,0.8)");
+    }
+
+    // ---- Buildings
+    function artHouse(x, y, z, w, h, wall, roof, opts) {
+      const o = opts || {};
+      const side = w * 0.42;
+      // side wall (right, darker), front wall, roof gable and slope
+      poly([[x + w * 0.1, y], [x + w * 0.1 + side, y - side * 0.5], [x + w * 0.1 + side, y - h - side * 0.5], [x + w * 0.1, y - h]], shade(wall, 0.72));
+      rect(x - w * 0.5, y - h, w * 0.6, h, wall);
+      poly([[x - w * 0.5 - 1.5 * z, y - h], [x - w * 0.2, y - h - h * 0.62], [x + w * 0.1 + 1.5 * z, y - h]], shade(roof, LIGHT));
+      poly([[x - w * 0.2, y - h - h * 0.62], [x + w * 0.1 + 1.5 * z, y - h], [x + w * 0.1 + side + 1 * z, y - h - side * 0.5], [x - w * 0.2 + side + 1 * z, y - h - h * 0.62 - side * 0.5]], shade(roof, DARK));
+      rect(x - w * 0.28, y - h * 0.55, w * 0.16, h * 0.55, o.door || "#5a4030");
+      if (h > 9 * z) rect(x - w * 0.02, y - h * 0.78, w * 0.14, w * 0.14, "#f6e3a0");
+    }
+    function artHut(x, y, z, r, wall, roof) {   // round village hut
+      ellipse(x, y, r, r * 0.5, shade(wall, 0.8));
+      rect(x - r, y - r * 0.8, r * 2, r * 0.8, wall);
+      poly([[x - r, y - r * 0.8], [x + r, y - r * 0.8], [x, y - r * 0.8], [x, y - r * 0.8]], wall);
+      halfDisc(x, y, r, shade(wall, 0.72), -Math.PI / 2);
+      rect(x - r * 0.9, y - r * 0.8, r * 1.8, r * 0.8, wall);
+      cone(x, y - r * 0.8, r * 2.3, r * 1.3, shade(roof, LIGHT), shade(roof, DARK));
+      rect(x - r * 0.2, y - r * 0.6, r * 0.4, r * 0.6, "#4a3a2a");
+    }
+    function artBuilding(kind, cx, cy, z, color, seed, extra) {
+      const wall = "#efe6d2";
+      switch (kind) {
+        case B_FARM: {
+          poly([[cx - 24 * z, cy], [cx - 4 * z, cy - 10 * z], [cx + 20 * z, cy + 2 * z], [cx, cy + 12 * z]], "#b8864f");
+          for (let k = 0; k < 4; k++) line(cx - 20 * z + k * 5 * z, cy + 2 * z + k * 2.5 * z, cx - 1 * z + k * 5 * z, cy - 7.5 * z + k * 2.5 * z, "#d2a26a", 1.4 * z);
+          for (let k = 0; k < 4; k++) for (let m = 0; m < 3; m++) {
+            const x = cx - 17 * z + k * 5 * z + m * 6 * z, y = cy + 1 * z + k * 2.5 * z - m * 3 * z;
+            cone(x, y, 3.2 * z, 4 * z, "#7fd05a", "#55a83a");
+          }
+          artHouse(cx + 15 * z, cy - 6 * z, z, 11 * z, 8 * z, wall, color);
+          break;
+        }
+        case B_MINE: {
+          rect(cx - 10 * z, cy - 1 * z, 20 * z, 11 * z, "#3a2f28");
+          g.fillStyle = "#15100d"; g.beginPath(); g.arc(cx, cy + 4 * z, 6 * z, Math.PI, TAU); g.fill();
+          rect(cx - 7 * z, cy - 2 * z, 2.5 * z, 12 * z, "#8a6a44"); rect(cx + 4.5 * z, cy - 2 * z, 2.5 * z, 12 * z, "#8a6a44"); rect(cx - 9 * z, cy - 4 * z, 18 * z, 2.5 * z, "#8a6a44");
+          line(cx - 2 * z, cy + 10 * z, cx + 16 * z, cy + 16 * z, "#6a6a6a", 1.4 * z); line(cx + 2 * z, cy + 8 * z, cx + 20 * z, cy + 14 * z, "#6a6a6a", 1.4 * z);
+          rect(cx + 8 * z, cy + 6 * z, 9 * z, 5 * z, "#4d4d55");
+          circle(cx + 10 * z, cy + 12 * z, 1.8 * z, "#222"); circle(cx + 15 * z, cy + 13.5 * z, 1.8 * z, "#222");
+          circle(cx + 10.5 * z, cy + 5.5 * z, 1.7 * z, "#ffd166"); circle(cx + 14 * z, cy + 5 * z, 1.7 * z, "#ffd166");
+          break;
+        }
+        case B_LUMBER: {
+          artHouse(cx - 6 * z, cy + 5 * z, z, 17 * z, 11 * z, "#a97c50", "#6b4a2a");
+          for (let k = 0; k < 3; k++) { circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 2.8 * z, "#c9a070"); circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 1.4 * z, "#9a7448"); }
+          circle(cx + 17 * z, cy + 7 * z, 2.8 * z, "#c9a070"); circle(cx + 17 * z, cy + 7 * z, 1.4 * z, "#9a7448");
+          break;
+        }
+        case B_PORT: {
+          for (let k = 0; k < 4; k++) rect(cx - 16 * z + k * 9 * z, cy + 1 * z, 2.6 * z, 7 * z, "#5e4630");
+          poly([[cx - 20 * z, cy - 2 * z], [cx + 20 * z, cy - 2 * z], [cx + 14 * z, cy + 4 * z], [cx - 14 * z, cy + 4 * z]], "#9c7a4e");
+          for (let k = 0; k < 6; k++) line(cx - 15 * z + k * 6 * z, cy - 1.5 * z, cx - 17 * z + k * 6 * z, cy + 3.5 * z, "#7a5a36", 1 * z);
+          artHouse(cx + 9 * z, cy - 3 * z, z, 12 * z, 9 * z, wall, color);
+          poly([[cx - 20 * z, cy + 8 * z], [cx - 6 * z, cy + 8 * z], [cx - 8 * z, cy + 12 * z], [cx - 18 * z, cy + 12 * z]], "#8a5f3b");
+          rect(cx - 13.5 * z, cy - 2 * z, 1.4 * z, 10 * z, "#5a4a3a");
+          break;
+        }
+        case B_WINDMILL: {
+          poly([[cx - 7 * z, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx - 4.5 * z, cy - 20 * z]], "#e6dcc8");
+          poly([[cx, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx, cy - 20 * z]], "#c9bda6");
+          cone(cx, cy - 20 * z, 15 * z, 8 * z, shade(color, LIGHT), shade(color, DARK));
+          rect(cx - 2 * z, cy - 3 * z, 4 * z, 7 * z, "#5a4030");
+          const hx = cx + 1 * z, hy = cy - 24 * z;
+          for (let k = 0; k < 4; k++) {
+            const a = k * Math.PI / 2 + 0.5;
+            const ex = hx + Math.cos(a) * 15 * z, ey = hy + Math.sin(a) * 15 * z;
+            line(hx, hy, ex, ey, "#5a4a3a", 2 * z);
+            const px = -Math.sin(a) * 3.2 * z, py = Math.cos(a) * 3.2 * z;
+            poly([[hx + Math.cos(a) * 4 * z, hy + Math.sin(a) * 4 * z], [ex, ey], [ex + px, ey + py], [hx + Math.cos(a) * 4 * z + px, hy + Math.sin(a) * 4 * z + py]], "rgba(245,238,220,0.9)");
+          }
+          circle(hx, hy, 2 * z, "#3a2f28");
+          break;
+        }
+        case B_FORGE: {
+          artHouse(cx, cy + 5 * z, z, 24 * z, 14 * z, "#8f8a83", "#4a4440", { door: "#ff8c3a" });
+          circle(cx - 6 * z, cy - 2 * z, 7 * z, "rgba(255,140,58,0.28)");
+          rect(cx + 7 * z, cy - 24 * z, 5 * z, 12 * z, "#5a5450");
+          circle(cx + 9.5 * z, cy - 27 * z, 3.6 * z, "rgba(200,200,205,0.55)"); circle(cx + 12 * z, cy - 32 * z, 4.2 * z, "rgba(200,200,205,0.4)"); circle(cx + 15 * z, cy - 37 * z, 4.8 * z, "rgba(200,200,205,0.25)");
+          break;
+        }
+        case B_SAWMILL: {
+          artHouse(cx - 3 * z, cy + 5 * z, z, 22 * z, 12 * z, "#b48a5a", "#6b4a2a");
+          const sx = cx + 13 * z, sy = cy - 2 * z;
+          for (let k = 0; k < 12; k++) { const a = k * TAU / 12; poly([[sx + Math.cos(a) * 6 * z, sy + Math.sin(a) * 6 * z], [sx + Math.cos(a + 0.26) * 7.6 * z, sy + Math.sin(a + 0.26) * 7.6 * z], [sx + Math.cos(a + 0.52) * 6 * z, sy + Math.sin(a + 0.52) * 6 * z]], "#8c8c8c"); }
+          circle(sx, sy, 6 * z, "#a5a5a5"); circle(sx, sy, 1.6 * z, "#444");
+          circle(cx - 14 * z, cy + 8 * z, 2.6 * z, "#c9a070"); circle(cx - 14 * z, cy + 8 * z, 1.3 * z, "#9a7448");
+          break;
+        }
+        case B_CUSTOMS: {
+          rect(cx - 13 * z, cy - 9 * z, 26 * z, 14 * z, wall);
+          rect(cx + 3 * z, cy - 9 * z, 10 * z, 14 * z, shade(wall, 0.78));
+          for (let k = -1; k <= 1; k += 2) rect(cx + k * 9 * z - 1.5 * z, cy - 9 * z, 3 * z, 14 * z, "#d9ceb6");
+          g.fillStyle = shade(color, LIGHT); g.beginPath(); g.arc(cx, cy - 9 * z, 13 * z, Math.PI, TAU); g.fill();
+          g.fillStyle = shade(color, DARK); g.beginPath(); g.arc(cx, cy - 9 * z, 13 * z, -Math.PI / 2, 0); g.lineTo(cx, cy - 9 * z); g.closePath(); g.fill();
+          circle(cx, cy - 23 * z, 2 * z, "#ffd166");
+          rect(cx - 3 * z, cy - 4 * z, 6 * z, 9 * z, "#5a4a3a");
+          break;
+        }
+        case B_TEMPLE: case B_FTEMPLE: case B_MTEMPLE: case B_WTEMPLE: {
+          const col = kind === B_TEMPLE ? "#f1e6cf" : kind === B_FTEMPLE ? "#cfe8c4" : kind === B_MTEMPLE ? "#e4ecf2" : "#cfe3f1";
+          const lvl = extra || 1;
+          rect(cx - 15 * z, cy + 2 * z, 30 * z, 4 * z, shade(col, 0.7));
+          rect(cx - 12 * z, cy - 2 * z, 24 * z, 4 * z, shade(col, 0.85));
+          for (let k = -1; k <= 1; k++) { rect(cx + k * 8 * z - 2 * z, cy - 16 * z, 4 * z, 14 * z, col); rect(cx + k * 8 * z, cy - 16 * z, 2 * z, 14 * z, shade(col, 0.78)); }
+          rect(cx - 13 * z, cy - 19 * z, 26 * z, 3.5 * z, shade(col, 0.9));
+          poly([[cx - 14 * z, cy - 19 * z], [cx, cy - 29 * z], [cx + 14 * z, cy - 19 * z]], shade(col, 0.95));
+          poly([[cx, cy - 29 * z], [cx + 14 * z, cy - 19 * z], [cx, cy - 19 * z]], shade(col, 0.72));
+          if (lvl >= 3) rect(cx - 13 * z, cy - 19 * z, 26 * z, 1.5 * z, "#ffd166");
+          if (lvl >= 5) circle(cx, cy - 31 * z, 2.5 * z, "#ffd166");
+          break;
+        }
+        case B_MONUMENT: {
+          const k = (extra || 0) % 3;
+          rect(cx - 12 * z, cy + 2 * z, 24 * z, 5 * z, "#8c8578");
+          rect(cx - 9 * z, cy - 2 * z, 18 * z, 4 * z, "#a8a092");
+          poly([[cx - 4 * z, cy - 2 * z], [cx + 0.5 * z, cy - 2 * z], [cx + 0.5 * z, cy - 32 * z], [cx - 2.5 * z, cy - 32 * z]], "#e4dccb");
+          poly([[cx + 0.5 * z, cy - 2 * z], [cx + 4.5 * z, cy - 2 * z], [cx + 2.5 * z, cy - 32 * z], [cx + 0.5 * z, cy - 32 * z]], "#b8b0a0");
+          if (k === 0) cone(cx, cy - 32 * z, 7 * z, 7 * z, "#ffd166", "#d9a93a");
+          else if (k === 1) { circle(cx, cy - 35 * z, 4 * z, "#5bc2ea"); halfDisc(cx, cy - 35 * z, 4 * z, "#2f7fcb"); }
+          else { cone(cx, cy - 31 * z, 6 * z, 9 * z, "#ff8c3a", "#e0552f"); }
+          break;
+        }
+        case B_RUIN: {
+          for (let k = -1; k <= 1; k++) {
+            const hgt = (8 + (k === 0 ? 8 : k === 1 ? 3 : 5)) * z;
+            rect(cx + k * 9 * z - 2 * z, cy - hgt, 4 * z, hgt + 2 * z, "#a39b8f");
+            rect(cx + k * 9 * z, cy - hgt, 2 * z, hgt + 2 * z, "#7f786d");
+            rect(cx + k * 9 * z - 2.6 * z, cy - hgt, 5.2 * z, 1.6 * z, "#b5ada0");
+          }
+          poly([[cx + 2 * z, cy + 5 * z], [cx + 16 * z, cy + 1 * z], [cx + 17 * z, cy + 4 * z], [cx + 3 * z, cy + 8 * z]], "#9a9388");
+          circle(cx - 12 * z, cy + 5 * z, 2 * z, "#8d8578"); circle(cx - 7 * z, cy + 7 * z, 1.5 * z, "#8d8578");
+          break;
+        }
+        default: break;
+      }
+    }
+
+    // ---- Cities
+    function artWalls(cx, cy, z) {
+      const hw = TW / 2 * z * 0.9, hh = TH / 2 * z * 0.9;
+      const pts = [[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]];
+      const wallH = 9 * z;
+      // the wall is a band: a face below the top line on the two front edges
+      poly([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + wallH], [cx - hw, cy + wallH]], "#a89a80");
+      poly([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + wallH], [cx, cy + hh + wallH]], "#857863");
+      // the back edges rise behind the houses
+      poly([[cx - hw, cy], [cx, cy - hh], [cx, cy - hh + wallH * 0.7], [cx - hw, cy + wallH * 0.7]], "#9c8f76");
+      poly([[cx, cy - hh], [cx + hw, cy], [cx + hw, cy + wallH * 0.7], [cx, cy - hh + wallH * 0.7]], "#7d705c");
+      g.strokeStyle = "#d9cdb0"; g.lineWidth = 3.2 * z; g.lineJoin = "round";
+      g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < 4; i++) g.lineTo(pts[i][0], pts[i][1]); g.closePath(); g.stroke();
+      for (let e = 0; e < 4; e++) {
+        const a = pts[e], b = pts[(e + 1) % 4];
+        for (let k = 0; k < 5; k++) {
+          const t = (k + 0.5) / 5;
+          const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+          rect(x - 1.8 * z, y - 4.5 * z, 3.6 * z, 4 * z, "#e7dcc4");
+        }
+      }
+      for (const c of pts) { rect(c[0] - 3 * z, c[1] - 9 * z, 6 * z, 9 * z + (c[1] > cy ? wallH : wallH * 0.7), "#bfb297"); rect(c[0] - 3.6 * z, c[1] - 10 * z, 7.2 * z, 2.5 * z, "#e7dcc4"); }
+    }
+    function artCity(cx, cy, z, o) {
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      g.fillStyle = o.owned ? "rgba(236,226,200,0.42)" : "rgba(255,255,255,0.12)";
+      diamond(cx, cy, hw * 0.9, hh * 0.9); g.fill();
+      if (o.owned) { g.strokeStyle = "rgba(120,100,70,0.35)"; g.lineWidth = 1.2 * z; diamond(cx, cy, hw * 0.9, hh * 0.9); g.stroke(); }
+      if (o.walls) artWalls(cx, cy, z);
+      const spots = [[-0.04, -0.16], [-0.26, -0.02], [0.24, -0.08], [-0.2, 0.24], [0.26, 0.22], [0.02, -0.34], [-0.32, 0.1], [0.32, 0.04]];
+      const n = o.owned ? Math.min(8, o.level) : 2;
+      const list = [];
+      for (let k = 0; k < n; k++) {
+        const s = spots[k];
+        list.push({ x: cx + (s[0] - s[1]) * hw, y: cy + (s[0] + s[1]) * hh + hh * 0.3, k });
+      }
+      list.sort((a, b) => a.y - b.y);
+      for (const h of list) {
+        if (!o.owned) { artHut(h.x, h.y + 2 * z, z, 6.5 * z, "#b9a98a", "#c9a265"); continue; }
+        const big = h.k === 0;
+        if (big && o.level >= 4) {
+          // the hall: a wide house with a tower
+          artHouse(h.x, h.y + 4 * z, z, 20 * z, 14 * z, o.wall, o.color);
+          rect(h.x + 6 * z, h.y - 26 * z, 7 * z, 16 * z, shade(o.wall, 0.95));
+          rect(h.x + 10 * z, h.y - 26 * z, 3 * z, 16 * z, shade(o.wall, 0.72));
+          cone(h.x + 9.5 * z, h.y - 26 * z, 11 * z, 8 * z, shade(o.color, LIGHT), shade(o.color, DARK));
+        } else {
+          artHouse(h.x, h.y + 3 * z, z, (big ? 15 : 11) * z, (big ? 12 : 8.5) * z, o.wall, o.color);
+        }
+      }
+      if (o.capital && o.owned) {
+        const px = cx + hw * 0.52, py = cy - hh * 0.1;
+        line(px, py + 4 * z, px, py - 34 * z, "#4a3a2a", 2 * z);
+        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z], [px, py - 24 * z]], shade(o.color, LIGHT));
+        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z], [px + 5 * z, py - 29 * z]], shade(o.color, DARK));
+        circle(px, py - 35 * z, 2 * z, "#ffd166");
+      }
+      if (o.sieged) {
+        g.strokeStyle = "#ff5a4e"; g.lineWidth = 2.5 * z;
+        diamond(cx, cy, hw * 0.95, hh * 0.95); g.stroke();
+      }
+    }
+
+    // ---- Units
+    function artHorse(x, y, z, color, armored) {
+      const dark = shade(color, 0.72);
+      for (const lx of [-8, -4, 4, 8]) rect(x + lx * z - 1.3 * z, y - 2 * z, 2.6 * z, 7 * z, dark);
+      ellipse(x, y - 6 * z, 12 * z, 6 * z, color);
+      halfDisc(x, y - 6 * z, 6 * z, dark);
+      poly([[x + 8 * z, y - 9 * z], [x + 15 * z, y - 16 * z], [x + 19 * z, y - 12 * z], [x + 12 * z, y - 6 * z]], color);
+      ellipse(x + 18.5 * z, y - 12 * z, 2.2 * z, 1.6 * z, dark);
+      circle(x + 16 * z, y - 14.5 * z, 0.8 * z, "#111");
+      line(x + 10 * z, y - 10 * z, x + 14 * z, y - 18 * z, dark, 2.4 * z);
+      line(x - 11 * z, y - 7 * z, x - 15 * z, y - 1 * z, dark, 2 * z);
+      if (armored) { rect(x - 8 * z, y - 9 * z, 14 * z, 4 * z, "#9aa3b2"); }
+    }
+    function artBoat(x, y, z, kind, color) {
+      if (kind === 3) {
+        poly([[x - 21 * z, y - 5 * z], [x + 21 * z, y - 5 * z], [x + 15 * z, y + 4 * z], [x - 15 * z, y + 4 * z]], "#7d8794");
+        poly([[x - 21 * z, y - 5 * z], [x + 21 * z, y - 5 * z], [x + 21 * z, y - 7 * z], [x - 21 * z, y - 7 * z]], "#a9b2bf");
+        rect(x - 8 * z, y - 15 * z, 16 * z, 10 * z, "#9aa3b2"); rect(x + 1 * z, y - 15 * z, 7 * z, 10 * z, "#7d8794");
+        rect(x - 2 * z, y - 24 * z, 4 * z, 10 * z, "#5a6270");
+        circle(x, y - 27 * z, 2.8 * z, "rgba(200,200,205,0.6)"); circle(x + 3 * z, y - 31 * z, 3.4 * z, "rgba(200,200,205,0.4)");
+        rect(x - 19 * z, y - 10 * z, 8 * z, 2.6 * z, "#3a3f47");
+        rect(x + 11 * z, y - 10 * z, 8 * z, 2.6 * z, "#3a3f47");
+        return;
+      }
+      const big = kind === 2;
+      const hw2 = (big ? 20 : 16) * z;
+      poly([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2 * 0.7, y + 4 * z], [x - hw2 * 0.7, y + 4 * z]], "#8a5f3b");
+      poly([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2, y - 6 * z], [x - hw2, y - 6 * z]], "#b0804f");
+      line(x - hw2 * 0.6, y, x + hw2 * 0.6, y, "#5a3f28", 1.2 * z);
+      rect(x - 1 * z, y - 28 * z, 2 * z, 23 * z, "#5a4a3a");
+      poly([[x + 1 * z, y - 27 * z], [x + (big ? 14 : 10) * z, y - 14 * z], [x + 1 * z, y - 9 * z]], "#f3ead8");
+      poly([[x + 1 * z, y - 27 * z], [x + (big ? 14 : 10) * z, y - 14 * z], [x + 1 * z, y - 18 * z]], "#e0d6c2");
+      if (big) { poly([[x - 1 * z, y - 24 * z], [x - 10 * z, y - 13 * z], [x - 1 * z, y - 10 * z]], "#f3ead8"); }
+      poly([[x - 1 * z, y - 28 * z], [x - 6 * z, y - 26 * z], [x - 1 * z, y - 24 * z]], color);
+    }
+    const SKIN = "#f1d2b1", SKIN_D = "#d9b494";
+    function artUnit(cx, cy, z, o) {
+      const col = o.color, dark = shade(col, 0.72);
+      const x = cx, y = cy + 2 * z;
+      g.globalAlpha = o.dim ? 0.75 : 1;
+      ellipse(x, y + 3 * z, 12 * z, 5 * z, "rgba(0,0,0,0.3)");
+      let by = y;
+      if (o.boat) { artBoat(x, y, z, o.boat, col); by = y - 8 * z; }
+      const giant = o.type === "giant";
+      const s = giant ? 1.5 : (o.boat ? 0.85 : 1);
+      if (!o.boat && (o.type === "rider" || o.type === "knight")) { artHorse(x, y, z, o.type === "knight" ? "#7c8795" : "#8b5e3c", o.type === "knight"); by = y - 9 * z; }
+      if (o.type === "catapult" && !o.boat) {
+        rect(x - 13 * z, by - 5 * z, 26 * z, 5 * z, "#6b4a2a");
+        circle(x - 9 * z, by + 1 * z, 4 * z, "#4a3a2a"); circle(x - 9 * z, by + 1 * z, 1.4 * z, "#8a6a4a");
+        circle(x + 9 * z, by + 1 * z, 4 * z, "#4a3a2a"); circle(x + 9 * z, by + 1 * z, 1.4 * z, "#8a6a4a");
+        rect(x - 5 * z, by - 11 * z, 3 * z, 7 * z, "#8d6e4c"); rect(x + 2 * z, by - 11 * z, 3 * z, 7 * z, "#8d6e4c");
+        line(x - 2 * z, by - 6 * z, x + 12 * z, by - 24 * z, "#8d6e4c", 2.6 * z);
+        circle(x + 12 * z, by - 24 * z, 3.5 * z, "#555"); circle(x + 11 * z, by - 25 * z, 1.2 * z, "#888");
+        by = by - 2 * z; o.small = true;
+      }
+      const bodyW = 11 * z * s, bodyH = 13 * z * s;
+      const bx = o.small ? x - 14 * z : x;
+      const skin = giant ? "#b7bda8" : SKIN, skinD = giant ? "#949a86" : SKIN_D;
+      // body with a shaded right side and a belt
+      g.fillStyle = o.hit ? "#ffffff" : col;
+      g.beginPath(); g.roundRect(bx - bodyW / 2, by - bodyH, bodyW, bodyH, 3 * z); g.fill();
+      g.fillStyle = o.hit ? "#f0f0f0" : dark;
+      g.beginPath(); g.roundRect(bx + bodyW * 0.12, by - bodyH, bodyW * 0.38, bodyH, 3 * z); g.fill();
+      rect(bx - bodyW / 2, by - bodyH * 0.42, bodyW, 2 * z, o.hit ? "#ddd" : "#3b3028");
+      // arms
+      ellipse(bx - bodyW * 0.55, by - bodyH * 0.6, 2.4 * z * s, 4 * z * s, skin);
+      ellipse(bx + bodyW * 0.55, by - bodyH * 0.6, 2.4 * z * s, 4 * z * s, skinD);
+      // head
+      const hr = 5.6 * z * s, hx = bx, hy = by - bodyH - hr + 1 * z;
+      circle(hx, hy, hr, o.hit ? "#ffffff" : skin);
+      halfDisc(hx, hy, hr, o.hit ? "#f0f0f0" : skinD);
+      circle(hx - 1.8 * z * s, hy + 0.5 * z * s, 0.9 * z * s, "#222"); circle(hx + 1.8 * z * s, hy + 0.5 * z * s, 0.9 * z * s, "#222");
+      artGear(o.type, hx, hy, hr, z * s, col, dark);
+      g.globalAlpha = 1;
+      if (o.vet) { circle(bx + bodyW / 2 + 2.5 * z, by - bodyH + 1 * z, 2.6 * z, "#ffd166"); circle(bx + bodyW / 2 + 2.5 * z, by - bodyH + 1 * z, 1 * z, "#fff3c0"); }
+      if (o.hpFrac < 1) {
+        const bw = 24 * z, bbx = x - bw / 2, bby = y + 7 * z;
+        g.fillStyle = "rgba(0,0,0,0.6)"; g.beginPath(); g.roundRect(bbx - 1, bby - 1, bw + 2, 4 * z + 2, 2 * z); g.fill();
+        rect(bbx, bby, bw * clamp(o.hpFrac, 0, 1), 4 * z, o.hpFrac > 0.5 ? "#6ddb6d" : o.hpFrac > 0.25 ? "#ffd166" : "#ff5a4e");
+      }
+    }
+    function artGear(type, hx, hy, hr, z, col, dark) {
+      const steel = "#c9ced6", steelD = "#8d939c", iron = "#3b3b45", wood = "#8d6e4c";
+      const cap = (c1, c2) => { g.fillStyle = c1; g.beginPath(); g.arc(hx, hy - 0.5 * z, hr + 0.4 * z, Math.PI, TAU); g.fill();
+        g.fillStyle = c2; g.beginPath(); g.arc(hx, hy - 0.5 * z, hr + 0.4 * z, -Math.PI / 2, 0); g.lineTo(hx, hy - 0.5 * z); g.closePath(); g.fill(); };
+      switch (type) {
+        case "warrior":
+          cap(iron, "#26262e"); rect(hx - 1 * z, hy - 2 * z, 2 * z, 4 * z, iron);
+          line(hx + 7 * z, hy + 12 * z, hx + 9 * z, hy - 4 * z, wood, 2.2 * z); circle(hx + 9.2 * z, hy - 5 * z, 3 * z, "#6e6e78");
+          break;
+        case "rider":
+          cap(wood, "#6a5038"); line(hx + 6 * z, hy + 12 * z, hx + 8 * z, hy - 6 * z, iron, 1.6 * z);
+          break;
+        case "archer":
+          cap("#4f7a3a", "#3a5c2a"); poly([[hx - hr, hy - 1 * z], [hx + 1 * z, hy - hr - 5 * z], [hx + hr, hy - 1 * z]], "#4f7a3a");
+          g.strokeStyle = wood; g.lineWidth = 1.8 * z; g.beginPath(); g.arc(hx + 8 * z, hy + 6 * z, 8 * z, -Math.PI / 2 - 0.2, Math.PI / 2 + 0.2); g.stroke();
+          line(hx + 8 * z, hy - 2 * z, hx + 8 * z, hy + 14 * z, "#e9dcc8", 1 * z);
+          break;
+        case "defender":
+          cap(steel, steelD); rect(hx - hr, hy - 0.5 * z, hr * 2, 1.6 * z, steelD);
+          g.fillStyle = steel; g.beginPath(); g.roundRect(hx - 13 * z, hy + 3 * z, 10 * z, 14 * z, 3 * z); g.fill();
+          g.fillStyle = steelD; g.beginPath(); g.roundRect(hx - 8 * z, hy + 3 * z, 5 * z, 14 * z, 3 * z); g.fill();
+          circle(hx - 8 * z, hy + 10 * z, 2.2 * z, col);
+          break;
+        case "swordsman":
+          cap(steel, steelD); rect(hx - 1 * z, hy - 2 * z, 2 * z, 5 * z, steelD);
+          line(hx + 7 * z, hy + 8 * z, hx + 7 * z, hy - 9 * z, "#eef1f5", 2.2 * z); rect(hx + 3.5 * z, hy + 7 * z, 7 * z, 2 * z, wood);
+          g.fillStyle = steel; g.beginPath(); g.roundRect(hx - 12 * z, hy + 4 * z, 8 * z, 11 * z, 3 * z); g.fill();
+          circle(hx - 8 * z, hy + 9.5 * z, 2 * z, col);
+          break;
+        case "catapult": cap(wood, "#6a5038"); break;
+        case "knight":
+          cap(steel, steelD); rect(hx - hr, hy - 0.5 * z, hr * 2, 1.6 * z, steelD); rect(hx - 1 * z, hy - hr - 6 * z, 2 * z, 6 * z, col);
+          line(hx + 6 * z, hy + 14 * z, hx + 9 * z, hy - 14 * z, "#e9dcc8", 1.8 * z); poly([[hx + 9 * z, hy - 14 * z], [hx + 7.5 * z, hy - 10 * z], [hx + 10.5 * z, hy - 10 * z]], steel);
+          break;
+        case "mindbender":
+          cap("#5b3a86", "#3e2660"); poly([[hx - hr, hy], [hx, hy - hr - 6 * z], [hx + hr, hy]], "#5b3a86");
+          line(hx + 7 * z, hy + 13 * z, hx + 7 * z, hy - 8 * z, wood, 1.6 * z); circle(hx + 7 * z, hy - 9 * z, 3 * z, "#c77dff"); circle(hx + 7 * z, hy - 9 * z, 6 * z, "rgba(199,125,255,0.25)");
+          break;
+        case "giant":
+          rect(hx - hr * 0.9, hy - 1.5 * z, hr * 1.8, 1.6 * z, "#3a3f38"); rect(hx - 1.2 * z, hy + 3 * z, 2.4 * z, 1.2 * z, "#3a3f38");
+          break;
+        default: break;
+      }
     }
 
     // ====================================================================== //
@@ -2875,7 +3275,7 @@ window.plethoraBit = {
       hudEl.innerHTML =
         `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">` +
           `<div style="display:flex;align-items:center;gap:7px;background:rgba(22,28,38,0.86);border-radius:999px;padding:6px 12px 6px 7px;box-shadow:0 2px 10px rgba(0,0,0,0.45);">` +
-            `<span style="width:16px;height:16px;border-radius:50%;background:${tr.color};display:inline-block;"></span>` +
+            `<span style="width:16px;height:16px;border-radius:50%;background:${tr.color};display:inline-block;box-shadow:inset -4px -3px 0 rgba(0,0,0,0.25);"></span>` +
             `<span style="font-weight:800;font-size:13px;">${esc(tr.name)}</span>` +
             `<span style="opacity:0.75;font-size:12px;">Turn ${S.turn}${limit}</span>` +
           `</div>` +
@@ -3061,9 +3461,11 @@ window.plethoraBit = {
       switch (name) {
         case "menu": {
           const has = !!(S && !S.over && V.screen === "play") || !!savedGame;
-          return `<div style="text-align:center;padding-top:12vh;">` +
-            `<div style="font-size:42px;font-weight:900;letter-spacing:1px;text-shadow:0 4px 18px rgba(0,0,0,0.6);">Thirty Turns</div>` +
-            `<div style="font-size:14px;opacity:0.8;margin:6px 0 26px;">Grow a tribe from one village to an empire — in thirty turns, or until nobody else is left.</div>` +
+          return `<div style="text-align:center;padding-top:11vh;">` +
+            `<div style="font-size:30px;color:#ffd166;letter-spacing:6px;margin-bottom:-6px;text-shadow:0 3px 12px rgba(0,0,0,0.6);">★ ★ ★</div>` +
+            `<div style="font-size:46px;font-weight:900;letter-spacing:1.5px;line-height:1.05;text-shadow:0 4px 18px rgba(0,0,0,0.7),0 1px 0 rgba(255,209,102,0.35);">Thirty Turns</div>` +
+            `<div style="width:120px;height:3px;background:#ffd166;border-radius:2px;margin:12px auto 14px;opacity:0.9;"></div>` +
+            `<div style="font-size:14px;opacity:0.85;margin:0 18px 26px;line-height:1.45;">Grow a tribe from one village to an empire — in thirty turns, or until nobody else is left.</div>` +
             (has ? `<div style="margin:8px;"><button data-act="menu:continue" style="${BIG}min-width:220px;">Continue game</button></div>` : "") +
             `<div style="margin:8px;"><button data-act="menu:new" style="${BIG}min-width:220px;${has ? "background:rgba(255,255,255,0.14);color:#f3efe6;" : ""}">New game</button></div>` +
             `<div style="margin:8px;"><button data-act="menu:help" style="${BTN}min-width:220px;">How to play</button></div>` +

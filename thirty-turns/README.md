@@ -197,15 +197,39 @@ game plays on exactly as it would have.
 
 ## The look
 
-Isometric 2:1 diamonds drawn in three passes — ground, then borders, roads and
-highlights, then objects and units back to front — so a tree never paints over
-the unit standing in front of it. Every tribe has a field, forest, trunk and
-rock colour, and the land near each capital uses that tribe's palette, with
-snow caps, palms or dead trees where that is the tribe. Units are a coloured
-body with a glyph per type (shield, bow, lance, staff…), boats carry a hull
-and sail, and cities grow one house per level with a flag on the capital and a
-ring for walls. Below 0.62 zoom every tile drops to one shape so a Massive map
-stays cheap.
+Low-poly in two dimensions. The world is a raised slab: every land tile draws
+its two front faces in the tribe's earth colour before its top, so the island
+floats with visible sides, coasts show a cliff where the sea sits a few pixels
+lower, and foam runs along the shore. Everything that stands on a tile is a
+few flat facets lit from the upper left — a lighter face on the left, a darker
+one on the right — which is what makes a cone read as a tree, a stack of quads
+as a house, and three triangles with a ragged white hem as a mountain.
+
+Each tribe has its own field, forest, trunk, rock, earth and house colours, a
+tree style (cones, snow-capped cones, palms, dead trees, round canopies,
+acacias) and an animal (boar, deer, bear, camel, horned, humped), and the land
+near each capital uses that tribe's set, so a snowbound Hjold valley, a Tiwa
+atoll and an ash-grey Grimm waste are told apart at a glance. Fruit bushes,
+wheat rows, fish, whales and ore crystals mark resources; farms, mines, lumber
+huts, ports, windmills with turning blades, forges with smoke, sawmills,
+domed customs houses, tiered temples that gain gold trim as they age,
+obelisks and broken columns mark what has been built or found. Cities grow a
+house per level around a stone plaza, gain a hall with a tower at level four,
+a crenellated wall band when walled, and a pennant on the capital.
+
+Units are chibi figures: a tunic in the tribe colour with a shaded side, a
+round head with two dots for eyes, and gear per type — a club and cap, a
+hooded archer with a bow, a defender behind a tall shield, a swordsman with
+helmet and buckler, a catapult with its crew, a knight on an armoured horse
+with lance and plume, a mind bender with a glowing staff, a bald grey giant.
+Boats carry the figure on a hull with mast and sail; ships get a second sail;
+battleships are steel with a stack and guns. Hit points show as a bar when
+below full.
+
+Fog is a cloud bank: unexplored tiles are a dark slab, and the ones that
+border the known world are covered in puffs drawn in three layers (bodies,
+tops, highlights) so neighbouring tiles merge into one bank. Below 0.62 zoom
+every tile drops to one shape so a Massive map stays cheap.
 
 Bot turns are replayed as scenes: moves slide along their path, hits flash and
 float their damage, deaths fade, and anything outside the viewer's fog is
