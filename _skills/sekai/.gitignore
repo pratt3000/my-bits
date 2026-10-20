@@ -2,3 +2,5 @@
 vendor/
 # Never commit a credential. The agent token lives in ~/.plethora/, not here.
 *token*.json
+# Python bytecode from importing the scripts (bisect.py is imported by its probes).
+__pycache__/
