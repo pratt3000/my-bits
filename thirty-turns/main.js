@@ -2129,7 +2129,7 @@ window.plethoraBit = {
 
     function drawScene(nowMs) {
       const w = W(), h = H();
-      g.fillStyle = "#2a3140";
+      g.fillStyle = SEA_FLOOR;
       g.fillRect(0, 0, w, h);
       const n = S ? S.n : 0, z = cam.z;
       const hw = (TW / 2) * z, hh = (TH / 2) * z;
@@ -2224,19 +2224,15 @@ window.plethoraBit = {
         const owner = tilePlayer(S, i);
         if (S.road[i]) drawRoad(tx, ty, p, hw, hh);
         if (owner >= 0) {
-          const col = tribeByIndex(S.players[owner].tribe).color;
+          const trb = tribeByIndex(S.players[owner].tribe);
           const dy = isWater(S.terrain[i]) ? drop : 0;
-          g.strokeStyle = rgba(col, 0.95);
-          g.lineWidth = Math.max(1.2, 2.2 * z);
-          g.beginPath();
           const nb = [[-1, 0, [-hw, 0, 0, -hh]], [0, -1, [0, -hh, hw, 0]], [1, 0, [0, hh, hw, 0]], [0, 1, [-hw, 0, 0, hh]]];
           for (const e of nb) {
             const xx = tx + e[0], yy = ty + e[1];
             const other = inBounds(S, xx, yy) ? tilePlayer(S, yy * n + xx) : -1;
             if (other === owner) continue;
-            g.moveTo(p[0] + e[2][0] * 0.96, p[1] + dy + e[2][1] * 0.96); g.lineTo(p[0] + e[2][2] * 0.96, p[1] + dy + e[2][3] * 0.96);
+            drawBorderEdge(p[0] + e[2][0] * 0.97, p[1] + dy + e[2][1] * 0.97, p[0] + e[2][2] * 0.97, p[1] + dy + e[2][3] * 0.97, trb.color, trb.dark, z);
           }
-          g.stroke();
         }
       }
       if (sel && V.reach) {
@@ -2244,10 +2240,10 @@ window.plethoraBit = {
           const tx = i % n, ty = (i - tx) / n;
           const p = toScreen(tx, ty);
           const dy = isWater(S.terrain[i]) ? drop : 0;
-          g.fillStyle = "rgba(255,255,255,0.3)";
+          g.fillStyle = "rgba(255,255,255,0.28)";
           diamond(p[0], p[1] + dy, hw - 2, hh - 1); g.fill();
-          g.strokeStyle = "rgba(255,255,255,0.7)"; g.lineWidth = 1.5;
-          diamond(p[0], p[1] + dy, hw - 3, hh - 1.5); g.stroke();
+          g.strokeStyle = "rgba(255,255,255,0.75)"; g.lineWidth = 1.6;
+          diamond(p[0], p[1] + dy, hw - 4, hh - 2); g.stroke();
         }
       }
       if (V.selTile >= 0 && !sel) {
@@ -2292,10 +2288,14 @@ window.plethoraBit = {
           const p = toScreen(t.x, t.y);
           const dy = isWater(S.terrain[t.y * n + t.x]) ? drop : 0;
           const pk = 1 + 0.05 * Math.sin(ART_T * 7);
-          g.strokeStyle = V.converts.indexOf(t) >= 0 ? "#c77dff" : "#ff5a4e"; g.lineWidth = 3;
-          diamond(p[0], p[1] + dy, (hw - 2) * pk, (hh - 1) * pk); g.stroke();
-          g.fillStyle = V.converts.indexOf(t) >= 0 ? "rgba(199,125,255,0.18)" : "rgba(255,90,78,0.2)";
-          diamond(p[0], p[1] + dy, hw - 2, hh - 1); g.fill();
+          const conv = V.converts.indexOf(t) >= 0;
+          // a bullseye of rings under the target
+          const tones = conv ? ["rgba(199,125,255,0.5)", "rgba(199,125,255,0.32)", "rgba(199,125,255,0.6)"] : ["rgba(255,120,60,0.55)", "rgba(255,70,50,0.35)", "rgba(255,90,60,0.7)"];
+          ellipse(p[0], p[1] + dy + 2 * z, hw * 0.46 * pk, hh * 0.46 * pk, tones[0]);
+          ellipse(p[0], p[1] + dy + 2 * z, hw * 0.3 * pk, hh * 0.3 * pk, tones[1]);
+          ellipse(p[0], p[1] + dy + 2 * z, hw * 0.14 * pk, hh * 0.14 * pk, tones[2]);
+          g.strokeStyle = conv ? "#d9a6ff" : "#ff6a4e"; g.lineWidth = 2.2 * z;
+          g.beginPath(); g.ellipse(p[0], p[1] + dy + 2 * z, hw * 0.46 * pk, hh * 0.46 * pk, 0, 0, TAU); g.stroke();
         }
       }
       // Pass 3: labels and floats
@@ -2317,6 +2317,18 @@ window.plethoraBit = {
       }
     }
 
+    // A border is a low wall along the edge: a dark base band with blocks
+    // of the tribe colour on top.
+    function drawBorderEdge(ax, ay, bx, by, col, dark, z) {
+      const L = Math.hypot(bx - ax, by - ay);
+      const segs = Math.max(2, Math.round(L / (9 * z)));
+      const lift = 2.2 * z;
+      line(ax, ay + lift * 0.5, bx, by + lift * 0.5, dark, 4.6 * z, "butt");
+      for (let k = 0; k < segs; k += 2) {
+        const t0 = k / segs, t1 = Math.min(1, (k + 1) / segs);
+        line(ax + (bx - ax) * t0, ay + (by - ay) * t0 - lift * 0.5, ax + (bx - ax) * t1, ay + (by - ay) * t1 - lift * 0.5, col, 4.2 * z, "butt");
+      }
+    }
     function drawRoad(tx, ty, p, hw, hh) {
       const z = cam.z;
       let any = false;
@@ -2354,7 +2366,7 @@ window.plethoraBit = {
       if (c) {
         const ctr = c.owner >= 0 ? tribeByIndex(S.players[c.owner].tribe) : null;
         artCity(cx, cy, z, { level: c.level, capital: c.capital, walls: c.walls, owned: c.owner >= 0,
-          color: ctr ? ctr.color : "#8a7f70", wall: ctr ? ctr.wall : "#cfc6b4", sieged: sieged(S, c), t: ART_T + seed * 7 });
+          color: ctr ? ctr.color : "#8a7f70", wall: ctr ? ctr.wall : "#cfc6b4", sieged: sieged(S, c), t: ART_T + seed * 7, seed });
         return;
       }
       if (t === MOUNTAIN) {
@@ -2442,13 +2454,15 @@ window.plethoraBit = {
       const onWater = isWater(S.terrain[Math.round(u.y) * S.n + Math.round(u.x)]);
       const y = p[1] + (onWater ? WATER_DROP * z : 0);
       if (selected) {
+        // a cyan glow under the chosen unit, breathing a little
         const k = 1 + 0.06 * Math.sin(ART_T * 6);
-        g.strokeStyle = "rgba(255,224,102,0.55)"; g.lineWidth = 6;
-        diamond(p[0], y, TW * 0.47 * z * k, TH * 0.47 * z * k); g.stroke();
-        g.strokeStyle = "#ffe066"; g.lineWidth = 2.5;
-        diamond(p[0], y, TW * 0.47 * z * k, TH * 0.47 * z * k); g.stroke();
+        ellipse(p[0], y + 2 * z, TW * 0.4 * z * k, TH * 0.4 * z * k, "rgba(90,225,255,0.28)");
+        g.strokeStyle = "rgba(90,225,255,0.45)"; g.lineWidth = 7 * z;
+        g.beginPath(); g.ellipse(p[0], y + 2 * z, TW * 0.4 * z * k, TH * 0.4 * z * k, 0, 0, TAU); g.stroke();
+        g.strokeStyle = "#8ef0ff"; g.lineWidth = 2.4 * z;
+        g.beginPath(); g.ellipse(p[0], y + 2 * z, TW * 0.4 * z * k, TH * 0.4 * z * k, 0, 0, TAU); g.stroke();
       }
-      artUnit(p[0], y, z, { type: u.type, boat: u.boat, color: tr.color, hpFrac: u.hp / maxHp(u), vet: u.vet,
+      artUnit(p[0], y, z, { type: u.type, boat: u.boat, color: tr.color, hpFrac: u.hp / maxHp(u), hp: u.dead ? null : Math.max(0, Math.round(u.hp)), vet: u.vet,
         dim: u.owner === S.cur && u.moved && u.attacked && !u.dead, hit: !!V.flash.get(u.id) });
     }
 
@@ -2597,10 +2611,10 @@ window.plethoraBit = {
     // ====================================================================== //
     // 7b. Art: everything that stands on a tile                              //
     // ====================================================================== //
-    // Low-poly in two dimensions. Every solid thing is drawn as a few flat
-    // facets lit from the upper left — a lighter face on the left, a darker
-    // one on the right — which is what makes a cone read as a tree and a
-    // stack of quads read as a house. All functions take the tile centre in
+    // Low-poly in two dimensions. The ground is a few flat facets around a
+    // jittered centre, so it folds like paper; every solid thing is a stack
+    // of boxes and cones lit from the upper left — a lighter face on the
+    // left, a darker one on the right. All functions take the tile centre in
     // screen pixels and the zoom z; nothing here looks at the game state.
 
     const LIGHT = 1.16, DARK = 0.74;
@@ -2611,6 +2625,16 @@ window.plethoraBit = {
       for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
       g.closePath();
       g.fill();
+    }
+    // A facet is a polygon stroked in its own colour, so neighbouring facets
+    // meet without a hairline between them.
+    function facet(pts, color) {
+      g.fillStyle = color; g.strokeStyle = color; g.lineWidth = 0.8; g.lineJoin = "round";
+      g.beginPath();
+      g.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+      g.closePath();
+      g.fill(); g.stroke();
     }
     function ellipse(x, y, rx, ry, color, rot) {
       g.fillStyle = color; g.beginPath(); g.ellipse(x, y, rx, ry, rot || 0, 0, TAU); g.fill();
@@ -2627,48 +2651,82 @@ window.plethoraBit = {
       poly([[x, y - h], [x - w / 2, y], [x, y + w * 0.1]], light);
       poly([[x, y - h], [x, y + w * 0.1], [x + w / 2, y]], dark);
     }
+    // An isometric box standing on the ground at (x, y): footprint w wide and
+    // d deep on screen, h tall. Left face lit, right face shaded, top lightest.
+    function box(x, y, w, d, h, col, tones) {
+      const t = tones || [1.0, 0.72, 1.18];
+      const W = [x - w / 2, y], N = [x, y - d / 2], E = [x + w / 2, y], S = [x, y + d / 2];
+      facet([W, S, [S[0], S[1] - h], [W[0], W[1] - h]], shade(col, t[0]));
+      facet([S, E, [E[0], E[1] - h], [S[0], S[1] - h]], shade(col, t[1]));
+      facet([[W[0], W[1] - h], [N[0], N[1] - h], [E[0], E[1] - h], [S[0], S[1] - h]], shade(col, t[2]));
+    }
+    // A pyramid roof on top of a box of the same footprint.
+    function roof(x, y, w, d, h, rh, col) {
+      const W = [x - w / 2 - 1, y - h], E = [x + w / 2 + 1, y - h], S = [x, y + d / 2 + 0.5 - h], N = [x, y - d / 2 - 0.5 - h];
+      const A = [x, y - h - rh];
+      facet([W, S, A], shade(col, LIGHT));
+      facet([S, E, A], shade(col, DARK));
+      facet([W, A, N], shade(col, 1.3));
+      facet([N, A, E], shade(col, 0.95));
+    }
+    // A faceted blob: a hexagon split down the middle, lit on the left.
+    function blob(x, y, rw, rh, col, kL, kR) {
+      const T = [x, y - rh], B = [x, y + rh];
+      const UL = [x - rw, y - rh * 0.45], LL = [x - rw * 0.92, y + rh * 0.5];
+      const UR = [x + rw, y - rh * 0.45], LR = [x + rw * 0.92, y + rh * 0.5];
+      facet([T, UL, LL, B], shade(col, kL == null ? LIGHT : kL));
+      facet([T, B, LR, UR], shade(col, kR == null ? DARK : kR));
+      facet([T, [x - rw * 0.55, y - rh * 0.55], [x - rw * 0.2, y - rh * 0.1]], shade(col, 1.35));
+    }
 
     // ---- Ground
-    const WATER = { shallow: "#5cc4ea", deep: "#2f7fcb", side: "#1d5290", sideDeep: "#174378" };
+    const WATER = { shallow: "#62c6ee", deep: "#2d7fd4", side: "#1d5290", sideDeep: "#174378" };
     const TILE_T = 14, WATER_DROP = 5;        // land thickness, how far the sea sits below the land
 
     function artSides(cx, cy, z, earth, thick, lipL, lipR) {
       const hw = TW / 2 * z, hh = TH / 2 * z, t = thick * z;
-      poly([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + t], [cx - hw, cy + t]], shade(earth, 0.98));
-      poly([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + t], [cx, cy + hh + t]], shade(earth, 0.7));
-      const lip = 2.4 * z;
+      facet([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + t], [cx - hw, cy + t]], shade(earth, 0.92));
+      facet([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + t], [cx, cy + hh + t]], shade(earth, 0.62));
+      const lip = 2.2 * z;
       if (lipL) poly([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + lip], [cx - hw, cy + lip]], lipL);
       if (lipR) poly([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + lip], [cx, cy + hh + lip]], lipR);
     }
-    // sand: bitmask of edges touching water (1 TL, 2 TR, 4 BL, 8 BR)
+    // The folded-paper ground: four facets around a jittered centre, one of
+    // them split again, each a step lighter or darker by where it faces.
+    function artFacets(cx, cy, hw, hh, base, seed, spread) {
+      const s = Math.floor(seed * 1000);
+      const j1 = hash2(s + 3, 17), j2 = hash2(s + 9, 31), j3 = hash2(s + 5, 7);
+      const C = [cx + (j1 - 0.5) * hw * 0.6, cy + (j2 - 0.5) * hh * 0.6];
+      const N = [cx, cy - hh], E = [cx + hw, cy], S = [cx, cy + hh], W = [cx - hw, cy];
+      const k = spread;
+      facet([W, N, C], shade(base, 1 + k * (0.7 + j3 * 0.5)));
+      facet([N, E, C], shade(base, 1 + k * (0.0 + j1 * 0.4)));
+      facet([E, S, C], shade(base, 1 - k * (0.7 + j2 * 0.5)));
+      facet([S, W, C], shade(base, 1 - k * (0.1 + j3 * 0.4)));
+      if (j1 > 0.5) {
+        const M = [(E[0] + S[0]) / 2 + (j2 - 0.5) * hw * 0.2, (E[1] + S[1]) / 2 + (j3 - 0.5) * hh * 0.2];
+        facet([C, M, S], shade(base, 1 - k * (0.2 + j1 * 0.3)));
+      } else {
+        const M = [(W[0] + N[0]) / 2 + (j3 - 0.5) * hw * 0.2, (W[1] + N[1]) / 2 + (j1 - 0.5) * hh * 0.2];
+        facet([C, W, M], shade(base, 1 + k * (0.2 + j2 * 0.5)));
+      }
+    }
+    // sand: bitmask of edges touching water (1 TL, 2 TR, 4 BL, 8 BR); kept for the snow rim
     function artLandTop(cx, cy, z, color, seed, sand, snow, baseHex) {
       const hw = TW / 2 * z, hh = TH / 2 * z;
       g.fillStyle = color;
       diamond(cx, cy, hw + 0.7, hh + 0.5);
       g.fill();
-      // a soft lit upper-left and shaded lower-right, so the ground reads as a surface
-      poly([[cx - hw, cy], [cx, cy - hh], [cx + hw, cy]], "rgba(255,255,255,0.07)");
-      poly([[cx - hw, cy], [cx + hw, cy], [cx, cy + hh]], "rgba(0,0,0,0.05)");
-      if (sand) {
-        // a beach strip inside each shore edge
-        const E = [[[-hw, 0], [0, -hh]], [[0, -hh], [hw, 0]], [[-hw, 0], [0, hh]], [[0, hh], [hw, 0]]];
-        for (let e = 0; e < 4; e++) {
-          if (!(sand & (1 << e))) continue;
-          const a = E[e][0], b = E[e][1];
-          const f = 0.74;
-          poly([[cx + a[0], cy + a[1]], [cx + b[0], cy + b[1]], [cx + b[0] * f, cy + b[1] * f], [cx + a[0] * f, cy + a[1] * f]], snow ? "#dfe6ea" : "#e3cf98");
-        }
-      }
-      if (z >= 0.85 && seed > 0.35) {
-        // a few grass tufts, or pebbles on snow
+      artFacets(cx, cy, hw, hh, baseHex, seed, snow ? 0.035 : 0.07);
+      if (z >= 0.85 && seed > 0.45 && !snow) {
+        // a few grass tufts
         const k = Math.floor(seed * 3) + 1;
         for (let i = 0; i < k; i++) {
           const jx = hash2(i * 13 + 1, Math.floor(seed * 1000)), jy = hash2(i * 7 + 5, Math.floor(seed * 777));
           const u = (jx - 0.5) * 0.7, v = (jy - 0.5) * 0.7;
           const x = cx + (u - v) * hw, y = cy + (u + v) * hh;
-          if (snow) { ellipse(x, y, 2.2 * z, 1.1 * z, "rgba(255,255,255,0.55)"); continue; }
-          const tuft = shade(baseHex || "#8fcf6a", 0.78);
-          line(x, y, x - 1.6 * z, y - 3.6 * z, tuft, 1.1 * z); line(x, y, x + 0.4 * z, y - 4.2 * z, tuft, 1.1 * z); line(x, y, x + 2 * z, y - 3.2 * z, tuft, 1.1 * z);
+          const tuft = shade(baseHex || "#8fcf6a", 0.74);
+          line(x, y, x - 1.6 * z, y - 3.8 * z, tuft, 1.2 * z); line(x, y, x + 0.4 * z, y - 4.4 * z, tuft, 1.2 * z); line(x, y, x + 2 * z, y - 3.4 * z, tuft, 1.2 * z);
         }
       }
     }
@@ -2678,42 +2736,37 @@ window.plethoraBit = {
     // coast: bitmask of edges touching land — 1 top-left, 2 top-right, 4 bottom-left, 8 bottom-right
     function artWaterTop(cx, cy, z, deep, coast, seed) {
       const hw = TW / 2 * z, hh = TH / 2 * z;
-      g.fillStyle = deep ? WATER.deep : WATER.shallow;
+      const base = deep ? WATER.deep : WATER.shallow;
+      g.fillStyle = base;
       diamond(cx, cy, hw + 0.7, hh + 0.5);
       g.fill();
-      // sparkles that drift slowly
-      const k = seed;
+      artFacets(cx, cy, hw, hh, base, seed, deep ? 0.05 : 0.06);
+      // a glint that drifts slowly
       const ph = Math.sin(ART_T * 0.9 + seed * 9);
       const sx = ph * hw * 0.08;
-      g.strokeStyle = deep ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.3)";
-      g.lineWidth = Math.max(1, 1.3 * z); g.lineCap = "round";
+      g.strokeStyle = deep ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.34)";
+      g.lineWidth = Math.max(1, 1.4 * z); g.lineCap = "round";
       g.beginPath();
-      g.moveTo(cx - hw * 0.45 + sx, cy + hh * (0.05 - k * 0.3)); g.lineTo(cx - hw * 0.15 + sx, cy + hh * (0.05 - k * 0.3));
-      g.moveTo(cx + hw * 0.1 - sx, cy + hh * (0.4 - k * 0.25)); g.lineTo(cx + hw * 0.45 - sx, cy + hh * (0.4 - k * 0.25));
+      g.moveTo(cx - hw * 0.4 + sx, cy + hh * (0.1 - seed * 0.3)); g.lineTo(cx - hw * 0.12 + sx, cy + hh * (0.1 - seed * 0.3));
       g.stroke();
       if (!coast) return;
-      // foam along the shore, two lines inset from the edge
+      // a pale shelf along the shore
       const E = [[[-hw, 0], [0, -hh]], [[0, -hh], [hw, 0]], [[-hw, 0], [0, hh]], [[0, hh], [hw, 0]]];
       for (let e = 0; e < 4; e++) {
         if (!(coast & (1 << e))) continue;
         const a = E[e][0], b = E[e][1];
-        const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
-        for (let pass = 0; pass < 2; pass++) {
-          const f = pass ? 0.72 : 0.9;
-          g.strokeStyle = pass ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.55)";
-          g.lineWidth = Math.max(1, (pass ? 1.5 : 2.4) * z);
-          g.beginPath();
-          g.moveTo(cx + mx + (a[0] - mx) * f, cy + my + (a[1] - my) * f);
-          g.lineTo(cx + mx + (b[0] - mx) * f, cy + my + (b[1] - my) * f);
-          g.stroke();
-        }
+        const f = 0.8;
+        poly([[cx + a[0], cy + a[1]], [cx + b[0], cy + b[1]], [cx + b[0] * f, cy + b[1] * f], [cx + a[0] * f, cy + a[1] * f]], "rgba(255,255,255,0.22)");
       }
     }
-    // The cloud sea: every unexplored tile, on the map or beyond it, carries
-    // three puffs lit from the upper left. The puffs are the same at every
-    // zoom, so they are painted once per zoom step into a small canvas that
-    // repeats across the screen; the whole sea is then one fill per frame.
+
+    // ---- The cloud sea: every unexplored tile, on the map or beyond it,
+    // carries three puffs lit from the upper left. The puffs are the same at
+    // every zoom, so they are painted once per zoom step into a small canvas
+    // that repeats across the screen; the whole sea is then one fill per frame.
     const SEA_SPOTS = [[-0.3, -0.08], [0.22, -0.18], [0.0, 0.24]];
+    const SEA_FLOOR = "#808da1";
+    const SEA_TONE = [["#8e9bae", "#8e9bae"], ["#b9c3cf", "#bfc8d3"], ["#e1e6ec", "#e9edf1"]];
     let seaCanvas = null, seaPat = null, seaPatZ = -1, seaOk = true;
     // The backing-store scale of the main canvas, so the texture is as sharp as the screen.
     const seaDpr = () => Math.min(3, Math.max(1, (canvas.width / Math.max(1, ctx.width)) || Number(ctx.dpr) || 1));
@@ -2724,15 +2777,16 @@ window.plethoraBit = {
         if (x + r < 0 || x - r > PW || y + r < 0 || y - r > PH) return;
         pg.fillStyle = col; pg.beginPath(); pg.arc(x, y, r, 0, TAU); pg.fill();
       };
-      // zoomed far out, two bigger puffs per tile keep the sea from turning to noise
-      const count = z < 0.7 ? 2 : 3, grow = z < 0.7 ? 1.35 : 1;
+      // two or three puffs per tile; zoomed out they grow a little so the sea stays soft
+      const count = z < 0.9 ? 2 : 3, grow = z < 0.7 ? 1.4 : z < 0.9 ? 1.2 : 1.1;
       for (let k = 0; k < count; k++) {
         const j = hash2(k * 7 + 3, Math.floor(seed * 911));
+        const tone = j > 0.5 ? 1 : 0;
         const x = cx + SEA_SPOTS[k][0] * hw * 1.2 + (j - 0.5) * 10 * z, y = cy + SEA_SPOTS[k][1] * hh * 1.2 + (j - 0.5) * 6 * z;
         const r = hh * (0.78 + j * 0.4) * grow;
-        dot(x, y + 3 * z, r, "#313948");
-        dot(x - r * 0.08, y - r * 0.1, r * 0.92, j > 0.5 ? "#454f63" : "#414b5e");
-        dot(x - r * 0.32, y - r * 0.42, r * 0.44, j > 0.5 ? "#616d86" : "#5a667d");
+        dot(x, y + 3 * z, r, SEA_TONE[0][tone]);
+        dot(x - r * 0.08, y - r * 0.1, r * 0.92, SEA_TONE[1][tone]);
+        dot(x - r * 0.32, y - r * 0.42, r * 0.44, SEA_TONE[2][tone]);
       }
     }
     function buildSeaPattern(z) {
@@ -2743,7 +2797,7 @@ window.plethoraBit = {
       seaCanvas = new OffscreenCanvas(Math.max(1, Math.round(PW * dpr)), Math.max(1, Math.round(PH * dpr)));
       const pg = seaCanvas.getContext("2d");
       pg.scale(dpr, dpr);
-      pg.fillStyle = "#2a3140"; pg.fillRect(0, 0, PW, PH);
+      pg.fillStyle = SEA_FLOOR; pg.fillRect(0, 0, PW, PH);
       // Tile (tx, ty) sits at ((tx - ty) * TW / 2, (tx + ty) * TH / 2); over
       // one period e = tx - ty and d = tx + ty run 0..K-1 with equal parity.
       // Two rows and columns beyond the period are drawn too, back to front,
@@ -2784,17 +2838,18 @@ window.plethoraBit = {
         const cx = tiles[k], cy = tiles[k + 1], seed = tiles[k + 2];
         for (let q = 0; q < 3; q++) {
           const j = hash2(q * 7 + 3, Math.floor(seed * 911));
+          const tone = j > 0.5 ? 1 : 0;
           const x = cx + SEA_SPOTS[q][0] * hw * 1.2 + (j - 0.5) * 10 * z, y = cy + SEA_SPOTS[q][1] * hh * 1.2 + (j - 0.5) * 6 * z;
           const r = hh * (0.78 + j * 0.4);
-          circle(x, y + 3 * z, r, "#313948");
-          circle(x - r * 0.08, y - r * 0.1, r * 0.92, j > 0.5 ? "#454f63" : "#414b5e");
-          circle(x - r * 0.32, y - r * 0.42, r * 0.44, j > 0.5 ? "#616d86" : "#5a667d");
+          circle(x, y + 3 * z, r, SEA_TONE[0][tone]);
+          circle(x - r * 0.08, y - r * 0.1, r * 0.92, SEA_TONE[1][tone]);
+          circle(x - r * 0.32, y - r * 0.42, r * 0.44, SEA_TONE[2][tone]);
         }
       }
     }
     // Cloud banks are drawn in three layers over every fog tile that borders
-    // the known world: dark bodies, then lighter tops, then highlights, so the
-    // puffs of neighbouring tiles merge into one bank instead of a row of balls.
+    // the known world: shadowed bodies, then lighter tops, then highlights, so
+    // the puffs of neighbouring tiles merge into one bank instead of a row of balls.
     function artCloud(cx, cy, z, seed, layer) {
       const hw = TW / 2 * z, hh = TH / 2 * z;
       const puffs = [[-0.36, -0.02, 0.9], [0.0, -0.3, 1.0], [0.36, 0.02, 0.9], [0.02, 0.26, 0.95], [-0.2, 0.14, 0.8], [0.22, -0.12, 0.85]];
@@ -2803,68 +2858,71 @@ window.plethoraBit = {
         const j = hash2(k + 1, Math.floor(seed * 997));
         const x = cx + puff[0] * hw * 1.15 + (j - 0.5) * 6 * z, y = cy + puff[1] * hh * 1.3 + (j - 0.5) * 4 * z;
         const r = puff[2] * hh * (0.95 + j * 0.3);
-        if (layer === 0) circle(x, y + 2 * z, r * 1.02, "#2d3443");
-        else if (layer === 1) circle(x - r * 0.08, y - r * 0.18, r * 0.86, "#48526a");
-        else circle(x - r * 0.28, y - r * 0.46, r * 0.4, "#66738d");
+        if (layer === 0) circle(x, y + 2 * z, r * 1.02, "#8592a6");
+        else if (layer === 1) circle(x - r * 0.08, y - r * 0.18, r * 0.86, "#cdd5df");
+        else circle(x - r * 0.28, y - r * 0.46, r * 0.4, "#f3f6f9");
       }
     }
 
     // ---- Trees
     function artTree(x, y, z, tribe, h, seed) {
       const style = tribe.tree || "cone";
-      const light = shade(tribe.forest, LIGHT), dark = shade(tribe.forest, DARK);
+      const col = tribe.forest;
       const trunk = tribe.trunk;
-      h *= 1.08;
-      const w = h * 0.58;
+      h *= 1.15;
+      const w = h * 0.62;
       artShadow(x + 2 * z, y + 1 * z, z, w * 0.5 / z, w * 0.2 / z, 0.2);
       switch (style) {
         case "palm": {
-          const topX = x + 3 * z, topY = y - h * 0.8;
-          line(x, y, x + 2.2 * z, y - h * 0.45, trunk, 3.2 * z);
-          line(x + 2.2 * z, y - h * 0.45, topX, topY, trunk, 2.6 * z);
+          const topX = x + 4 * z, topY = y - h * 0.82;
+          line(x, y, x + 2.4 * z, y - h * 0.45, trunk, 3.6 * z, "butt");
+          line(x + 2.4 * z, y - h * 0.45, topX, topY, trunk, 3 * z, "butt");
           const n = 6;
           for (let i = 0; i < n; i++) {
-            const a = -Math.PI * 0.95 + (i / (n - 1)) * Math.PI * 1.05 + (seed - 0.5) * 0.3;
-            const len = h * 0.46, wid = h * 0.13;
-            const ex = topX + Math.cos(a) * len * 0.5, ey = topY + Math.sin(a) * len * 0.5 + h * 0.08;
-            ellipse(ex, ey, len * 0.5, wid, Math.cos(a) < 0 ? light : dark, a);
+            const a = -Math.PI * 0.98 + (i / (n - 1)) * Math.PI * 1.1 + (seed - 0.5) * 0.3;
+            const len = h * 0.5, wid = h * 0.13;
+            const ex = topX + Math.cos(a) * len, ey = topY + Math.sin(a) * len * 0.6 + h * 0.1;
+            const px = -Math.sin(a) * wid, py = Math.cos(a) * wid * 0.6;
+            const mid = [topX + Math.cos(a) * len * 0.5, topY + Math.sin(a) * len * 0.3 + h * 0.03];
+            facet([[topX, topY], [mid[0] + px, mid[1] + py], [ex, ey], [mid[0] - px * 0.4, mid[1] - py * 0.4]], shade(col, Math.cos(a) < 0 ? LIGHT : DARK));
           }
-          circle(topX - 2 * z, topY + 2 * z, 2 * z, "#6b4a2a"); circle(topX + 2.5 * z, topY + 2.5 * z, 2 * z, "#6b4a2a");
+          circle(topX - 2 * z, topY + 2.5 * z, 2.2 * z, "#6b4a2a"); circle(topX + 2.5 * z, topY + 3 * z, 2.2 * z, "#8a5f3b");
           break;
         }
         case "round": {
-          h *= 0.82;
-          const r = h * 0.34, cy2 = y - h * 0.62;
-          rect(x - 1.7 * z, y - h * 0.5, 3.4 * z, h * 0.5, trunk);
-          circle(x - r * 0.55, cy2 + r * 0.25, r * 0.75, shade(tribe.forest, 0.92));
-          circle(x + r * 0.6, cy2 + r * 0.3, r * 0.72, dark);
-          circle(x, cy2 - r * 0.1, r, light);
-          halfDisc(x, cy2 - r * 0.1, r, shade(tribe.forest, 0.86));
-          circle(x - r * 0.38, cy2 - r * 0.45, r * 0.3, shade(tribe.forest, 1.4));
+          // three faceted layers of canopy
+          box(x, y, 3.4 * z, 1.7 * z, h * 0.36, trunk, [0.95, 0.7, 1.1]);
+          blob(x + 0.5 * z, y - h * 0.4, w * 0.56, h * 0.26, col, 1.05, 0.7);
+          blob(x - 1 * z, y - h * 0.62, w * 0.5, h * 0.24, col, LIGHT, 0.78);
+          blob(x + 0.5 * z, y - h * 0.84, w * 0.36, h * 0.18, col, 1.26, 0.86);
           break;
         }
         case "acacia": {
-          rect(x - 1.5 * z, y - h * 0.78, 3 * z, h * 0.78, trunk);
-          line(x, y - h * 0.5, x + 6 * z, y - h * 0.72, trunk, 2 * z);
-          ellipse(x + 2 * z, y - h * 0.82, h * 0.5, h * 0.16, light);
-          g.fillStyle = dark; g.beginPath(); g.ellipse(x + 2 * z, y - h * 0.82, h * 0.5, h * 0.16, 0, -Math.PI / 2, Math.PI / 2); g.closePath(); g.fill();
+          box(x, y, 3 * z, 1.5 * z, h * 0.74, trunk, [0.95, 0.7, 1.1]);
+          line(x, y - h * 0.5, x + 7 * z, y - h * 0.74, trunk, 2.2 * z);
+          const cy2 = y - h * 0.82;
+          facet([[x - w * 0.9, cy2], [x - w * 0.4, cy2 - h * 0.16], [x + 2 * z, cy2 - h * 0.2], [x + 2 * z, cy2 + h * 0.08]], shade(col, LIGHT));
+          facet([[x + 2 * z, cy2 - h * 0.2], [x + w * 0.5, cy2 - h * 0.14], [x + w * 0.95, cy2 + 0.5 * z], [x + 2 * z, cy2 + h * 0.08]], shade(col, DARK));
           break;
         }
         case "dead": {
-          poly([[x - 2.2 * z, y], [x + 2.2 * z, y], [x + 1 * z, y - h * 0.85], [x - 1 * z, y - h * 0.85]], tribe.forest);
-          line(x, y - h * 0.5, x - 7 * z, y - h * 0.78, tribe.forest, 2 * z);
-          line(x, y - h * 0.36, x + 6 * z, y - h * 0.62, tribe.forest, 1.8 * z);
-          line(x - 4 * z, y - h * 0.66, x - 7 * z, y - h * 0.9, tribe.forest, 1.4 * z);
+          poly([[x - 2.4 * z, y], [x + 2.4 * z, y], [x + 1.1 * z, y - h * 0.9], [x - 1.1 * z, y - h * 0.9]], col);
+          line(x, y - h * 0.5, x - 8 * z, y - h * 0.8, col, 2.2 * z);
+          line(x, y - h * 0.36, x + 7 * z, y - h * 0.64, col, 2 * z);
+          line(x - 4.5 * z, y - h * 0.68, x - 8 * z, y - h * 0.94, col, 1.5 * z);
           break;
         }
-        default: {   // cone, and snow-cone
-          rect(x - 1.7 * z, y - 3 * z, 3.4 * z, 5 * z, trunk);
-          cone(x, y - 2 * z, w, h * 0.66, light, dark);
-          cone(x, y - 2 * z - h * 0.4, w * 0.74, h * 0.6, light, dark);
-          poly([[x, y - 2 * z - h], [x - w * 0.37, y - 2 * z - h * 0.4], [x - w * 0.22, y - 2 * z - h * 0.4]], shade(tribe.forest, 1.32));
+        default: {   // cone, and snow-cone: three tiers
+          box(x, y, 3.6 * z, 1.8 * z, 5 * z, trunk, [0.95, 0.7, 1.1]);
+          const t0 = y - 3 * z;
+          cone(x, t0, w, h * 0.5, shade(col, LIGHT), shade(col, DARK));
+          cone(x, t0 - h * 0.3, w * 0.8, h * 0.46, shade(col, 1.1), shade(col, 0.7));
+          cone(x, t0 - h * 0.58, w * 0.56, h * 0.42, shade(col, LIGHT), shade(col, DARK));
+          poly([[x, t0 - h], [x - w * 0.2, t0 - h * 0.62], [x - w * 0.08, t0 - h * 0.6]], shade(col, 1.4));
           if (style === "snow") {
-            cone(x, y - 2 * z - h * 0.4 - h * 0.6 + h * 0.26, w * 0.74 * 0.43, h * 0.26, "#ffffff", "#dde5ec");
-            cone(x, y - 2 * z - h * 0.66 + h * 0.2, w * 0.33, h * 0.2, "#ffffff", "#dde5ec");
+            cone(x, t0 - h * 0.58 - h * 0.42 + h * 0.2, w * 0.56 * 0.48, h * 0.2, "#ffffff", "#d8e2ea");
+            cone(x, t0 - h * 0.3 - h * 0.46 + h * 0.17, w * 0.8 * 0.36, h * 0.17, "#ffffff", "#d8e2ea");
+            cone(x, t0 - h * 0.5 + h * 0.14, w * 0.3, h * 0.14, "#ffffff", "#d8e2ea");
           }
         }
       }
@@ -2877,69 +2935,80 @@ window.plethoraBit = {
         const s = spots[k];
         const j1 = hash2(k * 31 + 7, Math.floor(seed * 1000)), j2 = hash2(k * 17 + 3, Math.floor(seed * 977));
         const u = s[0] + (j1 - 0.5) * 0.14, v = s[1] + (j2 - 0.5) * 0.14;
-        trees.push({ x: cx + (u - v) * hw, y: cy + (u + v) * hh + hh * 0.35, h: (TH * 0.95 + j1 * TH * 0.5) * z, j: j2 });
+        trees.push({ x: cx + (u - v) * hw, y: cy + (u + v) * hh + hh * 0.35, h: (TH * 0.9 + j1 * TH * 0.42) * z, j: j2 });
       }
       trees.sort((a, b) => a.y - b.y);
       for (const t of trees) artTree(t.x, t.y, z, tribe, t.h, t.j);
     }
 
-    // ---- Mountain
+    // ---- Mountain: a ridge of peaks, each a fan of facets, snow on top,
+    // mist at the foot.
     function artMountain(cx, cy, z, tribe, seed, metal) {
-      const mh = TH * (1.2 + seed * 0.25) * z, mw = TW * 0.62 * z;
+      const hw = TW / 2 * z, hh = TH / 2 * z;
+      const j = (k) => hash2(k * 13 + 1, Math.floor(seed * 1000));
       const rock = tribe.rock;
-      const A = [cx - 3 * z, cy - mh];
-      const BL = [cx - mw / 2, cy + 3 * z], BM = [cx - mw * 0.04, cy + 9 * z], BR = [cx + mw / 2, cy + 0.5 * z];
-      // sometimes a lesser peak behind, to the right
-      if (seed > 0.45) {
-        const A2 = [cx + mw * 0.3, cy - mh * 0.55];
-        poly([A2, [cx + mw * 0.04, cy + 4 * z], [cx + mw * 0.24, cy + 6 * z]], shade(rock, 0.95));
-        poly([A2, [cx + mw * 0.24, cy + 6 * z], [cx + mw * 0.56, cy - 1 * z]], shade(rock, 0.62));
+      const mh = TH * (1.45 + j(1) * 0.4) * z;
+      // peaks from back to front: [x, y, height factor, tone]
+      const peaks = [
+        [cx + hw * 0.36, cy - mh * 0.58, 0.58, 0.9],
+        [cx - hw * 0.42, cy - mh * 0.42, 0.42, 0.95],
+        [cx - hw * 0.06, cy - mh, 1.0, 1.0]
+      ];
+      if (j(2) > 0.55) peaks.splice(1, 1);
+      const baseY = cy + hh * 0.55;
+      for (const pk of peaks) {
+        const px = pk[0], py = pk[1], hf = pk[2], tone = pk[3];
+        const bw = hw * (0.55 + hf * 0.55);
+        const L = [px - bw, baseY - hh * 0.25 * hf], M = [px + bw * 0.12, baseY + hh * 0.2], R = [px + bw * 0.9, baseY - hh * 0.3];
+        const M2 = [px - bw * 0.42, baseY + hh * 0.02];
+        const A = [px, py];
+        facet([A, L, M2], shade(rock, 1.2 * tone));
+        facet([A, M2, M], shade(rock, 0.98 * tone));
+        facet([A, M, R], shade(rock, 0.66 * tone));
+        // a ridge line crease on the front facet
+        facet([A, M2, [px - bw * 0.1, baseY - hh * 0.1]], shade(rock, 1.07 * tone));
+        // snow cap with a ragged hem
+        const capK = 0.34 + j(3) * 0.1;
+        const lerp2 = (P, Q, t) => [P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t];
+        const CL = lerp2(A, L, capK), CM2 = lerp2(A, M2, capK * 1.15), CM = lerp2(A, M, capK), CR = lerp2(A, R, capK * 0.9);
+        facet([A, CL, [CL[0] + (CM2[0] - CL[0]) * 0.5, CL[1] + 3 * z], CM2], "#ffffff");
+        facet([A, CM2, [CM2[0] + (CM[0] - CM2[0]) * 0.5, CM2[1] + 2.5 * z], CM], "#eef2f6");
+        facet([A, CM, [CM[0] + (CR[0] - CM[0]) * 0.5, CM[1] + 3 * z], CR], "#cfd8e2");
       }
-      // main peak: three facets
-      poly([A, BL, BM], shade(rock, LIGHT));
-      poly([A, BM, BR], shade(rock, DARK));
-      poly([A, BM, [cx + mw * 0.1, cy + 6 * z]], shade(rock, 0.9));
-      // snow cap with a ragged hem
-      const capK = 0.36;
-      const hem = (P, Q, kinks) => {
-        const pts = [];
-        for (let i = 0; i <= kinks; i++) {
-          const t = i / kinks;
-          const px = P[0] + (Q[0] - P[0]) * t, py = P[1] + (Q[1] - P[1]) * t;
-          pts.push([px, py + (i % 2 ? 2.5 * z : -1.5 * z)]);
-        }
-        return pts;
-      };
-      const CL = [A[0] + (BL[0] - A[0]) * capK, A[1] + (BL[1] - A[1]) * capK];
-      const CM = [A[0] + (BM[0] - A[0]) * capK, A[1] + (BM[1] - A[1]) * capK];
-      const CR = [A[0] + (BR[0] - A[0]) * capK, A[1] + (BR[1] - A[1]) * capK];
-      poly([A].concat(hem(CL, CM, 3)), "#ffffff");
-      poly([A].concat(hem(CM, CR, 3)), "#d9e2ea");
+      // mist at the foot
+      const drift = Math.sin(ART_T * 0.4 + seed * 6) * 2 * z;
+      for (let k = 0; k < 4; k++) {
+        const mx = cx + (k - 1.5) * hw * 0.42 + drift * (k % 2 ? 1 : -1), my = baseY - hh * 0.1 + (k % 2) * 3 * z;
+        ellipse(mx, my, hw * 0.34, hh * 0.3, "rgba(255,255,255," + (0.22 + j(k + 4) * 0.12) + ")");
+      }
       if (metal) {
-        const ore = [[cx - mw * 0.3, cy + 1 * z], [cx - mw * 0.12, cy + 7 * z], [cx + mw * 0.08, cy + 3 * z]];
+        const ore = [[cx - hw * 0.5, cy + 3 * z], [cx - hw * 0.2, cy + 9 * z], [cx + hw * 0.14, cy + 4 * z]];
         for (const o of ore) {
           const x = o[0], y = o[1];
-          poly([[x, y - 8 * z], [x + 4 * z, y - 3 * z], [x + 3 * z, y + 2 * z], [x - 3 * z, y + 2 * z], [x - 4 * z, y - 3 * z]], "#2f3642");
-          poly([[x, y - 8 * z], [x - 4 * z, y - 3 * z], [x - 1 * z, y + 2 * z]], "#8d99ad");
-          circle(x - 1.5 * z, y - 3.5 * z, 1 * z, "#e8f0ff");
+          poly([[x, y - 9 * z], [x + 4.5 * z, y - 3 * z], [x + 3 * z, y + 2 * z], [x - 3 * z, y + 2 * z], [x - 4.5 * z, y - 3 * z]], "#2f3642");
+          poly([[x, y - 9 * z], [x - 4.5 * z, y - 3 * z], [x - 1 * z, y + 2 * z]], "#8d99ad");
+          poly([[x, y - 9 * z], [x - 1 * z, y + 2 * z], [x + 1.5 * z, y - 2 * z]], "#c3ccdb");
+          circle(x - 1.5 * z, y - 4 * z, 1 * z, "#ffffff");
         }
       }
     }
 
     // ---- Resources
     function artFruit(cx, cy, z, seed) {
-      const spots = [[-11, -1], [9, 4], [-1, 9]];
-      const berries = ["#ff5f3f", "#ffb03a", "#ff7a5a"];
+      // three faceted fruits with a leaf crown
+      const spots = [[-12, 0], [10, 4], [-1, 9]];
+      const tones = [["#ffb13a", "#e4821c", "#ffd27a"], ["#ff6b47", "#d33d22", "#ff9a7a"], ["#f7c948", "#d79a1c", "#ffe38a"]];
       for (let k = 0; k < 3; k++) {
-        const x = cx + spots[k][0] * z, y = cy + spots[k][1] * z - 4 * z;
-        const r = (6.5 + hash2(k, Math.floor(seed * 100)) * 1.5) * z;
-        circle(x, y, r, "#5aa83f");
-        halfDisc(x, y, r, "#3f8a2f");
-        circle(x - r * 0.3, y - r * 0.3, r * 0.3, "#7cc45a");
-        circle(x - 2 * z, y - 1.5 * z, 2 * z, berries[k]);
-        circle(x + 2.5 * z, y + 0.5 * z, 2 * z, berries[(k + 1) % 3]);
-        circle(x - 0.5 * z, y + 2.5 * z, 1.8 * z, berries[(k + 2) % 3]);
-        circle(x - 2.6 * z, y - 2.2 * z, 0.7 * z, "#fff3e0");
+        const x = cx + spots[k][0] * z, y = cy + spots[k][1] * z - 2 * z;
+        const r = (6 + hash2(k, Math.floor(seed * 100)) * 1.6) * z;
+        const t = tones[(k + Math.floor(seed * 3)) % 3];
+        artShadow(x + 1 * z, y + r * 0.9, z, r * 0.9 / z, r * 0.35 / z, 0.18);
+        facet([[x, y - r], [x - r * 0.9, y - r * 0.4], [x - r * 0.9, y + r * 0.45], [x, y + r]], t[0]);
+        facet([[x, y - r], [x, y + r], [x + r * 0.9, y + r * 0.45], [x + r * 0.9, y - r * 0.4]], t[1]);
+        facet([[x, y - r], [x - r * 0.5, y - r * 0.55], [x - r * 0.25, y - r * 0.1]], t[2]);
+        // leaf crown
+        poly([[x - 1 * z, y - r + 1 * z], [x - 4 * z, y - r - 5 * z], [x + 0.5 * z, y - r - 2 * z]], "#4f9d3a");
+        poly([[x - 0.5 * z, y - r + 1 * z], [x + 3.5 * z, y - r - 5.5 * z], [x + 2 * z, y - r - 1 * z]], "#3a7f2a");
       }
     }
     function artCrop(cx, cy, z, seed) {
@@ -2947,79 +3016,76 @@ window.plethoraBit = {
         for (let k = 0; k < 4; k++) {
           const u = -0.3 + k * 0.2, v = r * 0.22;
           const x = cx + (u - v) * (TW / 2) * z, y = cy + (u + v) * (TH / 2) * z + 2 * z;
-          line(x, y, x + 1 * z, y - 9 * z, "#c9a73a", 1.6 * z);
-          ellipse(x + 1.2 * z, y - 10 * z, 2.2 * z, 3.6 * z, "#efcf52", 0.2);
-          circle(x + 0.6 * z, y - 11 * z, 0.9 * z, "#fff0a8");
+          line(x, y, x + 1 * z, y - 9 * z, "#9fb33a", 2 * z, "butt");
+          facet([[x + 1 * z, y - 14 * z], [x - 1.6 * z, y - 10 * z], [x + 1 * z, y - 6 * z]], "#f3cf4a");
+          facet([[x + 1 * z, y - 14 * z], [x + 1 * z, y - 6 * z], [x + 3.6 * z, y - 10 * z]], "#d9a82a");
         }
       }
     }
+    // A boxy beast: body box, head box, legs, and whatever grows on its head.
     function artAnimal(cx, cy, z, tribe, seed) {
       const a = tribe.animal || { body: "#5a4330", mark: "#8c6a4a", horn: "horn" };
-      const x = cx + (seed - 0.5) * 10 * z, y = cy + 3 * z;
+      const x = cx + (seed - 0.5) * 8 * z, y = cy + 4 * z;
       const body = a.body, mark = a.mark;
-      artShadow(x + 1 * z, y + 2 * z, z, 11, 4, 0.2);
-      // legs, body, belly, head
-      for (const lx of [-6, -3, 3, 6]) rect(x + lx * z - 1 * z, y - 3 * z, 2.2 * z, 5 * z, shade(body, 0.8));
-      ellipse(x, y - 6 * z, 9 * z, 5 * z, body);
-      ellipse(x - 1 * z, y - 4.5 * z, 6 * z, 2.4 * z, mark);
-      circle(x + 8.5 * z, y - 9.5 * z, 4 * z, body);
-      ellipse(x + 11 * z, y - 8.5 * z, 2.6 * z, 1.8 * z, mark);
-      circle(x + 9.5 * z, y - 10.5 * z, 0.9 * z, "#111");
-      ellipse(x + 6.5 * z, y - 12.5 * z, 1.6 * z, 2.2 * z, body, -0.4);
-      line(x - 9 * z, y - 7 * z, x - 12 * z, y - 4 * z, body, 1.5 * z);
-      const hx = x + 8.5 * z, hy = y - 13 * z;
+      artShadow(x + 1 * z, y + 1 * z, z, 12, 4.5, 0.2);
+      for (const lx of [-7, -3, 3, 7]) box(x + lx * z, y, 2.6 * z, 1.3 * z, 5 * z, body, [0.8, 0.58, 0.9]);
+      box(x, y - 4.5 * z, 18 * z, 7 * z, 8 * z, body);
+      facet([[x - 7 * z, y - 10 * z], [x + 1 * z, y - 10 * z], [x + 1 * z, y - 7 * z], [x - 7 * z, y - 7 * z]], mark);
+      box(x + 9.5 * z, y - 10 * z, 7 * z, 4 * z, 6 * z, body, [1.02, 0.74, 1.2]);
+      circle(x + 7.5 * z, y - 13.5 * z, 0.9 * z, "#111");
+      facet([[x + 6 * z, y - 16 * z], [x + 7.5 * z, y - 19.5 * z], [x + 9 * z, y - 16.5 * z]], shade(body, 0.85));
+      line(x - 9 * z, y - 9 * z, x - 12.5 * z, y - 5 * z, shade(body, 0.8), 1.6 * z);
+      const hx = x + 9.5 * z, hy = y - 16 * z;
+      const bone = "#efe6d6";
       if (a.horn === "antler") {
-        line(hx - 1 * z, hy, hx - 3 * z, hy - 5 * z, "#e9dcc8", 1.3 * z); line(hx - 3 * z, hy - 3 * z, hx - 6 * z, hy - 5 * z, "#e9dcc8", 1.1 * z);
-        line(hx + 1 * z, hy, hx + 3 * z, hy - 5 * z, "#e9dcc8", 1.3 * z); line(hx + 3 * z, hy - 3 * z, hx + 6 * z, hy - 4.5 * z, "#e9dcc8", 1.1 * z);
+        line(hx - 1 * z, hy, hx - 3.5 * z, hy - 6 * z, bone, 1.5 * z); line(hx - 3.5 * z, hy - 3.5 * z, hx - 7 * z, hy - 6 * z, bone, 1.2 * z);
+        line(hx + 1 * z, hy, hx + 3.5 * z, hy - 6 * z, bone, 1.5 * z); line(hx + 3.5 * z, hy - 3.5 * z, hx + 7 * z, hy - 5.5 * z, bone, 1.2 * z);
       } else if (a.horn === "horn") {
-        line(hx - 1.5 * z, hy, hx - 3.5 * z, hy - 4 * z, "#e9dcc8", 1.6 * z); line(hx + 1.5 * z, hy, hx + 3.5 * z, hy - 4 * z, "#e9dcc8", 1.6 * z);
+        line(hx - 2 * z, hy, hx - 4.5 * z, hy - 5 * z, bone, 1.8 * z); line(hx + 2 * z, hy, hx + 4.5 * z, hy - 5 * z, bone, 1.8 * z);
       } else if (a.horn === "tusk") {
-        line(x + 11 * z, y - 7 * z, x + 13 * z, y - 9.5 * z, "#f4efe6", 1.5 * z);
+        line(x + 12 * z, y - 8 * z, x + 15 * z, y - 11 * z, bone, 1.8 * z);
       } else if (a.horn === "hump") {
-        ellipse(x - 1 * z, y - 10 * z, 4.5 * z, 3.5 * z, body);
+        blob(x - 1 * z, y - 13 * z, 5 * z, 3.5 * z, body, 1.1, 0.75);
       }
     }
     function artFish(cx, cy, z, seed) {
-      const spots = [[-9, -2], [8, 4], [-2, 7]];
+      const spots = [[-9, -3], [8, 3], [-2, 8]];
       for (let k = 0; k < 2 + (seed > 0.6 ? 1 : 0); k++) {
         const x = cx + spots[k][0] * z, y = cy + spots[k][1] * z;
-        g.strokeStyle = "rgba(255,255,255,0.35)"; g.lineWidth = z;
-        g.beginPath(); g.ellipse(x, y + 1 * z, 9 * z, 3.5 * z, 0, 0, TAU); g.stroke();
-        ellipse(x, y, 6 * z, 2.6 * z, "#eef4f9");
-        poly([[x - 5.5 * z, y], [x - 9.5 * z, y - 3 * z], [x - 9.5 * z, y + 3 * z]], "#d9e4ee");
-        circle(x + 3.2 * z, y - 0.6 * z, 0.8 * z, "#223");
-        ellipse(x + 1 * z, y + 0.8 * z, 3 * z, 1 * z, "#c6d6e6");
+        const flip = k % 2 ? -1 : 1;
+        ellipse(x, y + 2.5 * z, 9 * z, 3 * z, "rgba(255,255,255,0.18)");
+        facet([[x + 6 * z * flip, y], [x + 1 * z * flip, y - 3.2 * z], [x - 5 * z * flip, y - 1 * z], [x - 5 * z * flip, y + 1.2 * z], [x + 1 * z * flip, y + 3 * z]], "#f2f6fa");
+        facet([[x + 6 * z * flip, y], [x - 5 * z * flip, y + 1.2 * z], [x + 1 * z * flip, y + 3 * z]], "#c9d8e8");
+        facet([[x - 5 * z * flip, y], [x - 10 * z * flip, y - 3.5 * z], [x - 10 * z * flip, y + 3.5 * z]], "#dfe8f1");
+        circle(x + 3.4 * z * flip, y - 0.8 * z, 0.8 * z, "#223");
       }
     }
     function artWhale(cx, cy, z) {
-      ellipse(cx, cy, 16 * z, 7 * z, "#2d3e5a");
-      ellipse(cx + 2 * z, cy + 2 * z, 12 * z, 3 * z, "#4a5f80");
-      poly([[cx + 14 * z, cy - 1 * z], [cx + 22 * z, cy - 6 * z], [cx + 24 * z, cy + 1 * z], [cx + 17 * z, cy + 2 * z]], "#2d3e5a");
-      circle(cx - 9 * z, cy - 2 * z, 1 * z, "#dde");
-      g.strokeStyle = "rgba(230,245,255,0.85)"; g.lineWidth = 1.5 * z;
-      g.beginPath(); g.moveTo(cx - 5 * z, cy - 7 * z); g.lineTo(cx - 8 * z, cy - 15 * z); g.moveTo(cx - 5 * z, cy - 7 * z); g.lineTo(cx - 2 * z, cy - 14 * z); g.stroke();
-      circle(cx - 9 * z, cy - 16 * z, 1.2 * z, "rgba(230,245,255,0.8)"); circle(cx - 1 * z, cy - 15.5 * z, 1.2 * z, "rgba(230,245,255,0.8)");
+      facet([[cx - 16 * z, cy - 2 * z], [cx - 8 * z, cy - 8 * z], [cx + 8 * z, cy - 8 * z], [cx + 16 * z, cy - 1 * z], [cx + 10 * z, cy + 5 * z], [cx - 10 * z, cy + 5 * z]], "#2d3e5a");
+      facet([[cx - 14 * z, cy + 1 * z], [cx + 14 * z, cy + 1 * z], [cx + 10 * z, cy + 5 * z], [cx - 10 * z, cy + 5 * z]], "#4a5f80");
+      poly([[cx + 14 * z, cy - 1 * z], [cx + 22 * z, cy - 7 * z], [cx + 25 * z, cy + 1 * z], [cx + 17 * z, cy + 2 * z]], "#2d3e5a");
+      circle(cx - 10 * z, cy - 3 * z, 1 * z, "#dde");
+      g.strokeStyle = "rgba(230,245,255,0.85)"; g.lineWidth = 1.6 * z;
+      g.beginPath(); g.moveTo(cx - 5 * z, cy - 8 * z); g.lineTo(cx - 8 * z, cy - 16 * z); g.moveTo(cx - 5 * z, cy - 8 * z); g.lineTo(cx - 2 * z, cy - 15 * z); g.stroke();
+      circle(cx - 9 * z, cy - 17 * z, 1.3 * z, "rgba(230,245,255,0.8)"); circle(cx - 1 * z, cy - 16.5 * z, 1.3 * z, "rgba(230,245,255,0.8)");
     }
 
     // ---- Buildings
-    function artHouse(x, y, z, w, h, wall, roof, opts) {
+    function artHouse(x, y, z, w, h, wall, roofCol, opts) {
       const o = opts || {};
-      const side = w * 0.42;
-      // side wall (right, darker), front wall, roof gable and slope
-      poly([[x + w * 0.1, y], [x + w * 0.1 + side, y - side * 0.5], [x + w * 0.1 + side, y - h - side * 0.5], [x + w * 0.1, y - h]], shade(wall, 0.72));
-      rect(x - w * 0.5, y - h, w * 0.6, h, wall);
-      poly([[x - w * 0.5 - 1.5 * z, y - h], [x - w * 0.2, y - h - h * 0.62], [x + w * 0.1 + 1.5 * z, y - h]], shade(roof, LIGHT));
-      poly([[x - w * 0.2, y - h - h * 0.62], [x + w * 0.1 + 1.5 * z, y - h], [x + w * 0.1 + side + 1 * z, y - h - side * 0.5], [x - w * 0.2 + side + 1 * z, y - h - h * 0.62 - side * 0.5]], shade(roof, DARK));
-      rect(x - w * 0.28, y - h * 0.55, w * 0.16, h * 0.55, o.door || "#5a4030");
-      if (h > 9 * z) rect(x - w * 0.02, y - h * 0.78, w * 0.14, w * 0.14, "#f6e3a0");
+      const d = w * 0.55;
+      box(x, y, w, d, h, wall, [1.0, 0.74, 1.08]);
+      roof(x, y, w, d, h, h * 0.55, roofCol);
+      // a door on the lit face and a window on the shaded one
+      rect(x - w * 0.3, y - h * 0.5, w * 0.13, h * 0.5 - d * 0.1, o.door || "#5a4030");
+      if (h > 9 * z) facet([[x + w * 0.14, y - h * 0.8 + d * 0.07], [x + w * 0.26, y - h * 0.8 + d * 0.13], [x + w * 0.26, y - h * 0.5 + d * 0.13], [x + w * 0.14, y - h * 0.5 + d * 0.07]], "#f6e3a0");
     }
-    function artHut(x, y, z, r, wall, roof) {   // round village hut
+    function artHut(x, y, z, r, wall, roofCol) {   // village hut: a round wall and a thatch cone
       ellipse(x, y, r, r * 0.5, shade(wall, 0.8));
       rect(x - r, y - r * 0.8, r * 2, r * 0.8, wall);
-      poly([[x - r, y - r * 0.8], [x + r, y - r * 0.8], [x, y - r * 0.8], [x, y - r * 0.8]], wall);
       halfDisc(x, y, r, shade(wall, 0.72), -Math.PI / 2);
       rect(x - r * 0.9, y - r * 0.8, r * 1.8, r * 0.8, wall);
-      cone(x, y - r * 0.8, r * 2.3, r * 1.3, shade(roof, LIGHT), shade(roof, DARK));
+      cone(x, y - r * 0.8, r * 2.4, r * 1.4, shade(roofCol, LIGHT), shade(roofCol, DARK));
       rect(x - r * 0.2, y - r * 0.6, r * 0.4, r * 0.6, "#4a3a2a");
     }
     function artBuilding(kind, cx, cy, z, color, seed, extra) {
@@ -3027,116 +3093,112 @@ window.plethoraBit = {
       if (kind !== B_RUIN && kind !== B_PORT) artShadow(cx + 2 * z, cy + 5 * z, z, 18, 7, 0.18);
       switch (kind) {
         case B_FARM: {
-          poly([[cx - 24 * z, cy], [cx - 4 * z, cy - 10 * z], [cx + 20 * z, cy + 2 * z], [cx, cy + 12 * z]], "#b8864f");
+          facet([[cx - 24 * z, cy], [cx - 4 * z, cy - 10 * z], [cx + 20 * z, cy + 2 * z], [cx, cy + 12 * z]], "#b8864f");
           for (let k = 0; k < 4; k++) line(cx - 20 * z + k * 5 * z, cy + 2 * z + k * 2.5 * z, cx - 1 * z + k * 5 * z, cy - 7.5 * z + k * 2.5 * z, "#d2a26a", 1.4 * z);
           for (let k = 0; k < 4; k++) for (let m = 0; m < 3; m++) {
             const x = cx - 17 * z + k * 5 * z + m * 6 * z, y = cy + 1 * z + k * 2.5 * z - m * 3 * z;
-            cone(x, y, 3.2 * z, 4 * z, "#7fd05a", "#55a83a");
+            cone(x, y, 3.4 * z, 4.5 * z, "#7fd05a", "#55a83a");
           }
-          artHouse(cx + 15 * z, cy - 6 * z, z, 11 * z, 8 * z, wall, color);
+          artHouse(cx + 15 * z, cy - 6 * z, z, 12 * z, 9 * z, wall, color);
           break;
         }
         case B_MINE: {
-          rect(cx - 10 * z, cy - 1 * z, 20 * z, 11 * z, "#3a2f28");
-          g.fillStyle = "#15100d"; g.beginPath(); g.arc(cx, cy + 4 * z, 6 * z, Math.PI, TAU); g.fill();
-          rect(cx - 7 * z, cy - 2 * z, 2.5 * z, 12 * z, "#8a6a44"); rect(cx + 4.5 * z, cy - 2 * z, 2.5 * z, 12 * z, "#8a6a44"); rect(cx - 9 * z, cy - 4 * z, 18 * z, 2.5 * z, "#8a6a44");
+          box(cx, cy + 4 * z, 22 * z, 11 * z, 11 * z, "#4a3d35", [0.95, 0.7, 1.05]);
+          g.fillStyle = "#15100d"; g.beginPath(); g.ellipse(cx - 6 * z, cy + 2 * z, 4.5 * z, 5.5 * z, 0, Math.PI, TAU); g.fill();
+          rect(cx - 11 * z, cy - 4 * z, 2.5 * z, 11 * z, "#8a6a44"); rect(cx - 1 * z, cy - 1 * z, 2.5 * z, 8 * z, "#8a6a44"); rect(cx - 12 * z, cy - 5 * z, 14 * z, 2.5 * z, "#8a6a44");
           line(cx - 2 * z, cy + 10 * z, cx + 16 * z, cy + 16 * z, "#6a6a6a", 1.4 * z); line(cx + 2 * z, cy + 8 * z, cx + 20 * z, cy + 14 * z, "#6a6a6a", 1.4 * z);
-          rect(cx + 8 * z, cy + 6 * z, 9 * z, 5 * z, "#4d4d55");
-          circle(cx + 10 * z, cy + 12 * z, 1.8 * z, "#222"); circle(cx + 15 * z, cy + 13.5 * z, 1.8 * z, "#222");
-          circle(cx + 10.5 * z, cy + 5.5 * z, 1.7 * z, "#ffd166"); circle(cx + 14 * z, cy + 5 * z, 1.7 * z, "#ffd166");
+          box(cx + 13 * z, cy + 13 * z, 9 * z, 4.5 * z, 5 * z, "#4d4d55");
+          circle(cx + 10 * z, cy + 14 * z, 1.8 * z, "#222"); circle(cx + 15 * z, cy + 15.5 * z, 1.8 * z, "#222");
+          circle(cx + 11 * z, cy + 7 * z, 1.8 * z, "#ffd166"); circle(cx + 14.5 * z, cy + 6.5 * z, 1.8 * z, "#ffd166");
           break;
         }
         case B_LUMBER: {
-          artHouse(cx - 6 * z, cy + 5 * z, z, 17 * z, 11 * z, "#a97c50", "#6b4a2a");
-          for (let k = 0; k < 3; k++) { circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 2.8 * z, "#c9a070"); circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 1.4 * z, "#9a7448"); }
-          circle(cx + 17 * z, cy + 7 * z, 2.8 * z, "#c9a070"); circle(cx + 17 * z, cy + 7 * z, 1.4 * z, "#9a7448");
+          artHouse(cx - 6 * z, cy + 5 * z, z, 18 * z, 11 * z, "#a97c50", "#6b4a2a");
+          for (let k = 0; k < 3; k++) { circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 2.9 * z, "#c9a070"); circle(cx + 13 * z, cy + 4 * z - k * 4.6 * z, 1.4 * z, "#9a7448"); }
+          circle(cx + 17.5 * z, cy + 7 * z, 2.9 * z, "#c9a070"); circle(cx + 17.5 * z, cy + 7 * z, 1.4 * z, "#9a7448");
           break;
         }
         case B_PORT: {
           for (let k = 0; k < 4; k++) rect(cx - 16 * z + k * 9 * z, cy + 1 * z, 2.6 * z, 7 * z, "#5e4630");
-          poly([[cx - 20 * z, cy - 2 * z], [cx + 20 * z, cy - 2 * z], [cx + 14 * z, cy + 4 * z], [cx - 14 * z, cy + 4 * z]], "#9c7a4e");
+          facet([[cx - 20 * z, cy - 2 * z], [cx + 20 * z, cy - 2 * z], [cx + 14 * z, cy + 4 * z], [cx - 14 * z, cy + 4 * z]], "#9c7a4e");
           for (let k = 0; k < 6; k++) line(cx - 15 * z + k * 6 * z, cy - 1.5 * z, cx - 17 * z + k * 6 * z, cy + 3.5 * z, "#7a5a36", 1 * z);
-          artHouse(cx + 9 * z, cy - 3 * z, z, 12 * z, 9 * z, wall, color);
-          poly([[cx - 20 * z, cy + 8 * z], [cx - 6 * z, cy + 8 * z], [cx - 8 * z, cy + 12 * z], [cx - 18 * z, cy + 12 * z]], "#8a5f3b");
+          artHouse(cx + 9 * z, cy - 3 * z, z, 13 * z, 9 * z, wall, color);
+          facet([[cx - 20 * z, cy + 8 * z], [cx - 6 * z, cy + 8 * z], [cx - 8 * z, cy + 12 * z], [cx - 18 * z, cy + 12 * z]], "#8a5f3b");
           rect(cx - 13.5 * z, cy - 2 * z, 1.4 * z, 10 * z, "#5a4a3a");
           break;
         }
         case B_WINDMILL: {
-          poly([[cx - 7 * z, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx - 4.5 * z, cy - 20 * z]], "#e6dcc8");
-          poly([[cx, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx, cy - 20 * z]], "#c9bda6");
+          facet([[cx - 7 * z, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx - 4.5 * z, cy - 20 * z]], "#e6dcc8");
+          facet([[cx, cy + 4 * z], [cx + 7 * z, cy + 4 * z], [cx + 4.5 * z, cy - 20 * z], [cx, cy - 20 * z]], "#c9bda6");
           cone(cx, cy - 20 * z, 15 * z, 8 * z, shade(color, LIGHT), shade(color, DARK));
           rect(cx - 2 * z, cy - 3 * z, 4 * z, 7 * z, "#5a4030");
           const hx = cx + 1 * z, hy = cy - 24 * z;
           for (let k = 0; k < 4; k++) {
-            const a = k * Math.PI / 2 + 0.5;
+            const a = k * Math.PI / 2 + ART_T * 0.6;
             const ex = hx + Math.cos(a) * 15 * z, ey = hy + Math.sin(a) * 15 * z;
             line(hx, hy, ex, ey, "#5a4a3a", 2 * z);
-            const px = -Math.sin(a) * 3.2 * z, py = Math.cos(a) * 3.2 * z;
-            poly([[hx + Math.cos(a) * 4 * z, hy + Math.sin(a) * 4 * z], [ex, ey], [ex + px, ey + py], [hx + Math.cos(a) * 4 * z + px, hy + Math.sin(a) * 4 * z + py]], "rgba(245,238,220,0.9)");
+            const px = -Math.sin(a) * 3.4 * z, py = Math.cos(a) * 3.4 * z;
+            poly([[hx + Math.cos(a) * 4 * z, hy + Math.sin(a) * 4 * z], [ex, ey], [ex + px, ey + py], [hx + Math.cos(a) * 4 * z + px, hy + Math.sin(a) * 4 * z + py]], "rgba(245,238,220,0.92)");
           }
           circle(hx, hy, 2 * z, "#3a2f28");
           break;
         }
         case B_FORGE: {
           artHouse(cx, cy + 5 * z, z, 24 * z, 14 * z, "#8f8a83", "#4a4440", { door: "#ff8c3a" });
-          circle(cx - 6 * z, cy - 2 * z, 7 * z, "rgba(255,140,58,0.28)");
-          rect(cx + 7 * z, cy - 24 * z, 5 * z, 12 * z, "#5a5450");
+          circle(cx - 7 * z, cy - 2 * z, 7 * z, "rgba(255,140,58,0.28)");
+          box(cx + 9 * z, cy - 12 * z, 5 * z, 2.5 * z, 12 * z, "#5a5450");
           { const dr = (ART_T * 4 + seed * 10) % 10;
-            circle(cx + 9.5 * z + dr * 0.3 * z, cy - 27 * z - dr * z, 3.6 * z, "rgba(200,200,205,0.5)");
-            circle(cx + 12 * z + dr * 0.5 * z, cy - 32 * z - dr * z, 4.2 * z, "rgba(200,200,205,0.36)");
-            circle(cx + 15 * z + dr * 0.7 * z, cy - 37 * z - dr * z, 4.8 * z, "rgba(200,200,205," + (0.22 * (1 - dr / 10)) + ")"); }
+            circle(cx + 9.5 * z + dr * 0.3 * z, cy - 27 * z - dr * z, 3.6 * z, "rgba(230,230,235,0.55)");
+            circle(cx + 12 * z + dr * 0.5 * z, cy - 32 * z - dr * z, 4.2 * z, "rgba(230,230,235,0.4)");
+            circle(cx + 15 * z + dr * 0.7 * z, cy - 37 * z - dr * z, 4.8 * z, "rgba(230,230,235," + (0.25 * (1 - dr / 10)) + ")"); }
           break;
         }
         case B_SAWMILL: {
           artHouse(cx - 3 * z, cy + 5 * z, z, 22 * z, 12 * z, "#b48a5a", "#6b4a2a");
           const sx = cx + 13 * z, sy = cy - 2 * z;
-          for (let k = 0; k < 12; k++) { const a = k * TAU / 12; poly([[sx + Math.cos(a) * 6 * z, sy + Math.sin(a) * 6 * z], [sx + Math.cos(a + 0.26) * 7.6 * z, sy + Math.sin(a + 0.26) * 7.6 * z], [sx + Math.cos(a + 0.52) * 6 * z, sy + Math.sin(a + 0.52) * 6 * z]], "#8c8c8c"); }
+          for (let k = 0; k < 12; k++) { const a = k * TAU / 12 + ART_T * 0.8; poly([[sx + Math.cos(a) * 6 * z, sy + Math.sin(a) * 6 * z], [sx + Math.cos(a + 0.26) * 7.6 * z, sy + Math.sin(a + 0.26) * 7.6 * z], [sx + Math.cos(a + 0.52) * 6 * z, sy + Math.sin(a + 0.52) * 6 * z]], "#8c8c8c"); }
           circle(sx, sy, 6 * z, "#a5a5a5"); circle(sx, sy, 1.6 * z, "#444");
           circle(cx - 14 * z, cy + 8 * z, 2.6 * z, "#c9a070"); circle(cx - 14 * z, cy + 8 * z, 1.3 * z, "#9a7448");
           break;
         }
         case B_CUSTOMS: {
-          rect(cx - 13 * z, cy - 9 * z, 26 * z, 14 * z, wall);
-          rect(cx + 3 * z, cy - 9 * z, 10 * z, 14 * z, shade(wall, 0.78));
-          for (let k = -1; k <= 1; k += 2) rect(cx + k * 9 * z - 1.5 * z, cy - 9 * z, 3 * z, 14 * z, "#d9ceb6");
+          box(cx, cy + 4 * z, 28 * z, 14 * z, 13 * z, wall, [1.0, 0.76, 1.08]);
+          for (let k = -1; k <= 1; k += 2) rect(cx + k * 8 * z - 1.5 * z - 4 * z, cy - 9 * z + k * 2 * z, 3 * z, 12 * z, "#d9ceb6");
           g.fillStyle = shade(color, LIGHT); g.beginPath(); g.arc(cx, cy - 9 * z, 13 * z, Math.PI, TAU); g.fill();
           g.fillStyle = shade(color, DARK); g.beginPath(); g.arc(cx, cy - 9 * z, 13 * z, -Math.PI / 2, 0); g.lineTo(cx, cy - 9 * z); g.closePath(); g.fill();
           circle(cx, cy - 23 * z, 2 * z, "#ffd166");
-          rect(cx - 3 * z, cy - 4 * z, 6 * z, 9 * z, "#5a4a3a");
+          rect(cx - 10 * z, cy - 4 * z, 5 * z, 8 * z, "#5a4a3a");
           break;
         }
         case B_TEMPLE: case B_FTEMPLE: case B_MTEMPLE: case B_WTEMPLE: {
           const col = kind === B_TEMPLE ? "#f1e6cf" : kind === B_FTEMPLE ? "#cfe8c4" : kind === B_MTEMPLE ? "#e4ecf2" : "#cfe3f1";
           const lvl = extra || 1;
-          rect(cx - 15 * z, cy + 2 * z, 30 * z, 4 * z, shade(col, 0.7));
-          rect(cx - 12 * z, cy - 2 * z, 24 * z, 4 * z, shade(col, 0.85));
-          for (let k = -1; k <= 1; k++) { rect(cx + k * 8 * z - 2 * z, cy - 16 * z, 4 * z, 14 * z, col); rect(cx + k * 8 * z, cy - 16 * z, 2 * z, 14 * z, shade(col, 0.78)); }
-          rect(cx - 13 * z, cy - 19 * z, 26 * z, 3.5 * z, shade(col, 0.9));
-          poly([[cx - 14 * z, cy - 19 * z], [cx, cy - 29 * z], [cx + 14 * z, cy - 19 * z]], shade(col, 0.95));
-          poly([[cx, cy - 29 * z], [cx + 14 * z, cy - 19 * z], [cx, cy - 19 * z]], shade(col, 0.72));
+          box(cx, cy + 5 * z, 32 * z, 16 * z, 4 * z, col, [0.86, 0.66, 0.96]);
+          box(cx, cy + 3 * z, 26 * z, 13 * z, 4 * z, col, [0.9, 0.7, 1.0]);
+          for (let k = -1; k <= 1; k++) box(cx + k * 8 * z, cy - 1 * z + k * 2 * z, 4 * z, 2 * z, 14 * z, col, [1.0, 0.76, 1.1]);
+          box(cx, cy - 1 * z, 28 * z, 14 * z, 3.5 * z, col, [0.95, 0.72, 1.05]);
+          roof(cx, cy - 1 * z, 28 * z, 14 * z, 3.5 * z, 10 * z, col);
           if (lvl >= 3) rect(cx - 13 * z, cy - 19 * z, 26 * z, 1.5 * z, "#ffd166");
           if (lvl >= 5) circle(cx, cy - 31 * z, 2.5 * z, "#ffd166");
           break;
         }
         case B_MONUMENT: {
           const k = (extra || 0) % 3;
-          rect(cx - 12 * z, cy + 2 * z, 24 * z, 5 * z, "#8c8578");
-          rect(cx - 9 * z, cy - 2 * z, 18 * z, 4 * z, "#a8a092");
-          poly([[cx - 4 * z, cy - 2 * z], [cx + 0.5 * z, cy - 2 * z], [cx + 0.5 * z, cy - 32 * z], [cx - 2.5 * z, cy - 32 * z]], "#e4dccb");
-          poly([[cx + 0.5 * z, cy - 2 * z], [cx + 4.5 * z, cy - 2 * z], [cx + 2.5 * z, cy - 32 * z], [cx + 0.5 * z, cy - 32 * z]], "#b8b0a0");
-          if (k === 0) cone(cx, cy - 32 * z, 7 * z, 7 * z, "#ffd166", "#d9a93a");
-          else if (k === 1) { circle(cx, cy - 35 * z, 4 * z, "#5bc2ea"); halfDisc(cx, cy - 35 * z, 4 * z, "#2f7fcb"); }
-          else { cone(cx, cy - 31 * z, 6 * z, 9 * z, "#ff8c3a", "#e0552f"); }
+          box(cx, cy + 6 * z, 26 * z, 13 * z, 4 * z, "#9a9386", [0.92, 0.7, 1.02]);
+          box(cx, cy + 2 * z, 18 * z, 9 * z, 4 * z, "#b1aa9c", [0.92, 0.7, 1.02]);
+          box(cx, cy - 2 * z, 6 * z, 3 * z, 30 * z, "#d9d1c1", [1.0, 0.74, 1.1]);
+          if (k === 0) cone(cx, cy - 32 * z, 8 * z, 8 * z, "#ffd166", "#d9a93a");
+          else if (k === 1) { circle(cx, cy - 36 * z, 4.5 * z, "#5bc2ea"); halfDisc(cx, cy - 36 * z, 4.5 * z, "#2f7fcb"); }
+          else { cone(cx, cy - 31 * z, 7 * z, 10 * z, "#ff8c3a", "#e0552f"); }
           break;
         }
         case B_RUIN: {
           for (let k = -1; k <= 1; k++) {
-            const hgt = (8 + (k === 0 ? 8 : k === 1 ? 3 : 5)) * z;
-            rect(cx + k * 9 * z - 2 * z, cy - hgt, 4 * z, hgt + 2 * z, "#a39b8f");
-            rect(cx + k * 9 * z, cy - hgt, 2 * z, hgt + 2 * z, "#7f786d");
-            rect(cx + k * 9 * z - 2.6 * z, cy - hgt, 5.2 * z, 1.6 * z, "#b5ada0");
+            const hgt = (8 + (k === 0 ? 9 : k === 1 ? 3 : 5)) * z;
+            box(cx + k * 9 * z, cy + 2 * z - k * 2 * z, 4.5 * z, 2.2 * z, hgt, "#a39b8f", [1.0, 0.74, 1.08]);
+            rect(cx + k * 9 * z - 2.8 * z, cy + 2 * z - k * 2 * z - hgt - 1.6 * z, 5.6 * z, 1.6 * z, "#b5ada0");
           }
-          poly([[cx + 2 * z, cy + 5 * z], [cx + 16 * z, cy + 1 * z], [cx + 17 * z, cy + 4 * z], [cx + 3 * z, cy + 8 * z]], "#9a9388");
+          facet([[cx + 2 * z, cy + 5 * z], [cx + 16 * z, cy + 1 * z], [cx + 17 * z, cy + 4 * z], [cx + 3 * z, cy + 8 * z]], "#9a9388");
           circle(cx - 12 * z, cy + 5 * z, 2 * z, "#8d8578"); circle(cx - 7 * z, cy + 7 * z, 1.5 * z, "#8d8578");
           break;
         }
@@ -3144,38 +3206,40 @@ window.plethoraBit = {
       }
     }
 
-    // ---- Cities
+    // ---- Cities: a tight cluster of houses on a stone plaza, a hall with a
+    // tower from level four, a keep from level seven, walls as a ring of blocks.
     function artWalls(cx, cy, z) {
-      const hw = TW / 2 * z * 0.9, hh = TH / 2 * z * 0.9;
+      const hw = TW / 2 * z * 0.92, hh = TH / 2 * z * 0.92;
       const pts = [[cx, cy - hh], [cx + hw, cy], [cx, cy + hh], [cx - hw, cy]];
-      const wallH = 9 * z;
-      // the wall is a band: a face below the top line on the two front edges
-      poly([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + wallH], [cx - hw, cy + wallH]], "#a89a80");
-      poly([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + wallH], [cx, cy + hh + wallH]], "#857863");
-      // the back edges rise behind the houses
-      poly([[cx - hw, cy], [cx, cy - hh], [cx, cy - hh + wallH * 0.7], [cx - hw, cy + wallH * 0.7]], "#9c8f76");
-      poly([[cx, cy - hh], [cx + hw, cy], [cx + hw, cy + wallH * 0.7], [cx, cy - hh + wallH * 0.7]], "#7d705c");
-      g.strokeStyle = "#d9cdb0"; g.lineWidth = 3.2 * z; g.lineJoin = "round";
+      const wallH = 8 * z;
+      // back walls first, then the two front walls as solid bands
+      facet([[cx - hw, cy], [cx, cy - hh], [cx, cy - hh + wallH * 0.75], [cx - hw, cy + wallH * 0.75]], "#a89c86");
+      facet([[cx, cy - hh], [cx + hw, cy], [cx + hw, cy + wallH * 0.75], [cx, cy - hh + wallH * 0.75]], "#8a7e6a");
+      facet([[cx - hw, cy], [cx, cy + hh], [cx, cy + hh + wallH], [cx - hw, cy + wallH]], "#bdb09a");
+      facet([[cx, cy + hh], [cx + hw, cy], [cx + hw, cy + wallH], [cx, cy + hh + wallH]], "#8f8370");
+      g.strokeStyle = "#e3d8c0"; g.lineWidth = 3.4 * z; g.lineJoin = "round";
       g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < 4; i++) g.lineTo(pts[i][0], pts[i][1]); g.closePath(); g.stroke();
       for (let e = 0; e < 4; e++) {
         const a = pts[e], b = pts[(e + 1) % 4];
         for (let k = 0; k < 5; k++) {
           const t = (k + 0.5) / 5;
           const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
-          rect(x - 1.8 * z, y - 4.5 * z, 3.6 * z, 4 * z, "#e7dcc4");
+          box(x, y, 3.6 * z, 1.8 * z, 3.6 * z, "#e7dcc4", [1.0, 0.76, 1.08]);
         }
       }
-      for (const c of pts) { rect(c[0] - 3 * z, c[1] - 9 * z, 6 * z, 9 * z + (c[1] > cy ? wallH : wallH * 0.7), "#bfb297"); rect(c[0] - 3.6 * z, c[1] - 10 * z, 7.2 * z, 2.5 * z, "#e7dcc4"); }
+      for (const c of pts) box(c[0], c[1] + (c[1] > cy ? 2 : 0) * z, 6.5 * z, 3.2 * z, 11 * z, "#cfc2a8", [1.0, 0.74, 1.1]);
     }
     function artCity(cx, cy, z, o) {
       const hw = TW / 2 * z, hh = TH / 2 * z;
-      g.fillStyle = o.owned ? "rgba(236,226,200,0.42)" : "rgba(255,255,255,0.12)";
+      // the plaza: a paler stone diamond with a faint rim
+      g.fillStyle = o.owned ? "rgba(236,226,200,0.5)" : "rgba(255,255,255,0.14)";
       diamond(cx, cy, hw * 0.9, hh * 0.9); g.fill();
       if (o.owned) { g.strokeStyle = "rgba(120,100,70,0.35)"; g.lineWidth = 1.2 * z; diamond(cx, cy, hw * 0.9, hh * 0.9); g.stroke(); }
       if (o.walls) artWalls(cx, cy, z);
       artShadow(cx + 3 * z, cy + 6 * z, z, 26, 9, 0.16);
-      const spots = [[-0.04, -0.16], [-0.26, -0.02], [0.24, -0.08], [-0.2, 0.24], [0.26, 0.22], [0.02, -0.34], [-0.32, 0.1], [0.32, 0.04]];
-      const n = o.owned ? Math.min(8, o.level) : 2;
+      // houses pack around the centre, back to front
+      const spots = [[-0.04, -0.16], [-0.3, -0.04], [0.26, -0.1], [-0.22, 0.24], [0.28, 0.2], [0.02, -0.38], [-0.38, 0.1], [0.38, 0.02], [0.0, 0.3]];
+      const n = o.owned ? Math.min(9, o.level + 2) : 2;
       const list = [];
       for (let k = 0; k < n; k++) {
         const s = spots[k];
@@ -3183,33 +3247,32 @@ window.plethoraBit = {
       }
       list.sort((a, b) => a.y - b.y);
       for (const h of list) {
-        if (!o.owned) { artHut(h.x, h.y + 2 * z, z, 6.5 * z, "#b9a98a", "#c9a265"); continue; }
+        if (!o.owned) { artHut(h.x, h.y + 2 * z, z, 7 * z, "#b9a98a", "#c9a265"); continue; }
         const big = h.k === 0;
+        const jit = hash2(h.k * 7 + 1, Math.floor(o.seed * 100));
         if (big && o.level >= 7) {
-          // the keep: a broad hall and a tall crenellated tower
-          artHouse(h.x, h.y + 4 * z, z, 22 * z, 15 * z, o.wall, o.color);
-          rect(h.x + 5 * z, h.y - 36 * z, 9 * z, 26 * z, shade(o.wall, 0.95));
-          rect(h.x + 10 * z, h.y - 36 * z, 4 * z, 26 * z, shade(o.wall, 0.72));
-          for (let q = 0; q < 3; q++) rect(h.x + 5 * z + q * 3.4 * z, h.y - 39 * z, 2.2 * z, 3.5 * z, shade(o.wall, 0.9));
-          line(h.x + 9.5 * z, h.y - 39 * z, h.x + 9.5 * z, h.y - 48 * z, "#4a3a2a", 1.4 * z);
-          poly([[h.x + 9.5 * z, h.y - 48 * z], [h.x + 17 * z, h.y - 45.5 * z], [h.x + 9.5 * z, h.y - 43 * z]], o.color);
+          // the keep: a broad hall with a tall tower
+          artHouse(h.x, h.y + 4 * z, z, 24 * z, 16 * z, o.wall, o.color);
+          box(h.x + 9 * z, h.y + 2 * z, 10 * z, 5 * z, 40 * z, o.wall, [0.97, 0.72, 1.1]);
+          for (let q = 0; q < 3; q++) box(h.x + 5.5 * z + q * 3.5 * z, h.y - 38 * z + q * 1.2 * z, 2.2 * z, 1.1 * z, 3 * z, o.wall, [0.95, 0.7, 1.05]);
+          line(h.x + 9 * z, h.y - 42 * z, h.x + 9 * z, h.y - 52 * z, "#4a3a2a", 1.4 * z);
+          poly([[h.x + 9 * z, h.y - 52 * z], [h.x + 17 * z, h.y - 49.5 * z], [h.x + 9 * z, h.y - 47 * z]], o.color);
         } else if (big && o.level >= 4) {
-          // the hall: a wide house with a tower
-          artHouse(h.x, h.y + 4 * z, z, 20 * z, 14 * z, o.wall, o.color);
-          rect(h.x + 6 * z, h.y - 26 * z, 7 * z, 16 * z, shade(o.wall, 0.95));
-          rect(h.x + 10 * z, h.y - 26 * z, 3 * z, 16 * z, shade(o.wall, 0.72));
-          cone(h.x + 9.5 * z, h.y - 26 * z, 11 * z, 8 * z, shade(o.color, LIGHT), shade(o.color, DARK));
+          // the hall: a wide house with a tower and a spire
+          artHouse(h.x, h.y + 4 * z, z, 22 * z, 15 * z, o.wall, o.color);
+          box(h.x + 8 * z, h.y + 1 * z, 8 * z, 4 * z, 26 * z, o.wall, [0.97, 0.72, 1.1]);
+          cone(h.x + 8 * z, h.y - 25 * z, 12 * z, 10 * z, shade(o.color, LIGHT), shade(o.color, DARK));
         } else {
-          artHouse(h.x, h.y + 3 * z, z, (big ? 15 : 11) * z, (big ? 12 : 8.5) * z, o.wall, o.color);
+          artHouse(h.x, h.y + 3 * z, z, (big ? 16 : 12 + jit * 2) * z, (big ? 13 : 8.5 + jit * 3) * z, o.wall, o.color);
         }
       }
       if (o.capital && o.owned) {
-        const px = cx + hw * 0.52, py = cy - hh * 0.1;
-        const wave = Math.sin((o.t || 0) * 2.6) * 2.2 * z;
-        line(px, py + 4 * z, px, py - 34 * z, "#4a3a2a", 2 * z);
-        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z + wave], [px, py - 24 * z]], shade(o.color, LIGHT));
-        poly([[px, py - 34 * z], [px + 14 * z, py - 29 * z + wave], [px + 5 * z, py - 29 * z + wave * 0.4]], shade(o.color, DARK));
-        circle(px, py - 35 * z, 2 * z, "#ffd166");
+        const px = cx + hw * 0.56, py = cy - hh * 0.05;
+        const wave = Math.sin((o.t || 0) * 2.6) * 2.4 * z;
+        line(px, py + 4 * z, px, py - 36 * z, "#4a3a2a", 2 * z);
+        poly([[px, py - 36 * z], [px + 15 * z, py - 31 * z + wave], [px, py - 25 * z]], shade(o.color, LIGHT));
+        poly([[px, py - 36 * z], [px + 15 * z, py - 31 * z + wave], [px + 5 * z, py - 31 * z + wave * 0.4]], shade(o.color, DARK));
+        circle(px, py - 37 * z, 2.2 * z, "#ffd166");
       }
       if (o.sieged) {
         g.strokeStyle = "#ff5a4e"; g.lineWidth = 2.5 * z;
@@ -3217,127 +3280,140 @@ window.plethoraBit = {
       }
     }
 
-    // ---- Units
-    function artHorse(x, y, z, color, armored) {
+    // ---- Units: blocky figures, a box body under a box head, a weapon in
+    // the right hand, lit from the upper left like everything else.
+    function artHorse(x, y, z, color, armored, stripes) {
       const dark = shade(color, 0.72);
-      for (const lx of [-8, -4, 4, 8]) rect(x + lx * z - 1.3 * z, y - 2 * z, 2.6 * z, 7 * z, dark);
-      ellipse(x, y - 6 * z, 12 * z, 6 * z, color);
-      halfDisc(x, y - 6 * z, 6 * z, dark);
-      poly([[x + 8 * z, y - 9 * z], [x + 15 * z, y - 16 * z], [x + 19 * z, y - 12 * z], [x + 12 * z, y - 6 * z]], color);
-      ellipse(x + 18.5 * z, y - 12 * z, 2.2 * z, 1.6 * z, dark);
-      circle(x + 16 * z, y - 14.5 * z, 0.8 * z, "#111");
-      line(x + 10 * z, y - 10 * z, x + 14 * z, y - 18 * z, dark, 2.4 * z);
-      line(x - 11 * z, y - 7 * z, x - 15 * z, y - 1 * z, dark, 2 * z);
-      if (armored) { rect(x - 8 * z, y - 9 * z, 14 * z, 4 * z, "#9aa3b2"); }
+      for (const lx of [-8, -4, 4, 8]) box(x + lx * z, y + 1 * z, 2.8 * z, 1.4 * z, 6 * z, color, [0.82, 0.6, 0.95]);
+      box(x, y - 4 * z, 24 * z, 9 * z, 9 * z, color);
+      if (stripes) for (let k = -2; k <= 2; k++) facet([[x + k * 4.5 * z - 1.2 * z, y - 7.5 * z - 4.5 * z], [x + k * 4.5 * z + 1 * z, y - 7.5 * z - 4.5 * z], [x + k * 4.5 * z + 0.4 * z, y - 7.5 * z + 4 * z], [x + k * 4.5 * z - 1.8 * z, y - 7.5 * z + 4 * z]], dark);
+      // neck and head
+      facet([[x + 8 * z, y - 12 * z], [x + 13 * z, y - 20 * z], [x + 18 * z, y - 18 * z], [x + 13 * z, y - 9 * z]], shade(color, 1.05));
+      box(x + 17 * z, y - 15 * z, 8 * z, 4 * z, 6 * z, color, [1.02, 0.74, 1.15]);
+      circle(x + 15.5 * z, y - 18.5 * z, 0.9 * z, "#111");
+      facet([[x + 11 * z, y - 20 * z], [x + 12.5 * z, y - 24 * z], [x + 14 * z, y - 20.5 * z]], dark);
+      // mane and tail
+      line(x + 10 * z, y - 13 * z, x + 14 * z, y - 21 * z, dark, 2.6 * z);
+      line(x - 12 * z, y - 10 * z, x - 16 * z, y - 2 * z, dark, 2.2 * z);
+      if (armored) { facet([[x - 10 * z, y - 13 * z], [x + 6 * z, y - 13 * z], [x + 6 * z, y - 8 * z], [x - 10 * z, y - 8 * z]], "#9aa3b2"); facet([[x - 10 * z, y - 8 * z], [x + 6 * z, y - 8 * z], [x + 6 * z, y - 6 * z], [x - 10 * z, y - 6 * z]], "#6f7784"); }
     }
     function artBoat(x, y, z, kind, color) {
       if (kind === 3) {
-        poly([[x - 21 * z, y - 5 * z], [x + 21 * z, y - 5 * z], [x + 15 * z, y + 4 * z], [x - 15 * z, y + 4 * z]], "#7d8794");
-        poly([[x - 21 * z, y - 5 * z], [x + 21 * z, y - 5 * z], [x + 21 * z, y - 7 * z], [x - 21 * z, y - 7 * z]], "#a9b2bf");
-        rect(x - 8 * z, y - 15 * z, 16 * z, 10 * z, "#9aa3b2"); rect(x + 1 * z, y - 15 * z, 7 * z, 10 * z, "#7d8794");
-        rect(x - 2 * z, y - 24 * z, 4 * z, 10 * z, "#5a6270");
-        circle(x, y - 27 * z, 2.8 * z, "rgba(200,200,205,0.6)"); circle(x + 3 * z, y - 31 * z, 3.4 * z, "rgba(200,200,205,0.4)");
-        rect(x - 19 * z, y - 10 * z, 8 * z, 2.6 * z, "#3a3f47");
-        rect(x + 11 * z, y - 10 * z, 8 * z, 2.6 * z, "#3a3f47");
+        facet([[x - 22 * z, y - 5 * z], [x + 22 * z, y - 5 * z], [x + 15 * z, y + 4 * z], [x - 15 * z, y + 4 * z]], "#7d8794");
+        facet([[x - 22 * z, y - 5 * z], [x + 22 * z, y - 5 * z], [x + 22 * z, y - 7.5 * z], [x - 22 * z, y - 7.5 * z]], "#a9b2bf");
+        box(x, y - 6 * z, 18 * z, 8 * z, 9 * z, "#9aa3b2");
+        box(x + 1 * z, y - 16 * z, 5 * z, 2.5 * z, 9 * z, "#5a6270");
+        circle(x + 1 * z, y - 28 * z, 2.8 * z, "rgba(200,200,205,0.6)"); circle(x + 4 * z, y - 32 * z, 3.4 * z, "rgba(200,200,205,0.4)");
+        box(x - 14 * z, y - 8 * z, 8 * z, 2.6 * z, 2.6 * z, "#3a3f47");
+        box(x + 14 * z, y - 8 * z, 8 * z, 2.6 * z, 2.6 * z, "#3a3f47");
         return;
       }
       const big = kind === 2;
-      const hw2 = (big ? 20 : 16) * z;
-      poly([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2 * 0.7, y + 4 * z], [x - hw2 * 0.7, y + 4 * z]], "#8a5f3b");
-      poly([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2, y - 6 * z], [x - hw2, y - 6 * z]], "#b0804f");
+      const hw2 = (big ? 21 : 17) * z;
+      facet([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2 * 0.7, y + 4 * z], [x - hw2 * 0.7, y + 4 * z]], "#8a5f3b");
+      facet([[x - hw2, y - 4 * z], [x + hw2, y - 4 * z], [x + hw2, y - 6.5 * z], [x - hw2, y - 6.5 * z]], "#b0804f");
       line(x - hw2 * 0.6, y, x + hw2 * 0.6, y, "#5a3f28", 1.2 * z);
-      rect(x - 1 * z, y - 28 * z, 2 * z, 23 * z, "#5a4a3a");
-      poly([[x + 1 * z, y - 27 * z], [x + (big ? 14 : 10) * z, y - 14 * z], [x + 1 * z, y - 9 * z]], "#f3ead8");
-      poly([[x + 1 * z, y - 27 * z], [x + (big ? 14 : 10) * z, y - 14 * z], [x + 1 * z, y - 18 * z]], "#e0d6c2");
-      if (big) { poly([[x - 1 * z, y - 24 * z], [x - 10 * z, y - 13 * z], [x - 1 * z, y - 10 * z]], "#f3ead8"); }
-      poly([[x - 1 * z, y - 28 * z], [x - 6 * z, y - 26 * z], [x - 1 * z, y - 24 * z]], color);
+      rect(x - 1 * z, y - 30 * z, 2 * z, 25 * z, "#5a4a3a");
+      // a striped sail in the tribe colour
+      const sw = (big ? 15 : 11) * z;
+      facet([[x + 1 * z, y - 29 * z], [x + sw, y - 15 * z], [x + 1 * z, y - 9 * z]], "#f3ead8");
+      for (let k = 0; k < 3; k++) {
+        const t0 = 0.1 + k * 0.3, t1 = t0 + 0.14;
+        poly([[x + 1 * z, y - 29 * z + 20 * z * t0], [x + 1 * z + (sw - 1 * z) * (t0 < 0.7 ? 1 : 1), y - 15 * z + 0 * t0], [x + 1 * z, y - 29 * z + 20 * z * t1]], color);
+      }
+      if (big) { facet([[x - 1 * z, y - 26 * z], [x - 11 * z, y - 14 * z], [x - 1 * z, y - 10 * z]], "#f3ead8"); }
+      poly([[x - 1 * z, y - 30 * z], [x - 7 * z, y - 27.5 * z], [x - 1 * z, y - 25 * z]], color);
     }
     const SKIN = "#f1d2b1", SKIN_D = "#d9b494";
     function artUnit(cx, cy, z, o) {
       const col = o.color, dark = shade(col, 0.72);
       const x = cx, y = cy + 2 * z;
       g.globalAlpha = o.dim ? 0.75 : 1;
-      ellipse(x, y + 3 * z, 12 * z, 5 * z, "rgba(0,0,0,0.3)");
+      ellipse(x, y + 3 * z, 13 * z, 5.5 * z, "rgba(0,0,0,0.3)");
       let by = y;
       if (o.boat) { artBoat(x, y, z, o.boat, col); by = y - 8 * z; }
       const giant = o.type === "giant";
-      const s = (giant ? 1.5 : (o.boat ? 0.85 : 1)) * 1.12;
-      if (!o.boat && (o.type === "rider" || o.type === "knight")) { artHorse(x, y, z, o.type === "knight" ? "#7c8795" : "#8b5e3c", o.type === "knight"); by = y - 9 * z; }
+      const s = (giant ? 1.55 : (o.boat ? 0.85 : 1)) * 1.1;
+      if (!o.boat && (o.type === "rider" || o.type === "knight")) { artHorse(x, y, z, o.type === "knight" ? "#7c8795" : "#e9e2d2", o.type === "knight", o.type === "rider"); by = y - 11 * z; }
       if (o.type === "catapult" && !o.boat) {
-        rect(x - 13 * z, by - 5 * z, 26 * z, 5 * z, "#6b4a2a");
-        circle(x - 9 * z, by + 1 * z, 4 * z, "#4a3a2a"); circle(x - 9 * z, by + 1 * z, 1.4 * z, "#8a6a4a");
-        circle(x + 9 * z, by + 1 * z, 4 * z, "#4a3a2a"); circle(x + 9 * z, by + 1 * z, 1.4 * z, "#8a6a4a");
-        rect(x - 5 * z, by - 11 * z, 3 * z, 7 * z, "#8d6e4c"); rect(x + 2 * z, by - 11 * z, 3 * z, 7 * z, "#8d6e4c");
-        line(x - 2 * z, by - 6 * z, x + 12 * z, by - 24 * z, "#8d6e4c", 2.6 * z);
-        circle(x + 12 * z, by - 24 * z, 3.5 * z, "#555"); circle(x + 11 * z, by - 25 * z, 1.2 * z, "#888");
+        box(x, by, 26 * z, 10 * z, 5 * z, "#6b4a2a");
+        circle(x - 9 * z, by + 2 * z, 4.2 * z, "#4a3a2a"); circle(x - 9 * z, by + 2 * z, 1.4 * z, "#8a6a4a");
+        circle(x + 9 * z, by + 2 * z, 4.2 * z, "#4a3a2a"); circle(x + 9 * z, by + 2 * z, 1.4 * z, "#8a6a4a");
+        box(x - 3 * z, by - 5 * z, 3 * z, 1.5 * z, 8 * z, "#8d6e4c"); box(x + 4 * z, by - 5 * z, 3 * z, 1.5 * z, 8 * z, "#8d6e4c");
+        line(x - 2 * z, by - 7 * z, x + 13 * z, by - 26 * z, "#8d6e4c", 2.8 * z);
+        circle(x + 13 * z, by - 26 * z, 3.8 * z, "#555"); circle(x + 12 * z, by - 27 * z, 1.3 * z, "#888");
         by = by - 2 * z; o.small = true;
       }
-      const bodyW = 11 * z * s, bodyH = 13 * z * s;
-      const bx = o.small ? x - 14 * z : x;
+      const bw = 10 * z * s, bd = 5 * z * s, bh = 10 * z * s;
+      const bx = o.small ? x - 15 * z : x;
       const skin = giant ? "#b7bda8" : SKIN, skinD = giant ? "#949a86" : SKIN_D;
-      // body with a shaded right side and a belt
-      g.fillStyle = o.hit ? "#ffffff" : col;
-      g.beginPath(); g.roundRect(bx - bodyW / 2, by - bodyH, bodyW, bodyH, 3 * z); g.fill();
-      g.fillStyle = o.hit ? "#f0f0f0" : dark;
-      g.beginPath(); g.roundRect(bx + bodyW * 0.12, by - bodyH, bodyW * 0.38, bodyH, 3 * z); g.fill();
-      rect(bx - bodyW / 2, by - bodyH * 0.42, bodyW, 2 * z, o.hit ? "#ddd" : "#3b3028");
-      // arms
-      ellipse(bx - bodyW * 0.55, by - bodyH * 0.6, 2.4 * z * s, 4 * z * s, skin);
-      ellipse(bx + bodyW * 0.55, by - bodyH * 0.6, 2.4 * z * s, 4 * z * s, skinD);
-      // head
-      const hr = 5.6 * z * s, hx = bx, hy = by - bodyH - hr + 1 * z;
-      circle(hx, hy, hr, o.hit ? "#ffffff" : skin);
-      halfDisc(hx, hy, hr, o.hit ? "#f0f0f0" : skinD);
-      circle(hx - 1.8 * z * s, hy + 0.5 * z * s, 0.9 * z * s, "#222"); circle(hx + 1.8 * z * s, hy + 0.5 * z * s, 0.9 * z * s, "#222");
-      artGear(o.type, hx, hy, hr, z * s, col, dark);
+      // legs, body box, a belt on the lit face
+      box(bx - bw * 0.22, by, bw * 0.34, bd * 0.34, 3 * z * s, "#3b3028", [0.9, 0.65, 1.0]);
+      box(bx + bw * 0.2, by + 1 * z * s, bw * 0.34, bd * 0.34, 3 * z * s, "#3b3028", [0.9, 0.65, 1.0]);
+      const bodyCol = o.hit ? "#ffffff" : col;
+      box(bx, by - 3 * z * s, bw, bd, bh, bodyCol, o.hit ? [1, 0.95, 1] : [1.0, 0.72, 1.16]);
+      rect(bx - bw / 2, by - 3 * z * s - bh * 0.38, bw / 2, 1.8 * z * s, o.hit ? "#ddd" : "#3b3028");
+      // arms as small boxes at the shoulders
+      box(bx - bw * 0.62, by - 3 * z * s - bh * 0.35, bw * 0.26, bd * 0.3, bh * 0.5, o.hit ? "#fff" : skin, [1.0, 0.75, 1.1]);
+      box(bx + bw * 0.6, by - 2 * z * s - bh * 0.35, bw * 0.26, bd * 0.3, bh * 0.5, o.hit ? "#fff" : skin, [1.0, 0.75, 1.1]);
+      // head box with two eyes on the lit face
+      const hw2 = 7.6 * z * s, hd = 3.8 * z * s, hh2 = 6.8 * z * s;
+      const hx = bx, hy = by - 3 * z * s - bh - 0.5 * z;
+      box(hx, hy, hw2, hd, hh2, o.hit ? "#ffffff" : skin, o.hit ? [1, 0.95, 1] : [1.0, 0.76, 1.12]);
+      circle(hx - hw2 * 0.34, hy - hh2 * 0.55 + hd * 0.12, 0.9 * z * s, "#222"); circle(hx - hw2 * 0.1, hy - hh2 * 0.55 + hd * 0.24, 0.9 * z * s, "#222");
+      artGear(o.type, hx, hy - hh2, hw2 / 2, hd, z * s, col, dark);
       g.globalAlpha = 1;
-      if (o.vet) { circle(bx + bodyW / 2 + 2.5 * z, by - bodyH + 1 * z, 2.6 * z, "#ffd166"); circle(bx + bodyW / 2 + 2.5 * z, by - bodyH + 1 * z, 1 * z, "#fff3c0"); }
-      if (o.hpFrac < 1) {
-        const bw = 24 * z, bbx = x - bw / 2, bby = y + 7 * z;
-        g.fillStyle = "rgba(0,0,0,0.6)"; g.beginPath(); g.roundRect(bbx - 1, bby - 1, bw + 2, 4 * z + 2, 2 * z); g.fill();
-        rect(bbx, bby, bw * clamp(o.hpFrac, 0, 1), 4 * z, o.hpFrac > 0.5 ? "#6ddb6d" : o.hpFrac > 0.25 ? "#ffd166" : "#ff5a4e");
+      if (o.vet) { circle(bx + bw / 2 + 2.5 * z, by - bh - 1 * z, 2.8 * z, "#ffd166"); circle(bx + bw / 2 + 2.5 * z, by - bh - 1 * z, 1.1 * z, "#fff3c0"); }
+      if (o.hp != null) {
+        // hit points as a small number at the shoulder, the way the original shows them
+        const hpx = bx - bw * 0.8 - 3 * z, hpy = hy - hh2 * 0.3;
+        outlinedText(String(o.hp), hpx, hpy, clamp(8.5 * z, 9, 12), o.hpFrac > 0.5 ? "#ffffff" : o.hpFrac > 0.25 ? "#ffd166" : "#ff7a6e", "right");
       }
     }
-    function artGear(type, hx, hy, hr, z, col, dark) {
+    // Helmets and weapons. (hx, hy) is the top centre of the head box, hr its
+    // half width, hd its depth; z here already includes the unit's scale.
+    function artGear(type, hx, hy, hr, hd, z, col, dark) {
       const steel = "#c9ced6", steelD = "#8d939c", iron = "#3b3b45", wood = "#8d6e4c";
-      const cap = (c1, c2) => { g.fillStyle = c1; g.beginPath(); g.arc(hx, hy - 0.5 * z, hr + 0.4 * z, Math.PI, TAU); g.fill();
-        g.fillStyle = c2; g.beginPath(); g.arc(hx, hy - 0.5 * z, hr + 0.4 * z, -Math.PI / 2, 0); g.lineTo(hx, hy - 0.5 * z); g.closePath(); g.fill(); };
+      const w = hr * 2 + 1.2 * z;
+      const helm = (c, h) => box(hx, hy + hd * 0.5 + 0.4 * z, w, hd + 0.8 * z, h, c, [1.0, 0.72, 1.18]);
+      const handX = hx + hr + 4 * z, handY = hy + 14 * z;
       switch (type) {
         case "warrior":
-          cap(iron, "#26262e"); rect(hx - 1 * z, hy - 2 * z, 2 * z, 4 * z, iron);
-          line(hx + 7 * z, hy + 12 * z, hx + 9 * z, hy - 4 * z, wood, 2.2 * z); circle(hx + 9.2 * z, hy - 5 * z, 3 * z, "#6e6e78");
+          helm(iron, 3.2 * z); rect(hx - hr * 0.55, hy + 1 * z, 1.4 * z, 4 * z, iron);
+          line(handX, handY + 6 * z, handX + 2 * z, hy - 3 * z, wood, 2.4 * z); blob(handX + 2.4 * z, hy - 4 * z, 3.2 * z, 3.4 * z, "#6e6e78", 1.1, 0.7);
           break;
         case "rider":
-          cap(wood, "#6a5038"); line(hx + 6 * z, hy + 12 * z, hx + 8 * z, hy - 6 * z, iron, 1.6 * z);
+          helm(wood, 3 * z); line(handX, handY + 4 * z, handX + 3 * z, hy - 7 * z, iron, 1.7 * z);
           break;
         case "archer":
-          cap("#4f7a3a", "#3a5c2a"); poly([[hx - hr, hy - 1 * z], [hx + 1 * z, hy - hr - 5 * z], [hx + hr, hy - 1 * z]], "#4f7a3a");
-          g.strokeStyle = wood; g.lineWidth = 1.8 * z; g.beginPath(); g.arc(hx + 8 * z, hy + 6 * z, 8 * z, -Math.PI / 2 - 0.2, Math.PI / 2 + 0.2); g.stroke();
-          line(hx + 8 * z, hy - 2 * z, hx + 8 * z, hy + 14 * z, "#e9dcc8", 1 * z);
+          helm("#4f7a3a", 2.6 * z); cone(hx, hy + 1.2 * z, w, hr + 5 * z, "#5d8f45", "#3a5c2a");
+          g.strokeStyle = wood; g.lineWidth = 1.9 * z; g.beginPath(); g.arc(handX + 1 * z, handY - 2 * z, 8.5 * z, -Math.PI / 2 - 0.2, Math.PI / 2 + 0.2); g.stroke();
+          line(handX + 1 * z, handY - 10.5 * z, handX + 1 * z, handY + 6.5 * z, "#e9dcc8", 1 * z);
           break;
         case "defender":
-          cap(steel, steelD); rect(hx - hr, hy - 0.5 * z, hr * 2, 1.6 * z, steelD);
-          g.fillStyle = steel; g.beginPath(); g.roundRect(hx - 13 * z, hy + 3 * z, 10 * z, 14 * z, 3 * z); g.fill();
-          g.fillStyle = steelD; g.beginPath(); g.roundRect(hx - 8 * z, hy + 3 * z, 5 * z, 14 * z, 3 * z); g.fill();
-          circle(hx - 8 * z, hy + 10 * z, 2.2 * z, col);
+          helm(steel, 3.4 * z); rect(hx - hr - 0.6 * z, hy + 2.5 * z, w, 1.6 * z, steelD);
+          facet([[hx - hr - 9 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 20 * z], [hx - hr - 5 * z, hy + 23 * z], [hx - hr - 9 * z, hy + 20 * z]], steel);
+          facet([[hx - hr - 5 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 6 * z], [hx - hr - 1 * z, hy + 20 * z], [hx - hr - 5 * z, hy + 23 * z]], steelD);
+          circle(hx - hr - 5 * z, hy + 13 * z, 2.4 * z, col);
           break;
         case "swordsman":
-          cap(steel, steelD); rect(hx - 1 * z, hy - 2 * z, 2 * z, 5 * z, steelD);
-          line(hx + 7 * z, hy + 8 * z, hx + 7 * z, hy - 9 * z, "#eef1f5", 2.2 * z); rect(hx + 3.5 * z, hy + 7 * z, 7 * z, 2 * z, wood);
-          g.fillStyle = steel; g.beginPath(); g.roundRect(hx - 12 * z, hy + 4 * z, 8 * z, 11 * z, 3 * z); g.fill();
-          circle(hx - 8 * z, hy + 9.5 * z, 2 * z, col);
+          helm(steel, 3.4 * z); rect(hx - hr * 0.55, hy + 1 * z, 1.4 * z, 5 * z, steelD);
+          line(handX + 1 * z, handY + 2 * z, handX + 1 * z, hy - 9 * z, "#eef1f5", 2.4 * z, "butt"); rect(handX - 2.5 * z, handY + 1 * z, 7 * z, 2 * z, wood);
+          facet([[hx - hr - 8 * z, hy + 8 * z], [hx - hr - 1 * z, hy + 8 * z], [hx - hr - 1 * z, hy + 18 * z], [hx - hr - 8 * z, hy + 18 * z]], steel);
+          circle(hx - hr - 4.5 * z, hy + 13 * z, 2 * z, col);
           break;
-        case "catapult": cap(wood, "#6a5038"); break;
+        case "catapult": helm(wood, 3 * z); break;
         case "knight":
-          cap(steel, steelD); rect(hx - hr, hy - 0.5 * z, hr * 2, 1.6 * z, steelD); rect(hx - 1 * z, hy - hr - 6 * z, 2 * z, 6 * z, col);
-          line(hx + 6 * z, hy + 14 * z, hx + 9 * z, hy - 14 * z, "#e9dcc8", 1.8 * z); poly([[hx + 9 * z, hy - 14 * z], [hx + 7.5 * z, hy - 10 * z], [hx + 10.5 * z, hy - 10 * z]], steel);
+          helm(steel, 4 * z); rect(hx - hr - 0.6 * z, hy + 2.5 * z, w, 1.6 * z, steelD);
+          box(hx, hy - 3 * z, 2.4 * z, 1.2 * z, 7 * z, col, [1.0, 0.74, 1.2]);
+          line(handX, handY + 6 * z, handX + 3 * z, hy - 16 * z, "#e9dcc8", 2 * z); poly([[handX + 3 * z, hy - 16 * z], [handX + 1.5 * z, hy - 11 * z], [handX + 4.5 * z, hy - 11 * z]], steel);
           break;
         case "mindbender":
-          cap("#5b3a86", "#3e2660"); poly([[hx - hr, hy], [hx, hy - hr - 6 * z], [hx + hr, hy]], "#5b3a86");
-          line(hx + 7 * z, hy + 13 * z, hx + 7 * z, hy - 8 * z, wood, 1.6 * z); circle(hx + 7 * z, hy - 9 * z, 3 * z, "#c77dff"); circle(hx + 7 * z, hy - 9 * z, 6 * z, "rgba(199,125,255,0.25)");
+          helm("#5b3a86", 2.6 * z); cone(hx, hy + 1.2 * z, w * 1.1, hr + 7 * z, "#6d47a0", "#3e2660");
+          line(handX, handY + 5 * z, handX, hy - 7 * z, wood, 1.7 * z); circle(handX, hy - 8.5 * z, 3.2 * z, "#c77dff"); circle(handX, hy - 8.5 * z, 6.5 * z, "rgba(199,125,255,0.25)");
           break;
         case "giant":
-          rect(hx - hr * 0.9, hy - 1.5 * z, hr * 1.8, 1.6 * z, "#3a3f38"); rect(hx - 1.2 * z, hy + 3 * z, 2.4 * z, 1.2 * z, "#3a3f38");
+          rect(hx - hr * 0.9, hy + 1.5 * z, hr * 1.8, 1.6 * z, "#3a3f38"); rect(hx - 1.2 * z, hy + 6 * z, 2.4 * z, 1.2 * z, "#3a3f38");
           break;
         default: break;
       }
@@ -3439,7 +3515,7 @@ window.plethoraBit = {
       .tt .hero { text-align: center; padding-top: 10vh; }
       .tt .hero .title { font-size: 48px; font-weight: 900; letter-spacing: 1px; line-height: 1; text-shadow: 0 6px 24px rgba(0,0,0,0.7), 0 2px 0 rgba(255,209,102,0.35); }
       .tt .hero .rule { width: 110px; height: 3px; background: linear-gradient(90deg, transparent, #ffd166, transparent); margin: 14px auto; }
-      .tt .vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.5) 100%); }
+      .tt .vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.3) 100%); }
       .tt .reward { pointer-events: auto; flex: 1; background: rgba(22,28,39,0.96); border: 1px solid rgba(255,255,255,0.1); border-radius: 18px;
         padding: 18px 12px; color: #f3efe6; font-family: ${FONT}; cursor: pointer; text-align: center; transition: transform 0.08s ease; box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
       .tt .reward:active { transform: scale(0.96); }

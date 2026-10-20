@@ -197,49 +197,62 @@ game plays on exactly as it would have.
 
 ## The look
 
-Low-poly in two dimensions. The world is a raised slab: every land tile draws
-its two front faces in the tribe's earth colour before its top, so the island
-floats with visible sides, coasts show a cliff where the sea sits a few pixels
-lower, and foam runs along the shore. Everything that stands on a tile is a
-few flat facets lit from the upper left — a lighter face on the left, a darker
-one on the right — which is what makes a cone read as a tree, a stack of quads
-as a house, and three triangles with a ragged white hem as a mountain.
+Low-poly in two dimensions, after the original. The ground is folded paper:
+every tile top is four or five flat facets around a jittered centre, each a
+step lighter or darker by the way it faces, and the water is the same in two
+blues with a pale shelf along the shore and a drifting glint. The world is a
+raised slab — every land tile draws its two front faces in the tribe's earth
+colour before its top, so an island floats with visible sides and coasts show
+a cliff where the sea sits a few pixels lower. Everything that stands on a
+tile is a stack of boxes, cones and faceted blobs lit from the upper left — a
+lighter face on the left, a darker one on the right, the lightest on top.
+Facets are stroked in their own colour so no hairline shows between them.
 
 Each tribe has its own field, forest, trunk, rock, earth and house colours, a
-tree style (cones, snow-capped cones, palms, dead trees, round canopies,
-acacias) and an animal (boar, deer, bear, camel, horned, humped), and the land
-near each capital uses that tribe's set, so a snowbound Hjold valley, a Tiwa
-atoll and an ash-grey Grimm waste are told apart at a glance. Fruit bushes,
-wheat rows, fish, whales and ore crystals mark resources; farms, mines, lumber
-huts, ports, windmills with turning blades, forges with smoke, sawmills,
-domed customs houses, tiered temples that gain gold trim as they age,
-obelisks and broken columns mark what has been built or found. Cities grow a
-house per level around a stone plaza, gain a hall with a tower at level four,
-a crenellated wall band when walled, and a pennant on the capital.
+tree style (three-tier pines, snow-capped pines, palms with faceted fronds,
+bare trees, three-layer canopies, flat acacias) and a boxy beast (boar, deer,
+bear, camel, horned, humped), and the land near each capital uses that
+tribe's set, so a snowbound Hjold valley, a Tiwa atoll and an ash-grey Grimm
+waste are told apart at a glance. Mountains are a ridge of two or three peaks,
+each a fan of facets with a ragged snow cap, mist drifting at the foot and
+ore crystals once Climbing is known. Fruit is three faceted fruits with leaf
+crowns, crops are rows of stalks with diamond heads, fish are angular white
+shapes in pairs. Farms, mines, lumber huts, ports, windmills with turning
+blades, forges with smoke, sawmills with a spinning blade, domed customs
+houses, tiered temples that gain gold trim as they age, obelisks and broken
+columns mark what has been built or found. Cities pack box houses with
+pyramid roofs around a stone plaza, two more than the level, gain a hall with
+a tower at level four and a keep with a tall tower at level seven, a ring of
+stone blocks when walled, and a waving pennant on the capital.
 
-Units are chibi figures: a tunic in the tribe colour with a shaded side, a
-round head with two dots for eyes, and gear per type — a club and cap, a
-hooded archer with a bow, a defender behind a tall shield, a swordsman with
-helmet and buckler, a catapult with its crew, a knight on an armoured horse
-with lance and plume, a mind bender with a glowing staff, a bald grey giant.
-Boats carry the figure on a hull with mast and sail; ships get a second sail;
-battleships are steel with a stack and guns. Hit points show as a bar when
-below full.
+Territory borders are low walls along the edge: a dark base band with blocks
+of the tribe colour on top, the way the original draws them. Units are blocky
+figures — a box body under a box head with two eyes on the lit face, small
+boxes for arms, a belt — with gear per type: an iron helm and club, a hooded
+archer with a bow, a defender behind a tall shield, a swordsman with helmet
+and buckler, a catapult with its crew, a rider on a striped horse, a knight
+on an armoured horse with lance and plume, a mind bender in a tall hat with a
+glowing staff, a grey giant half again as big. Boats carry the figure on a
+hull with a striped sail in the tribe colour; ships get a second sail;
+battleships are steel with a stack and guns. Every unit shows its hit points
+as a small number at the shoulder, white when whole and amber then red as it
+is hurt. The chosen unit stands in a breathing cyan glow; attack targets get a
+bullseye of red rings, conversion targets a purple one.
 
 Fog is a sea of clouds. Everything unexplored — on the map and beyond its
-edges, to the corners of the screen — is covered in puffs lit from the upper
-left, so the known world sits in a hole in the clouds and the screen is never
-empty. The puffs are the same at every zoom, so they are painted once per
-zoom step into a small `OffscreenCanvas` and repeated across the screen as a
-pattern: one fill per frame instead of a few thousand arcs. (The texture is
-seamless because the rows beyond its period are painted too, back to front,
-so a puff crossing an edge continues in the same stacking order on the other
-side.) The sea drifts a few pixels over a minute. A browser without
+edges, to the corners of the screen — is covered in pale puffs lit from the
+upper left, so the known world sits in a hole in the clouds and the screen is
+never empty. The puffs are the same at every zoom, so they are painted once
+per zoom step into a small `OffscreenCanvas` and repeated across the screen
+as a pattern: one fill per frame instead of a few thousand arcs. (The texture
+is seamless because the rows beyond its period are painted too, back to
+front, so a puff crossing an edge continues in the same stacking order on the
+other side.) Zoomed out, the puffs grow so the sea stays soft rather than
+turning to foam. The sea drifts a few pixels over a minute. A browser without
 `OffscreenCanvas` draws the same puffs tile by tile. The fog tiles that
 border the known world get a brighter bank on top, drawn in three layers
-(bodies, tops, highlights) so neighbouring tiles merge into one rim. Land
-tops carry a faint lit upper half and shaded lower half. Below 0.62 zoom
-every object drops to one shape so a Massive map stays cheap.
+(bodies, tops, highlights) so neighbouring tiles merge into one rim. Below
+0.62 zoom every object drops to one shape so a Massive map stays cheap.
 
 A turn opens close in — zoom 1.2 to 1.6 by screen width, with the capital
 sitting above the action sheet rather than behind it — so a unit is a
@@ -256,12 +269,13 @@ The canvas asks for a three-times backing store in CSS coordinates
 surface when every draw call already uses `ctx.width`/`ctx.height` pixels; the
 default backing store is CSS-sized and blurs on a phone. A little ambient
 motion runs at about fourteen frames a second while the map is up (seven when
-a frame takes longer than fourteen milliseconds to draw): water sparkles
-drift, the capital's pennant waves, forge smoke rises, the selection ring
-breathes, the clouds drift. The camera glides to the capital at the start of
-a turn. The HUD pills and the action sheet are frosted glass; the full-screen
-panels are not, because a backdrop blur over the whole canvas is the one
-thing a software renderer cannot keep up with.
+a frame takes longer than fourteen milliseconds to draw): water glints
+drift, mountain mist and the clouds drift, windmill blades and sawmill blades
+turn, the capital's pennant waves, forge smoke rises, the selection glow
+breathes. The camera glides to the capital at the start of a turn. The HUD
+pills and the action sheet are frosted glass; the full-screen panels are not,
+because a backdrop blur over the whole canvas is the one thing a software
+renderer cannot keep up with.
 
 ### Interface
 
