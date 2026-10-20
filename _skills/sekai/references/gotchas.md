@@ -43,6 +43,22 @@ the documented contract. This bug passed every headless run because the harness
 mock had `storage` as `async` when the contract says otherwise. A mock that is
 kinder than reality is worse than no mock.
 
+### The mock is only as current as the last person who read `sdk.md`
+
+**Symptom:** `init threw: TypeError: Indexed property setter is not supported`
+from `createRoot`, on a bit that passes `style` the way the SDK says to.
+
+`sdk.md` 1.5.7 says `createRoot({ style })` takes CSS text appended to
+`cssText`, never a JS style object; the mock used `Object.assign(el.style,
+opts.style)` and blew up on a string. Fixed, along with two more gaps found the
+same day: the mock never resized the canvas backing store when the container
+changed size (a landscape screenshot came out as a smeared strip, which looked
+like a renderer bug and was not), and it had no `ctx.game.progress`,
+`ctx.pulse`, `ctx.tune` or `ctx.onboarding` at all, so a bit using Continue
+Playing could only be tested by guarding every call. All four now follow the
+documented shapes. The lesson: when a run fails inside `mockctx.js`, check the
+mock against the current `sdk.md` before touching the bit.
+
 ### Anything that only appears on device
 
 The harness runs desktop Chromium. Things it cannot tell you about: real audio

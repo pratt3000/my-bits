@@ -47,6 +47,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`first-rakhi/`](first-rakhi)           | Tear a strip from a woven sari, thread by thread, and bind a cut with it. |
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
+| [`thirty-turns/`](thirty-turns)         | A pocket 4X in the Polytopia mould — twelve tribes, 24 techs, bots at four levels, pass-and-play. |
 
 ### Rakshabandhan set
 
@@ -87,7 +88,10 @@ The one exception is [`_skills/`](_skills), which holds reusable tooling rather
 than bits — the underscore keeps it sorted away from them. Right now it holds
 [`_skills/sekai/`](_skills/sekai): the route from a Sekai game link to a bit,
 plus the headless harness, the pre-upload validator and the draft uploader, all
-of which are useful for any bit and not just ported ones.
+of which are useful for any bit and not just ported ones. The harness mock
+follows `sdk.md` 1.5.7: `createRoot` takes `style` as CSS text, the canvas
+backing store follows the container, and `ctx.game.progress`, `ctx.pulse`,
+`ctx.tune` and `ctx.onboarding` are present with the documented shapes.
 
 ## Working on a bit
 

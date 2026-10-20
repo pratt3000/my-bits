@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "runtime": "plethora-bit@2",
+  "entry": "main.js",
+  "title": "Thirty Turns",
+  "description": "A pocket 4X strategy game in the Polytopia mould. Start with one city and one warrior on a square world of fields, forests, mountains and sea. Harvest, hunt and fish to grow cities, research a 24-technology tree, capture villages, and fight with warriors, riders, archers, defenders, swordsmen, catapults, knights, mind benders, giants and boats. Twelve tribes each with their own starting technology and landscape. Perfection (highest score after thirty turns), Domination, Glory and Might modes. Play alone against bots at four difficulties, or pass the phone around for up to eight players. Games save and resume.",
+  "tags": [
+    "strategy",
+    "4x",
+    "turn-based",
+    "game",
+    "tactics",
+    "civilization",
+    "multiplayer",
+    "pass-and-play",
+    "leaderboard",
+    "bot"
+  ],
+  "permissions": [
+    "audio",
+    "backgroundMusic",
+    "haptics",
+    "storage"
+  ],
+  "dependencies": [],
+  "memory": {
+    "records": {
+      "perfection": {
+        "label": "Perfection Score",
+        "valueType": "number",
+        "order": "desc",
+        "format": "integer",
+        "periods": [
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user",
+        "dimensions": {
+          "difficulty": [
+            "easy",
+            "normal",
+            "hard",
+            "crazy"
+          ]
+        }
+      },
+      "conquest": {
+        "label": "Fastest Conquest",
+        "valueType": "number",
+        "order": "asc",
+        "format": "integer",
+        "periods": [
+          "weekly",
+          "all_time"
+        ],
+        "scopes": [
+          "following",
+          "global"
+        ],
+        "dedupe": "best_per_user",
+        "dimensions": {
+          "difficulty": [
+            "easy",
+            "normal",
+            "hard",
+            "crazy"
+          ]
+        }
+      }
+    }
+  },
+  "game": {
+    "progress": {
+      "main": {
+        "label": "Saved game",
+        "stateSchemaVersion": 1,
+        "ttlDays": 180
+      }
+    }
+  },
+  "tuning": {
+    "schemaVersion": 1,
+    "groups": {
+      "difficulty": { "label": "Difficulty" },
+      "feel": { "label": "Feel" }
+    },
+    "knobs": {
+      "ai_bonus_stars": {
+        "label": "Extra stars every bot earns per turn",
+        "type": "integer",
+        "default": 0,
+        "min": 0,
+        "max": 5,
+        "step": 1,
+        "group": "difficulty",
+        "intent": "difficulty",
+        "apply": "live"
+      },
+      "turn_limit": {
+        "label": "Perfection turn limit override (0 lets the player choose)",
+        "type": "integer",
+        "default": 0,
+        "min": 0,
+        "max": 60,
+        "step": 5,
+        "group": "difficulty",
+        "intent": "gameplay",
+        "apply": "restart"
+      },
+      "anim_speed": {
+        "label": "Animation speed",
+        "type": "number",
+        "default": 1,
+        "min": 0.5,
+        "max": 2,
+        "step": 0.1,
+        "group": "feel",
+        "intent": "feel",
+        "apply": "live"
+      },
+      "music_volume": {
+        "label": "Music volume",
+        "type": "percent",
+        "default": 30,
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "group": "feel",
+        "intent": "audio",
+        "apply": "restart"
+      }
+    }
+  },
+  "onboarding": {
+    "kind": "briefing",
+    "version": 1,
+    "pages": [
+      {
+        "title": "One city, one warrior",
+        "body": "Tap a unit, then a lit tile to move it. Stand on a village for a turn and capture it to found a new city. Moving into a forest, a mountain, or next to an enemy ends the move."
+      },
+      {
+        "title": "Grow your cities",
+        "body": "Tap a tile inside your border to harvest fruit, hunt, fish, farm or mine. Population fills the bar under the city name; a full bar levels the city up, pays one more star every turn, and offers a reward."
+      },
+      {
+        "title": "Research and fight",
+        "body": "Stars buy technology too. Each tribe starts with one. Red tiles are enemies you can attack; defenders strike back when you are in their reach, and a unit in its own city defends harder."
+      },
+      {
+        "title": "Win",
+        "body": "Perfection: highest score after thirty turns. Domination: last tribe standing. Glory: first to 10,000 points. Might: hold every capital. Tap End turn when you are done."
+      }
+    ]
+  }
+}

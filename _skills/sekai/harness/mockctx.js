@@ -71,7 +71,9 @@
       el.style.inset = "0";
       if (opts.className) el.className = opts.className;
       if (opts.touchAction) el.style.touchAction = opts.touchAction;
-      if (opts.style) Object.assign(el.style, opts.style);
+      // sdk.md: style is CSS text appended to cssText, never a JS style object.
+      if (typeof opts.style === "string") el.style.cssText += ";" + opts.style;
+      else if (opts.style) Object.assign(el.style, opts.style);
       container.appendChild(el);
       destroyers.push(() => el.remove());
       return el;
@@ -91,6 +93,19 @@
       container.appendChild(c);
       const g = c.getContext("2d");
       g.setTransform(DPR, 0, 0, DPR, 0, 0);
+      // The runtime owns the surface: when the container changes size the
+      // backing store follows and the CSS-pixel transform is re-applied, so a
+      // bit never touches canvas.width or setTransform itself.
+      if (typeof ResizeObserver === "function") {
+        const ro = new ResizeObserver(() => {
+          const r2 = rect();
+          if (c.width === Math.round(r2.w * DPR) && c.height === Math.round(r2.h * DPR)) return;
+          c.width = Math.round(r2.w * DPR); c.height = Math.round(r2.h * DPR);
+          g.setTransform(DPR, 0, 0, DPR, 0, 0);
+        });
+        ro.observe(container);
+        destroyers.push(() => ro.disconnect());
+      }
       destroyers.push(() => c.remove());
       return c;
     },
@@ -262,6 +277,51 @@
           }
         };
       }
+    },
+
+    // sdk.md 1.5.7: viewer-private Continue Playing state. Mirrors the
+    // documented shapes only; nothing is kinder than the contract says.
+    game: {
+      progress: {
+        async load(channelId) {
+          const id = channelId || "main";
+          const key = "progress:" + id;
+          if (!store.has(key)) return { channelId: id, resumeEligible: false, resumeIneligibleReason: "empty", state: null };
+          const saved = JSON.parse(store.get(key));
+          return Object.assign({ channelId: id, resumeEligible: saved.status === "in_progress" }, saved);
+        },
+        async save(channelId, value) {
+          const id = typeof channelId === "string" ? channelId : "main";
+          const v = typeof channelId === "string" ? value : channelId;
+          if (!v || typeof v !== "object" || !("state" in v)) throw new Error("progress.save needs { state }");
+          if (JSON.stringify(v.state).length > 8192) throw new Error("progress state over 8192 bytes");
+          store.set("progress:" + id, JSON.stringify(Object.assign({ status: "in_progress", stateSchemaVersion: 1 }, v)));
+          note("progress.save", id, v.label);
+          return { ok: true, status: "in_progress" };
+        },
+        async complete(channelId, value) {
+          const id = typeof channelId === "string" ? channelId : "main";
+          const v = typeof channelId === "string" ? value : channelId;
+          store.set("progress:" + id, JSON.stringify(Object.assign({ status: "completed" }, v || {})));
+          note("progress.complete", id);
+          return { ok: true, status: "completed" };
+        },
+        async abandon(channelId) {
+          const id = typeof channelId === "string" ? channelId : "main";
+          store.delete("progress:" + id);
+          note("progress.abandon", id);
+          return { ok: true, status: "abandoned" };
+        }
+      }
+    },
+    pulse: { complete(o) { note("pulse.complete", o); } },
+    tune: {
+      get() { return undefined; }, has() { return false; }, onChange() { return () => {}; },
+      number() { return undefined; }, integer() { return undefined; }, boolean() { return undefined; }, percent() { return undefined; }
+    },
+    onboarding: {
+      state() { return { kind: "immersive", version: 1, active: false, completed: true }; },
+      start() {}, next() {}, advance() {}, complete() {}, dismiss() {}, replay() {}, focus() {}, clearFocus() {}
     },
 
     assets: {
