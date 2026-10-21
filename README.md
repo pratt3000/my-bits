@@ -118,6 +118,9 @@ hard way, documented where they bit:
   see [`heartwood/`](heartwood#what-the-upload-validator-rejects).
 - `const ph = <call expression>` — the local's name alone. See
   [`pixel-fog/`](pixel-fog).
+- A `ctx.createCanvas2D()` fallback in a bake helper **plus** a loop writing
+  into `getImageData(...).data` anywhere else in the file, even when the two
+  never meet — see [`crumple/`](crumple#what-the-upload-validator-rejects).
 
 A rejected upload creates nothing, so probe uploads are free; unreachable code
 is still scanned; and constructs that merely *look* exotic are usually fine if

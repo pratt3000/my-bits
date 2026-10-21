@@ -83,6 +83,10 @@ for diagnosis. Known triggers, none of which are about remote resources:
 - `addColorStop()` with a colour it cannot resolve to a literal
 - `const <name> = <call expression>` — in at least one case the local's *name*
   alone was enough
+- **A `ctx.createCanvas2D()` fallback anywhere in the file plus a loop writing
+  into `getImageData(...).data` anywhere else** — even when the pixels never
+  come from that canvas. Either alone passes. Bake to `OffscreenCanvas` or
+  nothing (`crumple/`, and the same policy in `cairn/` and `pixel-fog/`).
 
 See the root `README.md` "Upload-validator gotchas" section, which links to the
 bits where each was found.
@@ -98,7 +102,13 @@ parse.
 Two caveats learned the hard way: manifest checks run *before* the source scan,
 so a deliberately-broken manifest tells you nothing; and a small slice may pass
 simply for being small, so confirm a "clean" verdict on a slice of comparable
-size to the whole.
+size to the whole. Two more from `crumple/`: the validator concatenates every
+complaint into one message, so judge a probe on whether the *remote resources*
+phrase is present, not on whether the message changed; and it rate-limits —
+a dozen probes in parallel all came back "Request deadline exceeded", which is
+a timeout, not a verdict. Run probes one at a time. The bisection is in
+`crumple/README.md`; its probe script posted the exact draft payload with
+`window.plethoraBit` renamed, which is all a probe needs.
 
 ### Duplicate drafts
 

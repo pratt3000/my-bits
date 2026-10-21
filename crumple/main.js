@@ -42,19 +42,19 @@ window.plethoraBit = {
     const rnd = (a, b) => a + Math.random() * (b - a);
     const TAU = Math.PI * 2;
 
-    // Offscreen surfaces for texture bakes. The runtime owns every canvas in
-    // the DOM, so bakes go to an OffscreenCanvas; if the WebView lacks it we
-    // fall back to a hidden SDK canvas rather than losing the texture.
+    // Offscreen surfaces for texture bakes go to an OffscreenCanvas or nowhere.
+    // The upload validator rejects a file that both mints an SDK canvas and
+    // writes pixels into an ImageData, even when the two never meet, so there
+    // is no hidden-canvas fallback: without OffscreenCanvas every texture
+    // function returns null, materials fall back to flat colours, and the
+    // sprite effects are skipped.
     const CAN_BAKE = typeof OffscreenCanvas === "function";
     function surface(w, h) {
-      w = Math.max(1, w | 0); h = Math.max(1, h | 0);
-      if (CAN_BAKE) {
-        try { return new OffscreenCanvas(w, h); } catch (_) { /* fall through */ }
-      }
-      const c = ctx.createCanvas2D();
-      c.style.display = "none";
-      c.width = w; c.height = h;
-      return c;
+      if (!CAN_BAKE) return null;
+      try {
+        const c = new OffscreenCanvas(Math.max(1, w | 0), Math.max(1, h | 0));
+        return c.getContext("2d") ? c : null;
+      } catch (_) { return null; }
     }
 
     // ctx.storage.set() returns nothing on device; never chain onto it.
@@ -292,6 +292,7 @@ window.plethoraBit = {
     /** Per-pixel painter: fn(u, v, out) fills out[0..2] with 0..255. */
     function paint(w, h, fn) {
       const c = surface(w, h);
+      if (!c) return null;
       const g = c.getContext("2d");
       const img = g.getImageData(0, 0, w, h);
       const d = img.data;
@@ -307,12 +308,20 @@ window.plethoraBit = {
       return c;
     }
     function texOf(c, opts) {
+      if (!c) return null;
       opts = opts || {};
       const t = new THREE.CanvasTexture(c);
       if (opts.srgb !== false) t.colorSpace = THREE.SRGBColorSpace;
       if (opts.repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(opts.repeat[0], opts.repeat[1]); }
       t.anisotropy = opts.aniso || 4;
       return t;
+    }
+    /** Material options with a map, or the flat colour when the bake was skipped. */
+    function mapped(tex, color, extra) {
+      const o = extra || {};
+      o.map = tex;
+      o.color = tex ? 0xffffff : color;
+      return o;
     }
     const rgb = (r, g, b) => "rgb(" + (r | 0) + "," + (g | 0) + "," + (b | 0) + ")";
 
@@ -337,6 +346,7 @@ window.plethoraBit = {
         const g = 116 + (n - 0.5) * 48 + (s - 0.5) * 74;
         o[0] = clamp(g + 5, 0, 255); o[1] = clamp(g + 3, 0, 255); o[2] = clamp(g - 2, 0, 255);
       });
+      if (!c) return null;
       const g = c.getContext("2d");
       g.strokeStyle = "rgba(38,36,34,.32)";
       g.lineCap = "round";
@@ -355,6 +365,7 @@ window.plethoraBit = {
     function plankTex() {
       const W = 512, H = 512, n = 8;
       const c = surface(W, H);
+      if (!c) return null;
       const g = c.getContext("2d");
       for (let i = 0; i < n; i++) {
         const x0 = i * W / n, tone = rnd(-16, 16);
@@ -384,6 +395,7 @@ window.plethoraBit = {
     function woodTex(r0, g0, b0) {
       const W = 512, H = 256;
       const c = surface(W, H);
+      if (!c) return null;
       const g = c.getContext("2d");
       g.fillStyle = rgb(r0, g0, b0); g.fillRect(0, 0, W, H);
       for (let i = 0; i < 150; i++) {
@@ -420,6 +432,7 @@ window.plethoraBit = {
     function cinderTex() {
       const W = 512, H = 256;
       const c = surface(W, H);
+      if (!c) return null;
       const g = c.getContext("2d");
       g.fillStyle = "#6a665e"; g.fillRect(0, 0, W, H);
       const bw = W / 5, bh = H / 5;
@@ -446,6 +459,7 @@ window.plethoraBit = {
         const g = 214 + (n - 0.5) * 22;
         o[0] = g; o[1] = g; o[2] = g - 4;
       });
+      if (!c) return null;
       const g = c.getContext("2d");
       g.fillStyle = "rgba(60,60,66,.55)";
       g.fillRect(0, 0, S, 3); g.fillRect(0, 0, 3, S);
@@ -457,6 +471,7 @@ window.plethoraBit = {
     function paperTex(kind) {
       const S = 256;
       const c = surface(S, S);
+      if (!c) return null;
       const g = c.getContext("2d");
       const base = { plain: "#f4f3ee", sticky: "#f6e46b", news: "#d9d6cc", memo: "#f7b8c9", foil: "#f6d27a" };
       g.fillStyle = base[kind] || base.plain; g.fillRect(0, 0, S, S);
@@ -496,6 +511,7 @@ window.plethoraBit = {
     function screenTex(on) {
       const W = 256, H = 160;
       const c = surface(W, H);
+      if (!c) return null;
       const g = c.getContext("2d");
       if (!on) {
         g.fillStyle = "#0c0f14"; g.fillRect(0, 0, W, H);
@@ -524,6 +540,7 @@ window.plethoraBit = {
         const k = 0.9 + (n - 0.5) * 0.28;
         o[0] = clamp(178 * k, 0, 255); o[1] = clamp(136 * k, 0, 255); o[2] = clamp(92 * k, 0, 255);
       });
+      if (!c) return null;
       const g = c.getContext("2d");
       g.fillStyle = "rgba(224,204,164,.6)"; g.fillRect(S * 0.44, 0, S * 0.12, S);
       g.fillStyle = "rgba(255,255,255,.82)"; g.fillRect(28, 150, 70, 44);
@@ -535,6 +552,7 @@ window.plethoraBit = {
     function posterTex(kind) {
       const W = 256, H = 352;
       const c = surface(W, H);
+      if (!c) return null;
       const g = c.getContext("2d");
       if (kind === 0) {
         g.fillStyle = "#1d3a6b"; g.fillRect(0, 0, W, H);
@@ -558,6 +576,7 @@ window.plethoraBit = {
     function neonTex() {
       const W = 512, H = 192;
       const c = surface(W, H);
+      if (!c) return null;
       const g = c.getContext("2d");
       g.fillStyle = "#07050a"; g.fillRect(0, 0, W, H);
       g.font = "bold 118px 'Bebas Neue', Impact, 'Arial Narrow', sans-serif";
@@ -573,6 +592,7 @@ window.plethoraBit = {
     function meshBumpTex() {
       const S = 128;
       const c = surface(S, S);
+      if (!c) return null;
       const g = c.getContext("2d");
       g.fillStyle = "#808080"; g.fillRect(0, 0, S, S);
       g.strokeStyle = "#ffffff"; g.lineWidth = 3;
@@ -585,6 +605,7 @@ window.plethoraBit = {
     function glowTex(inner, outer) {
       const S = 64;
       const c = surface(S, S);
+      if (!c) return null;
       const g = c.getContext("2d");
       const grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
       grad.addColorStop(0, inner);
@@ -602,6 +623,7 @@ window.plethoraBit = {
     function envTex(kind) {
       const W = 256, H = 128;
       const c = surface(W, H);
+      if (!c) return null;
       const g = c.getContext("2d");
       const stops = kind === "office"
         ? [[244, 246, 250], [200, 206, 216], [138, 144, 160], [60, 63, 72]]
@@ -722,8 +744,9 @@ window.plethoraBit = {
         m.add(box(0.22, 0.015, 0.16, blackMat, 0, 0.0075, 0));
         m.add(box(0.04, 0.12, 0.03, blackMat, 0, 0.07, -0.03));
         m.add(box(0.54, 0.34, 0.03, blackMat, 0, 0.3, -0.02));
+        const smap = on ? screenOn : screenOff;
         const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.3), new THREE.MeshStandardMaterial({
-          color: 0x000000, emissive: 0xffffff, emissiveMap: on ? screenOn : screenOff,
+          color: 0x000000, emissive: smap ? 0xffffff : (on ? 0x3a86d8 : 0x0c0f14), emissiveMap: smap,
           emissiveIntensity: on ? 1.15 : 0.25, roughness: 0.25, metalness: 0.1
         }));
         scr.position.set(0, 0.3, -0.004);
@@ -756,7 +779,7 @@ window.plethoraBit = {
       };
 
       room.boxStack = function (x, z) {
-        const cb = new THREE.MeshStandardMaterial({ map: cardboard, roughness: 0.9 });
+        const cb = new THREE.MeshStandardMaterial(mapped(cardboard, 0xb2885c, { roughness: 0.9 }));
         g.add(box(0.5, 0.36, 0.42, cb, x, 0.18, z, { ry: 0.1 }));
         g.add(box(0.42, 0.3, 0.36, cb, x + 0.03, 0.51, z - 0.02, { ry: -0.15 }));
         g.add(box(0.3, 0.24, 0.3, cb, x - 0.05, 0.78, z + 0.03, { ry: 0.3 }));
@@ -772,10 +795,10 @@ window.plethoraBit = {
       const g = room.group, cols = room.cols;
 
       const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24),
-        new THREE.MeshStandardMaterial({ map: carpetTex([80, 94, 122], [150, 160, 178]), roughness: 0.96 }));
+        new THREE.MeshStandardMaterial(mapped(carpetTex([80, 94, 122], [150, 160, 178]), 0x5c6a86, { roughness: 0.96 })));
       floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, -6); floor.receiveShadow = true; g.add(floor);
 
-      const ceil = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), new THREE.MeshStandardMaterial({ map: ceilingTex(), roughness: 0.95 }));
+      const ceil = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), new THREE.MeshStandardMaterial(mapped(ceilingTex(), 0xd4d4d0, { roughness: 0.95 })));
       ceil.rotation.x = Math.PI / 2; ceil.position.set(0, 2.75, -6); g.add(ceil);
       const panelMat = new THREE.MeshBasicMaterial({ color: 0xf6f8ff });
       for (const z of [-3.4, -6.2, -9.0]) for (const x of [-1.25, 1.25]) g.add(box(0.6, 0.02, 1.2, panelMat, x, 2.74, z, { noCast: true }));
@@ -802,7 +825,7 @@ window.plethoraBit = {
       g.add(win);
 
       // Cubicle partitions.
-      const fabric = new THREE.MeshStandardMaterial({ map: fabricTex(), roughness: 0.95 });
+      const fabric = new THREE.MeshStandardMaterial(mapped(fabricTex(), 0x8e96a3, { roughness: 0.95 }));
       const alu = new THREE.MeshStandardMaterial({ color: 0xb9bec6, metalness: 0.8, roughness: 0.35 });
       function partition(len, x, z, ry) {
         const p = new THREE.Group();
@@ -823,13 +846,13 @@ window.plethoraBit = {
       partition(1.4, -2.6, -5.3, Math.PI / 2);
 
       // Posters pinned to the back partitions.
-      const po1 = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.55), new THREE.MeshStandardMaterial({ map: posterTex(0), roughness: 0.85 }));
+      const po1 = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.55), new THREE.MeshStandardMaterial(mapped(posterTex(0), 0x1d3a6b, { roughness: 0.85 })));
       po1.position.set(-0.6, 1.0, -8.17); g.add(po1);
-      const po2 = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.55), new THREE.MeshStandardMaterial({ map: posterTex(1), roughness: 0.85 }));
+      const po2 = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.55), new THREE.MeshStandardMaterial(mapped(posterTex(1), 0xb05a6e, { roughness: 0.85 })));
       po2.position.set(1.9, 1.0, -8.17); po2.rotation.z = 0.03; g.add(po2);
 
       // Desks with their clutter.
-      const lam = new THREE.MeshStandardMaterial({ map: woodTex(206, 182, 146), roughness: 0.55, metalness: 0.02 });
+      const lam = new THREE.MeshStandardMaterial(mapped(woodTex(206, 182, 146), 0xceb692, { roughness: 0.55, metalness: 0.02 }));
       const side = new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 0.7, metalness: 0.2 });
       room.desk(-0.95, -7.6, 1.7, 0.75, lam, side);
       room.monitor(-0.95, -7.72, 0.08, true);
@@ -867,7 +890,7 @@ window.plethoraBit = {
       // Mid-room: side returns, a water cooler, a printer on a stand.
       partition(1.8, -2.0, -5.7, Math.PI / 2);
       partition(1.8, 2.0, -5.7, Math.PI / 2);
-      const po3 = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.47), new THREE.MeshStandardMaterial({ map: posterTex(1), roughness: 0.85 }));
+      const po3 = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.47), new THREE.MeshStandardMaterial(mapped(posterTex(1), 0xb05a6e, { roughness: 0.85 })));
       po3.position.set(-1.97, 1.0, -5.5); po3.rotation.y = Math.PI / 2; g.add(po3);
       g.add(box(0.32, 0.95, 0.32, new THREE.MeshStandardMaterial({ color: 0xe9ebee, roughness: 0.5 }), -1.6, 0.475, -5.2));
       const bottleMat = new THREE.MeshStandardMaterial({ color: 0x6fb7ff, roughness: 0.15, transparent: true, opacity: 0.75, envMapIntensity: 1.2 });
@@ -903,10 +926,10 @@ window.plethoraBit = {
       const room = makeRoom();
       const g = room.group, cols = room.cols;
 
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), new THREE.MeshStandardMaterial({ map: concreteTex(), roughness: 0.85 }));
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), new THREE.MeshStandardMaterial(mapped(concreteTex(), 0x76746f, { roughness: 0.85 })));
       floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, -6); floor.receiveShadow = true; g.add(floor);
 
-      const cinder = new THREE.MeshStandardMaterial({ map: cinderTex(), roughness: 0.95 });
+      const cinder = new THREE.MeshStandardMaterial(mapped(cinderTex(), 0x8c887f, { roughness: 0.95 }));
       g.add(box(16, 2.75, 0.1, cinder, 0, 1.375, -10.05));
       g.add(box(0.1, 2.75, 24, cinder, -3.65, 1.375, -6));
       g.add(box(0.1, 2.75, 24, cinder, 3.65, 1.375, -6));
@@ -935,7 +958,7 @@ window.plethoraBit = {
         const met = new THREE.MeshStandardMaterial({ color: 0x6d7076, roughness: 0.55, metalness: 0.6 });
         for (const sx of [-0.45, 0.45]) for (const sz of [-0.2, 0.2]) s.add(box(0.035, 1.9, 0.035, met, sx, 0.95, sz));
         for (let i = 0; i < 4; i++) s.add(box(0.95, 0.025, 0.45, met, 0, 0.1 + i * 0.55, 0));
-        const cb = new THREE.MeshStandardMaterial({ map: cardboard, roughness: 0.9 });
+        const cb = new THREE.MeshStandardMaterial(mapped(cardboard, 0xb2885c, { roughness: 0.9 }));
         s.add(box(0.36, 0.3, 0.32, cb, -0.25, 0.2625, 0));
         s.add(box(0.3, 0.25, 0.3, cb, 0.22, 0.2375, 0.02, { ry: 0.2 }));
         s.add(box(0.4, 0.28, 0.34, cb, 0.1, 0.8025, 0));
@@ -951,7 +974,7 @@ window.plethoraBit = {
       shelving(2.4, -7.2, 0.35);
       shelving(-3.1, -4.8, Math.PI / 2);
 
-      const bench = new THREE.MeshStandardMaterial({ map: woodTex(150, 118, 80), roughness: 0.8 });
+      const bench = new THREE.MeshStandardMaterial(mapped(woodTex(150, 118, 80), 0x967650, { roughness: 0.8 }));
       const benchLeg = new THREE.MeshStandardMaterial({ color: 0x3b3430, roughness: 0.85 });
       room.desk(0.4, -8.9, 1.9, 0.7, bench, benchLeg);
       g.add(box(0.42, 0.2, 0.2, new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.45, metalness: 0.3 }), 0.8, 0.84, -8.95));
@@ -986,12 +1009,12 @@ window.plethoraBit = {
       const room = makeRoom();
       const g = room.group, cols = room.cols;
 
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), new THREE.MeshStandardMaterial({ map: plankTex(), roughness: 0.5, metalness: 0.05 }));
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), new THREE.MeshStandardMaterial(mapped(plankTex(), 0x58361e, { roughness: 0.5, metalness: 0.05 })));
       floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, -6); floor.receiveShadow = true; g.add(floor);
 
       const plaster = new THREE.MeshStandardMaterial({ color: 0x5a2a22, roughness: 0.9 });
-      const darkWood = new THREE.MeshStandardMaterial({ map: woodTex(70, 42, 24), roughness: 0.55, metalness: 0.05 });
-      const glossWood = new THREE.MeshStandardMaterial({ map: woodTex(110, 66, 34), roughness: 0.25, metalness: 0.1, envMapIntensity: 1.1 });
+      const darkWood = new THREE.MeshStandardMaterial(mapped(woodTex(70, 42, 24), 0x462a18, { roughness: 0.55, metalness: 0.05 }));
+      const glossWood = new THREE.MeshStandardMaterial(mapped(woodTex(110, 66, 34), 0x6e4222, { roughness: 0.25, metalness: 0.1, envMapIntensity: 1.1 }));
       g.add(box(16, 2.75, 0.1, plaster, 0, 1.375, -10.05));
       g.add(box(0.1, 2.75, 24, plaster, -3.65, 1.375, -6));
       g.add(box(0.1, 2.75, 24, plaster, 3.65, 1.375, -6));
@@ -1029,8 +1052,9 @@ window.plethoraBit = {
         g.add(cyl(0.034, 0.036, 0.27, mat, x, y + 0.135, -9.8, 14));
         g.add(cyl(0.013, 0.02, 0.1, mat, x, y + 0.32, -9.8, 10));
       }
+      const nmap = neonTex();
       const neon = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.56), new THREE.MeshStandardMaterial({
-        color: 0x000000, emissive: 0xffffff, emissiveMap: neonTex(), emissiveIntensity: 1.3, roughness: 1
+        color: 0x000000, emissive: nmap ? 0xffffff : 0xff6fb0, emissiveMap: nmap, emissiveIntensity: 1.3, roughness: 1
       }));
       neon.position.set(0, 2.2, -9.96); g.add(neon);
       const pinMat = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.3 });
@@ -1109,7 +1133,7 @@ window.plethoraBit = {
     // ===================================================================== //
     // The player's desk: a square top seen over its far corner, so the wedge
     // of wood at the bottom of the frame points up the room.
-    const deskWood = new THREE.MeshStandardMaterial({ map: woodTex(196, 150, 92), roughness: 0.5, metalness: 0.03 });
+    const deskWood = new THREE.MeshStandardMaterial(mapped(woodTex(196, 150, 92), 0xc4965c, { roughness: 0.5, metalness: 0.03 }));
     const deskGroup = new THREE.Group();
     deskGroup.add(box(0.9, 0.04, 0.9, deskWood, 0, 0.72, -0.33, { ry: Math.PI / 4 }));
     deskGroup.add(box(0.86, 0.09, 0.86, new THREE.MeshStandardMaterial({ color: 0x6e4a2a, roughness: 0.75 }), 0, 0.655, -0.33, { ry: Math.PI / 4 }));
@@ -1236,9 +1260,11 @@ window.plethoraBit = {
     const paperMats = {};
     function paperMat(kind) {
       if (paperMats[kind]) return paperMats[kind];
+      const flat = { plain: 0xf4f3ee, sticky: 0xf6e46b, news: 0xd9d6cc, memo: 0xf7b8c9, foil: 0xf6d27a };
+      const tex = paperTex(kind);
       const m = kind === "foil"
-        ? new THREE.MeshStandardMaterial({ map: paperTex(kind), color: 0xffe9a8, metalness: 0.85, roughness: 0.32, flatShading: true, envMapIntensity: 1.6 })
-        : new THREE.MeshStandardMaterial({ map: paperTex(kind), roughness: 0.92, metalness: 0, flatShading: true });
+        ? new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffe9a8 : 0xf6d27a, metalness: 0.85, roughness: 0.32, flatShading: true, envMapIntensity: 1.6 })
+        : new THREE.MeshStandardMaterial(mapped(tex, flat[kind] || flat.plain, { roughness: 0.92, metalness: 0, flatShading: true }));
       paperMats[kind] = m;
       return m;
     }
@@ -1264,7 +1290,7 @@ window.plethoraBit = {
     // Flight trail: a short ribbon of fading sprites.
     const trailTex = glowTex("rgba(255,255,255,1)", "rgba(255,255,255,.45)");
     const trail = [];
-    for (let i = 0; i < 28; i++) {
+    for (let i = 0; i < (trailTex ? 28 : 0); i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: trailTex, transparent: true, opacity: 0, depthWrite: false }));
       s.scale.set(0.06, 0.06, 1);
       s.visible = false;
@@ -1293,7 +1319,7 @@ window.plethoraBit = {
     // Flies. Every office has them.
     const flyTex = glowTex("rgba(20,18,16,1)", "rgba(20,18,16,.9)");
     const flies = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < (flyTex ? 3 : 0); i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flyTex, transparent: true, depthWrite: false }));
       s.scale.set(0.016, 0.012, 1);
       s.visible = false;

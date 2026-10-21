@@ -108,6 +108,9 @@ carpet, because every office has them.
 Textures — carpet, concrete, planks, laminate, cubicle fabric, cinder block,
 ceiling tile, cardboard, posters, a desktop for the monitor, a neon sign, the
 five papers — are painted to `OffscreenCanvas` with tileable value noise.
+Without `OffscreenCanvas` (iOS before 16.4) every texture function returns
+null, materials fall back to flat colours of the same tone, the monitor and
+neon keep a plain emissive, and the trail and flies are skipped.
 Reflections come from a banded equirectangular room per scene. Lighting is a
 hemisphere, one shadow-casting key light (1536² PCF soft), and a few point
 lights; ACES tone mapping; fog to sink the far wall.
@@ -148,6 +151,24 @@ band-passed air plus a low motor hum — whose level follows the wind.
 - Onboarding is `immersive`: the bit draws its own in-scene cue (the hand
   and the arrow), which is the reference's own tutorial.
 
+### What the upload validator rejects
+
+The first upload was refused with the usual message about unsupported remote
+resources. Bisected with probe uploads (the global renamed, so a clean scan
+fails on a different check and no draft is created), the cause was the
+combination of **a hidden `ctx.createCanvas2D()` fallback in the bake helper**
+and **a loop writing into `getImageData(...).data`** in the texture painter.
+Either alone passes — pen-fight carries the same fallback helper and uploads,
+and the painter passes once the fallback is gone — and it does not matter that
+the pixels never come from the SDK canvas: a probe with the painter on a plain
+`OffscreenCanvas` and the fallback merely present elsewhere still failed. The
+bake helper is now `OffscreenCanvas` or null, like `cairn/` and `pixel-fog/`.
+Ruled out along the way, each by its own probe: the SVG `url(#…)` gradient,
+`getCoalescedEvents`, `backdrop-filter`, `MeshPhysicalMaterial`, the registry
+URL fallback, the SVG `<text>`, the canvas font string, a variable record
+channel, the `<style>` block, the inline SVG as a whole, the local's name,
+`createImageData` in place of `getImageData`, and `putImageData`.
+
 ## Verified
 
 Run headlessly with the repo harness (`_skills/sekai/harness/run.js`) against
@@ -165,4 +186,10 @@ the strict mock `ctx`, on a 390 × 844 viewport:
 The harness drives flicks over CDP with real send timestamps rather than
 awaiting each mouse move, because under software rendering a frame takes
 most of a second and an awaited "220 ms" flick really took eight. That change
-lives in `run.js` and helps any flick-driven bit.
+lives in `run.js` and helps any flick-driven bit. The harness runs at four or
+five frames a second, so a scenario's fixed waits occasionally land a step
+early; a run that reports only a scripted step out of order, with every
+platform event present and no console error, is timing, not the bit.
+
+Uploaded as a draft on 2026-10-21 (id `b7f4659b-d111-4b16-8cce-ab1925eced78`)
+after the validator bisection above; publishing stays manual in the app.
