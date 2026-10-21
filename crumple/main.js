@@ -65,8 +65,6 @@ window.plethoraBit = {
       } catch (_) { /* not supported on this runtime */ }
     }
 
-    const SAFE_T = Math.max((ctx.safeArea && ctx.safeArea.top) || 0, 0);
-    const SAFE_B = Math.max((ctx.safeArea && ctx.safeArea.bottom) || 0, 0);
 
     // ===================================================================== //
     // 1. Surfaces + an immediate first frame (the title card)                //
@@ -117,7 +115,7 @@ window.plethoraBit = {
       ".cr *{box-sizing:border-box;}" +
       ".cr-vig{position:absolute;inset:0;background:radial-gradient(125% 95% at 50% 42%,rgba(0,0,0,0) 56%,rgba(0,0,0,.45) 100%);}" +
       ".cr-fade{position:absolute;inset:0;background:#06080e;opacity:0;transition:opacity .35s ease;}" +
-      ".cr-hud{position:absolute;left:10px;right:10px;top:" + (SAFE_T + 8) + "px;opacity:0;transition:opacity .4s ease;}" +
+      ".cr-hud{position:absolute;left:calc(10px + var(--sl,0px));right:calc(10px + var(--sr,0px));top:calc(8px + var(--st,0px));opacity:0;transition:opacity .4s ease;}" +
       ".cr-ban{position:relative;height:64px;border-radius:15px;display:flex;align-items:center;gap:8px;padding:0 9px 0 7px;" +
       "background:repeating-linear-gradient(135deg,rgba(255,255,255,.07) 0 2px,rgba(255,255,255,0) 2px 6px),linear-gradient(180deg,#f3dcb0 0%,#e7c68f 55%,#d9b172 100%);" +
       "box-shadow:0 7px 18px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.6),inset 0 -3px 0 rgba(110,72,25,.22);}" +
@@ -135,15 +133,15 @@ window.plethoraBit = {
       ".cr-balls{display:flex;justify-content:center;gap:5px;margin-top:9px;}" +
       ".cr-balls svg{filter:drop-shadow(0 2px 2px rgba(0,0,0,.35));transition:opacity .3s,transform .3s;}" +
       ".cr-balls svg.used{opacity:.22;transform:scale(.8);}" +
-      ".cr-wind{position:absolute;left:13%;top:66%;width:96px;text-align:center;opacity:0;transition:opacity .35s;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5));}" +
+      ".cr-wind{position:absolute;left:calc(13% + var(--sl,0px));top:66%;width:96px;text-align:center;opacity:0;transition:opacity .35s;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5));}" +
       ".cr-wind .n{margin-top:-5px;font-size:20px;font-weight:800;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.6);}" +
       ".cr-wind .a{display:inline-block;transition:transform .3s;}" +
       ".cr-wind .a.l{transform:scaleX(-1);}" +
-      ".cr-tag{position:absolute;left:0;top:52%;padding:7px 14px 7px 12px;border-radius:0 6px 6px 0;pointer-events:auto;opacity:0;transition:opacity .4s;" +
+      ".cr-tag{position:absolute;left:var(--sl,0px);top:52%;padding:7px 14px 7px 12px;border-radius:0 6px 6px 0;pointer-events:auto;opacity:0;transition:opacity .4s;" +
       "background:linear-gradient(180deg,#f0d7a9,#e0bd82);color:#6b4a1e;font-weight:800;font-size:14px;letter-spacing:.1em;" +
       "transform:rotate(-4deg);transform-origin:left center;box-shadow:0 4px 10px rgba(0,0,0,.35);}" +
       ".cr-tag::before{content:'';position:absolute;top:-7px;left:50%;width:34px;height:12px;background:rgba(255,255,255,.5);transform:translateX(-50%) rotate(-3deg);border-radius:2px;}" +
-      ".cr-badge{position:absolute;right:0;top:44%;width:40px;height:34px;border-radius:9px 0 0 9px;pointer-events:auto;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s;" +
+      ".cr-badge{position:absolute;right:var(--sr,0px);top:44%;width:40px;height:34px;border-radius:9px 0 0 9px;pointer-events:auto;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s;" +
       "background:linear-gradient(180deg,#b79cff,#8b63f3);color:#fff;font-weight:800;font-size:22px;box-shadow:0 4px 10px rgba(0,0,0,.35);}" +
       ".cr-up{position:absolute;left:0;top:0;width:22px;height:30px;margin-left:-11px;margin-top:-15px;opacity:0;transition:opacity .3s;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));animation:crBob 1.1s ease-in-out infinite;}" +
       ".cr-hand{position:absolute;left:0;top:0;width:64px;height:80px;margin-left:-14px;margin-top:-4px;opacity:0;filter:drop-shadow(0 6px 8px rgba(0,0,0,.45));}" +
@@ -152,8 +150,8 @@ window.plethoraBit = {
       ".cr-toast .b{font-family:'Bebas Neue',Impact,'Arial Narrow',sans-serif;font-size:60px;letter-spacing:.06em;line-height:1;color:#fff;text-shadow:0 3px 0 rgba(0,0,0,.25),0 8px 24px rgba(0,0,0,.55);}" +
       ".cr-toast .s{margin-top:4px;font-size:18px;font-weight:800;color:#ffd54a;text-shadow:0 2px 6px rgba(0,0,0,.6);}" +
       ".cr-toast.on{animation:crPop 1s cubic-bezier(.2,1.4,.4,1) forwards;}" +
-      ".cr-hint{position:absolute;left:16px;right:16px;bottom:" + (SAFE_B + 14) + "px;text-align:center;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.78);text-shadow:0 1px 3px rgba(0,0,0,.7);opacity:0;transition:opacity .35s;}" +
-      ".cr-modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:" + (SAFE_T + 16) + "px 20px " + (SAFE_B + 16) + "px;background:rgba(8,12,22,.55);pointer-events:auto;}" +
+      ".cr-hint{position:absolute;left:calc(16px + var(--sl,0px));right:calc(16px + var(--sr,0px));bottom:calc(14px + var(--sb,0px));text-align:center;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.78);text-shadow:0 1px 3px rgba(0,0,0,.7);opacity:0;transition:opacity .35s;}" +
+      ".cr-modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:calc(16px + var(--st,0px)) calc(20px + var(--sr,0px)) calc(16px + var(--sb,0px)) calc(20px + var(--sl,0px));background:rgba(8,12,22,.55);pointer-events:auto;}" +
       ".cr-modal.on{display:flex;}" +
       ".cr-card{width:100%;max-width:340px;max-height:100%;overflow:auto;border-radius:18px;padding:20px 18px 18px;text-align:center;color:#5c3f16;" +
       "background:repeating-linear-gradient(135deg,rgba(255,255,255,.07) 0 2px,rgba(255,255,255,0) 2px 6px),linear-gradient(180deg,#f6e3bf,#e9cb95);" +
@@ -178,7 +176,7 @@ window.plethoraBit = {
       ".cr-stat2 div{display:flex;flex-direction:column;align-items:center;}" +
       ".cr-stat2 b{font-size:28px;color:#2a62b4;line-height:1;}" +
       ".cr-stat2 span{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7a5222;margin-top:4px;}" +
-      ".cr-curtain{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:" + (SAFE_T + 20) + "px 28px " + (SAFE_B + 24) + "px;text-align:center;pointer-events:auto;" +
+      ".cr-curtain{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(20px + var(--st,0px)) calc(28px + var(--sr,0px)) calc(24px + var(--sb,0px)) calc(28px + var(--sl,0px));text-align:center;pointer-events:auto;" +
       "background:radial-gradient(120% 90% at 50% 20%,rgba(34,52,86,.82) 0%,rgba(13,20,36,.9) 55%,rgba(5,8,16,.96) 100%);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:opacity .45s ease;}" +
       ".cr-title{font-family:'Bebas Neue',Impact,'Arial Narrow',sans-serif;font-size:clamp(54px,18vw,92px);letter-spacing:.04em;line-height:.92;" +
       "background:linear-gradient(180deg,#fff7e6 0%,#ffd27a 45%,#f0742a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 6px 18px rgba(240,116,42,.35));}" +
@@ -218,6 +216,25 @@ window.plethoraBit = {
 
     const el = {};
     for (const n of ui.querySelectorAll("[data-el]")) el[n.getAttribute("data-el")] = n;
+
+    // Safe-area insets as CSS variables on the stage, re-read every frame and
+    // re-applied only when they change, so the HUD follows the runtime if it
+    // moves the bit between an inset and an edge-to-edge presentation, or
+    // rotates it. All four sides: a notch sits on the left in landscape.
+    let insetKey = "";
+    function applyInsets() {
+      const sa = ctx.safeArea || {};
+      const t = Math.max(sa.top || 0, 0), b = Math.max(sa.bottom || 0, 0);
+      const l = Math.max(sa.left || 0, 0), r = Math.max(sa.right || 0, 0);
+      const key = t + "," + b + "," + l + "," + r;
+      if (key === insetKey) return;
+      insetKey = key;
+      el.stage.style.setProperty("--st", t + "px");
+      el.stage.style.setProperty("--sb", b + "px");
+      el.stage.style.setProperty("--sl", l + "px");
+      el.stage.style.setProperty("--sr", r + "px");
+    }
+    applyInsets();
 
     ctx.markVisualReady("title");
     ctx.platform.ready();
@@ -1887,8 +1904,8 @@ window.plethoraBit = {
       if (a < 0.05) { el.wind.style.opacity = "0"; return; }
       el.wind.style.opacity = "1";
       // Keep it on the side the fan is not.
-      if (fanSide > 0) { el.wind.style.left = "13%"; el.wind.style.right = "auto"; }
-      else { el.wind.style.left = "auto"; el.wind.style.right = "13%"; }
+      if (fanSide > 0) { el.wind.style.left = "calc(13% + var(--sl,0px))"; el.wind.style.right = "auto"; }
+      else { el.wind.style.left = "auto"; el.wind.style.right = "calc(13% + var(--sr,0px))"; }
       el.winda.className = "a" + (w < 0 ? " l" : "");
       el.windn.textContent = (a * 2.4).toFixed(1);
     }
@@ -2359,6 +2376,7 @@ window.plethoraBit = {
     let clock = 0, shake = 0;
     ctx.onFrame((dtMs) => {
       if (ctx.width !== lastW || ctx.height !== lastH) resize();
+      applyInsets();
       // Up to 100 ms per frame: a slow frame costs a coarser step, not slow motion.
       const dt = Math.min(dtMs, 100) / 1000;
       clock += dt;

@@ -246,6 +246,15 @@
       "wait": 300
     },
     {
+      "eval": "window.__ctx.safeArea = { top: 90, bottom: 70, left: 28, right: 28 }"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "screenshot": "12-insets-changed"
+    },
+    {
       "resize": [
         360,
         780

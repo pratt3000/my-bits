@@ -157,6 +157,12 @@ band-passed air plus a low motor hum — whose level follows the wind.
   above it; the root is `pointer-events: none` and only buttons re-enable
   hits. Buttons are listened to individually (never the root), so the
   overlay stays transparent to flicks.
+- Safe-area insets are live, on all four sides: `ctx.safeArea` is re-read
+  every frame and written to CSS variables on the stage only when it
+  changes, so the banner, the side tags, the hint, the cards and the title
+  follow the runtime if it moves the bit between an inset and an
+  edge-to-edge presentation or rotates it. The harness scenario changes the
+  insets mid-run and screenshots the HUD following them.
 - Pointer positions come from `offsetX`/`offsetY` with pointer capture on
   the canvas; flick speed is measured from event timestamps, unpacking
   coalesced moves, so a slow frame cannot read as a fast flick.
