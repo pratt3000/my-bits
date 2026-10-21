@@ -63,6 +63,38 @@ so a batched move still yields real samples. Found with `crumple/`.
 Also: a six-point drag has five sleeps, so its real duration is 5/6 of `ms`,
 and a scenario can set `"dpr": 1` to render four times fewer pixels.
 
+### Full screen: the logo button sits where a bottom control wants to be
+
+**Symptom:** a bit that used to look right has its bottom-centre control, or
+its drag start, under Plethora's logo button; or a bit laid out from the
+`onResize` payload gets a zero bottom inset on an older app.
+
+Since SDK 1.7.0 a bit declares `"display": "fullscreen"` and covers the whole
+phone; the logo floats over the bottom centre and `ctx.contentSafeArea` is
+`ctx.safeArea` moved in past it (bottom ≈ 108 on an iPhone, ≈ 130 on Android
+with 3-button navigation). Read `ctx.contentSafeArea ?? ctx.safeArea` — the
+`??` matters, because on an app from before full-screen support the same
+file plays in the legacy safe frame where `contentSafeArea` is undefined and
+`safeArea.bottom` is a fixed 120. Read it from `ctx`, not from the `onResize`
+callback's payload, whose `safeArea` is all zeros in the safe frame. The
+three inset objects are frozen live values: assigning to them does nothing
+(and throws in strict mode), so the harness scenario changes them through
+`window.__setInsets(...)`, never by assignment. If a scene puts the thing a
+finger has to reach near the bottom — `crumple/`'s resting paper ball — make
+the camera or layout guarantee it clears `contentSafeArea.bottom`, and prove
+it with a squat viewport, where a fixed composition fails first.
+
+### The contract moved hosts, and the old host does not say so
+
+**Symptom:** the docs you fetch say `2026-09-06.1` / SDK 1.5.7 and know
+nothing about full screen, while the creator says the SDK is 1.7.0.
+
+`api.plethora.studio/v1/agent/*` still answers, with the stale set, however
+hard you cache-bust. The canonical agent origin is `agent.plethora.studio`
+(announced in `https://plethora.studio/llms.txt`), and every document there
+carries a `Context version:` line — read it before trusting anything.
+`upload.py` and the README links point there now. Found with `crumple/`.
+
 ### Anything that only appears on device
 
 The harness runs desktop Chromium. Things it cannot tell you about: real audio
@@ -136,6 +168,9 @@ If it does, say so immediately rather than letting them find it.
   overnight lost an upload this way (`crumple/`).
 - Never ask for a username, email, password or login of any kind. Approval
   happens entirely on the creator's own device — that is the point of the flow.
+- A token minted through the old `api.plethora.studio` pairing endpoints is
+  accepted by `agent.plethora.studio` — same backend, different front door —
+  so switching hosts mid-session needs no second pairing (`crumple/`).
 
 ---
 

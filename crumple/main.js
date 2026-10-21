@@ -23,6 +23,13 @@
  *  - the floor and the furniture are box colliders with low restitution and
  *    heavy friction, because a paper ball does not roll, it flops.
  *
+ * Full screen (SDK 1.7.0): the manifest declares display "fullscreen", so
+ * the room runs edge to edge under the camera cutout, the home indicator and
+ * Plethora's logo button, while everything a thumb needs — the banner, the
+ * cards, the hint, the side tags and the resting ball itself — is laid out
+ * from ctx.contentSafeArea ?? ctx.safeArea. An older app plays the same file
+ * in the legacy safe frame through that same fallback.
+ *
  * Renderer: three@0.164.1 (ES module via ctx.importModule).
  */
 window.plethoraBit = {
@@ -217,22 +224,42 @@ window.plethoraBit = {
     const el = {};
     for (const n of ui.querySelectorAll("[data-el]")) el[n.getAttribute("data-el")] = n;
 
-    // Safe-area insets as CSS variables on the stage, re-read every frame and
-    // re-applied only when they change, so the HUD follows the runtime if it
-    // moves the bit between an inset and an edge-to-edge presentation, or
-    // rotates it. All four sides: a notch sits on the left in landscape.
+    // The area a thumb can use. In a full-screen bit the container covers
+    // the whole phone and Plethora's logo button floats over the bottom
+    // centre; ctx.contentSafeArea is ctx.safeArea moved in past that button
+    // (and, in the web player, past its back arrow). Text and controls stay
+    // inside it; the room runs to every edge underneath. An older app without
+    // full-screen support plays this same file in the legacy safe frame,
+    // where contentSafeArea is undefined and safeArea.bottom is a fixed 120
+    // under the logo, so the fallback chain is exactly the SDK's:
+    // contentSafeArea ?? safeArea. Both are frozen live objects the host
+    // replaces when the insets change — read every frame, never assigned.
+    function readArea() {
+      const a = ctx.contentSafeArea || ctx.safeArea || {};
+      return {
+        top: Math.max(a.top || 0, 0), bottom: Math.max(a.bottom || 0, 0),
+        left: Math.max(a.left || 0, 0), right: Math.max(a.right || 0, 0)
+      };
+    }
+    // The insets as CSS variables on the stage, written only when they
+    // change, so the banner, the side tags, the hint, the cards and the title
+    // follow the host between an inset and an edge-to-edge presentation or
+    // through a rotation. All four sides: a notch sits on the left in
+    // landscape. Returns true when they changed, because the camera framing
+    // depends on the bottom one.
+    let insets = readArea();
     let insetKey = "";
     function applyInsets() {
-      const sa = ctx.safeArea || {};
-      const t = Math.max(sa.top || 0, 0), b = Math.max(sa.bottom || 0, 0);
-      const l = Math.max(sa.left || 0, 0), r = Math.max(sa.right || 0, 0);
-      const key = t + "," + b + "," + l + "," + r;
-      if (key === insetKey) return;
+      const a = readArea();
+      const key = a.top + "," + a.bottom + "," + a.left + "," + a.right;
+      if (key === insetKey) return false;
       insetKey = key;
-      el.stage.style.setProperty("--st", t + "px");
-      el.stage.style.setProperty("--sb", b + "px");
-      el.stage.style.setProperty("--sl", l + "px");
-      el.stage.style.setProperty("--sr", r + "px");
+      insets = a;
+      el.stage.style.setProperty("--st", a.top + "px");
+      el.stage.style.setProperty("--sb", a.bottom + "px");
+      el.stage.style.setProperty("--sl", a.left + "px");
+      el.stage.style.setProperty("--sr", a.right + "px");
+      return true;
     }
     applyInsets();
 
@@ -684,12 +711,17 @@ window.plethoraBit = {
 
     // Seated at the desk, looking slightly down the room. World units are
     // metres: the floor is y = 0, the desk top is 0.74, the camera looks down
-    // the -z axis.
+    // the -z axis. The pitch is the one knob the layout owns: 19 degrees
+    // puts the resting sheet about 28% up the screen, and layoutCamera()
+    // (section 12) looks further down on a viewport where that would leave
+    // the sheet inside the bottom inset, so the flick never starts on the
+    // logo button.
     const camera = new THREE.PerspectiveCamera(70, ctx.width / Math.max(1, ctx.height), 0.05, 40);
     const CAM_POS = new THREE.Vector3(0, 1.38, 0);
     const CAM_PITCH = 19 * Math.PI / 180;
+    let camPitch = CAM_PITCH;
     camera.position.copy(CAM_POS);
-    camera.rotation.set(-CAM_PITCH, 0, 0);
+    camera.rotation.set(-camPitch, 0, 0);
 
     const chromeMat = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, metalness: 1, roughness: 0.22, envMapIntensity: 1.4 });
     const blackMat = new THREE.MeshStandardMaterial({ color: 0x17191d, roughness: 0.5, metalness: 0.3 });
@@ -2357,6 +2389,26 @@ window.plethoraBit = {
     // ===================================================================== //
     // 12. Frame loop                                                        //
     // ===================================================================== //
+    // The resting sheet is the one thing a finger has to reach, so it is the
+    // one thing the camera framing guarantees: its centre sits at least a
+    // thumb's width above the bottom inset (the logo button in full screen,
+    // the legacy 120 px band in the safe frame). At 19 degrees that already
+    // holds on any phone in portrait; a squat viewport — a short window in
+    // the web player, a phone on its side — tips the camera further down
+    // until it does, instead of parking the sheet under the logo.
+    const BALL_CLEAR = 64;
+    function layoutCamera() {
+      const h = Math.max(1, ctx.height);
+      const want = Math.min(0.5, (insets.bottom + BALL_CLEAR) / h);   // of the height, from the bottom
+      const below = Math.atan2(CAM_POS.y - BALL_HOME.y, -BALL_HOME.z); // the sheet, below the horizon
+      const halfTan = Math.tan(camera.fov * Math.PI / 360);
+      // On screen the sheet sits tan(below - pitch) / halfTan half-heights
+      // under the centre; it is `want` of the height from the bottom when
+      // that equals 1 - 2 * want.
+      const need = below - Math.atan((1 - 2 * want) * halfTan);
+      camPitch = clamp(need, CAM_PITCH, 42 * Math.PI / 180);
+    }
+
     let lastW = ctx.width, lastH = ctx.height;
     function resize() {
       lastW = ctx.width; lastH = ctx.height;
@@ -2364,8 +2416,15 @@ window.plethoraBit = {
       renderer.setSize(lastW, lastH, false);
       camera.aspect = lastW / Math.max(1, lastH);
       camera.updateProjectionMatrix();
+      layoutCamera();
     }
     resize();
+    // The SDK's cleanup-owned layout hook: it fires on a resize or rotation
+    // and, in a full-screen bit, whenever the host changes the insets. The
+    // insets are read back from ctx rather than the payload, because in the
+    // safe frame the payload's safeArea is all zeros. The per-frame checks
+    // in the loop below stay as the belt to these braces.
+    ctx.onResize(() => { resize(); applyInsets(); layoutCamera(); }, { immediate: true });
 
     const projV = new THREE.Vector3();
     function toScreen(x, y, z) {
@@ -2376,7 +2435,7 @@ window.plethoraBit = {
     let clock = 0, shake = 0;
     ctx.onFrame((dtMs) => {
       if (ctx.width !== lastW || ctx.height !== lastH) resize();
-      applyInsets();
+      if (applyInsets()) layoutCamera();
       // Up to 100 ms per frame: a slow frame costs a coarser step, not slow motion.
       const dt = Math.min(dtMs, 100) / 1000;
       clock += dt;
@@ -2408,7 +2467,7 @@ window.plethoraBit = {
       shake = Math.max(0, shake - dt * 2.2);
       const sh = shake * shake * 0.012;
       camera.rotation.set(
-        -CAM_PITCH + Math.sin(clock * 0.37) * 0.004 + rnd(-1, 1) * sh,
+        -camPitch + Math.sin(clock * 0.37) * 0.004 + rnd(-1, 1) * sh,
         Math.sin(clock * 0.23) * 0.003 + rnd(-1, 1) * sh,
         0
       );

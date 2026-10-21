@@ -4,6 +4,20 @@ Pair with Plethora and upload bits as drafts.
 
     python3 upload.py pair                    # once, then the token is durable
     python3 upload.py <bit-dir> [<bit-dir>…]  # upload/update drafts
+    python3 upload.py --feedback notes.json <bit-dir>   # with agentFeedback
+
+The API origin is https://agent.plethora.studio (the canonical agent origin
+since context 2026-10-20.1; the old api.plethora.studio host still answers but
+serves the stale 2026-09-06.1 docs). Every write carries
+X-Plethora-Command-Protocol: v1 and an Idempotency-Key; the key for an upload
+is minted once per bit and reused only across retries of that same request,
+which is what the protocol asks for. A 202 means the command is still running:
+the script polls GET /commands/:id with the same token until it is terminal.
+
+Every upload sends agentFeedback (the contract asks for it on every agent
+upload). The default is an honest "clear" report stamped with the context and
+SDK versions this script was written against; pass --feedback <file.json> to
+send real friction notes instead (same shape as upload.md's example).
 
 Pairing is a short bootstrap: mint a code, the creator approves it on their
 own device, and the access token that comes back is good for four hours
@@ -33,23 +47,44 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 
-API = "https://api.plethora.studio/v1/agent"
+API = os.environ.get("PLETHORA_AGENT_API", "https://agent.plethora.studio/v1/agent")
+CONTEXT_VERSION = "plethora-agent-context-2026-10-20.1"
+SDK_VERSION = "1.7.0"
 TOKEN_DIR = os.path.expanduser("~/.plethora")
 TOKEN_PATH = os.path.join(TOKEN_DIR, "agent-token.json")
 
 
-def post(path, body, token=None):
-    headers = ["-H", "Content-Type: application/json"]
+def headers(token=None, key=None):
+    h = ["-H", "Content-Type: application/json", "-H", "X-Plethora-Command-Protocol: v1"]
+    if key:
+        h += ["-H", "Idempotency-Key: " + key]
     if token:
-        headers += ["-H", "Authorization: Plethora-Agent " + token]
-    r = subprocess.run(["curl", "-sS", "-X", "POST", API + path, *headers,
+        h += ["-H", "Authorization: Plethora-Agent " + token]
+    return h
+
+
+def parse(r):
+    try:
+        out = json.loads(r.stdout)
+    except Exception:
+        return {"ok": False, "error": {"message": "unparseable: " + (r.stdout or r.stderr)[:300]}}
+    if isinstance(out, dict):
+        out.setdefault("_status", r.returncode)
+    return out
+
+
+def post(path, body, token=None, key=None):
+    r = subprocess.run(["curl", "-sS", "-X", "POST", API + path, *headers(token, key or str(uuid.uuid4())),
                         "--data-binary", "@-"],
                        input=json.dumps(body), capture_output=True, text=True)
-    try:
-        return json.loads(r.stdout)
-    except Exception:
-        return {"ok": False, "error": {"message": "unparseable: " + r.stdout[:300]}}
+    return parse(r)
+
+
+def get(path, token):
+    r = subprocess.run(["curl", "-sS", API + path, *headers(token)], capture_output=True, text=True)
+    return parse(r)
 
 
 def load_token():
@@ -61,7 +96,8 @@ def load_token():
 
 
 def pair():
-    r = post("/pair/sessions", {"agentName": "Claude Code", "scopes": ["bits:draft:write"]})
+    r = post("/pair/sessions", {"agentName": "Claude Code", "deviceLabel": "cloud session",
+                                "scopes": ["bits:draft:write"]})
     if not r.get("ok"):
         sys.exit("could not start pairing: " + json.dumps(r)[:300])
     d = r["data"]
@@ -104,7 +140,39 @@ def remember(title, bit_id):
     json.dump(seen, open(LEDGER, "w"), indent=1)
 
 
-def upload(dirs):
+def default_feedback():
+    return {
+        "contextVersion": CONTEXT_VERSION, "sdkVersion": SDK_VERSION,
+        "outcome": "clear", "confidence": "medium",
+        "unclear": [], "blockers": [], "repeatedFixes": [], "workarounds": [], "suggestions": [],
+        "docsMissing": [], "runtimeIssues": [], "validatorIssues": [], "libraryIssues": [],
+        "uploadIssues": [], "pairingIssues": [],
+        "notes": "Nothing hurt on this upload."
+    }
+
+
+def settle(r, token):
+    """A 202 is a command still running; poll it to a terminal result."""
+    cmd = ((r.get("data") or {}).get("command") or {})
+    if r.get("ok") and "action" in (r.get("data") or {}):
+        return r
+    if not cmd.get("id"):
+        return r
+    for _ in range(30):
+        time.sleep(4)
+        st = get("/commands/%s" % cmd["id"], token)
+        c = (st.get("data") or {}).get("command") or {}
+        res = (st.get("data") or {}).get("result")
+        if res:
+            env = res.get("envelope") or {}
+            return env if "ok" in env else {"ok": False, "error": {"message": json.dumps(res)[:300]}}
+        if c.get("status") in ("failed", "rejected", "expired"):
+            return {"ok": False, "error": {"message": "command %s" % c.get("status")}}
+    return {"ok": False, "error": {"message": "command %s still pending after two minutes; "
+                                               "check Create -> Drafts before uploading again" % cmd["id"]}}
+
+
+def upload(dirs, feedback=None):
     token = load_token()
     if not token:
         sys.exit("no token — run `python3 upload.py pair` first")
@@ -117,11 +185,14 @@ def upload(dirs):
         body = {
             "title": m["title"], "description": m.get("description", ""),
             "tags": m.get("tags", []), "source": source, "manifest": m, "generated": True,
+            "agentFeedback": feedback or default_feedback(),
         }
+        # One key per upload, reused only across retries of this same request.
+        key = str(uuid.uuid4())
         # The API sometimes answers "Request deadline exceeded" to a single
         # upload; that is a timeout, not a verdict, and a retry goes through.
         for attempt in range(4):
-            r = post("/bits/drafts", body, token)
+            r = settle(post("/bits/drafts", body, token, key), token)
             if "deadline" not in json.dumps(r):
                 break
             print("%-16s timed out (attempt %d), retrying..." % (os.path.basename(d), attempt + 1))
@@ -132,6 +203,9 @@ def upload(dirs):
             bit_id = (data.get("bit") or {}).get("id", "?")
             action = data.get("action", "ok")
             print("%-16s %s  id=%s  %d bytes" % (name, action, bit_id, data.get("packageBytes", 0)))
+            # Non-blocking advice the creator should hear, e.g. display_not_fullscreen.
+            for n in data.get("notices") or []:
+                print("                 notice %s: %s" % (n.get("code", "?"), n.get("message", "")))
             if action == "created" and known and bit_id not in known:
                 print("                 ! DUPLICATE: %r already existed as %s." % (m["title"], ", ".join(known)))
                 print("                   The creator now has more than one draft with this title and")
@@ -140,15 +214,27 @@ def upload(dirs):
             remember(m["title"], bit_id)
         else:
             failures += 1
-            print("%-16s FAILED  %s" % (name, (r.get("error") or {}).get("message", json.dumps(r))[:200]))
-            print("                 -> run check.py on it; see references/gotchas.md for how to bisect")
+            err = r.get("error") or {}
+            print("%-16s FAILED  %s %s" % (name, err.get("code", ""), err.get("message", json.dumps(r))[:200]))
+            if err.get("code") in ("unauthorized", "forbidden") or "token" in json.dumps(err).lower():
+                print("                 -> the pairing token is gone (they last four hours); mint a new code")
+            else:
+                print("                 -> run check.py on it; see references/gotchas.md for how to bisect")
     sys.exit(1 if failures else 0)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    args = sys.argv[1:]
+    feedback = None
+    if "--feedback" in args:
+        i = args.index("--feedback")
+        feedback = json.load(open(args[i + 1]))
+        feedback.setdefault("contextVersion", CONTEXT_VERSION)
+        feedback.setdefault("sdkVersion", SDK_VERSION)
+        del args[i:i + 2]
+    if not args:
         sys.exit(__doc__)
-    if sys.argv[1] == "pair":
+    if args[0] == "pair":
         pair()
     else:
-        upload(sys.argv[1:])
+        upload(args, feedback)

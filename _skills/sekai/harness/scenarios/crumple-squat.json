@@ -1,0 +1,40 @@
+{
+  "display": "fullscreen",
+  "viewport": {
+    "width": 844,
+    "height": 390
+  },
+  "dpr": 1,
+  "steps": [
+    {
+      "wait": 3500
+    },
+    {
+      "screenshot": "sq-01-title"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"levels\"]').click()"
+    },
+    {
+      "wait": 1300
+    },
+    {
+      "screenshot": "sq-02-aim"
+    },
+    {
+      "eval": "window.__setInsets({ safeArea: { top: 0, right: 62, bottom: 21, left: 62 }, contentSafeArea: { top: 0, right: 62, bottom: 95, left: 62 }, logoArea: { x: 390, y: 300, width: 64, height: 64 } })"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "screenshot": "sq-03-landscape-insets"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "start"
+    }
+  ]
+}

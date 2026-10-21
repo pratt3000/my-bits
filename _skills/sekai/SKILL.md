@@ -116,7 +116,14 @@ whether frames advanced, and writes screenshots to `shots/<bit>/`.
 Write a scenario for the bit's real interactions; copy `harness/scenarios/example.json`
 as a starting point. Steps: `wait`, `tap`, `press`, `drag`, `circle`, `zigzag`,
 `down`/`moveTo`/`up` (held gestures, so you can screenshot mid-drag), `eval`,
-`screenshot`, `resize`, `expectEvent`.
+`screenshot`, `resize`, `expectEvent`. Top-level keys: `viewport`, `dpr`,
+`display` (`"fullscreen"` or `"safe-frame"`; default is what the manifest
+declares) and `insets` (`{ safeArea, contentSafeArea, logoArea }` overrides).
+The mock models both presentations the way `sdk.md` describes them — in the
+safe frame `contentSafeArea` is undefined and the `onResize` payload's
+`safeArea` is all zeros — and an `eval` of `window.__setInsets({...})` does
+what the host does when the insets change. Run a full-screen bit through both
+modes and look at the bottom of every screenshot: that is where the logo is.
 
 **Look at the screenshots.** A bit can run clean and still look wrong — mangled
 layout, an unreadable palette, a control off-screen — and the console will never
@@ -132,7 +139,12 @@ python3 scripts/upload.py <repo>/<bit-name>
 
 `check.py` verifies the manifest and scans for constructs the upload validator
 rejects. Its value is that the validator's own error message names the wrong
-cause almost every time, so catching things locally saves a bisect.
+cause almost every time, so catching things locally saves a bisect. It also
+enforces the `display` rule: `"fullscreen"` or absent, nothing else, and a
+full-screen bit has to read `ctx.contentSafeArea`. `upload.py` talks to
+`agent.plethora.studio`, sends `agentFeedback` on every upload (pass
+`--feedback notes.json` when something hurt) and prints the response's
+`notices`, which the creator should hear.
 
 If pairing is needed, `python3 scripts/upload.py pair` mints a code. Only mint
 one when the creator says they are at their phone — codes last ten minutes, and
@@ -171,10 +183,18 @@ The line to hold: rebuild the shell freely, never invent the substance.
 
 Fetch the current contract — it is the source of truth and it changes:
 
-- `https://api.plethora.studio/v1/agent/context.md`
-- `https://api.plethora.studio/v1/agent/sdk.md`
-- `https://api.plethora.studio/v1/agent/schema.json`
-- `https://api.plethora.studio/v1/agent/libraries.json`
+- `https://agent.plethora.studio/v1/agent/creation.md` — the process
+- `https://agent.plethora.studio/v1/agent/fundamentals.md` — the environment
+- `https://agent.plethora.studio/v1/agent/sdk.md` — the complete SDK, one read
+- `https://agent.plethora.studio/v1/agent/schema.json` — exact manifest fields
+- `https://agent.plethora.studio/v1/agent/libraries.json` — approved pins
+- `https://agent.plethora.studio/v1/agent/upload.md` — the upload protocol
+
+`agent.plethora.studio` is the canonical agent origin (context
+`2026-10-20.1`, SDK 1.7.0). The old `api.plethora.studio` host still answers
+but serves the stale `2026-09-06.1` docs, cache-busting or not, with no hint
+that anything newer exists; `https://plethora.studio/llms.txt` is where the
+move was announced. Check the `Context version` line of whatever you fetch.
 
 ## Files
 

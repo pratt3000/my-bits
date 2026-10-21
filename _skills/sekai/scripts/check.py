@@ -77,13 +77,25 @@ def main():
         sys.exit("manifest entry %r does not exist in %s" % (entry, d))
     src = open(src_path, encoding="utf-8").read()
 
-    ok, bad = [], []
+    ok, bad, warn = [], [], []
 
     def chk(cond, msg):
         (ok if cond else bad).append(msg)
 
     chk(m.get("schemaVersion") == 1, "schemaVersion is 1")
     chk(m.get("runtime") == "plethora-bit@2", "runtime is plethora-bit@2")
+    # SDK 1.7.0: "fullscreen" is the only value display accepts — anything
+    # else, null included, is a 400 (E_MANIFEST_DISPLAY). Absent is allowed and
+    # means the legacy safe frame, which the upload flags with a notice.
+    if "display" in m:
+        chk(m["display"] == "fullscreen",
+            'display is "fullscreen" (the only accepted value; null or anything else is rejected)')
+        if m["display"] == "fullscreen":
+            chk("contentSafeArea" in src,
+                "a full-screen bit lays out from ctx.contentSafeArea ?? ctx.safeArea")
+    else:
+        warn.append('no "display": the bit plays in the legacy safe frame and the upload '
+                    'answers with a display_not_fullscreen notice; new bits declare "fullscreen"')
     chk(bool(m.get("title")), "title present")
     chk(bool(m.get("description")), "description present")
     chk(isinstance(m.get("tags"), list) and m["tags"], "tags present")
@@ -111,6 +123,8 @@ def main():
     print("PASS (%d)" % len(ok))
     for o in ok:
         print("  +", o)
+    for w in warn:
+        print("  ?", w)
     if bad:
         print("\nFAIL (%d)" % len(bad))
         for b in bad:

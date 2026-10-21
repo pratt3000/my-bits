@@ -246,7 +246,7 @@
       "wait": 300
     },
     {
-      "eval": "window.__ctx.safeArea = { top: 90, bottom: 70, left: 28, right: 28 }"
+      "eval": "window.__setInsets({ safeArea: { top: 90, right: 28, bottom: 70, left: 28 }, contentSafeArea: { top: 90, right: 28, bottom: 140, left: 28 }, logoArea: { x: 163, y: 704, width: 64, height: 64 } })"
     },
     {
       "wait": 600

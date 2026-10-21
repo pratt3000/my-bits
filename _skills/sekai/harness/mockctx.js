@@ -33,6 +33,88 @@
     events.push({ kind, a, b, t: performance.now() });
   }
 
+  // ---- full screen, safe areas and the logo button ---------------------------
+  // SDK 1.7.0: a bit whose manifest declares display "fullscreen" gets the whole
+  // phone. ctx.safeArea is then the phone's own insets, ctx.contentSafeArea the
+  // same moved in past Plethora's logo button at the bottom (and the web
+  // player's back arrow at the top), and ctx.logoArea the button's rect. Without
+  // the declaration, or on an app from before full-screen support, the bit
+  // plays in the legacy safe frame: safeArea is a fixed { 0, 0, 120, 0 } and
+  // contentSafeArea and logoArea are undefined — which is why a bit reads
+  // `ctx.contentSafeArea ?? ctx.safeArea`. All three are frozen; the host
+  // replaces them when the insets change and fires onResize. A scenario picks
+  // the mode with `display` ("fullscreen" | "safe-frame"; default: whatever the
+  // manifest declares) and overrides the numbers with `insets`. The defaults
+  // are an iPhone 17 Pro, straight from sdk.md.
+  const manifest = window.__manifest || {};
+  const fullscreen = window.__display ? window.__display === "fullscreen" : manifest.display === "fullscreen";
+  const freeze = (o) => (o == null ? undefined : Object.freeze(Object.assign({}, o)));
+  let insets = null;
+  function defaultInsets() {
+    const r = rect();
+    if (!fullscreen) return { safeArea: { top: 0, right: 0, bottom: 120, left: 0 } };
+    return {
+      safeArea: { top: 62, right: 0, bottom: 34, left: 0 },
+      contentSafeArea: { top: 62, right: 0, bottom: 108.5, left: 0 },
+      logoArea: { x: r.w / 2 - 32, y: r.h - 100, width: 64, height: 64 }
+    };
+  }
+  function setInsets(next) {
+    const d = defaultInsets();
+    const n = next || window.__insets || d;
+    insets = {
+      safeArea: freeze(n.safeArea || d.safeArea),
+      contentSafeArea: fullscreen ? freeze(n.contentSafeArea || d.contentSafeArea) : undefined,
+      logoArea: fullscreen ? freeze(n.logoArea || d.logoArea) : undefined
+    };
+    // A full-screen document carries the insets as CSS variables on :root; a
+    // safe-frame one gets none, so a bit's CSS needs fallbacks either way.
+    const root = document.documentElement.style;
+    for (const side of ["top", "right", "bottom", "left"]) {
+      if (fullscreen) {
+        root.setProperty("--plethora-safe-" + side, insets.safeArea[side] + "px");
+        root.setProperty("--plethora-content-safe-" + side, insets.contentSafeArea[side] + "px");
+      } else {
+        root.removeProperty("--plethora-safe-" + side);
+        root.removeProperty("--plethora-content-safe-" + side);
+      }
+    }
+  }
+  setInsets();
+
+  // ctx.onResize(cb, { immediate?, debounceMs? }) -> cleanup. Fires on a
+  // resize and, in a full-screen bit, on an inset change. In the safe frame
+  // the payload's safeArea is all zeros (sdk.md), so a bit that reads the
+  // payload instead of ctx gets a zero bottom inset there — a trap worth
+  // reproducing.
+  const resizeCbs = [];
+  function resizePayload() {
+    const r = rect();
+    const p = {
+      width: r.w, height: r.h, dpr: DPR, nativeDpr: window.devicePixelRatio || 1,
+      safeArea: fullscreen ? insets.safeArea : Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 })
+    };
+    if (fullscreen) { p.contentSafeArea = insets.contentSafeArea; p.logoArea = insets.logoArea; }
+    return p;
+  }
+  function fireResize(entry) {
+    const run = () => {
+      try { entry.cb(resizePayload()); }
+      catch (e) { errors.push("onResize: " + (e.stack || e.message || e)); }
+    };
+    if (entry.debounce > 0) { clearTimeout(entry.timer); entry.timer = setTimeout(run, entry.debounce); }
+    else run();
+  }
+  function fireAllResize(why) {
+    note("resize", why, rect());
+    for (const e of resizeCbs.slice()) fireResize(e);
+  }
+  let firstObservation = true;
+  new ResizeObserver(() => {
+    if (firstObservation) { firstObservation = false; return; }
+    fireAllResize("viewport");
+  }).observe(container);
+
   // ---- offline-ish memory simulation ----------------------------------------
   function worldOf(id) {
     if (!worlds.has(id)) worlds.set(id, new Map());
@@ -54,7 +136,11 @@
     get height() { return rect().h; },
     dpr: DPR,
     nativeDpr: window.devicePixelRatio || 1,
-    safeArea: window.__safeArea || { top: 47, bottom: 34, left: 0, right: 0 },
+    // Getter-only, like the host's frozen live values: assigning does nothing
+    // (and throws in strict-mode code).
+    get safeArea() { return insets.safeArea; },
+    get contentSafeArea() { return insets.contentSafeArea; },
+    get logoArea() { return insets.logoArea; },
     manifest: window.__manifest || {},
     runtime: { version: "plethora-bit@2", schemaVersion: 1 },
     capabilities: Object.assign(
@@ -132,6 +218,14 @@
 
     onFrame(cb) { frameCbs.push(cb); },
     raf(cb) { frameCbs.push(cb); },
+    onResize(cb, opts) {
+      if (typeof cb !== "function") throw new Error("onResize needs a callback");
+      opts = opts || {};
+      const entry = { cb, timer: null, debounce: opts.debounceMs | 0 };
+      resizeCbs.push(entry);
+      if (opts.immediate) fireResize(entry);
+      return () => { const i = resizeCbs.indexOf(entry); if (i >= 0) resizeCbs.splice(i, 1); };
+    },
 
     timeout(fn, ms) {
       const id = setTimeout(fn, ms);
@@ -290,6 +384,9 @@
   requestAnimationFrame(tick);
 
   window.__ctx = ctx;
+  // What the host does when the insets change: new frozen values, then
+  // onResize. Takes { safeArea?, contentSafeArea?, logoArea? }.
+  window.__setInsets = (next) => { setInsets(next); fireAllResize("insets"); };
   window.__seedWorld = (id, entries) => {
     const m = worldOf(id);
     for (const e of entries) m.set(e.id, e.object);

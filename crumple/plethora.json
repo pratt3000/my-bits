@@ -24,6 +24,7 @@
   "dependencies": [
     "three@0.164.1"
   ],
+  "display": "fullscreen",
   "memory": {
     "records": {
       "level": {

@@ -95,13 +95,38 @@ of which are useful for any bit and not just ported ones.
 Fetch the current contract before writing code — these endpoints are the source
 of truth, and they win over anything cached locally:
 
-- `https://api.plethora.studio/v1/agent/context.md`
-- `https://api.plethora.studio/v1/agent/sdk.md`
-- `https://api.plethora.studio/v1/agent/schema.json`
-- `https://api.plethora.studio/v1/agent/libraries.json`
+- `https://agent.plethora.studio/v1/agent/creation.md` — the process
+- `https://agent.plethora.studio/v1/agent/fundamentals.md` — the environment
+- `https://agent.plethora.studio/v1/agent/sdk.md` — the complete SDK, one read
+- `https://agent.plethora.studio/v1/agent/schema.json` — exact manifest fields
+- `https://agent.plethora.studio/v1/agent/libraries.json` — approved pins
+- `https://agent.plethora.studio/v1/agent/upload.md` — the upload protocol
+
+`agent.plethora.studio` is the canonical agent origin (context
+`2026-10-20.1`, SDK 1.7.0). The old `api.plethora.studio` host still answers
+but serves the stale `2026-09-06.1` docs, cache-busting or not, with no hint
+that anything newer exists; `https://plethora.studio/llms.txt` is where the
+move was announced. Check the `Context version` line of whatever you fetch.
 
 Packaged assets are disabled (`maxAssets: 0`), so generate visuals and audio
 procedurally or use approved pinned registry libraries.
+
+Every new bit declares `"display": "fullscreen"` in its manifest (SDK 1.7.0).
+The bit then covers the whole phone, with Plethora's logo button floating over
+the bottom centre, and lays out text, scores and controls from
+`ctx.contentSafeArea ?? ctx.safeArea` — the content safe area is the phone's
+own insets moved in past that button (and past the web player's back arrow).
+Scenery runs to every edge; nothing a thumb needs sits under the logo or the
+cutout. The same file on an older app plays in the legacy safe frame, where
+`contentSafeArea` is undefined and `safeArea.bottom` is a fixed 120, so the
+`??` fallback is the whole compatibility story. In CSS the equivalents are
+`var(--plethora-content-safe-top, 0px)` and
+`var(--plethora-content-safe-bottom, 120px)` — never a `0px` bottom fallback.
+`display` accepts no other value: `null` or anything else is a 400
+(`E_MANIFEST_DISPLAY`); absent is allowed, and the upload answers with a
+`display_not_fullscreen` notice. [`crumple/`](crumple#full-screen-sdk-170) is
+the worked example, including the one case where the logo and the game want
+the same pixels.
 
 ### Upload-validator gotchas
 
@@ -168,9 +193,17 @@ like art-direction or tuning failures until you find them:
 ## Publishing
 
 Publishing stays manual. An agent pairs with the creator at
-<https://create.plethora.studio/agent-pair>, then `POST`s `{ source, manifest }`
-to `/v1/agent/bits/drafts` with an `Authorization: Plethora-Agent <token>`
-header. Drafts are reviewed and published from the Plethora app or dashboard.
+<https://create.plethora.studio/agent-pair>, then `POST`s
+`{ source, manifest, generated, agentFeedback }` to
+`https://agent.plethora.studio/v1/agent/bits/drafts` with an
+`Authorization: Plethora-Agent <token>` header, plus
+`X-Plethora-Command-Protocol: v1` and an `Idempotency-Key` that is minted once
+per upload and reused only to retry that same request after a lost or
+timed-out response. A `202` is a command still running: poll
+`GET /v1/agent/commands/:id` with the same token. The response's
+`data.notices` are non-blocking advice to pass on to the creator. Drafts are
+reviewed and published from the Plethora app or dashboard;
+`_skills/sekai/scripts/upload.py` does all of this.
 
 The pairing code expires after 10 minutes, and the `accessToken` it yields
 expires **four hours after approval** (`tokenExpiresAt` in the saved token;

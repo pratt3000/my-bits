@@ -1,0 +1,84 @@
+{
+  "display": "safe-frame",
+  "viewport": {
+    "width": 390,
+    "height": 778
+  },
+  "dpr": 1,
+  "steps": [
+    {
+      "wait": 3500
+    },
+    {
+      "screenshot": "sf-01-title"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"levels\"]').click()"
+    },
+    {
+      "wait": 1300
+    },
+    {
+      "screenshot": "sf-02-aim"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"pause\"]').click()"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "sf-03-pause"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"resume\"]').click()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "drag": [
+        [
+          195,
+          560
+        ],
+        [
+          195,
+          512
+        ],
+        [
+          195,
+          464
+        ],
+        [
+          195,
+          416
+        ],
+        [
+          195,
+          368
+        ],
+        [
+          195,
+          320
+        ]
+      ],
+      "ms": 180
+    },
+    {
+      "wait": 3200
+    },
+    {
+      "screenshot": "sf-04-after-throw"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "start"
+    },
+    {
+      "expectEvent": "interact"
+    }
+  ]
+}

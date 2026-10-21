@@ -5,10 +5,12 @@
   #bit{position:fixed;inset:0;overflow:hidden}
 </style></head>
 <body><div id="bit"></div>
-<script src="/harness/mockctx.js"></script>
 <script>
+  // Before the mock: it reads manifest.display to pick full screen or the
+  // legacy safe frame, and ctx.manifest is this object.
   window.__manifest = JSON.parse(decodeURIComponent(new URLSearchParams(location.search).get("manifest") || "%7B%7D"));
 </script>
+<script src="/harness/mockctx.js"></script>
 <script id="bitsrc"></script>
 <script>
   (async function () {

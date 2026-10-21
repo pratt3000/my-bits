@@ -85,6 +85,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   if (scenario.caps) {
     await page.addInitScript((c) => { window.__caps = c; }, scenario.caps);
   }
+  // Full-screen or legacy safe-frame presentation, and the inset numbers;
+  // see mockctx.js. Default: whatever the manifest declares.
+  if (scenario.display) {
+    await page.addInitScript((d) => { window.__display = d; }, scenario.display);
+  }
+  if (scenario.insets) {
+    await page.addInitScript((i) => { window.__insets = i; }, scenario.insets);
+  }
 
   const url = "http://127.0.0.1:8791/harness/host.html?bit=" + bit +
     "&manifest=" + encodeURIComponent(JSON.stringify(manifest));

@@ -14,7 +14,7 @@ the first miss. Baskets pay cash, and the shop sells paper and bins.
 
 | File            | What it is                                                                 |
 | --------------- | -------------------------------------------------------------------------- |
-| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, two leaderboards, onboarding. |
+| `plethora.json` | Manifest — `plethora-bit@2`, `three@0.164.1`, full screen, two leaderboards, onboarding. |
 | `main.js`       | Entry source defining `window.plethoraBit`.                                 |
 
 ## How it plays
@@ -157,12 +157,12 @@ band-passed air plus a low motor hum — whose level follows the wind.
   above it; the root is `pointer-events: none` and only buttons re-enable
   hits. Buttons are listened to individually (never the root), so the
   overlay stays transparent to flicks.
-- Safe-area insets are live, on all four sides: `ctx.safeArea` is re-read
-  every frame and written to CSS variables on the stage only when it
-  changes, so the banner, the side tags, the hint, the cards and the title
-  follow the runtime if it moves the bit between an inset and an
-  edge-to-edge presentation or rotates it. The harness scenario changes the
-  insets mid-run and screenshots the HUD following them.
+- `display: "fullscreen"`; the insets are live, on all four sides, read
+  from `ctx.contentSafeArea ?? ctx.safeArea` every frame and written to CSS
+  variables on the stage only when they change, so the banner, the side
+  tags, the hint, the cards and the title follow the host between an inset
+  and an edge-to-edge presentation or through a rotation. The camera pitch
+  is re-solved on the same change. Details under *Full screen* below.
 - Pointer positions come from `offsetX`/`offsetY` with pointer capture on
   the canvas; flick speed is measured from event timestamps, unpacking
   coalesced moves, so a slow frame cannot read as a fast flick.
@@ -173,6 +173,40 @@ band-passed air plus a low motor hum — whose level follows the wind.
 - Permissions: `audio`, `backgroundMusic`, `haptics`, `storage`.
 - Onboarding is `immersive`: the bit draws its own in-scene cue (the hand
   and the arrow), which is the reference's own tutorial.
+
+### Full screen (SDK 1.7.0)
+
+The manifest declares `"display": "fullscreen"`, so the bit covers the whole
+phone and Plethora's logo button floats over the bottom centre. The room runs
+to every edge underneath — desk, floor, the fan — and everything a thumb needs
+is laid out from `ctx.contentSafeArea ?? ctx.safeArea`: the content safe area
+is the phone's own insets moved in past the logo (and, in the web player, past
+its back arrow). The `??` is the compatibility story: an app from before
+full-screen support plays this same file in the legacy safe frame, where
+`contentSafeArea` is undefined and `safeArea.bottom` is a fixed 120 under the
+logo, and the fallback lands on exactly what the previous version did.
+
+The one real conflict is the paper ball. Paper Toss parks the sheet
+bottom-centre — which is now where the logo lives. The resolution is in the
+camera rather than the HUD: `layoutCamera()` solves the pitch that puts the
+resting sheet at least a thumb's width (64 px) above the bottom inset. At the
+designed 19° that already holds on any phone in portrait (the sheet sits about
+28% up the screen, some 240 px above the bottom on an iPhone, against a 108 px
+logo band), so nothing moves; on a squat viewport — a short window in the web
+player, a phone on its side — the camera tips further down until it holds,
+instead of parking the sheet under the button. The pitch is re-solved from
+`ctx.onResize` (registered with `immediate: true`; in a full-screen bit it
+also fires when the insets change) and from the per-frame inset check. The
+insets are read from `ctx` inside the callback, not from its payload, whose
+`safeArea` is all zeros in the safe frame. The three inset objects are
+frozen live values; the bit only ever reads them.
+
+What `ctx.contentSafeArea` moves, in CSS-variable terms: the banner hangs
+from `--st`, the hint sits on `--sb` (directly above the logo, under the
+sheet), the cards and the title screen pad by all four, the side tags hang
+off `--sl`/`--sr` at mid-height where neither the cutout nor the logo can
+reach them. The wind readout at two-thirds height and the toast at a third
+are feedback, not controls, and stay where the eye is.
 
 ### What the upload validator rejects
 
@@ -204,7 +238,15 @@ the strict mock `ctx`, on a 390 × 844 viewport:
   throw resolves, pays or litters, and the next sheet appears;
 - out-of-paper card → try again, level-cleared card → next level, shop
   (buy, select, insufficient funds), pause (resume, restart, mute, menu),
-  endless mode, resize.
+  endless mode, resize;
+- full screen: the mock models an iPhone's insets with the logo band (content
+  safe area bottom 108.5), the scenario then changes all four insets through
+  `window.__setInsets` and screenshots the HUD following them;
+- the legacy safe frame (`crumple-safeframe.json`, `display: "safe-frame"`,
+  a 390 × 778 frame with `contentSafeArea` undefined and a 120 px bottom
+  band): title, aim, pause card and a throw, every control above the band;
+- a squat viewport (`crumple-squat.json`, 844 × 390 in full screen, then
+  landscape insets): the camera tips down and the sheet clears the logo band.
 
 The harness drives flicks over CDP with real send timestamps rather than
 awaiting each mouse move, because under software rendering a frame takes
@@ -219,4 +261,10 @@ after the validator bisection above, then re-uploaded with the per-substep
 commit fix and again with the forgiving flick mapping. Once the creator had
 published it, the live-inset build went up as a draft revision of the same
 bit (the upload answers `draft_revision` rather than `updated` for a
-published bit); publishing each revision stays manual in the app.
+published bit); publishing each revision stays manual in the app. The
+full-screen build (SDK 1.7.0: `display: "fullscreen"`, content safe area,
+adaptive camera pitch) went up the same way on 2026-10-21 through
+`agent.plethora.studio`, 136,284 bytes, with no `notices` in the response —
+so the `display` declaration was accepted as such. Not verified on a phone
+from here: the real logo button over the real room, and the web player's
+back-arrow inset at the top.
