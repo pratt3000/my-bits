@@ -158,6 +158,12 @@ like art-direction or tuning failures until you find them:
   [`first-rakhi/`](first-rakhi) and [`cats-cradle/`](cats-cradle).
 - **Particles that integrate their drift wander off**, and one that drifts
   through the near plane fills the screen. Orbit a fixed home instead.
+- **A per-frame check on the sign of a velocity misses anything that starts
+  and finishes inside one frame.** At ten frames a second a ball's whole drop
+  into a bin is one frame, and by the end of it the resting contact has zeroed
+  the velocity the check was waiting for. Judge such events per substep. The
+  bug is intermittent, because it depends on where frame boundaries fall. See
+  [`crumple/`](crumple#the-physics).
 
 ## Publishing
 

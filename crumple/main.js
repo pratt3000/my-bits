@@ -1575,6 +1575,10 @@ window.plethoraBit = {
         collideWalls();
         collideOBB(DESK);
         for (let c = 0; c < activeCols.length; c++) collideAABB(activeCols[c]);
+        // Judged here, per substep: at ten frames a second the whole drop from
+        // the rim to the bin floor fits inside one frame, and by the end of it
+        // the resting contact has already zeroed vy.
+        if (ball.inside && !ball.committed && ball.y < bin.h - BALL_R * 1.6 && ball.vy < 0) ball.committed = true;
       }
 
       // Tumble.
@@ -1592,7 +1596,6 @@ window.plethoraBit = {
       if (ball.inside) {
         ball.insideT += dt;
         ball.restT = 0;
-        if (!ball.committed && ball.y < bin.h - BALL_R * 1.6 && ball.vy < 0) ball.committed = true;
         if (ball.committed && (sp < 0.35 || ball.insideT > 1.6)) ball.done = "basket";
       } else {
         ball.insideT = 0;

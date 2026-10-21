@@ -55,7 +55,15 @@ what makes rim shots behave — a ball that catches the lip rattles in or spins
 out instead of being either swallowed or rejected — and why a ball can hit the
 far inner wall, bounce back across and settle. A basket is called once the
 ball is committed below the rim and either slows down or has been inside for
-1.6 s; a miss once it has rested for 0.3 s on anything outside.
+1.6 s; a miss once it has rested for 0.3 s on anything outside. "Committed"
+is judged inside the substep loop, not once per frame: at ten frames a second
+the whole drop from the rim to the bin floor fits inside one frame, and by the
+end of it the resting contact has already zeroed the downward velocity the
+per-frame check was waiting for. The headless harness, at five frames a
+second, caught a throw that dropped in and then timed out as a miss with the
+sheet hidden inside the bin — and which runs it happened on depended on where
+the frame boundaries fell, so the same bug would have been intermittent on a
+slow phone.
 
 **Everything else** is boxes: floor, walls, the player's desk (a box rotated
 45°, resolved in its own frame), and per-room colliders for desks, cabinets,
@@ -192,4 +200,5 @@ early; a run that reports only a scripted step out of order, with every
 platform event present and no console error, is timing, not the bit.
 
 Uploaded as a draft on 2026-10-21 (id `b7f4659b-d111-4b16-8cce-ab1925eced78`)
-after the validator bisection above; publishing stays manual in the app.
+after the validator bisection above, then re-uploaded with the per-substep
+commit fix; publishing stays manual in the app.

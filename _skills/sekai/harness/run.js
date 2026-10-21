@@ -219,6 +219,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     for (const e of window.__bitEvents) o[e.kind] = (o[e.kind] || 0) + 1;
     return o;
   });
+  // The first interact payloads, so a scenario's throws, choices or moves can be read back.
+  const payloads = await page.evaluate(() => window.__bitEvents
+    .filter((e) => e.kind === "interact" && e.a && typeof e.a === "object").slice(0, 12).map((e) => JSON.stringify(e.a)));
 
   await browser.close();
   server.kill();
@@ -226,6 +229,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log("\n=== " + bit + " ===");
   console.log("frames:", state.frames, " canvases:", JSON.stringify(variety));
   console.log("platform events:", JSON.stringify(counts));
+  if (payloads.length) console.log("interact payloads:", payloads.join("  "));
   if (problems.length) {
     console.log("\nPROBLEMS (" + problems.length + "):");
     for (const p of problems.slice(0, 40)) console.log("  - " + p);
