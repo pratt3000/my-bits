@@ -21,10 +21,14 @@ the first miss. Baskets pay cash, and the shop sells paper and bins.
 
 Touch the sheet (or anywhere below the banner) and flick upward. The release
 speed, measured over the last ~90 ms of the flick in **screen heights per
-second**, sets the throw speed; a flick of about 1.3 screen heights per second
-lands level 1's bin, and because range grows with the square of speed, the far
-levels only ask for roughly twice that. The flick angle, clamped to ±35°, is
-the aim. Wind is a steady sideways push on the ball for the whole flight, with
+second**, sets the *distance* of the throw, linearly: a flick of about 1.9
+screen heights per second lands level 1's bin, a flick 10% faster throws 10%
+further, and the launch speed is solved from that distance. A first version
+mapped flick speed to launch speed instead, which made range grow with the
+square of the flick — a small difference in finger speed sent the sheet a long
+way off, and the creator could not sink one. The flick angle, clamped to
+±35°, is the aim. A miss says which way it missed (LONG, SHORT, WIDE LEFT,
+WIDE RIGHT) and what to change, because that is what teaches the flick. Wind is a steady sideways push on the ball for the whole flight, with
 a little flutter on top, and the fan sits on the side the wind comes from, so
 it swaps sides when the wind does. Level 1 is calm; from level 2 the fan
 climbs a notch per level.
@@ -76,16 +80,21 @@ on every contact, which with ten substeps a frame glued a sheet to whatever it
 touched, including the outside of the bin, where it then never counted as at
 rest; one throw in the harness stuck that way and the model was replaced.
 
-**Forgiveness.** Two things, both small. The lip is inelastic (restitution
-0.28), so a sheet that catches the rim mostly dies there and drops in rather
-than pinging off — which is what paper does. And on the way down, within a
-metre of the bin, a sideways pull (4.5 m/s² at the bin, fading to nothing)
-nudges the ball toward the bin's line *across* the line of flight only; range
-stays entirely the flick's job. Measured on level 1: a flick within ±3% of the
-right speed lands clean, ±1% more catches the lip, and the aim window is about
-±4°. A first version pulled the ball toward the bin in every direction, which
-helped short throws and made long ones longer — it moved the window instead of
-widening it, so it went.
+**Forgiveness.** Three things. At launch, a throw whose distance is within a
+band of the right one is pulled three quarters of the way in; the band is 28%
+on level 1 and tightens to 9% by level 11 (in endless, with the streak). The
+lip is inelastic (restitution 0.28), so a sheet that catches the rim mostly
+dies there and drops in rather than pinging off — which is what paper does.
+And on the way down, within 1.2 m of the bin, a sideways pull (7 m/s² at the
+bin, fading to nothing) nudges the ball toward the bin's line *across* the
+line of flight only, so a slightly wide aim still drops; it is applied in
+flight, so it works with the wind rather than against the player's
+correction for it. Measured on level 1 with no wind: flicks from about 1.4 to
+2.4 screen heights per second land clean; on level 12, 1.75 to 2.05. Before
+the launch band and the linear mapping the clean window was ±3% of flick
+speed, which played as impossible. An earlier pull toward the bin in every
+direction helped short throws and made long ones longer — it moved the window
+instead of widening it, so it went.
 
 ## The look
 
@@ -184,9 +193,9 @@ the strict mock `ctx`, on a 390 × 844 viewport:
 
 - init clean, `ready()` after the title card, frames advancing, no console or
   page errors;
-- a 1.3 screen-heights-per-second flick lands level 1's bin, a 1.55 flick
-  lands long behind it, a 0.97 flick drops short in front — each throw
-  resolves, pays or litters, and the next sheet appears;
+- a 1.9 screen-heights-per-second flick lands level 1's bin, a flick 35%
+  faster lands long behind it, one 30% slower drops short in front — each
+  throw resolves, pays or litters, and the next sheet appears;
 - out-of-paper card → try again, level-cleared card → next level, shop
   (buy, select, insufficient funds), pause (resume, restart, mute, menu),
   endless mode, resize.
@@ -201,4 +210,5 @@ platform event present and no console error, is timing, not the bit.
 
 Uploaded as a draft on 2026-10-21 (id `b7f4659b-d111-4b16-8cce-ab1925eced78`)
 after the validator bisection above, then re-uploaded with the per-substep
-commit fix; publishing stays manual in the app.
+commit fix and again with the forgiving flick mapping; publishing stays
+manual in the app.

@@ -187,7 +187,7 @@ window.plethoraBit = {
       ".cr-cbtn{width:min(100%,280px);margin-top:4px;}" +
       ".cr-cball{filter:drop-shadow(0 14px 22px rgba(0,0,0,.55));animation:crBob 2.4s ease-in-out infinite;}" +
       "@keyframes crBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-9px);}}" +
-      "@keyframes crHand{0%{transform:translate(0,0) rotate(-6deg);opacity:0;}8%{opacity:1;}62%{transform:translate(6px,-130px) rotate(2deg);opacity:1;}78%{opacity:0;}100%{transform:translate(6px,-130px);opacity:0;}}" +
+      "@keyframes crHand{0%{transform:translate(0,0) rotate(-6deg);opacity:0;}10%{opacity:1;transform:translate(0,0) rotate(-6deg);}22%{transform:translate(0,0) rotate(-6deg);}42%{transform:translate(6px,-150px) rotate(2deg);opacity:1;}58%{opacity:0;transform:translate(6px,-150px);}100%{transform:translate(6px,-150px);opacity:0;}}" +
       "@keyframes crPop{0%{opacity:0;transform:scale(.6);}18%{opacity:1;transform:scale(1.08);}30%{transform:scale(1);}78%{opacity:1;}100%{opacity:0;transform:translateY(-14px) scale(1);}}" +
       "@keyframes crCard{0%{opacity:0;transform:translateY(16px) scale(.96);}100%{opacity:1;transform:none;}}" +
       "</style>" +
@@ -1368,7 +1368,6 @@ window.plethoraBit = {
     let wind = 0;                        // lateral acceleration in m/s^2, +x is to the right
     const WALL_X = 3.55, WALL_Z = -9.95, FRONT_Z = 0.3;
     const hits = [];                     // contact events for the sound layer, drained each frame
-    const ASSIST = 4.5, ASSIST_R = 1.0;  // m/s^2 toward the bin, fading out at ASSIST_R metres
 
     function resetBall() {
       ball.x = BALL_HOME.x; ball.y = BALL_HOME.y; ball.z = BALL_HOME.z;
@@ -1611,7 +1610,8 @@ window.plethoraBit = {
 
     // --- the throw ----------------------------------------------------------
     const THROW_EL = 52 * Math.PI / 180;   // launch elevation
-    const S_REF = 1.3;                     // flick speed, in screen heights per second, that lands level 1
+    const S_REF = 1.9;                     // flick speed, in screen heights per second, that lands level 1
+    const ASSIST = 7.0, ASSIST_R = 1.2;    // sideways pull toward the bin's line on the way down, m/s^2 at the bin
     /** Horizontal distance a throw of speed v travels before it comes back down to rim height. */
     function flightRange(v) {
       let x = 0, y = BALL_HOME.y, vx = v * Math.cos(THROW_EL), vy = v * Math.sin(THROW_EL);
@@ -1630,7 +1630,26 @@ window.plethoraBit = {
       for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (flightRange(m) < dist) lo = m; else hi = m; }
       return (lo + hi) / 2;
     }
-    const V_REF = speedFor(2.9 + BALL_HOME.z);   // level 1: the bin sits at z = -2.9
+    const D_REF = 2.9 + BALL_HOME.z;             // level 1: the bin sits at z = -2.9, this far from the sheet
+    /**
+     * How much of a range error the launch forgives: a throw that would land
+     * within this fraction of the right distance is pulled three quarters of
+     * the way in. Generous early, tighter as the levels or the streak climb.
+     */
+    function rangeBand() {
+      const n = mode === "levels" ? level : 1 + Math.min(score, 12) * 0.8;
+      return lerp(0.28, 0.09, clamp((n - 1) / 10, 0, 1));
+    }
+    /** Flick speed (screen heights per second) -> launch speed, through distance. */
+    function speedForFlick(sNorm) {
+      // Linear in distance: a flick 10% faster throws 10% further, not 21%.
+      const want = clamp(D_REF * (sNorm / S_REF), 0.4, 7.5);
+      const need = Math.hypot(bin.x - ball.x, bin.z - ball.z);
+      const err = (want - need) / need;
+      const band = rangeBand();
+      const target = Math.abs(err) < band ? need * (1 + err * 0.25) : want;
+      return clamp(speedFor(target), 1.4, 12);
+    }
 
     function launch(v, phi) {
       const cv = v * Math.cos(THROW_EL);
@@ -2021,7 +2040,7 @@ window.plethoraBit = {
       state = "aim";
       el.up.style.opacity = "1";
       if (throwsTotal < 3) el.hand.classList.add("on"); else el.hand.classList.remove("on");
-      hint(throwsTotal < 1 ? "Flick up to throw" : (wind !== 0 ? "Aim into the wind" : ""));
+      hint(throwsTotal < 1 ? "Flick up quickly to throw" : (wind !== 0 ? "Aim into the wind" : ""));
     }
 
     function onRelease(sNorm, phi) {
@@ -2030,7 +2049,7 @@ window.plethoraBit = {
       el.hand.classList.remove("on");
       hint("");
       throwsTotal++;
-      const v = clamp(V_REF * (sNorm / S_REF), 1.4, 12);
+      const v = speedForFlick(sNorm);
       launch(v, phi);
       if (mode === "levels") { ballsLeft--; renderBalls(); }
       state = "fly";
@@ -2091,12 +2110,19 @@ window.plethoraBit = {
         if (ball.y > -0.4) dropLitter(ball.x, ball.y, ball.z, ball.q, sel.paper);
         ballMesh.visible = false;
         haptic("warning");
+        // Say which way it missed: that is what teaches the flick.
+        const dzb = ball.z - bin.z, dxb = ball.x - bin.x;
+        let big = "MISS", tip = "";
+        if (ball.rimHits) { big = "RIM!"; tip = "So close"; }
+        else if (Math.abs(dzb) > Math.abs(dxb) * 1.2) {
+          if (dzb < 0) { big = "LONG"; tip = "Flick softer"; } else { big = "SHORT"; tip = "Flick harder"; }
+        } else { big = dxb > 0 ? "WIDE RIGHT" : "WIDE LEFT"; tip = dxb > 0 ? "Aim left" : "Aim right"; }
         if (mode === "levels") {
-          toast(ball.rimHits ? "RIM!" : "MISS", ballsLeft > 0 ? ballsLeft + (ballsLeft === 1 ? " sheet left" : " sheets left") : "");
+          toast(big, tip + (ballsLeft > 0 ? "  \u00b7  " + ballsLeft + (ballsLeft === 1 ? " sheet left" : " sheets left") : ""));
           if (ballsLeft <= 0) { ctx.timeout(levelFailed, 1200); return; }
           ctx.timeout(nextAfterResult, 1000);
         } else {
-          toast(ball.rimHits ? "RIM!" : "MISS", score ? score + " in a row" : "");
+          toast(big, tip + (score ? "  \u00b7  " + score + " in a row" : ""));
           ctx.timeout(runOver, 1200);
         }
       }
