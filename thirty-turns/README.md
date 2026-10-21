@@ -1,4 +1,10 @@
-# Thirty Turns
+# Polytopia (thirty-turns)
+
+The title screen and the records say **Polytopia**. The Plethora listing is
+still titled "Thirty Turns": the upload service matches a draft by its title,
+and the published game lives under that one, so renaming the manifest would
+start a second draft rather than update the first. Change the listing name in
+the app, or change `title` in `plethora.json` and publish the new draft.
 
 A mobile-first [Plethora Bit](https://create.plethora.studio): a pocket 4X in
 the mould of *The Battle of Polytopia*. One city, one warrior, a square world

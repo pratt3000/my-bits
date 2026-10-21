@@ -47,7 +47,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`first-rakhi/`](first-rakhi)           | Tear a strip from a woven sari, thread by thread, and bind a cut with it. |
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
-| [`thirty-turns/`](thirty-turns)         | A pocket 4X in the Polytopia mould — twelve tribes, 24 techs, bots at four levels, pass-and-play. |
+| [`thirty-turns/`](thirty-turns)         | Polytopia on the title screen: a pocket 4X — twelve tribes, 24 techs, bots at four levels, pass-and-play. |
 
 ### Rakshabandhan set
 

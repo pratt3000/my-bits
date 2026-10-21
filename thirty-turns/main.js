@@ -1,5 +1,6 @@
 /**
- * Thirty Turns — a pocket 4X in the Polytopia mould.
+ * Polytopia — a pocket 4X after The Battle of Polytopia. (Listed as
+ * "Thirty Turns"; the name on the title screen is Polytopia.)
  *
  * A square world of fields, forests, mountains and water, twelve tribes with a
  * starting technology each, villages to capture, a 24-technology tree, nine unit
@@ -3609,7 +3610,8 @@ window.plethoraBit = {
       .tt .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #ffd166, #ffb347); border-radius: 4px; }
       .tt .panel { position: absolute; inset: 0; display: none; pointer-events: auto; background: rgba(8,11,17,0.9);
         overflow-y: auto; -webkit-overflow-scrolling: touch; }
-      .tt .panel .inner { max-width: 520px; margin: 0 auto; animation: rise 0.26s ease-out; }
+      .tt .panel .inner { max-width: 520px; margin: 0 auto; }
+      .tt .panel .inner.rise { animation: rise 0.26s ease-out; }
       .tt .sheet { position: absolute; left: 8px; right: 8px; border-radius: 20px; padding: 10px 12px 10px; pointer-events: none; display: none; animation: rise 0.2s ease-out; }
       .tt .sheet .head { display: flex; align-items: center; gap: 10px; }
       .tt .sheet .title { font-size: 15px; font-weight: 900; }
@@ -3912,10 +3914,15 @@ window.plethoraBit = {
     let savedGame = null;       // compact save found at startup
 
     function openPanel(name, arg) {
+      // Re-rendering the panel that is already open (a chip tapped in setup,
+      // a technology bought) keeps its scroll position and does not replay
+      // the rise; a new panel starts at the top.
+      const same = V.panel === name && V.panelArg === arg && panelEl.style.display === "block";
+      const keep = same ? panelEl.scrollTop : 0;
       V.panel = name; V.panelArg = arg;
       panelEl.style.display = "block";
-      panelEl.scrollTop = 0;
-      panelEl.innerHTML = `<div class="inner" style="padding:${sa.top + 14}px 14px ${sa.bottom + 28}px;">` + panelHtml(name, arg) + `</div>`;
+      panelEl.innerHTML = `<div class="inner${same ? "" : " rise"}" style="padding:${sa.top + 14}px 14px ${sa.bottom + 28}px;">` + panelHtml(name, arg) + `</div>`;
+      panelEl.scrollTop = keep;
       V.dirty = true;
     }
     function closePanel() { V.panel = null; panelEl.style.display = "none"; panelEl.innerHTML = ""; V.dirty = true; }
@@ -3932,7 +3939,7 @@ window.plethoraBit = {
           const has = !!(S && !S.over && V.screen === "play") || !!savedGame;
           return `<div class="hero">` +
             `<div style="color:#ffd166;letter-spacing:8px;font-size:22px;margin-bottom:4px;">${svg("star", 22, "#ffd166")}${svg("star", 28, "#ffd166")}${svg("star", 22, "#ffd166")}</div>` +
-            `<div class="title">Thirty Turns</div>` +
+            `<div class="title">Polytopia</div>` +
             `<div class="rule"></div>` +
             `<div class="small" style="margin:0 20px 26px;">Grow a tribe from one village to an empire — in thirty turns, or until nobody else is left.</div>` +
             `<div style="display:flex;flex-direction:column;gap:10px;align-items:center;">` +
@@ -4325,7 +4332,7 @@ window.plethoraBit = {
         savedGame = null;
         if (w && w.human && ctx.pulse && ctx.pulse.complete) {
           fireAndForget(() => ctx.pulse.complete({ mode: S.mode, score: w.score, level: S.turn,
-            text: "Won a game of Thirty Turns (" + MODES.find((m) => m.id === S.mode).name + ") as the " + tribeName(w.id) + " with " + w.score.toLocaleString() + " points" }));
+            text: "Won a game of Polytopia (" + MODES.find((m) => m.id === S.mode).name + ") as the " + tribeName(w.id) + " with " + w.score.toLocaleString() + " points" }));
         }
       }
       openPanel("over");
