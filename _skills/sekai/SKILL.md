@@ -136,7 +136,9 @@ cause almost every time, so catching things locally saves a bisect.
 
 If pairing is needed, `python3 scripts/upload.py pair` mints a code. Only mint
 one when the creator says they are at their phone — codes last ten minutes, and
-they must approve on their own device. Never ask for a login of any kind.
+they must approve on their own device. The token it yields lasts four hours,
+so a long session pairs again for its later uploads. Never ask for a login of
+any kind.
 
 Publishing is always the creator's own action; uploading only creates a draft.
 

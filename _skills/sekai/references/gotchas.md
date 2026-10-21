@@ -129,6 +129,11 @@ If it does, say so immediately rather than letting them find it.
   returns `rate_limited`.
 - The access token is returned **exactly once**, on the approved exchange.
   Write it to disk before doing anything else with the response.
+- The token **expires four hours after approval** (`tokenExpiresAt`), not
+  when revoked. `upload.py` then fails with "Agent token is invalid, expired,
+  revoked, or missing draft scope" and a new code is needed — and that new
+  code expires in ten minutes, so ask the creator first. A session that ran
+  overnight lost an upload this way (`crumple/`).
 - Never ask for a username, email, password or login of any kind. Approval
   happens entirely on the creator's own device — that is the point of the flow.
 

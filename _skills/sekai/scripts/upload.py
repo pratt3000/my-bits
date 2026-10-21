@@ -5,8 +5,10 @@ Pair with Plethora and upload bits as drafts.
     python3 upload.py pair                    # once, then the token is durable
     python3 upload.py <bit-dir> [<bit-dir>…]  # upload/update drafts
 
-Pairing is a one-time bootstrap: mint a code, the creator approves it on their
-own device, and the access token that comes back is reusable until revoked. The
+Pairing is a short bootstrap: mint a code, the creator approves it on their
+own device, and the access token that comes back is good for four hours
+(tokenExpiresAt in the saved file), after which uploads fail with a 403 and a
+fresh code is needed. The
 token is a credential — it is written to ~/.plethora/agent-token.json with mode
 600 and must never be committed. Never ask the creator for a username, email,
 password or any login; approval happens entirely on their device.

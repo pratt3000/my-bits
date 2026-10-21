@@ -172,7 +172,10 @@ Publishing stays manual. An agent pairs with the creator at
 to `/v1/agent/bits/drafts` with an `Authorization: Plethora-Agent <token>`
 header. Drafts are reviewed and published from the Plethora app or dashboard.
 
-Pairing is durable — the creator approves a code once and the agent reuses the
-returned `accessToken` until it is revoked. Only the bootstrap exchange is
-one-time, and the pairing code itself expires after 10 minutes, so mint it when
-there is something ready to upload rather than at the start of the work.
+The pairing code expires after 10 minutes, and the `accessToken` it yields
+expires **four hours after approval** (`tokenExpiresAt` in the saved token;
+the contract calls it the four-hour agent session) — it is not durable until
+revoked, as this file used to say. A session that spans more than four hours
+needs a second pairing for its later uploads, so mint a code when there is
+something ready to upload and the creator is at their phone, not at the start
+of the work.
