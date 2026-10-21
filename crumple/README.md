@@ -216,5 +216,7 @@ platform event present and no console error, is timing, not the bit.
 
 Uploaded as a draft on 2026-10-21 (id `b7f4659b-d111-4b16-8cce-ab1925eced78`)
 after the validator bisection above, then re-uploaded with the per-substep
-commit fix and again with the forgiving flick mapping; publishing stays
-manual in the app.
+commit fix and again with the forgiving flick mapping. Once the creator had
+published it, the live-inset build went up as a draft revision of the same
+bit (the upload answers `draft_revision` rather than `updated` for a
+published bit); publishing each revision stays manual in the app.

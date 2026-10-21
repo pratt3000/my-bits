@@ -114,10 +114,18 @@ def upload(dirs):
         m = json.load(open(os.path.join(d, "plethora.json")))
         source = open(os.path.join(d, m.get("entry", "main.js")), encoding="utf-8").read()
         known = ledger().get(m["title"], [])
-        r = post("/bits/drafts", {
+        body = {
             "title": m["title"], "description": m.get("description", ""),
             "tags": m.get("tags", []), "source": source, "manifest": m, "generated": True,
-        }, token)
+        }
+        # The API sometimes answers "Request deadline exceeded" to a single
+        # upload; that is a timeout, not a verdict, and a retry goes through.
+        for attempt in range(4):
+            r = post("/bits/drafts", body, token)
+            if "deadline" not in json.dumps(r):
+                break
+            print("%-16s timed out (attempt %d), retrying..." % (os.path.basename(d), attempt + 1))
+            time.sleep(6)
         name = os.path.basename(d)
         if r.get("ok"):
             data = r["data"]
