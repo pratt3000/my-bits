@@ -169,3 +169,9 @@ constraint is the easy half; not quietly routing around it is the point.
   big source (260 KB took one such failure). It is the server's own deadline,
   not a validation verdict: run the same upload again before bisecting
   anything — the retry went through at once.
+
+- Once the creator has *published* a draft, the next upload of the same title
+  comes back `created` with a new id even when nothing changed: the published
+  game cannot be overwritten, and the new draft is the next release for the
+  creator to publish. Expect the DUPLICATE warning then, and tell them which
+  id is the fresh one.
