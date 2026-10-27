@@ -1,12 +1,19 @@
 {
+  "display": "fullscreen",
   "viewport": {
     "width": 390,
     "height": 844
   },
   "dpr": 1,
+  "caps": {
+    "motion": true
+  },
   "steps": [
     {
-      "wait": 3000
+      "wait": 3500
+    },
+    {
+      "screenshot": "dbg-00-title"
     },
     {
       "eval": "document.querySelector('[data-act=\"play\"]').click()"
@@ -20,12 +27,10 @@
     {
       "balance": {
         "ms": 2500,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
@@ -34,12 +39,10 @@
     {
       "balance": {
         "ms": 2500,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
@@ -48,12 +51,10 @@
     {
       "balance": {
         "ms": 2500,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
@@ -65,12 +66,10 @@
     {
       "balance": {
         "ms": 4000,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {

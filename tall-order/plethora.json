@@ -3,14 +3,16 @@
   "runtime": "plethora-bit@2",
   "entry": "main.js",
   "title": "Tall Order",
-  "description": "Balance the tallest ice cream tower in town. A scooper holds the cone, two machine arms pile on scoop after scoop, and you walk the cone under the lean — drag a finger or tilt the phone — before the centre of mass gets away. Big scoops land heavy, minis come in threes, and every few scoops the machine shouts INCOMING and fires a burst for double points. Spill three and the customer walks; let it topple and it is over. Clean, steady landings build a multiplier. Leaderboards for best score and tallest tower.",
+  "description": "Balance the tallest ice cream tower in town, in 3D, with the phone. A scooper holds the cone in a little parlour, two machine arms swing in from the left and right and pile on scoop after scoop, and you tilt the phone to walk the cone under the lean — sideways and toward or away from you — before the centre of mass gets away. Big scoops land heavy, minis come in threes, and every few scoops the machine shouts INCOMING and fires a burst for double points. Spill three and the customer walks; let it topple and it is over. Clean, steady landings build a multiplier. Drag works where there are no motion sensors. Leaderboards for best score and tallest tower.",
   "tags": [
+    "3d",
     "game",
     "arcade",
     "balance",
     "ice-cream",
-    "stacking",
     "tilt",
+    "motion",
+    "stacking",
     "leaderboard",
     "physics"
   ],
@@ -21,7 +23,9 @@
     "motion",
     "storage"
   ],
-  "dependencies": [],
+  "dependencies": [
+    "three@0.164.1"
+  ],
   "display": "fullscreen",
   "memory": {
     "records": {
@@ -70,9 +74,6 @@
       },
       "feel": {
         "label": "Feel"
-      },
-      "visual": {
-        "label": "Look"
       },
       "audio": {
         "label": "Sound"
@@ -157,7 +158,7 @@
         "apply": "live"
       },
       "control_sensitivity": {
-        "label": "Drag and tilt sensitivity",
+        "label": "Tilt and drag sensitivity",
         "type": "number",
         "default": 1,
         "min": 0.5,
@@ -167,18 +168,16 @@
         "intent": "feel",
         "apply": "live"
       },
-      "sky": {
-        "label": "Sky",
+      "tilt_forward": {
+        "label": "Tilting the phone's top away walks the cone",
         "type": "choice",
-        "default": "sunset",
+        "default": "away",
         "options": [
-          "sunset",
-          "mint",
-          "midnight",
-          "candy"
+          "away",
+          "toward"
         ],
-        "group": "visual",
-        "intent": "visual",
+        "group": "feel",
+        "intent": "feel",
         "apply": "live"
       },
       "music_intensity": {

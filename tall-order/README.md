@@ -1,44 +1,63 @@
 # Tall Order
 
-Balance the tallest ice cream tower in town. A scooper stands at the bottom
-of the screen holding a waffle cone; two machine arms slide in along a rail at
-the top and lower scoop after scoop onto the stack. The stack leans. You walk
-the cone under the lean — drag a finger, or tilt the phone — before the centre
-of mass wanders past the cone and the whole thing comes down.
+Balance the tallest ice cream tower in town — in 3D, with the phone. A
+scooper stands in a little parlour holding a waffle cone over his head. Two
+machine arms, one on each side, swing in from the left and the right and lower
+scoop after scoop onto the stack. The stack leans, sideways and toward you and
+away. You hold the phone up like a tray and tilt it to walk the cone under the
+lean before the centre of mass wanders past the cone and the whole thing comes
+down. Where there are no motion sensors (the web player, a desktop) a drag does
+the same job.
 
-It is Cone Zone, the *Wii Play: Motion* minigame, rebuilt for one thumb and
-dressed up: a rooftop parlour at golden hour, glossy scoops with drips and
-sprinkles and a cherry that hops to the top, a scooper whose face tells you how
-worried you should be, INCOMING rushes, big scoops, mini triplets, hearts, a
-clean-landing multiplier, and two leaderboards.
+It is Cone Zone, the *Wii Play: Motion* minigame, rebuilt for a phone and
+dressed up: a pastel parlour with a tiled floor, a display case of tubs, a
+chalk menu, a neon sign and string lights; glossy lumpy scoops with drips,
+sprinkles and a cherry that hops to the top; a scooper whose face tells you
+how worried you should be; INCOMING rushes, big scoops, mini triplets, hearts,
+a clean-landing multiplier, a spirit level in the HUD, and two leaderboards.
 
 ## Files
 
-| File            | What it is                                                                      |
-| --------------- | ------------------------------------------------------------------------------- |
-| `plethora.json` | Manifest — `plethora-bit@2`, full screen, no dependencies, two records, tuning. |
-| `main.js`       | Entry source defining `window.plethoraBit`. Everything is drawn in Canvas2D.    |
+| File            | What it is                                                                                   |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| `plethora.json` | Manifest — `plethora-bit@2`, full screen, `three@0.164.1`, `motion`, two records, tuning.    |
+| `main.js`       | Entry source defining `window.plethoraBit`. The whole parlour is built from primitives here. |
 
 ## How it plays
 
-- **Balance.** The tower is an inverted pendulum pivoting at the cone's rim.
-  Drag anywhere to walk the cone (relative: the cone moves by what the finger
-  moves, scaled by the zoom), or switch to tilt on the title screen when the
-  app has motion. Arrow keys work in the web player.
+- **Tilt.** The phone is the controller. Motion starts from the Play press
+  (a user gesture, which iOS needs for its permission prompt) and the control
+  is levelled right there, so however you hold the phone, still means stand
+  still. The cone stands where the tilt says: the full walking range (±0.72 m
+  sideways, ±0.45 m in depth) at the control's max angle of 22°, so a steady
+  hand is a standing cone and a flick is a shove. *Re-level* happens again on
+  Resume. Which way is forward on the tilt's depth axis is a creator knob
+  (*tilt_forward*, default *away*: tipping the top of the phone away walks
+  the cone away from you) with a player flip on the pause card, because the
+  SDK does not say which sign `tiltControl.y` gives for that.
+- **Touch** is the fallback (and the default where `capabilities.motion` is
+  false): a drag moves the cone by what the finger moves at the cone's depth,
+  sideways, and up or down the screen for depth. Arrow keys and WASD work in
+  the web player. A chip on the title and the pause card switches.
 - **Scoops.** The arms aim at the tower's top with an error that grows with
-  height (and more in a rush); the aim is fixed when the arm stops to hover, a
-  dotted line and a landing disc show where, and the scoop drops straight down.
-  A landing inside the catch zone counts; it sits where it landed, which shifts
-  the centre of mass for good and gives the tower a shove. A scoop the tower is
-  not under glances off, splats on the deck and costs a heart. Three hearts.
+  height (and more in a rush); a ring the size of the catch zone sits on the
+  top, a beam runs from the hand to it, and both turn green, amber or red for
+  how far the hand is from the zone right now, which is the thing to steer
+  by. The scoop drops; a landing inside the zone counts and sits where it
+  landed, which shifts the centre of mass for good and shoves the tower. A
+  scoop the tower is not under glances off, splats on the tiles and costs a
+  heart. Three hearts.
 - **Kinds.** Regular (100 points), big (150, heavier, from scoop 5), mini
   (60, in quick triplets, from scoop 8).
 - **Clean landings** — near the centre while the tower is nearly upright —
   build a multiplier up to ×8; a wobbly one resets it.
-- **INCOMING.** Every eight scoops (a knob) the machine warns for 1.3 s, then
-  fires four to eight scoops half a second apart from alternating arms, with
-  more aim error, for double points. Then a breather.
+- **INCOMING.** Every eight scoops (a knob) the machine's lights go red and
+  it warns for 1.3 s, then fires four to eight scoops half a second apart from
+  alternating arms, with more aim error, for double points. Then a breather.
 - **Milestones** every ten scoops: a bonus of 50 × scoops, confetti, a cheer.
+- **The level.** A bubble in the HUD drifts the way the tower leans — right
+  is right, down is toward you — and turns amber then red near the limit, so
+  the depth lean, which is hard to see head-on, is never a mystery.
 - **It ends** when the tower topples (the centre of mass passes the edge of
   the cone's support) or the hearts run out. The result card shows scoops,
   points, your bests, the top three on the score board and your rank, and
@@ -50,153 +69,131 @@ clean-landing multiplier, and two leaderboards.
 
 ## The physics
 
-One rigid body, lean angle `th`, pivot at the cone's rim, centre of mass
-`(cx, cy)` in the tower's own frame (cx is the sum of where each scoop landed,
-weighted by mass):
+Metres; the floor is y = 0 and the scooper faces the camera. The tower is one
+rigid body pivoting at the cone's rim, with a lean in two axes `(thx, thz)`
+and a centre of mass `(cx, cy, cz)` in its own frame (cx and cz are the sum
+of where each scoop landed, weighted by mass). Per axis:
 
 ```
-th'' = (G / cy) (sin th + (cx / cy) cos th)        gravity, and the bias of an off-centre stack
-     - K_CUP (1 - grown) th                          the cone's cup springs a short stack upright
-     - (a / cy) cos th                               the cone's own horizontal acceleration
-     - c th'                                         viscosity
+th'' = (G / cy) (th + c / cy)          gravity, and the bias of an off-centre stack
+     - K_CUP (1 - grown) th            the cone's cup springs a short stack upright
+     - (a / cy) grown                  the cone's own horizontal acceleration
+     - c th'                           viscosity
 ```
 
-`G` is an effective gravity (520 px/s² × the *topple speed* knob × one minus
-0.6 × *stickiness*) multiplied by `grown = smoothstep(26, 120, cy)`, and the
-cone's acceleration reaches the stack in the same proportion, so the first
+`G` is an effective gravity (1.7 m/s² × the *topple speed* knob × one minus
+0.6 × *stickiness*) multiplied by `grown = smoothstep(0.085, 0.39, cy)`, and
+the cone's acceleration reaches the stack in the same proportion, so the first
 three or four scoops sit in the cup, come along for the ride and spring back
-when nudged; the instability fades in over scoops four to six. It topples when
-`|th| > atan(SUP / cy)` with `SUP = 30 px`: a tall tower leans slowly (the time
-constant `1 / sqrt(G / cy)` is 0.64 s at eight scoops and a second at twenty)
-but has a tiny window (10° at eight scoops, 4° at twenty, always about 60 px
-of sway at the top), and from eight scoops on a lean of one degree reaches the
-limit in about a second and a half. Moving the cone right by `dx` changes the
-lean by `-dx / cy`, which is exactly how a broom on a palm is balanced, and
-why the cone follows the finger through a stiff critically damped spring
-rather than snapping: the tower feels the cone's acceleration, and a finger
-jump has to be a bounded one. Because the cone spring (22 rad/s) and the
-jelly wobble (13 rad/s) are stiff, the body physics runs in substeps of 16 ms
-or less whatever the frame rate; before that a 100 ms frame sent the cone to
-infinity.
+when nudged; the instability fades in over scoops four to six. The lean is one
+rotation, by `hypot(thx, thz)` about the horizontal axis that takes up toward
+the lean, and it topples when that passes `atan(SUP / cy)` with `SUP = 0.1 m`:
+a tall tower leans slowly but has a tiny window (10° at eight scoops, 4° at
+twenty), and from eight scoops on a lean of one degree reaches the limit in
+about a second and a half. These are the 2D build's equations with the pixel
+constants turned into metres (120 px → 0.39 m), so its playability study
+holds: a balancer with a human's 250 ms reaction delay holds about twenty
+scoops, and with no delay fifty.
 
-A lopsided stack has an equilibrium lean, `-atan(cx / cy)`, where it needs no
+The cone follows its target — the tilt, or the finger — through a stiff
+critically damped spring (22 rad/s), and the tower feels the spring's
+acceleration, capped at 30 m/s²: a flick of the phone is a bounded shove,
+not a teleport. The spring and the jelly wobble are stiff, so the body
+physics runs in substeps of 16 ms or less whatever the frame rate.
+
+A lopsided stack has an equilibrium lean, `-atan(c / cy)`, where it needs no
 acceleration at all; holding it dead upright instead means accelerating the
-cone forever, which is how a player gets chased to the edge of the screen.
-That is a feature of the real thing too, and the hint for a long run: let it
-lean a little.
+cone forever, which is how a player gets walked to the edge. That is a
+feature of the real thing too, and the hint for a long run: let it lean a
+little.
 
-Playability was checked offline before trusting the headless driver: a model
-of exactly these equations, driven by a full-state balancer with a 250 ms
-reaction delay (a human's), holds a tower of about twenty scoops; with no
-delay it holds fifty. The same balancer, with equilibrium compensation and
-gains picked from the closed-loop eigenvalues, is the harness driver
-(`debug.drive`).
+A landing at offset `(ex, ez)` in the tower's frame adds `e × m / (M × cy) × 3`
+per axis to the angular velocity (capped at ±0.5 rad/s), settles at half the
+offset as that scoop's permanent displacement, and kicks the jelly wobble:
+each scoop carries a damped lateral oscillator (spring 170, damping 7, ±3 cm)
+excited by landings and by the cone's acceleration in proportion to its
+height, so the stack whips like soft ice cream. The wobble is cosmetic, and it
+is most of the feel. Scoops overlap by 18% of their summed radii. A topple
+turns the stack into rigid-body debris that bounces twice, leaves a splat
+decal and a spray of droplets in its flavour, and rests.
 
-A landing at lateral offset `e` adds `e × m / (M × cy) × 3` to the angular
-velocity (capped at ±0.5 rad/s), settles at `e / 2` as that scoop's permanent
-offset, and kicks the jelly wobble: each scoop also carries a damped lateral
-oscillator (spring 170, damping 7) excited by landings and by the cone's
-acceleration in proportion to its height, so the stack whips like soft ice
-cream. The wobble is cosmetic, and it is most of the feel. Scoops overlap by
-18% of their summed radii.
-
-The camera zooms out as the tower grows so the top stays below the dispenser's
-claw: `scale = room / (pivot height + tower height + 90)`, clamped to 0.24..1,
-where `room` is the screen distance from the claw to the deck. The drop
-gravity is divided by the zoom so a scoop falls in the same screen time at
-every height.
+The arms are two-link chains (1.0 m and 0.92 m) on carriages that ride their
+pillars so the hand is always 0.7 m above the tower's top; the elbow bends
+up and out like a crane from a closed-form two-bone solution, the home pose
+stands folded beside the pillar, and the hand hovers above the aim point,
+opens, and withdraws. The camera frames feet to tower top inside the
+content-safe height (90% fill), fits the walking range to the width, follows
+the cone part of the way so a narrow portrait never loses the scooper,
+dollies back as the tower grows, and shifts the image by half the difference
+of the top and bottom insets (`setViewOffset`) so the framed span is centred
+between them, not between the screen edges.
 
 ## The look
 
-Canvas2D, every frame, no assets: a four-palette sky (sunset, mint, midnight,
-candy — a *Sky* knob) painted as a literal-stop gradient, a sun with a glow or
-a moon with stars, drifting cloud clusters, a two-depth skyline with lit
-windows, a rooftop parapet and a brick deck that run edge to edge under the
-logo. The machine is a chrome rail with a maker's plate; each arm is a
-carriage, a piston and two fingers that swing open on release. Scoops are a
-flat flavour fill with three lower lobes, then a shade and a gloss gradient
-clipped to the shape, a specular, optional drips, sprinkles or cookie specks,
-and a cherry on the top one. The scooper is a round-headed soda jerk with a
-paper hat, striped shirt and apron; his eyes follow the arm or the tower top,
-his brows and mouth read calm, focused, panic, joy and dismay from the lean
-ratio and the events, and he leans and shuffles with the cone's acceleration
-and speed. A red vignette pulses as the lean nears the limit. Screen shake on
-big landings and the fall; particles for splats, sparkles and confetti.
+three.js 0.164.1 from the registry (`ctx.importModule("three", "0.164.1")`,
+with the libs URL as a fallback), ACES tone mapping, a 2048² PCF soft shadow
+from a warm key light, a cool fill, a hemisphere and a pendant point light,
+and a painted equirectangular parlour as the environment map at half
+strength so chrome and gloss have something to reflect. Every texture is
+painted on an `OffscreenCanvas` with plain drawing calls (tiles, stripes,
+wood grain, the chalk menu, the neon sign, the waffle, cookie specks, a
+contact-shadow blob) and falls back to flat colours where there is none. The
+chalk board and the neon sign are lettered in the title face, so they are
+repainted once the fonts arrive.
+
+The scooper is a round-headed soda jerk built from capsules and spheres —
+paper hat, striped shirt, apron, bow tie, arms raised with his hands gripping
+the cone — whose eyes follow the arm or the tower top, whose brows and mouth
+blend between calm, focused, panic, joy and dismay from the lean ratio and
+the events, who leans into the cone's acceleration pivoting at his hands so
+the cone never leaves them, and whose legs scissor as he walks. Scoops are
+icosahedral-looking lumpy spheres (value noise on a sphere) in physical
+materials with clearcoat and sheen, optional instanced sprinkles, capsule
+drips and a cherry on the top one. Sparkles are additive points, droplets and
+confetti instanced meshes, splats decals on the floor. The HUD, cards and
+title are a DOM overlay root above the canvas.
 
 ## Sound
 
 A small WebAudio synth (permission `audio`) for plops pitched by scoop size,
 squishes, the clean-landing chime, the splat, the INCOMING alarm, the
-milestone arpeggio and the fall; `ctx.music` (`backgroundMusic`) for a cozy
-bed that climbs in tempo and intensity with the tower, ducks under the alarm,
-and stings on milestones and the result. Mute is a chip on the title and the
-pause card and persists.
+milestone arpeggio, the arm's whir and release and the fall; `ctx.music`
+(`backgroundMusic`) for a cozy bed that climbs in tempo and intensity with
+the tower, ducks under the alarm, and stings on milestones and the result.
+Mute is a chip on the title and the pause card and persists.
 
 ## Contract notes
 
-- Built against context `plethora-agent-context-2026-10-22.1`, SDK 1.7.0.
-- `display: "fullscreen"` (required to publish since this context). Layout
-  reads `ctx.contentSafeArea ?? ctx.safeArea` every frame and on
-  `ctx.onResize`; the banner hangs from the top inset, the hint, the cards and
-  the title pad by all four, the scooper's feet stand on the content-safe
-  bottom so he is never behind the logo button, and the sky and deck run to
-  every edge. The same file plays in the legacy safe frame through the `??`.
-- No dependencies. `ctx.createCanvas2D({ coordinateSpace: "css", maxDpr: 2,
-  alpha: false })` plus a passthrough DOM root for the HUD; buttons through
+- Built against context `plethora-agent-context-2026-10-22.1`, SDK 1.7.0,
+  fetched live at the start of the session per the repo rule.
+- `display: "fullscreen"` (required to publish since this context). Insets
+  come from `ctx.contentSafeArea ?? ctx.safeArea`, read every frame and on
+  `ctx.onResize`; the HUD hangs from the top inset, the hint, the cards and
+  the title pad by all four, the camera centres its framing between the top
+  and bottom insets, and the parlour runs to every edge underneath. The same
+  file plays in the legacy safe frame through the `??`.
+- One dependency, `three@0.164.1`, in `dependencies` and loaded through
+  `ctx.importModule`. `ctx.createCanvas({ touchAction: "none" })` for WebGL
+  plus a passthrough DOM root for the HUD; buttons through
   `ctx.input.activate`.
-- `ctx.game.loop` drives the frame; `ctx.game.score` holds the live score and
-  tower tracks and submits the two declared records at the result;
+- `ctx.game.loop` drives update and render; `ctx.game.score` holds the live
+  score and tower tracks and submits the two declared records at the result;
   `score.leaderboard` reads the top three.
-- Tilt through `ctx.motion.start` + `tiltControl`, started from the Play tap,
-  calibrated on start, stopped at the result; touch is the default and the
-  fallback when motion is denied or absent. Permissions: `audio`,
+- Tilt through `ctx.motion.start` + `tiltControl({ maxAngle: 22, deadzone:
+  0.05, smoothing: 0.25, calibrate: true })`, started from the Play press,
+  `calibrate()` on start and resume, paused with the game, stopped at the
+  result; touch is the fallback when motion is absent or denied, and the
+  default where `capabilities.motion` is false. Permissions: `audio`,
   `backgroundMusic`, `haptics`, `motion`, `storage`.
 - Ten tuning knobs (topple speed, stickiness, placement error, drop interval,
-  rush cadence, big and mini chances, sensitivity, sky, music) and a
+  rush cadence, big and mini chances, sensitivity, tilt forward, music) and a
   difficulty curve over scoop count; `chill` and `frantic` presets. Published
   playback uses the defaults.
-- Persistence in `ctx.storage` (bests, plays, control, mute) through a
-  fire-and-forget helper, because `set()` returns nothing on device.
-- Onboarding is `immersive`: the first run shows a drag cue and one follow-up
-  line, then nothing.
-- Gradient stops are string literals throughout: the upload validator rejects
-  a stop colour it cannot resolve, so dynamic colours (flavours, palettes) are
-  flat fills under literal-stop overlays. No `document.createElement("canvas")`,
-  no layout-box queries, no `ph` local, no ImageData.
-
-## Verified
-
-Headless, with the repo harness (`_skills/sekai/harness/run.js`) against the
-strict mock `ctx`, which for this bit learned `ctx.game` (score tracks and the
-loop), `ctx.tune` from the manifest, `ctx.input.activate`, a permission-gated
-`ctx.motion`, `ctx.pulse` and the documented leaderboard shape. The runner
-gained a closed-loop `balance` step that holds a finger down and moves it
-from the bit's `debug.drive` each tick — a hand on a pole, not scripted drags.
-
-- Full screen, 390 × 844 with an iPhone's insets and logo band: init clean,
-  `ready()` after the title, no console or page errors; the driver reached
-  fifteen scoops through the first INCOMING rush (both arms firing, double
-  points) and the ten-scoop milestone (confetti, bonus, cheer); clean and
-  wobbly landings, the multiplier rising and resetting, mini and big scoops,
-  the camera zooming out; a scripted swipe toppled it, the result card
-  showed scoops, points, a new best, the mock's top three with the viewer's
-  row and rank, and a Pulse completion was posted; play again, pause and
-  resume, an inset change mid-run, a resize.
-- The legacy safe frame (`display: "safe-frame"` in the mock, 390 × 778,
-  `contentSafeArea` undefined, a 120 px bottom band): title, play, three
-  scoops, pause card; every control above the band.
-- A squat 844 × 390 viewport with landscape insets: the camera zooms to its
-  floor, five scoops land; it plays but it is not the target.
-- The upload validator's known traps are avoided by construction (see
-  *Contract notes*); the real validator is the upload.
-
-Not verifiable here: tilt (the harness has no motion), haptics, the music
-bed, real touch, and the host's logo button over the real deck.
-
-Uploaded as a draft on 2026-10-27 through `agent.plethora.studio`: action
-`created`, id `7eda9816-178b-468d-ad2d-5a4be1951f9c`, 103,069 bytes, no
-`notices` in the response, so the full-screen declaration and the source
-passed the validator on the first upload. The upload carried
-`agentFeedback.contextVersion` 2026-10-22.1, which the uploader confirmed
-against the live origin first. Publishing stays manual in the app: Create ->
-Drafts.
+- Persistence in `ctx.storage` (bests, plays, control, forward, mute) through
+  a fire-and-forget helper, because `set()` returns nothing on device.
+- Onboarding is `immersive`: the first run shows a tilting-phone (or finger)
+  cue and one follow-up line, then nothing.
+- Validator traps avoided by construction: textures on `OffscreenCanvas`,
+  never `document.createElement("canvas")`; gradient stops are string
+  literals; no layout-box queries, no `ph` local, no ImageData, no bare
+  timers.

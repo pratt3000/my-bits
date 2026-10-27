@@ -1,0 +1,128 @@
+{
+  "display": "fullscreen",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "dpr": 1,
+  "steps": [
+    {
+      "wait": 4000
+    },
+    {
+      "screenshot": "t-01-title"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"play\"]').click()"
+    },
+    {
+      "wait": 1600
+    },
+    {
+      "screenshot": "t-02-first-arm"
+    },
+    {
+      "balance": {
+        "ms": 8000,
+        "read": "window.plethoraBit.debug.drivePx",
+        "mode": "accel2",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'"
+      }
+    },
+    {
+      "screenshot": "t-03-few-scoops"
+    },
+    {
+      "balance": {
+        "ms": 12000,
+        "read": "window.plethoraBit.debug.drivePx",
+        "mode": "accel2",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'"
+      }
+    },
+    {
+      "screenshot": "t-04-growing"
+    },
+    {
+      "balance": {
+        "ms": 14000,
+        "read": "window.plethoraBit.debug.drivePx",
+        "mode": "accel2",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'"
+      }
+    },
+    {
+      "screenshot": "t-05-tall"
+    },
+    {
+      "log": "window.plethoraBit.debug.snapshot()"
+    },
+    {
+      "drag": [
+        [
+          195,
+          700
+        ],
+        [
+          250,
+          700
+        ],
+        [
+          330,
+          700
+        ],
+        [
+          378,
+          700
+        ]
+      ],
+      "ms": 120
+    },
+    {
+      "waitUntil": "window.plethoraBit.debug.state() === 'topple'",
+      "timeout": 40000,
+      "after": 900
+    },
+    {
+      "screenshot": "t-06-after-topple"
+    },
+    {
+      "waitUntil": "window.plethoraBit.debug.state() === 'result'",
+      "timeout": 40000,
+      "after": 2500
+    },
+    {
+      "screenshot": "t-07-result"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "markVisualReady"
+    },
+    {
+      "expectEvent": "start"
+    },
+    {
+      "expectEvent": "interact"
+    },
+    {
+      "expectEvent": "complete"
+    },
+    {
+      "expectEvent": "record.submit"
+    },
+    {
+      "expectEvent": "leaderboard"
+    }
+  ]
+}

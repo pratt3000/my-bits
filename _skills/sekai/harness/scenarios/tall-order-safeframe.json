@@ -5,9 +5,12 @@
     "height": 778
   },
   "dpr": 1,
+  "caps": {
+    "motion": true
+  },
   "steps": [
     {
-      "wait": 3500
+      "wait": 4000
     },
     {
       "screenshot": "sf-01-title"
@@ -24,13 +27,10 @@
     {
       "balance": {
         "ms": 7000,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
@@ -40,7 +40,9 @@
       "eval": "document.querySelector('[data-act=\"pause\"]').click()"
     },
     {
-      "wait": 500
+      "waitUntil": "window.plethoraBit.debug.state() === 'paused'",
+      "timeout": 40000,
+      "after": 2200
     },
     {
       "screenshot": "sf-04-pause"

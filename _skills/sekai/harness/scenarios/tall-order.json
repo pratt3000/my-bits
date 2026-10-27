@@ -1,12 +1,16 @@
 {
+  "display": "fullscreen",
   "viewport": {
     "width": 390,
     "height": 844
   },
   "dpr": 1,
+  "caps": {
+    "motion": true
+  },
   "steps": [
     {
-      "wait": 3500
+      "wait": 4000
     },
     {
       "screenshot": "01-title"
@@ -15,7 +19,7 @@
       "eval": "document.querySelector('[data-act=\"play\"]').click()"
     },
     {
-      "wait": 1600
+      "wait": 1500
     },
     {
       "screenshot": "02-first-arm"
@@ -35,13 +39,10 @@
     {
       "balance": {
         "ms": 7000,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
@@ -50,13 +51,10 @@
     {
       "balance": {
         "ms": 9000,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
@@ -65,13 +63,10 @@
     {
       "balance": {
         "ms": 12000,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
@@ -80,50 +75,51 @@
     {
       "balance": {
         "ms": 14000,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 195,
-        "y": 700,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
       "screenshot": "06-taller"
     },
     {
-      "eval": "window.__toState = window.plethoraBit.debug.state()"
+      "log": "window.plethoraBit.debug.snapshot()"
     },
     {
-      "drag": [
-        [
-          195,
-          700
-        ],
-        [
-          250,
-          700
-        ],
-        [
-          330,
-          700
-        ],
-        [
-          378,
-          700
-        ]
-      ],
-      "ms": 120
+      "eval": "window.__tilt = { x: 1, y: 0 }"
     },
     {
-      "wait": 2600
+      "wait": 900
+    },
+    {
+      "eval": "window.__tilt = { x: -1, y: 0 }"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "eval": "window.__tilt = { x: 1, y: 0.5 }"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "eval": "window.__tilt = { x: 0, y: 0 }"
+    },
+    {
+      "waitUntil": "window.plethoraBit.debug.state() === 'topple'",
+      "timeout": 40000,
+      "after": 900
     },
     {
       "screenshot": "07-after-topple"
     },
     {
-      "wait": 1200
+      "waitUntil": "window.plethoraBit.debug.state() === 'result'",
+      "timeout": 40000,
+      "after": 2500
     },
     {
       "screenshot": "08-result"
@@ -132,7 +128,9 @@
       "eval": "document.querySelector('[data-act=\"again\"]').click()"
     },
     {
-      "wait": 1400
+      "waitUntil": "window.plethoraBit.debug.state() === 'play'",
+      "timeout": 40000,
+      "after": 1500
     },
     {
       "screenshot": "09-again"
@@ -141,7 +139,9 @@
       "eval": "document.querySelector('[data-act=\"pause\"]').click()"
     },
     {
-      "wait": 500
+      "waitUntil": "window.plethoraBit.debug.state() === 'paused'",
+      "timeout": 40000,
+      "after": 2200
     },
     {
       "screenshot": "10-pause"
@@ -168,6 +168,9 @@
       ]
     },
     {
+      "wait": 400
+    },
+    {
       "screenshot": "12-resized"
     },
     {
@@ -190,6 +193,9 @@
     },
     {
       "expectEvent": "leaderboard"
+    },
+    {
+      "expectEvent": "motion.start"
     }
   ]
 }

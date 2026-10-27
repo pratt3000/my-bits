@@ -5,6 +5,9 @@
     "height": 390
   },
   "dpr": 1,
+  "caps": {
+    "motion": true
+  },
   "insets": {
     "safeArea": {
       "top": 0,
@@ -27,7 +30,7 @@
   },
   "steps": [
     {
-      "wait": 3500
+      "wait": 4000
     },
     {
       "screenshot": "sq-01-title"
@@ -43,18 +46,26 @@
     },
     {
       "balance": {
-        "ms": 6000,
-        "read": "window.plethoraBit.debug.drive",
-        "x": 422,
-        "y": 260,
+        "ms": 7000,
+        "read": "window.plethoraBit.debug.drive2",
+        "mode": "tilt",
         "tick": 50,
-        "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel",
-        "arg": "offset"
+        "until": "window.plethoraBit.debug.state() !== 'play'"
       }
     },
     {
       "screenshot": "sq-03-playing"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"pause\"]').click()"
+    },
+    {
+      "waitUntil": "window.plethoraBit.debug.state() === 'paused'",
+      "timeout": 40000,
+      "after": 2200
+    },
+    {
+      "screenshot": "sq-04-pause"
     },
     {
       "expectEvent": "ready"

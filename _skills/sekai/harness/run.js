@@ -184,37 +184,84 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const b = step.balance;
         const vp = page.viewportSize();
         const x0 = b.x == null ? vp.width / 2 : b.x, y0 = b.y == null ? vp.height * 0.6 : b.y;
-        await down(x0, y0);
-        const t0 = Date.now();
-        // mode "accel": `read` is a finger acceleration (screen px/s^2) and the
-        // step integrates it, which is how a hand actually balances a pole.
+        // mode "tilt": no finger. `read` names a function returning
+        // { ax, az, rx, rz }: accelerations of the cone's target (m/s^2) and
+        // the reach a full tilt gives per axis (rz signed by the bit's
+        // forward convention). The step integrates twice, to a position, and
+        // sets window.__tilt to the tilt that puts the cone there — the
+        // mock's tiltControl reads it — which is how a hand balances a pole
+        // on a tray.
+        // mode "accel2": `read` returns { x, y } finger accelerations in
+        // screen px/s^2 and the finger moves on both axes.
+        // mode "accel": `read` is a finger acceleration (screen px/s^2) on x,
+        // optionally a function of the finger's offset from x0 (arg "offset").
         // Default: `read` is a finger offset from x0.
-        let fx = x0, fv = 0, last = Date.now();
+        // Under the software renderer the game runs slower than the wall
+        // clock (each slow frame is clamped), so when `read` reports game
+        // time in `t` the integration runs in the game's seconds and the
+        // velocity leak is per 50 ms of game time, not per tick.
+        const tilt = b.mode === "tilt";
+        if (!tilt) await down(x0, y0);
+        const t0 = Date.now();
+        let fx = x0, fy = y0, fv = 0, fvy = 0, tvx = 0, tvz = 0, tpx = 0, tpz = 0, last = Date.now(), lastT = null;
+        const gain = b.gain == null ? 1 : b.gain, leak = b.leak == null ? 0.9 : b.leak;
+        const cl = (v) => Math.max(-1, Math.min(1, v));
         while (Date.now() - t0 < (b.ms || 5000)) {
-          let v = 0;
-          // In accel mode `read` may name a function of the finger's offset from x0.
-          const expr = b.mode === "accel" && b.arg === "offset" ? "(" + b.read + ")(" + (fx - x0) + ")" : b.read;
-          try { v = Number(await page.evaluate(expr)) || 0; } catch (_) { v = 0; }
-          const now = Date.now(), dtS = Math.min(0.2, (now - last) / 1000); last = now;
-          let xt;
-          if (b.mode === "accel") {
-            fv += (b.gain == null ? 1 : b.gain) * v * dtS;
-            fv *= (b.leak == null ? 0.9 : b.leak);
-            fx += fv * dtS;
-            fx = Math.max(16, Math.min(vp.width - 16, fx));
-            xt = fx;
+          const now = Date.now(); let dtS = Math.min(0.2, (now - last) / 1000); last = now;
+          if (tilt || b.mode === "accel2") {
+            let o = null;
+            try { o = await page.evaluate("(" + b.read + ")()"); } catch (_) { o = null; }
+            if (o && typeof o === "object") {
+              if (typeof o.t === "number") { dtS = lastT == null ? 0 : Math.max(0, Math.min(0.2, o.t - lastT)); lastT = o.t; }
+              const lk = Math.pow(leak, dtS / 0.05);
+              if (tilt) {
+                tvx += gain * (Number(o.ax) || 0) * dtS; tvx *= lk; tpx += tvx * dtS;
+                tvz += gain * (Number(o.az) || 0) * dtS; tvz *= lk; tpz += tvz * dtS;
+                const tx = cl(tpx / (Number(o.rx) || 1)), ty = cl(tpz / (Number(o.rz) || 1));
+                tpx = tx * Math.abs(Number(o.rx) || 1); tpz = ty * Math.abs(Number(o.rz) || 1);
+                try { await page.evaluate("window.__tilt = { x: " + tx + ", y: " + ty + " }"); } catch (_) { /* fine */ }
+              } else {
+                fv += gain * (Number(o.x) || 0) * dtS; fv *= lk;
+                fvy += gain * (Number(o.y) || 0) * dtS; fvy *= lk;
+                fx = Math.max(16, Math.min(vp.width - 16, fx + fv * dtS));
+                fy = Math.max(16, Math.min(vp.height - 16, fy + fvy * dtS));
+                await move(fx, fy);
+              }
+            }
           } else {
-            xt = Math.max(16, Math.min(vp.width - 16, x0 + (b.gain == null ? 1 : b.gain) * v));
+            let v = 0;
+            const expr = b.mode === "accel" && b.arg === "offset" ? "(" + b.read + ")(" + (fx - x0) + ")" : b.read;
+            try { v = Number(await page.evaluate(expr)) || 0; } catch (_) { v = 0; }
+            let xt;
+            if (b.mode === "accel") {
+              fv += gain * v * dtS;
+              fv *= leak;
+              fx += fv * dtS;
+              fx = Math.max(16, Math.min(vp.width - 16, fx));
+              xt = fx;
+            } else {
+              xt = Math.max(16, Math.min(vp.width - 16, x0 + gain * v));
+            }
+            await move(xt, y0);
           }
-          await move(xt, y0);
           await sleep(b.tick || 50);
           if (b.until) { try { if (await page.evaluate(b.until)) break; } catch (_) { /* keep going */ } }
         }
-        await up();
+        if (tilt) { try { await page.evaluate("window.__tilt = { x: 0, y: 0 }"); } catch (_) { /* fine */ } }
+        else await up();
       }
       if (step.circle) await circle(step.circle);
       if (step.zigzag) await zigzag(step.zigzag);
       if (step.eval) await page.evaluate(step.eval);
+      // Wait until an expression is true in the page (polled every 100 ms),
+      // for state that arrives in game time rather than wall time.
+      if (step.waitUntil) {
+        const tw = Date.now(), lim = step.timeout || 30000;
+        let ok = false;
+        while (Date.now() - tw < lim) { try { if (await page.evaluate(step.waitUntil)) { ok = true; break; } } catch (_) { /* keep going */ } await sleep(100); }
+        if (!ok) problems.push("waitUntil timed out: " + step.waitUntil);
+        if (step.after) await sleep(step.after);
+      }
       // Print what an expression evaluates to in the page, for diagnosis.
       if (step.log) { let v; try { v = await page.evaluate(step.log); } catch (e) { v = "eval failed: " + e.message; } console.log("log " + JSON.stringify(step.log).slice(0, 60) + " => " + JSON.stringify(v)); }
       if (step.screenshot) await shot(step.screenshot, step.clip);

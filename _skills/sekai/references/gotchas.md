@@ -120,6 +120,34 @@ ask for the exact error text — the runtime surfaces it in an overlay.
 
 ---
 
+### Under the software renderer, CSS animations start late
+
+Headless Chromium draws WebGL through SwiftShader, and a scene with shadows
+and a few hundred meshes takes 200–300 ms a frame. CSS animations and
+transitions only start on the next rendered frame, so a card that fades in
+over 0.35 s is still at its first keyframe (opacity 0) when a screenshot is
+taken half a second after the click, and a HUD told to fade out is still
+fully there. `document.getAnimations()` shows them `running` at
+`currentTime 0`. It is a harness artefact — the device has a GPU and a real
+frame loop — but it looks exactly like a missing card. Wait two seconds or
+more before screenshotting anything that animates in, and remember that game
+time runs at about a third of wall time in such runs (`maxDeltaMs` clamps
+each slow frame), so balance steps need to be longer than the play they are
+meant to cover.
+
+### Driving a tilt bit headlessly
+
+The mock's `ctx.motion.tiltControl()` reads `window.__tilt = { x, y }`, and
+`capabilities.motion` is off unless the scenario sets `"caps": { "motion":
+true }`. The harness `balance` step has a `"mode": "tilt"` that holds no
+finger: `read` names a function returning `{ ax, az, rx, rz }` (accelerations
+of the cone's target and the reach a full tilt gives per axis, `rz` signed by
+the bit's forward convention), and the step integrates twice and sets the
+tilt that puts the cone there. `"mode": "accel2"` is the two-axis drag
+equivalent (`read` returns `{ x, y }` in screen px/s²). Both expect the bit
+to expose the controller itself (`debug.drive2`, `debug.drivePx`): the
+harness knows nothing about the physics, it only closes the loop.
+
 ## Upload validator
 
 The validator reports almost everything as **"This bit uses unsupported remote

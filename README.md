@@ -48,7 +48,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
 | [`crumple/`](crumple)                   | Paper toss in 3D — flick a crumpled sheet into the bin across the office, through the fan's wind. |
-| [`tall-order/`](tall-order)             | Cone Zone reborn — balance a tower of ice cream scoops two machine arms keep piling on, by drag or tilt. |
+| [`tall-order/`](tall-order)             | Cone Zone reborn in 3D — balance a tower of ice cream scoops two machine arms keep piling on, by tilting the phone. |
 
 ### Rakshabandhan set
 
