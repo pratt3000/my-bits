@@ -98,25 +98,36 @@ def headers(token=None, key=None):
     return h
 
 
+# curl appends the HTTP status and content type after the body, so a non-JSON
+# answer (an HTML error page from a proxy or the edge) is reported with them.
+TRAILER = ["-w", "\n__HTTP__ %{http_code} %{content_type}"]
+
+
 def parse(r):
+    text = r.stdout or ""
+    body, sep, trailer = text.rpartition("\n__HTTP__ ")
+    if not sep:
+        body, trailer = text, ""
     try:
-        out = json.loads(r.stdout)
+        out = json.loads(body)
     except Exception:
-        return {"ok": False, "error": {"message": "unparseable: " + (r.stdout or r.stderr)[:300]}}
+        return {"ok": False, "error": {"message": "unparseable (HTTP %s): %s" % (trailer.strip() or "?", (body or r.stderr)[:300])}}
     if isinstance(out, dict):
         out.setdefault("_status", r.returncode)
+        if trailer.strip():
+            out.setdefault("_http", trailer.strip())
     return out
 
 
 def post(path, body, token=None, key=None):
     r = subprocess.run(["curl", "-sS", "-X", "POST", API + path, *headers(token, key or str(uuid.uuid4())),
-                        "--data-binary", "@-"],
+                        *TRAILER, "--data-binary", "@-"],
                        input=json.dumps(body), capture_output=True, text=True)
     return parse(r)
 
 
 def get(path, token):
-    r = subprocess.run(["curl", "-sS", API + path, *headers(token)], capture_output=True, text=True)
+    r = subprocess.run(["curl", "-sS", API + path, *headers(token), *TRAILER], capture_output=True, text=True)
     return parse(r)
 
 

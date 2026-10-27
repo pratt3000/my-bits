@@ -186,6 +186,18 @@ a timeout, not a verdict. Run probes one at a time. The bisection is in
 `crumple/README.md`; its probe script posted the exact draft payload with
 `window.plethoraBit` renamed, which is all a probe needs.
 
+### An HTML page instead of JSON from the upload
+
+Once, a 130 KB upload came back as an HTML error page (the edge's, with the
+old `no-js ie6 oldie` boilerplate) instead of the JSON envelope; an empty
+body to the same endpoint answered a JSON 400 straight away and the same
+upload a minute later was `updated` normally. `upload.py` now appends the
+HTTP status and content type to curl's output and prints them with the
+`unparseable` message, so the next time it says which it was. A retry with
+a new key is safe for an existing title (the action is `updated`, not a new
+draft); check `data.action` and the ledger before assuming anything about
+the first attempt.
+
 ### Duplicate drafts
 
 Re-uploading the same title does not reliably update in place — it has been

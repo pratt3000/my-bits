@@ -197,3 +197,47 @@ Mute is a chip on the title and the pause card and persists.
   never `document.createElement("canvas")`; gradient stops are string
   literals; no layout-box queries, no `ph` local, no ImageData, no bare
   timers.
+
+## Verified
+
+Headless, with the repo harness (`_skills/sekai/harness/run.js`) against the
+strict mock `ctx`, whose `ctx.motion.tiltControl` reads a `window.__tilt`
+the harness sets. For this build the runner gained a `balance` mode `tilt`
+that holds no finger: it reads the bit's own balancer (`debug.drive2`, the
+model-based full-state controller from the 2D build, per axis), integrates
+it twice in the bit's game time and sets the tilt that puts the cone there
+— a hand on a tray, not scripted motion. A `accel2` mode does the same with
+a two-axis drag, and a `waitUntil` step waits for game state, because under
+the software renderer the WebGL scene runs at about a third of wall time.
+
+- Full screen, 390 × 844, tilt (`caps.motion`): init clean, `ready()` after
+  the title, no console or page errors; motion started from the Play press;
+  the tilt driver held four clean landings from alternating arms with the
+  cone kept at the centre (base offset under a millimetre), the multiplier
+  rising, the camera dollying back; a scripted full tilt toppled it, the
+  result card showed scoops, points, a new best, the mock's top three with
+  the viewer's row and rank, and the records were submitted; play again,
+  pause and resume (re-levelled), an inset change mid-run, a resize.
+- The same viewport without motion: touch is the default, the finger cue
+  shows, the two-axis drag driver landed three clean scoops, a swipe toppled
+  it, the result card and the records followed.
+- The legacy safe frame (`display: "safe-frame"`, 390 × 778,
+  `contentSafeArea` undefined, a 120 px bottom band): title, play, a scoop,
+  pause card; the hint and the framing stay above the band.
+- A squat 844 × 390 viewport with landscape insets: the whole parlour fits,
+  a scoop lands, the pause card scrolls; it plays but it is not the target.
+- `check.py` passes; the live index still serves `2026-10-22.1` / SDK 1.7.0
+  at upload time.
+
+Not verifiable here: real tilt (the sign of `tiltControl.y`, the feel of the
+22° range, calibration on a moving hand), haptics, the music bed, real touch,
+frame rate on a phone GPU, and the host's logo button over the real floor.
+
+Uploaded on 2026-10-27 through `agent.plethora.studio` as a revision of the
+existing draft: action `updated`, id `7eda9816-178b-468d-ad2d-5a4be1951f9c`,
+131,928 bytes, no `notices` in the response, so the three.js dependency, the
+full-screen declaration and the source passed the validator. The upload
+carried `agentFeedback.contextVersion` 2026-10-22.1, which the uploader
+confirmed against the live index first. The first attempt came back as an
+HTML error page from the edge rather than JSON; the second, a minute later,
+succeeded. It is a draft: not published, not yet played on a phone.
