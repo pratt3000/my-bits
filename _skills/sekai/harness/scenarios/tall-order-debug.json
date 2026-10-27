@@ -1,0 +1,79 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "dpr": 1,
+  "steps": [
+    {
+      "wait": 3000
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"play\"]').click()"
+    },
+    {
+      "wait": 2600
+    },
+    {
+      "log": "window.plethoraBit.debug.snapshot()"
+    },
+    {
+      "balance": {
+        "ms": 2500,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "mode": "accel"
+      }
+    },
+    {
+      "log": "window.plethoraBit.debug.snapshot()"
+    },
+    {
+      "balance": {
+        "ms": 2500,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "mode": "accel"
+      }
+    },
+    {
+      "log": "window.plethoraBit.debug.snapshot()"
+    },
+    {
+      "balance": {
+        "ms": 2500,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "mode": "accel"
+      }
+    },
+    {
+      "log": "window.plethoraBit.debug.snapshot()"
+    },
+    {
+      "screenshot": "dbg-01"
+    },
+    {
+      "balance": {
+        "ms": 4000,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "mode": "accel"
+      }
+    },
+    {
+      "log": "window.plethoraBit.debug.snapshot()"
+    },
+    {
+      "screenshot": "dbg-02"
+    }
+  ]
+}

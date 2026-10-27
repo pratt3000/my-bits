@@ -1,0 +1,191 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "dpr": 1,
+  "steps": [
+    {
+      "wait": 3500
+    },
+    {
+      "screenshot": "01-title"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"play\"]').click()"
+    },
+    {
+      "wait": 1600
+    },
+    {
+      "screenshot": "02-first-arm"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "02b-hover"
+    },
+    {
+      "wait": 450
+    },
+    {
+      "screenshot": "02c-falling"
+    },
+    {
+      "balance": {
+        "ms": 7000,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'",
+        "mode": "accel"
+      }
+    },
+    {
+      "screenshot": "03-few-scoops"
+    },
+    {
+      "balance": {
+        "ms": 9000,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'",
+        "mode": "accel"
+      }
+    },
+    {
+      "screenshot": "04-growing"
+    },
+    {
+      "balance": {
+        "ms": 12000,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'",
+        "mode": "accel"
+      }
+    },
+    {
+      "screenshot": "05-tall"
+    },
+    {
+      "balance": {
+        "ms": 14000,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'",
+        "mode": "accel"
+      }
+    },
+    {
+      "screenshot": "06-taller"
+    },
+    {
+      "eval": "window.__toState = window.plethoraBit.debug.state()"
+    },
+    {
+      "drag": [
+        [
+          195,
+          700
+        ],
+        [
+          250,
+          700
+        ],
+        [
+          330,
+          700
+        ],
+        [
+          378,
+          700
+        ]
+      ],
+      "ms": 120
+    },
+    {
+      "wait": 2600
+    },
+    {
+      "screenshot": "07-after-topple"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "screenshot": "08-result"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"again\"]').click()"
+    },
+    {
+      "wait": 1400
+    },
+    {
+      "screenshot": "09-again"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"pause\"]').click()"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "10-pause"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"resume\"]').click()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "eval": "window.__setInsets({ safeArea: { top: 90, right: 28, bottom: 70, left: 28 }, contentSafeArea: { top: 90, right: 28, bottom: 140, left: 28 }, logoArea: { x: 163, y: 704, width: 64, height: 64 } })"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "screenshot": "11-insets-changed"
+    },
+    {
+      "resize": [
+        360,
+        780
+      ]
+    },
+    {
+      "screenshot": "12-resized"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "markVisualReady"
+    },
+    {
+      "expectEvent": "start"
+    },
+    {
+      "expectEvent": "interact"
+    },
+    {
+      "expectEvent": "complete"
+    },
+    {
+      "expectEvent": "record.submit"
+    },
+    {
+      "expectEvent": "leaderboard"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "display": "fullscreen",
+  "viewport": {
+    "width": 844,
+    "height": 390
+  },
+  "dpr": 1,
+  "insets": {
+    "safeArea": {
+      "top": 0,
+      "right": 62,
+      "bottom": 21,
+      "left": 62
+    },
+    "contentSafeArea": {
+      "top": 0,
+      "right": 62,
+      "bottom": 95,
+      "left": 62
+    },
+    "logoArea": {
+      "x": 390,
+      "y": 300,
+      "width": 64,
+      "height": 64
+    }
+  },
+  "steps": [
+    {
+      "wait": 3500
+    },
+    {
+      "screenshot": "sq-01-title"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"play\"]').click()"
+    },
+    {
+      "wait": 1600
+    },
+    {
+      "screenshot": "sq-02-first-arm"
+    },
+    {
+      "balance": {
+        "ms": 6000,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 422,
+        "y": 260,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'",
+        "mode": "accel"
+      }
+    },
+    {
+      "screenshot": "sq-03-playing"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "start"
+    }
+  ]
+}

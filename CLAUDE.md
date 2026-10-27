@@ -25,7 +25,13 @@ is only ever what the origin serves right now.
    any code is written. If they do not, the host is wrong: go back to
    `llms.txt` and the index rather than arguing from what was fetched.
 5. Re-read `upload.md` before every upload. The endpoint, headers, body and
-   response shape are part of the contract and have changed before.
+   response shape are part of the contract and have changed before. Since
+   context `2026-10-22.1` the server enforces this: the upload carries the
+   version the bit was built against in `agentFeedback.contextVersion`, and
+   an older one is refused with `409 context_outdated` (nothing saved).
+   `scripts/upload.py` fetches the live version and refuses to upload a bit
+   built against a different one — re-read the diff and re-check the bit
+   first; never just send the newer version string.
 6. When the contract has moved since the local notes were written, updating
    the notes is part of the job: the root README's *Working on a bit*,
    `_skills/sekai/SKILL.md`, `references/gotchas.md`, `scripts/check.py` and

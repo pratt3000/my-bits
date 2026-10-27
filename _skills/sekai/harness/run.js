@@ -175,9 +175,46 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       if (step.moveTo) { await move(step.moveTo[0], step.moveTo[1]); await sleep(step.after || 120); }
       if (step.up) { await up(); await sleep(step.after || 120); }
       if (step.drag) await drag(step.drag, step.ms);
+      // Closed-loop control: hold a finger down and, every tick, move it to
+      // x0 + gain * (what `read` evaluates to in the page). A bit exposes a
+      // read-only number for this (Tall Order: a finger offset in screen px
+      // that rights its tower), so the harness can play a balance game for
+      // real instead of scripting blind drags. `until` ends the step early.
+      if (step.balance) {
+        const b = step.balance;
+        const vp = page.viewportSize();
+        const x0 = b.x == null ? vp.width / 2 : b.x, y0 = b.y == null ? vp.height * 0.6 : b.y;
+        await down(x0, y0);
+        const t0 = Date.now();
+        // mode "accel": `read` is a finger acceleration (screen px/s^2) and the
+        // step integrates it, which is how a hand actually balances a pole.
+        // Default: `read` is a finger offset from x0.
+        let fx = x0, fv = 0, last = Date.now();
+        while (Date.now() - t0 < (b.ms || 5000)) {
+          let v = 0;
+          try { v = Number(await page.evaluate(b.read)) || 0; } catch (_) { v = 0; }
+          const now = Date.now(), dtS = Math.min(0.2, (now - last) / 1000); last = now;
+          let xt;
+          if (b.mode === "accel") {
+            fv += (b.gain == null ? 1 : b.gain) * v * dtS;
+            fv *= (b.leak == null ? 0.9 : b.leak);
+            fx += fv * dtS;
+            fx = Math.max(16, Math.min(vp.width - 16, fx));
+            xt = fx;
+          } else {
+            xt = Math.max(16, Math.min(vp.width - 16, x0 + (b.gain == null ? 1 : b.gain) * v));
+          }
+          await move(xt, y0);
+          await sleep(b.tick || 50);
+          if (b.until) { try { if (await page.evaluate(b.until)) break; } catch (_) { /* keep going */ } }
+        }
+        await up();
+      }
       if (step.circle) await circle(step.circle);
       if (step.zigzag) await zigzag(step.zigzag);
       if (step.eval) await page.evaluate(step.eval);
+      // Print what an expression evaluates to in the page, for diagnosis.
+      if (step.log) { let v; try { v = await page.evaluate(step.log); } catch (e) { v = "eval failed: " + e.message; } console.log("log " + JSON.stringify(step.log).slice(0, 60) + " => " + JSON.stringify(v)); }
       if (step.screenshot) await shot(step.screenshot, step.clip);
       if (step.expectEvent) {
         const found = await page.evaluate((k) => window.__bitEvents.some((e) => e.kind === k), step.expectEvent);

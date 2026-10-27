@@ -95,6 +95,22 @@ hard you cache-bust. The canonical agent origin is `agent.plethora.studio`
 carries a `Context version:` line — read it before trusting anything.
 `upload.py` and the README links point there now. Found with `crumple/`.
 
+### The contract now checks what you built against
+
+**Symptom:** an upload answers `409 context_outdated` and nothing is saved;
+or a draft saves but the creator cannot publish it (`422
+display_fullscreen_required`).
+
+Since context `2026-10-22.1` every upload declares the context version the
+bit was built against (`agentFeedback.contextVersion`) and an older one is
+refused outright. `upload.py` fetches the live version from
+`/v1/agent/context.json` right before uploading and stops when it differs
+from the version the bit was built against; the fix is to fetch the new set,
+diff it, re-check the bit, and only then upload with the new version. In the
+same release `"display": "fullscreen"` went from recommended to required for
+publishing, so `check.py` fails a manifest without it. Found with
+`tall-order/`, six days after `crumple/` had been built against `10-20.1`.
+
 ### Anything that only appears on device
 
 The harness runs desktop Chromium. Things it cannot tell you about: real audio

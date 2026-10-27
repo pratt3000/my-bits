@@ -1,0 +1,57 @@
+{
+  "display": "safe-frame",
+  "viewport": {
+    "width": 390,
+    "height": 778
+  },
+  "dpr": 1,
+  "steps": [
+    {
+      "wait": 3500
+    },
+    {
+      "screenshot": "sf-01-title"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"play\"]').click()"
+    },
+    {
+      "wait": 1600
+    },
+    {
+      "screenshot": "sf-02-first-arm"
+    },
+    {
+      "balance": {
+        "ms": 7000,
+        "read": "window.plethoraBit.debug.accel()",
+        "x": 195,
+        "y": 700,
+        "tick": 50,
+        "until": "window.plethoraBit.debug.state() !== 'play'",
+        "mode": "accel"
+      }
+    },
+    {
+      "screenshot": "sf-03-playing"
+    },
+    {
+      "eval": "document.querySelector('[data-act=\"pause\"]').click()"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "sf-04-pause"
+    },
+    {
+      "expectEvent": "ready"
+    },
+    {
+      "expectEvent": "start"
+    },
+    {
+      "expectEvent": "interact"
+    }
+  ]
+}

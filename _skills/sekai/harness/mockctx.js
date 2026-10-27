@@ -18,6 +18,7 @@
 
   const container = document.getElementById("bit");
   const frameCbs = [];
+  const managedCanvases = [];
   const destroyers = [];
   const listeners = [];
   const store = new Map();
@@ -107,6 +108,7 @@
   }
   function fireAllResize(why) {
     note("resize", why, rect());
+    if (why === "viewport") for (const s of managedCanvases) s();
     for (const e of resizeCbs.slice()) fireResize(e);
   }
   let firstObservation = true;
@@ -157,7 +159,9 @@
       el.style.inset = "0";
       if (opts.className) el.className = opts.className;
       if (opts.touchAction) el.style.touchAction = opts.touchAction;
-      if (opts.style) Object.assign(el.style, opts.style);
+      if (typeof opts.style === "string") el.style.cssText += ";" + opts.style;
+      else if (opts.style) Object.assign(el.style, opts.style);
+      if (opts.input === "passthrough" || opts.pointerEvents === "none") el.style.pointerEvents = "none";
       container.appendChild(el);
       destroyers.push(() => el.remove());
       return el;
@@ -166,17 +170,24 @@
     createCanvas2D(opts) {
       opts = opts || {};
       const c = document.createElement("canvas");
-      const r = rect();
+      const dpr = opts.maxDpr ? Math.min(DPR, opts.maxDpr) : DPR;
+      const css = opts.coordinateSpace === "css" || opts.scaleToCssPixels === true;
       c.style.position = "absolute";
       c.style.inset = "0";
       c.style.width = "100%";
       c.style.height = "100%";
-      c.width = Math.round(r.w * DPR);
-      c.height = Math.round(r.h * DPR);
       if (opts.touchAction) c.style.touchAction = opts.touchAction;
+      if (opts.input === "passthrough") c.style.pointerEvents = "none";
       container.appendChild(c);
-      const g = c.getContext("2d");
-      g.setTransform(DPR, 0, 0, DPR, 0, 0);
+      const g = c.getContext("2d", { alpha: opts.alpha !== false });
+      const size = () => {
+        const r = rect();
+        c.width = Math.round(r.w * dpr);
+        c.height = Math.round(r.h * dpr);
+        if (css) g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+      size();
+      managedCanvases.push(size);
       destroyers.push(() => c.remove());
       return c;
     },
@@ -215,6 +226,176 @@
       target.addEventListener(name, handler, options);
       listeners.push(() => target.removeEventListener(name, handler, options));
     },
+
+    // ctx.input.activate(target, handler): click plus Enter/Space. The gesture
+    // tracker is not mocked; a bit that needs it fails here, loudly.
+    input: {
+      activate(target, handler) {
+        const onClick = (e) => handler(e);
+        const onKey = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handler(e); } };
+        target.addEventListener("click", onClick);
+        target.addEventListener("keydown", onKey);
+        const off = () => { target.removeEventListener("click", onClick); target.removeEventListener("keydown", onKey); };
+        listeners.push(off);
+        return off;
+      },
+      track() { throw new Error("ctx.input.track is not mocked in the harness"); },
+      on() { throw new Error("ctx.input.on is not mocked in the harness"); },
+      delegate() { throw new Error("ctx.input.delegate is not mocked in the harness"); }
+    },
+
+    // ctx.game: score tracks and the loop, per sdk.md. Leaderboard reads
+    // return the documented shape (rows + nullable viewerRank), not an
+    // invented one.
+    game: (function () {
+      const tracks = new Map();
+      let primary = null;
+      function declaredRecord(channel) {
+        const recs = (window.__manifest && window.__manifest.memory && window.__manifest.memory.records) || {};
+        if (!recs[channel]) throw new Error("record channel not declared in manifest.memory.records: " + channel);
+        return recs[channel];
+      }
+      function fakeBoard(channel, o) {
+        o = o || {};
+        const value = (tracks.get("score") || {}).value || 0;
+        const rows = [
+          { rank: 1, userId: "u-asha", username: "asha", value: Math.max(value + 1200, 4200), displayLabel: String(Math.max(value + 1200, 4200)), achievedAt: "2026-10-20T10:00:00Z" },
+          { rank: 2, userId: "u-me", username: "you", value: value, displayLabel: String(value), achievedAt: "2026-10-27T10:00:00Z", isViewer: true },
+          { rank: 3, userId: "u-rohan", username: "rohan", value: Math.max(0, value - 300), displayLabel: String(Math.max(0, value - 300)), achievedAt: "2026-10-19T10:00:00Z" }
+        ].slice(0, o.limit || 25);
+        return {
+          channel: channel, scope: o.scope || "global", period: o.period || "all_time", dimensions: o.dimensions || {},
+          rows: rows, viewerRank: { rank: 2, userId: "u-me", username: "you", value: value, displayLabel: String(value) },
+          standing: null, rankStatus: "ready", rankComputedAt: new Date().toISOString(), totalRanked: 128,
+          boardKey: channel + ":global:all_time", boardVersion: 1, checkpointStatus: { pending: 0, failed: 0, lastFailure: null }
+        };
+      }
+      return {
+        score(idOrOptions, options) {
+          let id = "score", o = idOrOptions || {};
+          if (typeof idOrOptions === "string") { id = idOrOptions; o = options || {}; }
+          if (tracks.has(id)) return tracks.get(id);
+          const isPrimary = id === "score" ? o.primary !== false : !!o.primary;
+          if (isPrimary && primary) throw new Error("only one primary score track");
+          const min = typeof o.min === "number" ? o.min : -Infinity, max = typeof o.max === "number" ? o.max : Infinity;
+          const subs = [];
+          const t = {
+            id: id, value: o.initial || 0, previous: o.initial || 0, delta: 0, lowest: o.initial || 0, highest: o.initial || 0, initial: o.initial || 0, primary: isPrimary,
+            set(v, meta) {
+              if (typeof v !== "number" || !isFinite(v)) throw new Error("score must be finite");
+              t.previous = t.value; t.value = Math.min(max, Math.max(min, v)); t.delta = t.value - t.previous;
+              t.lowest = Math.min(t.lowest, t.value); t.highest = Math.max(t.highest, t.value);
+              for (const s of subs) s({ id: id, value: t.value, previous: t.previous, delta: t.delta, lowest: t.lowest, highest: t.highest, reason: meta && meta.reason, source: "set" });
+              return t;
+            },
+            add(a, meta) { return t.set(t.value + a, meta); },
+            reset(meta) { return t.set(t.initial, meta); },
+            flush() { note("score.flush", id, t.value); return t; },
+            onChange(fn) { subs.push(fn); return () => { const i = subs.indexOf(fn); if (i >= 0) subs.splice(i, 1); }; },
+            async submit(channel, so) {
+              declaredRecord(channel);
+              note("record.submit", channel, { v: t.value, o: so });
+              return { submitted: true, eventId: "evt-" + Math.random().toString(36).slice(2), value: t.value, displayLabel: (so && so.label) || String(t.value), updatedPeriods: ["daily", "weekly", "all_time"], isPersonalBest: true, improvedBest: true, standing: null, pulseCapture: null, challenges: [] };
+            },
+            async checkpoint(channel, so) { declaredRecord(channel); note("record.checkpoint", channel, { v: t.value, o: so }); return { queued: true, checkpointId: "ck-1", submitted: false }; },
+            async rank(channel, ro) { declaredRecord(channel); const b = fakeBoard(channel, ro); delete b.rows; return b; },
+            async leaderboard(channel, lo) { declaredRecord(channel); note("leaderboard", channel, lo); return fakeBoard(channel, lo); },
+            async checkpointStatus() { return { pending: 0, failed: 0, lastFailure: null }; }
+          };
+          tracks.set(id, t);
+          if (isPrimary) primary = t;
+          return t;
+        },
+        loop(o) {
+          o = o || {};
+          const maxDelta = o.maxDeltaMs || 80;
+          const st = o.state || {};
+          let running = o.autoStart !== false, paused = false, destroyed = false, elapsed = 0, frames = 0;
+          const h = {
+            get frame() { return frames; }, get elapsedMs() { return elapsed; }, get isRunning() { return running && !destroyed; }, get isPaused() { return paused; },
+            timeScale: o.timeScale || 1,
+            stats: { fps: 0, frameMs: 0, updateMs: 0, renderMs: 0, droppedFrames: 0, clampedDeltas: 0, substeps: 0 },
+            pause() { paused = true; if (o.onPause) o.onPause(st); }, resume() { paused = false; if (o.onResume) o.onResume(st); },
+            start() { running = true; }, stop() { running = false; if (o.onStop) o.onStop(st); },
+            destroy() { destroyed = true; running = false; if (o.onDestroy) o.onDestroy(st); },
+            step(ms) { tick(ms == null ? 1000 / 60 : ms); }, resetClock() {}, setFps() {}, setTimeScale(v) { h.timeScale = v; }
+          };
+          function tick(dt) {
+            if (destroyed || !running || paused) return;
+            if (dt > maxDelta) { dt = maxDelta; h.stats.clampedDeltas++; }
+            dt *= h.timeScale;
+            elapsed += dt; frames++;
+            try {
+              if (o.update) o.update(dt, st);
+              if (o.fixedUpdate) o.fixedUpdate(dt, st);
+              if (o.render) o.render(0, st);
+            } catch (e) {
+              if (o.onError) o.onError(e, "update"); else errors.push("game.loop: " + (e.stack || e.message || e));
+            }
+          }
+          frameCbs.push((dt) => tick(dt));
+          destroyers.push(() => h.destroy());
+          if (o.onStart) o.onStart(st);
+          return h;
+        },
+        clamp(v, a, b) { return Math.min(b, Math.max(a, v)); },
+        lerp(a, b, t) { return a + (b - a) * t; },
+        approach(v, t, a) { return v < t ? Math.min(t, v + a) : Math.max(t, v - a); },
+        wrap(v, a, b) { const r = b - a; return a + ((((v - a) % r) + r) % r); }
+      };
+    })(),
+
+    // ctx.tune: manifest.tuning defaults, overridable from a scenario through
+    // window.__tune = { id: value }; window.__setTune(id, value) fires onChange.
+    tune: (function () {
+      const decl = (window.__manifest && window.__manifest.tuning) || {};
+      const knobs = decl.knobs || {}, curves = decl.curves || {};
+      const over = Object.assign({}, window.__tune || {});
+      const subs = [];
+      const val = (id) => (id in over ? over[id] : knobs[id] ? knobs[id].default : undefined);
+      const typed = (id, type) => { const k = knobs[id]; if (!k || k.type !== type) return undefined; return val(id); };
+      function curve(id) {
+        const c = curves[id];
+        if (!c) return { id: id, domain: "custom", range: [0, 1], points: [], easing: "linear", at() { return 0; }, toJSON() { return null; } };
+        const pts = (id in over ? over[id] : c.default).slice().sort((a, b) => a.x - b.x);
+        const sm = c.easing === "smooth" || c.easing === "ease_in_out";
+        return {
+          id: id, domain: c.domain, range: c.range, points: pts, easing: c.easing || "linear",
+          at(x) {
+            if (!pts.length) return 0;
+            if (x <= pts[0].x) return pts[0].y;
+            for (let i = 1; i < pts.length; i++) {
+              if (x <= pts[i].x) {
+                let t = (x - pts[i - 1].x) / Math.max(1e-9, pts[i].x - pts[i - 1].x);
+                if (sm) t = t * t * (3 - 2 * t);
+                if (c.easing === "step") t = 0;
+                return pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t;
+              }
+            }
+            return pts[pts.length - 1].y;
+          },
+          toJSON() { return { id: id, points: pts }; }
+        };
+      }
+      window.__setTune = (id, value) => { over[id] = value; for (const s of subs) if (s.ids.indexOf(id) >= 0) s.fn(value, { id: id, revision: 1 }); };
+      return {
+        get: val,
+        number: (id) => typed(id, "number"), integer: (id) => typed(id, "integer"), boolean: (id) => typed(id, "boolean"),
+        choice: (id) => typed(id, "choice"), multiChoice: (id) => typed(id, "multi_choice"), color: (id) => typed(id, "color"),
+        range: (id) => typed(id, "range"), point2: (id) => typed(id, "point2"), vec2: (id) => typed(id, "vec2"), seed: (id) => typed(id, "seed"),
+        durationMs: (id) => typed(id, "duration_ms"), percent: (id) => typed(id, "percent"),
+        curve: curve,
+        onChange(ids, fn) { const e = { ids: Array.isArray(ids) ? ids : [ids], fn: fn }; subs.push(e); return () => { const i = subs.indexOf(e); if (i >= 0) subs.splice(i, 1); }; },
+        has: (id) => !!(knobs[id] || curves[id]),
+        snapshot() { const o = {}; for (const k of Object.keys(knobs)) o[k] = val(k); return o; },
+        meta: (id) => knobs[id] || curves[id] || undefined,
+        applyPreset() { return []; }, reset() { return []; }
+      };
+    })(),
+
+    pulse: { complete(o) { note("pulse.complete", o); } },
+    share(o) { note("share", o); },
+    viewer: { username: "you" },
 
     onFrame(cb) { frameCbs.push(cb); },
     raf(cb) { frameCbs.push(cb); },
@@ -313,7 +494,32 @@
       rotationRate: null, orientation: null, snapshot: null,
       onChange() { return () => {}; }, active: false
     },
-    motion: { async start() { return false; }, tilt: { x: 0, y: 0 }, accel: null, active: false },
+    motion: (function () {
+      const zero3 = () => ({ x: 0, y: 0, z: 0 });
+      let active = false;
+      const m = {
+        get available() { return !!ctx.capabilities.motion; },
+        get active() { return active; },
+        get permission() { return ctx.capabilities.motion ? (active ? "granted" : "prompt") : "unavailable"; },
+        error: null,
+        get snapshot() { return { atMs: performance.now(), source: active ? "browser" : "none", orientation: zero3(), tilt: zero3(), control: { x: 0, y: 0 }, acceleration: zero3(), accelerationIncludingGravity: zero3(), gravity: zero3(), rotationRate: { alpha: 0, beta: 0, gamma: 0 }, gyroscope: zero3(), magnetometer: zero3(), quaternion: { x: 0, y: 0, z: 0, w: 1 }, calibrated: false, permission: m.permission }; },
+        tilt: zero3(), control: { x: 0, y: 0 }, accel: zero3(),
+        async start() {
+          if (!ctx.capabilities.motion) { const e = new Error("motion permission not declared or denied"); e.name = "NotAllowedError"; throw e; }
+          active = true; note("motion.start"); return true;
+        },
+        stop() { active = false; }, pause() {}, resume() {},
+        calibrate() { return m.snapshot; }, resetCalibration() { return m.snapshot; },
+        setSmoothing() {}, setDeadzone() {}, setAxisMapping() {},
+        tiltControl() {
+          return { get x() { return (window.__tilt && window.__tilt.x) || 0; }, get y() { return (window.__tilt && window.__tilt.y) || 0; }, angle: 0, strength: 0, raw: { x: 0, y: 0 }, destroy() {} };
+        },
+        shake() { return { active: false, strength: 0, count: 0, vector: zero3(), destroy() {} }; },
+        impulse() { return { active: false, strength: 0, vector: zero3(), ageMs: 0, destroy() {} }; },
+        on() { return () => {}; }, onChange() { return () => {}; }
+      };
+      return m;
+    })(),
 
     memory: {
       local(id) {
@@ -323,14 +529,27 @@
         };
       },
       record(id) {
+        const recs = (window.__manifest && window.__manifest.memory && window.__manifest.memory.records) || {};
+        if (window.__manifest && !recs[id]) throw new Error("record channel not declared in manifest.memory.records: " + id);
+        const board = (o) => {
+          o = o || {};
+          return {
+            channel: id, scope: o.scope || "global", period: o.period || "all_time", dimensions: o.dimensions || {},
+            rows: [
+              { rank: 1, userId: "u-asha", username: "asha", value: 11, displayLabel: "11", achievedAt: "2026-10-20T10:00:00Z" },
+              { rank: 2, userId: "u-me", username: "you", value: 7, displayLabel: "7", achievedAt: "2026-10-27T10:00:00Z", isViewer: true }
+            ].slice(0, o.limit || 25),
+            viewerRank: { rank: 2, userId: "u-me", username: "you", value: 7, displayLabel: "7" },
+            standing: null, rankStatus: "ready", rankComputedAt: new Date().toISOString(), totalRanked: 40,
+            boardKey: id + ":global:all_time", boardVersion: 1, checkpointStatus: { pending: 0, failed: 0, lastFailure: null }
+          };
+        };
         return {
-          async submit(v, o) { note("record.submit", id, { v, o }); return { ok: true, accepted: true }; },
-          async leaderboard() {
-            return { entries: [
-              { rank: 1, value: 11, label: "11", user: { handle: "asha" } },
-              { rank: 2, value: 7, label: "7", user: { handle: "rohan" }, self: true }
-            ] };
-          }
+          async submit(v, o) { note("record.submit", id, { v, o }); return { submitted: true, eventId: "evt-1", value: v, displayLabel: (o && o.label) || String(v), updatedPeriods: ["daily", "weekly", "all_time"], isPersonalBest: true, improvedBest: true, standing: null }; },
+          async checkpoint(v, o) { note("record.checkpoint", id, { v, o }); return { queued: true, checkpointId: "ck-1", submitted: false }; },
+          async leaderboard(o) { note("leaderboard", id, o); return board(o); },
+          async rank(o) { const b = board(o); delete b.rows; return b; },
+          async checkpointStatus() { return { pending: 0, failed: 0, lastFailure: null }; }
         };
       },
       tally(id) {

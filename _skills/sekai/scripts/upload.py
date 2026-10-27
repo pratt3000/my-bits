@@ -15,9 +15,18 @@ which is what the protocol asks for. A 202 means the command is still running:
 the script polls GET /commands/:id with the same token until it is terminal.
 
 Every upload sends agentFeedback (the contract asks for it on every agent
-upload). The default is an honest "clear" report stamped with the context and
-SDK versions this script was written against; pass --feedback <file.json> to
-send real friction notes instead (same shape as upload.md's example).
+upload). The default is an honest "clear" report; pass --feedback <file.json>
+to send real friction notes instead (same shape as upload.md's example).
+
+Since context 2026-10-22.1 the server checks agentFeedback.contextVersion: an
+upload that declares an older context than the current one is refused with
+409 context_outdated and nothing is saved. So this script fetches the live
+version from /v1/agent/context.json right before uploading and compares it
+with the version the bit was built against (the feedback file's
+contextVersion, or --built-against <version>). If they differ it stops: go
+read what changed, re-check the bit, then run again with the new version.
+It never papers over the gap by sending the live version for a bit built
+against an older one.
 
 Pairing is a short bootstrap: mint a code, the creator approves it on their
 own device, and the access token that comes back is good for four hours
@@ -50,8 +59,21 @@ import time
 import uuid
 
 API = os.environ.get("PLETHORA_AGENT_API", "https://agent.plethora.studio/v1/agent")
-CONTEXT_VERSION = "plethora-agent-context-2026-10-20.1"
+# What this script was last checked against; the live version is fetched at
+# upload time and wins.
+CONTEXT_VERSION = "plethora-agent-context-2026-10-22.1"
 SDK_VERSION = "1.7.0"
+
+
+def live_context():
+    """The current contextVersion and sdkVersion from the agent origin."""
+    r = subprocess.run(["curl", "-sS", API + "/context.json"], capture_output=True, text=True)
+    try:
+        d = json.loads(r.stdout)
+        d = d.get("data", d)
+        return d.get("contextVersion"), d.get("sdkVersion")
+    except Exception:
+        return None, None
 TOKEN_DIR = os.path.expanduser("~/.plethora")
 TOKEN_PATH = os.path.join(TOKEN_DIR, "agent-token.json")
 
@@ -172,10 +194,19 @@ def settle(r, token):
                                                "check Create -> Drafts before uploading again" % cmd["id"]}}
 
 
-def upload(dirs, feedback=None):
+def upload(dirs, feedback=None, built_against=None):
     token = load_token()
     if not token:
         sys.exit("no token — run `python3 upload.py pair` first")
+    live, live_sdk = live_context()
+    built = built_against or (feedback or {}).get("contextVersion") or CONTEXT_VERSION
+    if not live:
+        sys.exit("could not read the live context version from %s/context.json; not uploading blind" % API)
+    if live != built:
+        sys.exit("context moved: built against %s, the origin now serves %s (SDK %s).\n"
+                 "Fetch the new set, diff it, re-check the bit, then upload again with the new version\n"
+                 "(--built-against %s or contextVersion in the feedback file)." % (built, live, live_sdk, live))
+    print("context %s (SDK %s) — matches what the bit was built against" % (live, live_sdk))
     failures = 0
     for d in dirs:
         d = os.path.abspath(d)
@@ -185,7 +216,7 @@ def upload(dirs, feedback=None):
         body = {
             "title": m["title"], "description": m.get("description", ""),
             "tags": m.get("tags", []), "source": source, "manifest": m, "generated": True,
-            "agentFeedback": feedback or default_feedback(),
+            "agentFeedback": dict(feedback or default_feedback(), contextVersion=live, sdkVersion=live_sdk or SDK_VERSION),
         }
         # One key per upload, reused only across retries of this same request.
         key = str(uuid.uuid4())
@@ -226,15 +257,18 @@ def upload(dirs, feedback=None):
 if __name__ == "__main__":
     args = sys.argv[1:]
     feedback = None
+    built_against = None
     if "--feedback" in args:
         i = args.index("--feedback")
         feedback = json.load(open(args[i + 1]))
-        feedback.setdefault("contextVersion", CONTEXT_VERSION)
-        feedback.setdefault("sdkVersion", SDK_VERSION)
+        del args[i:i + 2]
+    if "--built-against" in args:
+        i = args.index("--built-against")
+        built_against = args[i + 1]
         del args[i:i + 2]
     if not args:
         sys.exit(__doc__)
     if args[0] == "pair":
         pair()
     else:
-        upload(args, feedback)
+        upload(args, feedback, built_against)

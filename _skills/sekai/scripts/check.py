@@ -84,18 +84,15 @@ def main():
 
     chk(m.get("schemaVersion") == 1, "schemaVersion is 1")
     chk(m.get("runtime") == "plethora-bit@2", "runtime is plethora-bit@2")
-    # SDK 1.7.0: "fullscreen" is the only value display accepts — anything
-    # else, null included, is a 400 (E_MANIFEST_DISPLAY). Absent is allowed and
-    # means the legacy safe frame, which the upload flags with a notice.
-    if "display" in m:
-        chk(m["display"] == "fullscreen",
-            'display is "fullscreen" (the only accepted value; null or anything else is rejected)')
-        if m["display"] == "fullscreen":
-            chk("contentSafeArea" in src,
-                "a full-screen bit lays out from ctx.contentSafeArea ?? ctx.safeArea")
-    else:
-        warn.append('no "display": the bit plays in the legacy safe frame and the upload '
-                    'answers with a display_not_fullscreen notice; new bits declare "fullscreen"')
+    # Context 2026-10-22.1: display "fullscreen" is required to publish. A
+    # draft without it is saved with a display_not_fullscreen notice, but
+    # publishing refuses it (422 display_fullscreen_required); any other
+    # value, null included, is a 400 (E_MANIFEST_DISPLAY).
+    chk(m.get("display") == "fullscreen",
+        'display is "fullscreen" (required to publish; the only accepted value)')
+    if m.get("display") == "fullscreen":
+        chk("contentSafeArea" in src,
+            "a full-screen bit lays out from ctx.contentSafeArea ?? ctx.safeArea")
     chk(bool(m.get("title")), "title present")
     chk(bool(m.get("description")), "description present")
     chk(isinstance(m.get("tags"), list) and m["tags"], "tags present")
