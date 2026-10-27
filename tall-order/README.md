@@ -192,3 +192,11 @@ from the bit's `debug.drive` each tick — a hand on a pole, not scripted drags.
 
 Not verifiable here: tilt (the harness has no motion), haptics, the music
 bed, real touch, and the host's logo button over the real deck.
+
+Uploaded as a draft on 2026-10-27 through `agent.plethora.studio`: action
+`created`, id `7eda9816-178b-468d-ad2d-5a4be1951f9c`, 103,069 bytes, no
+`notices` in the response, so the full-screen declaration and the source
+passed the validator on the first upload. The upload carried
+`agentFeedback.contextVersion` 2026-10-22.1, which the uploader confirmed
+against the live origin first. Publishing stays manual in the app: Create ->
+Drafts.
