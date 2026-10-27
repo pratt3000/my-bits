@@ -66,14 +66,25 @@ SDK_VERSION = "1.7.0"
 
 
 def live_context():
-    """The current contextVersion and sdkVersion from the agent origin."""
-    r = subprocess.run(["curl", "-sS", API + "/context.json"], capture_output=True, text=True)
-    try:
-        d = json.loads(r.stdout)
-        d = d.get("data", d)
-        return d.get("contextVersion"), d.get("sdkVersion")
-    except Exception:
-        return None, None
+    """The current contextVersion and sdkVersion from the agent origin.
+
+    The 9 KB index (GET /v1/agent) carries both at data.contextVersion and
+    data.contract.sdkVersion; the 260 KB context.json keeps them one level
+    down, at data.overview. Read the index first, fall back to context.json.
+    """
+    for path, pick in (("", lambda d: (d.get("contextVersion"), (d.get("contract") or {}).get("sdkVersion"))),
+                       ("/context.json", lambda d: ((d.get("overview") or {}).get("contextVersion"),
+                                                     ((d.get("overview") or {}).get("contract") or {}).get("sdkVersion")))):
+        r = subprocess.run(["curl", "-sS", API + path], capture_output=True, text=True)
+        try:
+            d = json.loads(r.stdout)
+            d = d.get("data", d)
+            ver, sdk = pick(d)
+            if ver:
+                return ver, sdk
+        except Exception:
+            pass
+    return None, None
 TOKEN_DIR = os.path.expanduser("~/.plethora")
 TOKEN_PATH = os.path.join(TOKEN_DIR, "agent-token.json")
 
