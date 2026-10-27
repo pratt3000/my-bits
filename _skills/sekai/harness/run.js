@@ -192,7 +192,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         let fx = x0, fv = 0, last = Date.now();
         while (Date.now() - t0 < (b.ms || 5000)) {
           let v = 0;
-          try { v = Number(await page.evaluate(b.read)) || 0; } catch (_) { v = 0; }
+          // In accel mode `read` may name a function of the finger's offset from x0.
+          const expr = b.mode === "accel" && b.arg === "offset" ? "(" + b.read + ")(" + (fx - x0) + ")" : b.read;
+          try { v = Number(await page.evaluate(expr)) || 0; } catch (_) { v = 0; }
           const now = Date.now(), dtS = Math.min(0.2, (now - last) / 1000); last = now;
           let xt;
           if (b.mode === "accel") {

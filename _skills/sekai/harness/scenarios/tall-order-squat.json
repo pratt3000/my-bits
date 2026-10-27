@@ -44,12 +44,13 @@
     {
       "balance": {
         "ms": 6000,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 422,
         "y": 260,
         "tick": 50,
         "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {

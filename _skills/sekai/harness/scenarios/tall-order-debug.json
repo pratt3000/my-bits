@@ -20,11 +20,12 @@
     {
       "balance": {
         "ms": 2500,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {
@@ -33,11 +34,12 @@
     {
       "balance": {
         "ms": 2500,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {
@@ -46,11 +48,12 @@
     {
       "balance": {
         "ms": 2500,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {
@@ -62,11 +65,12 @@
     {
       "balance": {
         "ms": 4000,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {

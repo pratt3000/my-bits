@@ -62,15 +62,35 @@ th'' = (G / cy) (sin th + (cx / cy) cos th)        gravity, and the bias of an o
 ```
 
 `G` is an effective gravity (520 px/s² × the *topple speed* knob × one minus
-0.6 × *stickiness*) multiplied by `grown = smoothstep(26, 150, cy)`, so the
-first two or three scoops sit in the cup and spring back when nudged, and the
-instability fades in as the tower grows. It topples when
-`|th| > atan(SUP / cy)` with `SUP = 30 px`: a tall tower leans slowly (its time
-constant is `sqrt(cy / G)`, about a second at twenty scoops) but has a tiny
-window. Moving the cone right by `dx` changes the lean by `-dx / cy`, which is
-exactly how a broom on a palm is balanced, and why the cone follows the finger
-through a stiff critically damped spring rather than snapping: the tower feels
-the cone's acceleration, and a finger jump has to be a bounded one.
+0.6 × *stickiness*) multiplied by `grown = smoothstep(26, 120, cy)`, and the
+cone's acceleration reaches the stack in the same proportion, so the first
+three or four scoops sit in the cup, come along for the ride and spring back
+when nudged; the instability fades in over scoops four to six. It topples when
+`|th| > atan(SUP / cy)` with `SUP = 30 px`: a tall tower leans slowly (the time
+constant `1 / sqrt(G / cy)` is 0.64 s at eight scoops and a second at twenty)
+but has a tiny window (10° at eight scoops, 4° at twenty, always about 60 px
+of sway at the top), and from eight scoops on a lean of one degree reaches the
+limit in about a second and a half. Moving the cone right by `dx` changes the
+lean by `-dx / cy`, which is exactly how a broom on a palm is balanced, and
+why the cone follows the finger through a stiff critically damped spring
+rather than snapping: the tower feels the cone's acceleration, and a finger
+jump has to be a bounded one. Because the cone spring (22 rad/s) and the
+jelly wobble (13 rad/s) are stiff, the body physics runs in substeps of 16 ms
+or less whatever the frame rate; before that a 100 ms frame sent the cone to
+infinity.
+
+A lopsided stack has an equilibrium lean, `-atan(cx / cy)`, where it needs no
+acceleration at all; holding it dead upright instead means accelerating the
+cone forever, which is how a player gets chased to the edge of the screen.
+That is a feature of the real thing too, and the hint for a long run: let it
+lean a little.
+
+Playability was checked offline before trusting the headless driver: a model
+of exactly these equations, driven by a full-state balancer with a 250 ms
+reaction delay (a human's), holds a tower of about twenty scoops; with no
+delay it holds fifty. The same balancer, with equilibrium compensation and
+gains picked from the closed-loop eigenvalues, is the harness driver
+(`debug.drive`).
 
 A landing at lateral offset `e` adds `e × m / (M × cy) × 3` to the angular
 velocity (capped at ±0.5 rad/s), settles at `e / 2` as that scoop's permanent
@@ -143,3 +163,32 @@ pause card and persists.
   a stop colour it cannot resolve, so dynamic colours (flavours, palettes) are
   flat fills under literal-stop overlays. No `document.createElement("canvas")`,
   no layout-box queries, no `ph` local, no ImageData.
+
+## Verified
+
+Headless, with the repo harness (`_skills/sekai/harness/run.js`) against the
+strict mock `ctx`, which for this bit learned `ctx.game` (score tracks and the
+loop), `ctx.tune` from the manifest, `ctx.input.activate`, a permission-gated
+`ctx.motion`, `ctx.pulse` and the documented leaderboard shape. The runner
+gained a closed-loop `balance` step that holds a finger down and moves it
+from the bit's `debug.drive` each tick — a hand on a pole, not scripted drags.
+
+- Full screen, 390 × 844 with an iPhone's insets and logo band: init clean,
+  `ready()` after the title, no console or page errors; the driver reached
+  fifteen scoops through the first INCOMING rush (both arms firing, double
+  points) and the ten-scoop milestone (confetti, bonus, cheer); clean and
+  wobbly landings, the multiplier rising and resetting, mini and big scoops,
+  the camera zooming out; a scripted swipe toppled it, the result card
+  showed scoops, points, a new best, the mock's top three with the viewer's
+  row and rank, and a Pulse completion was posted; play again, pause and
+  resume, an inset change mid-run, a resize.
+- The legacy safe frame (`display: "safe-frame"` in the mock, 390 × 778,
+  `contentSafeArea` undefined, a 120 px bottom band): title, play, three
+  scoops, pause card; every control above the band.
+- A squat 844 × 390 viewport with landscape insets: the camera zooms to its
+  floor, five scoops land; it plays but it is not the target.
+- The upload validator's known traps are avoided by construction (see
+  *Contract notes*); the real validator is the upload.
+
+Not verifiable here: tilt (the harness has no motion), haptics, the music
+bed, real touch, and the host's logo button over the real deck.

@@ -433,6 +433,7 @@ window.plethoraBit = {
     const DAMP = 0.9;                      // viscous damping on the lean, 1/s
     const K_IMP = 3;                       // how hard an off-centre landing shoves the tower
     const K_CUP = 40;                      // the cone's cup springs a short stack back upright, 1/s^2
+    const CUP_HI = 120;                    // centre-of-mass height (px) by which the cup has let go entirely
     const CATCH = 0.8;                     // fraction of the summed radii that still counts as a catch
     const WOB_K = 170, WOB_C = 7;          // the jelly wobble spring
     const FLAVORS = [
@@ -507,7 +508,7 @@ window.plethoraBit = {
       // A short stack sits in the cup of the cone: the cup springs it back
       // upright and gravity barely tips it. Over the first few scoops the
       // spring fades out and the instability fades in, and the game begins.
-      const grown = smooth(26, 150, cy);
+      const grown = smooth(26, CUP_HI, cy);
       const G = GRAV * tune.topple() * (1 - 0.6 * tune.sticky()) * grown;
       const koff = tower.cx / cy;
       const c = Math.cos(tower.th), s = Math.sin(tower.th);
@@ -635,7 +636,7 @@ window.plethoraBit = {
         const lx = sc.x + sc.w, ly = sc.y;
         debris.push({
           x: base.x + lx * c + ly * s, y: PIVOT_Y + ly * c - lx * s,
-          vx: dir * (90 + ly * 0.8) + rnd(-50, 50), vy: rnd(-10, 110) + ly * 0.12,
+          vx: dir * (50 + ly * 0.3) + rnd(-40, 40), vy: rnd(-10, 90) + ly * 0.1,
           rot: tower.th, vr: dir * rnd(2, 7), r: sc.r, spec: sc, bounces: 0, rest: false
         });
       }
@@ -648,6 +649,11 @@ window.plethoraBit = {
         if (d.rest) continue;
         d.vy -= 1500 * dt;
         d.x += d.vx * dt; d.y += d.vy * dt; d.rot += d.vr * dt;
+        // Stay on the deck in view: a scoop that reaches the edge of the
+        // screen bounces back rather than tumbling out of the frame.
+        const lim = (ctx.width / 2 - 24) / cam.s;
+        if (d.x > lim) { d.x = lim; d.vx = -Math.abs(d.vx) * 0.5; }
+        if (d.x < -lim) { d.x = -lim; d.vx = Math.abs(d.vx) * 0.5; }
         if (d.y < d.r * 0.85) {
           d.y = d.r * 0.85;
           if (d.bounces < 2 && Math.abs(d.vy) > 90) {
@@ -1719,10 +1725,24 @@ window.plethoraBit = {
       correction: () => cam.s * Math.max(30, tower.cy) * (tower.th + 0.32 * tower.om) * 1.5,
       // What a steady hand does: accelerate the cone toward the lean, more
       // for a faster lean, scaled up while the cup still holds the stack.
-      accel: () => {
+      // A model-based balancer for the harness: full state feedback on the
+      // lean (about the lopsided stack's own equilibrium) with a slow,
+      // regime-scaled position loop that walks the cone back to where the
+      // finger started. `off` is the finger's offset from its start, in
+      // screen px; the result is a finger acceleration in screen px/s^2.
+      // Gains were picked offline from the closed-loop eigenvalues; with a
+      // 250 ms reaction delay the same law holds about twenty scoops.
+      drive: (off) => {
         if (!tower.M) return 0;
-        const cy = Math.max(30, tower.cy), grown = smooth(26, 150, cy);
-        return cam.s * cy * (6 * tower.th + 3 * tower.om) / Math.max(0.25, grown);
+        const cy = Math.max(30, tower.cy), grown = smooth(26, CUP_HI, cy);
+        const G = GRAV * tune.topple() * (1 - 0.6 * tune.sticky()) * grown;
+        const om2 = G / cy - K_CUP * (1 - grown);
+        const kp = 10, kd = 5, wx = 0.2, zx = 0.7;
+        let alpha = om2 / (kp - om2);
+        if (Math.abs(alpha) < 0.06) alpha = alpha < 0 ? -0.06 : 0.06;
+        const k3 = wx * wx / alpha, k4 = 2 * zx * wx / alpha;
+        const thEq = -Math.atan2(tower.cx, cy);
+        return cam.s * (cy * (kp * (tower.th - thEq) + kd * tower.om) + k3 * (off || 0) / cam.s + k4 * base.v);
       },
       snapshot: () => ({
         state: state, scoops: count, hearts: hearts, points: points, base: [base.x, base.v, base.target, base.a],

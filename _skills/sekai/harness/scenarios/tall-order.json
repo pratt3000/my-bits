@@ -35,12 +35,13 @@
     {
       "balance": {
         "ms": 7000,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
         "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {
@@ -49,12 +50,13 @@
     {
       "balance": {
         "ms": 9000,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
         "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {
@@ -63,12 +65,13 @@
     {
       "balance": {
         "ms": 12000,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
         "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {
@@ -77,12 +80,13 @@
     {
       "balance": {
         "ms": 14000,
-        "read": "window.plethoraBit.debug.accel()",
+        "read": "window.plethoraBit.debug.drive",
         "x": 195,
         "y": 700,
         "tick": 50,
         "until": "window.plethoraBit.debug.state() !== 'play'",
-        "mode": "accel"
+        "mode": "accel",
+        "arg": "offset"
       }
     },
     {
