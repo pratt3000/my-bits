@@ -81,7 +81,10 @@ package is the source and the manifest.
 
 ## Verified
 
-- `_skills/sekai/scripts/check.py` passes.
+- `_skills/sekai/scripts/check.py` passes, and the draft is on Plethora
+  (id `f3f1ba4b-7c74-4f26-80d7-b26f852828b3`, uploaded 2026-11-09 through
+  the MCP pairing with `_skills/sekai/scripts/upload_mcp.py`; the validator
+  returned no notices).
 - Headless Chromium through `_skills/sekai/harness`: the whole story in
   portrait (390×844) and landscape (844×390), tapping the pill at each step
   and the sky at the end, with `ready`, `start`, `interact` and `complete`

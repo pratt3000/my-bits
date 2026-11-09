@@ -187,6 +187,7 @@ scripts/icons.js      inline lucide icon geometry; reports icons that do not exi
 scripts/check.py      manifest + validator pre-flight; gates the upload
 scripts/bisect.py     when the validator still says "remote resources": finds the statements it means
 scripts/upload.py     pair once, then upload drafts; warns about duplicates
+scripts/upload_mcp.py upload with the plag_ key from the Plethora MCP server's pairing
 harness/run.js        drive a bit headlessly against a strict mock ctx
 harness/scenarios/    example scenario to copy
 references/porting.md the mapping, in detail — read before writing the bit

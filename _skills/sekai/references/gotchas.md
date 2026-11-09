@@ -175,3 +175,34 @@ constraint is the easy half; not quietly routing around it is the point.
   game cannot be overwritten, and the new draft is the next release for the
   creator to publish. Expect the DUPLICATE warning then, and tell them which
   id is the fresh one.
+
+### The MCP pairing path
+
+When the session has the Plethora MCP tools (`start_pairing`,
+`wait_for_pairing`, `upload_draft`), the pairing code lasts 60 minutes and the
+upload key (`plag_...`) four hours. `upload_draft` wants the whole source as a
+tool argument; for a big bit send it over HTTPS instead with
+`scripts/upload_mcp.py`, which posts to
+`https://agent.plethora.studio/v1/agent/bits/drafts` with
+`Authorization: Bearer plag_...` and a fresh `Idempotency-Key`. The same
+package sent again the same day comes back `updated` with the same id, so a
+re-send to read the id back is safe. Store the key in
+`~/.plethora/mcp-upload-key.json`, never in the repo.
+
+### Three.js in a bit
+
+- `WebGLRenderTarget` gives you a 16-bit depth buffer unless you ask for a
+  stencil too (`stencilBuffer: true` → DEPTH24_STENCIL8). With a near plane of
+  a few centimetres and a scene tens of metres deep, 16 bits z-fight every
+  facade into stripes.
+- `three@0.164.1` is the core module only: no EffectComposer, no OrbitControls,
+  no loaders. Bloom is ~80 lines with a half-float target, a threshold pass,
+  three blurred mips and a composite that tone-maps (the AgX fit) and encodes
+  sRGB itself; set `renderer.toneMapping = NoToneMapping` so nothing is mapped
+  twice.
+- `new OffscreenCanvas(w, h)` is the way to bake textures and sample text ink;
+  `document.createElement("canvas")` is rejected by the validator.
+- Create the WebGL canvas before the DOM root. The runtime honours
+  `layer: "overlay"`, but legacy hosts and the harness stack by source order.
+- The harness mock now has `ctx.input` (tap, activate) and `ctx.onResize`;
+  a bit should still fall back to `ctx.listen` when they are missing.
