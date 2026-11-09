@@ -28,8 +28,8 @@ package is the source and the manifest.
    willows.
 7. **Wish.** Two more shells climb and burst into "Happy Diwali" and "from
    Plethora", the sparks sticking where the letters go, then whitening in a
-   sweep from left to right. Tapping the sky launches more shells. The share
-   button (where the host offers `ctx.share`) and "Watch again" appear.
+   sweep from left to right. Tapping the sky launches more shells, and the
+   "Watch again" pill appears.
 
 ## How it is built
 
@@ -73,6 +73,9 @@ package is the source and the manifest.
   sweep, the lantern riser, every burst (with crackle pops for crackles and
   crossettes) and a bell for the wish. It is created on the first touch,
   which also unlocks audio; the sound button mutes it.
+- The camera tweens between shots, carries each shot's slow drift into the
+  next tween's start (so a phase change never snaps it back) and runs the
+  result through a short spring, as the original does.
 - The phone's upright screen widens each shot's vertical field the way the
   original does (from the 16:9 framing, capped at 64°), so the same scene
   fits across a narrow screen.
@@ -98,9 +101,9 @@ package is the source and the manifest.
 
 - Sound: the harness has no speakers. The graph is exercised (no errors on
   creation) but the mix was tuned by ear only in the sense of the numbers.
-- `ctx.share` is not in the harness mock, so the share pill is hidden there
-  and only the "Watch again" button shows; on a host with `ctx.share` the
-  share pill appears above it.
+- A first build had a "Share this wish" pill calling `ctx.share`; on the
+  phone the host did nothing with the request, so the ending is the one
+  orange "Watch again" pill now.
 
 ## Divergence from the original
 
@@ -109,5 +112,5 @@ package is the source and the manifest.
   places, and the music is a drone and plucks rather than the original's
   score.
 - The original's end button goes to a page where you add your own name;
-  here it shares this wish, and the sender is fixed to Plethora.
+  here the sender is fixed to Plethora and the pill replays the wish.
 - No free-look orbit mode after the wish.

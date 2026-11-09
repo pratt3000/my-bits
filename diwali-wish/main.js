@@ -1925,7 +1925,6 @@ window.plethoraBit = {
     // ====================================================================== //
     const area = () => ctx.contentSafeArea || ctx.safeArea || { top: 0, right: 0, bottom: 0, left: 0 };
     const ICON_HAND = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V5.5a1.5 1.5 0 0 1 3 0v5"/><path d="M12 10.5v-1a1.5 1.5 0 0 1 3 0v1.5"/><path d="M15 11v-.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.6a6 6 0 0 1-4.7-2.3L4.5 16a1.6 1.6 0 0 1 2.4-2.1L9 15.5"/></svg>`;
-    const ICON_SHARE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>`;
     const ICON_REPLAY = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>`;
     const ICON_SOUND = (on) => on
       ? `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>`
@@ -1985,21 +1984,17 @@ window.plethoraBit = {
       <div class="veil" data-el="veil"></div>
       <div class="note" data-el="note">Tap the sky for more fireworks</div>
       <div class="end" data-el="end">
-        <button class="share" data-act="share" data-el="share"><span class="ripple a"></span><span class="ripple b"></span><span class="ico">${ICON_SHARE}</span>Share this wish</button>
-        <button class="again" data-act="again">${ICON_REPLAY}Watch again</button>
+        <button class="share" data-act="again"><span class="ripple a"></span><span class="ripple b"></span><span class="ico">${ICON_REPLAY}</span>Watch again</button>
       </div>
     </div>`;
     const el = (name) => ui.querySelector(`[data-el="${name}"]`);
     const hintEl = el("hint"), fillEl = el("fill"), threadEl = el("thread"), endEl = el("end"), veilEl = el("veil"), noteEl = el("note"), muteEl = el("mute"), brandEl = el("brand"), topshadeEl = el("topshade");
-    const shareEl = el("share");
-    const canShare = typeof ctx.share === "function";
-    if (!canShare) shareEl.style.display = "none";
     function layoutUi() {
       const a = area();
       brandEl.style.top = (a.top + 14) + "px";
       muteEl.style.top = (a.top + 8) + "px"; muteEl.style.right = (a.right + 14) + "px";
       endEl.style.bottom = (a.bottom + 18) + "px";
-      noteEl.style.bottom = (a.bottom + 18 + 112) + "px";
+      noteEl.style.bottom = (a.bottom + 18 + 74) + "px";
       topshadeEl.style.height = (a.top + 104) + "px";
     }
     layoutUi();
@@ -2115,28 +2110,36 @@ window.plethoraBit = {
     // ====================================================================== //
     // 13. Camera: eased moves between the shots, a slow drift once there     //
     // ====================================================================== //
+    // camState is the tweened shot; drift is the slow push a shot makes once
+    // it has arrived. A new tween starts from where the camera actually is
+    // (shot plus drift), so a phase change never snaps it back. The result
+    // then goes through a short spring, as in the original, so even a
+    // tween that begins mid-move stays smooth.
     const camState = { px: 0, py: 0, pz: 0, lx: 0, ly: 0, lz: 0, fov: 30 };
-    const camTween = { from: null, to: null, t0: 0, dur: 0, ease: "sine.inOut", axes: null, drift: null, shot: null };
+    const camTween = { from: null, to: null, t0: 0, dur: 0, ease: "sine.inOut", axes: null, shot: null, drift: [0, 0, 0] };
+    const camSmooth = { px: 0, py: 0, pz: 0, lx: 0, ly: 0, lz: 0, fov: 30, set: false };
     const EASE = { "power2.out": (t) => 1 - (1 - t) * (1 - t), "sine.inOut": (t) => -(Math.cos(Math.PI * t) - 1) / 2 };
     function setCamShot(name, immediate) {
       const s = SHOTS[name];
       const to = { px: s.pos[0], py: s.pos[1], pz: s.pos[2], lx: s.look[0], ly: s.look[1], lz: s.look[2], fov: shotFov(s.fov) };
-      if (immediate || !s.dur) { Object.assign(camState, to); camTween.to = null; camTween.shot = s; camTween.t0 = now(); return; }
-      camTween.from = Object.assign({}, camState);
+      const d = camTween.drift;
+      if (immediate || !s.dur) { Object.assign(camState, to); camTween.to = null; camTween.shot = s; camTween.t0 = now(); camTween.drift = [0, 0, 0]; camSmooth.set = false; return; }
+      camTween.from = Object.assign({}, camState, { px: camState.px + d[0], py: camState.py + d[1], pz: camState.pz + d[2] });
       camTween.to = to; camTween.t0 = now(); camTween.dur = s.dur; camTween.ease = s.ease || "sine.inOut"; camTween.axes = s.axes || null; camTween.shot = s;
+      camTween.drift = [0, 0, 0];
     }
     phaseListeners.push((p) => { if (SHOTS[p]) setCamShot(p); });
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
-    function updateCamera() {
+    function updateCamera(dt) {
       const T = camTween;
       if (T.to) {
         const u = clamp((now() - T.t0) / T.dur, 0, 1);
         const ease = EASE[T.ease] || EASE["sine.inOut"];
-        const along = (k, span) => { if (!span) return ease(u); return ease(clamp((u - span[0]) / Math.max(0.001, span[1]), 0, 1)); };
+        const along = (span) => { if (!span) return ease(u); return ease(clamp((u - span[0]) / Math.max(0.001, span[1]), 0, 1)); };
         const ax = T.axes || {};
-        camState.px = lerp(T.from.px, T.to.px, along("x", ax.x));
-        camState.py = lerp(T.from.py, T.to.py, along("y", ax.y));
-        camState.pz = lerp(T.from.pz, T.to.pz, along("z", ax.z));
+        camState.px = lerp(T.from.px, T.to.px, along(ax.x));
+        camState.py = lerp(T.from.py, T.to.py, along(ax.y));
+        camState.pz = lerp(T.from.pz, T.to.pz, along(ax.z));
         const e = ease(u);
         camState.lx = lerp(T.from.lx, T.to.lx, e); camState.ly = lerp(T.from.ly, T.to.ly, e); camState.lz = lerp(T.from.lz, T.to.lz, e);
         camState.fov = lerp(T.from.fov, T.to.fov, e);
@@ -2145,12 +2148,21 @@ window.plethoraBit = {
       const s = T.shot, t = now() - T.t0;
       const d = s && s.drift ? s.drift : [0, 0, 0];
       const k = smooth(t, s && s.dur ? s.dur * 0.6 : 0, (s && s.dur ? s.dur : 1) * 2.4 + 4);
+      T.drift = [d[0] * k, d[1] * k, d[2] * k];
+      const target = { px: camState.px + T.drift[0], py: camState.py + T.drift[1], pz: camState.pz + T.drift[2], lx: camState.lx, ly: camState.ly, lz: camState.lz, fov: camState.fov };
+      if (!camSmooth.set) { Object.assign(camSmooth, target); camSmooth.set = true; }
+      else {
+        const a = 1 - Math.exp(-(dt || 0.016) / 0.18), b = 1 - Math.exp(-(dt || 0.016) / 0.24);
+        camSmooth.px += (target.px - camSmooth.px) * a; camSmooth.py += (target.py - camSmooth.py) * a; camSmooth.pz += (target.pz - camSmooth.pz) * a;
+        camSmooth.lx += (target.lx - camSmooth.lx) * b; camSmooth.ly += (target.ly - camSmooth.ly) * b; camSmooth.lz += (target.lz - camSmooth.lz) * b;
+        camSmooth.fov += (target.fov - camSmooth.fov) * b;
+      }
       const sway = 0.012;
-      camPos.set(camState.px + d[0] * k + Math.sin(t * 0.7) * sway, camState.py + d[1] * k + Math.sin(t * 0.9 + 1) * sway * 0.6, camState.pz + d[2] * k);
-      camLook.set(camState.lx + Math.sin(t * 0.5) * sway * 0.5, camState.ly + Math.cos(t * 0.6) * sway * 0.5, camState.lz);
+      camPos.set(camSmooth.px + Math.sin(t * 0.7) * sway, camSmooth.py + Math.sin(t * 0.9 + 1) * sway * 0.6, camSmooth.pz);
+      camLook.set(camSmooth.lx + Math.sin(t * 0.5) * sway * 0.5, camSmooth.ly + Math.cos(t * 0.6) * sway * 0.5, camSmooth.lz);
       camera.position.copy(camPos);
       camera.lookAt(camLook);
-      camera.fov = camState.fov;
+      camera.fov = camSmooth.fov;
       camera.updateProjectionMatrix();
     }
     setCamShot("loading", true);
@@ -2198,11 +2210,7 @@ window.plethoraBit = {
       muteEl.innerHTML = ICON_SOUND(!story.muted);
       muteEl.setAttribute("aria-label", story.muted ? "Turn sound on" : "Turn sound off");
     });
-    onActivate(ui.querySelector('[data-act="again"]'), () => { firstGesture(); audio.tap(); replay(); });
-    if (canShare) onActivate(shareEl, () => {
-      firstGesture(); audio.tap(); haptic("light");
-      try { ctx.share({ sceneId: "wish", title: WISH_LINE + " from " + SENDER, text: WISH_LINE + " from " + SENDER + " — tap the diya and turn the sound on.", implicitText: SENDER + " sent you a Diwali wish" }); } catch (_) {}
-    });
+    onActivate(ui.querySelector('[data-act="again"]'), () => { firstGesture(); audio.tap(); haptic("light"); replay(); });
 
     // ====================================================================== //
     // 15. Frames                                                             //
@@ -2231,7 +2239,7 @@ window.plethoraBit = {
       const dt = Math.min(0.05, (dtMs || 16) / 1000);
       lightUniforms.uTime.value += dt;
       runTimers();
-      updateCamera();
+      updateCamera(dt);
       updateLamps(onIgnite);
       updateRangoli();
       updateLantern(dt);
@@ -2261,7 +2269,7 @@ window.plethoraBit = {
     });
 
     // The first frame, then the story begins.
-    updateCamera();
+    updateCamera(0.016);
     updateLamps(() => {});
     updateLantern(0.016);
     post.render();
