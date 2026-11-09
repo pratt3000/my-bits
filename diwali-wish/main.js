@@ -1,6 +1,6 @@
 // Plethora Bit · docs and draft upload: https://agent.plethora.studio/v1/agent/start.md
 /**
- * Happy Diwali from Prathamesh — a Diwali greeting to open with the sound on.
+ * Happy Diwali from Plethora — a Diwali greeting to open with the sound on.
  *
  * A courtyard at night. Tap the diya to light it; the flame spreads from lamp
  * to lamp across the courtyard, a rangoli draws itself on the stone, a sky
@@ -10,7 +10,7 @@
  */
 window.plethoraBit = {
   meta: {
-    title: "Happy Diwali from Prathamesh",
+    title: "Happy Diwali from Plethora",
     runtime: "plethora-bit@2",
     tags: ["diwali", "festival", "greeting", "fireworks", "3d", "art"],
     permissions: ["audio", "haptics"]
@@ -19,7 +19,7 @@ window.plethoraBit = {
     // ====================================================================== //
     // 1. Surfaces, the library, the phase clock                              //
     // ====================================================================== //
-    const SENDER = "Prathamesh";
+    const SENDER = "Plethora";
     const WISH_LINE = "Happy Diwali";
     const FONT_UI = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', sans-serif";
     const DISPLAY_FAMILY = "DiyaDisplay";

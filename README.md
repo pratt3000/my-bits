@@ -48,7 +48,7 @@ objects built to the `plethora-bit@2` agent contract.
 | [`cats-cradle/`](cats-cradle)           | The string game that needs two people — take the figure out of the other hands. |
 | [`waveflow/`](waveflow)                 | XY performance pad — 25 synth voices, pitch up the screen, timbre across it. |
 | [`thirty-turns/`](thirty-turns)         | Polytopia on the title screen: a pocket 4X — twelve tribes, 24 techs, bots at four levels, pass-and-play. |
-| [`diwali-wish/`](diwali-wish)           | Happy Diwali from Prathamesh: a three.js courtyard at night, tap the diya, fireworks write the wish. |
+| [`diwali-wish/`](diwali-wish)           | Happy Diwali from Plethora: a three.js courtyard at night, tap the diya, fireworks write the wish. |
 
 ### Rakshabandhan set
 

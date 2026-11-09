@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "runtime": "plethora-bit@2",
   "entry": "main.js",
-  "title": "Happy Diwali from Prathamesh",
-  "description": "A Diwali greeting from Prathamesh, best with the sound on. Tap the diya to light it and watch the flame spread from lamp to lamp across a courtyard at night: a rangoli draws itself on the stone, a sky lantern lifts off, and fireworks climb over the rooftops to write the wish in the sky. Tap the sky for more fireworks, then watch it again.",
+  "title": "Happy Diwali from Plethora",
+  "description": "A Diwali greeting from Plethora, best with the sound on. Tap the diya to light it and watch the flame spread from lamp to lamp across a courtyard at night: a rangoli draws itself on the stone, a sky lantern lifts off, and fireworks climb over the rooftops to write the wish in the sky. Tap the sky for more fireworks, then watch it again.",
   "tags": [
     "diwali",
     "festival",

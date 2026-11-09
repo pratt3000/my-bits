@@ -1,4 +1,4 @@
-# Happy Diwali from Prathamesh
+# Happy Diwali from Plethora
 
 A Diwali greeting to open with the sound on, after the one at
 `diwali.desh.app`: a courtyard at night, one diya to light, and the wish
@@ -27,7 +27,7 @@ package is the source and the manifest.
    up over the town: peonies, chrysanthemums, crossettes, rings, crackles,
    willows.
 7. **Wish.** Two more shells climb and burst into "Happy Diwali" and "from
-   Prathamesh", the sparks sticking where the letters go, then whitening in a
+   Plethora", the sparks sticking where the letters go, then whitening in a
    sweep from left to right. Tapping the sky launches more shells. The share
    button (where the host offers `ctx.share`) and "Watch again" appear.
 
@@ -106,5 +106,5 @@ package is the source and the manifest.
   places, and the music is a drone and plucks rather than the original's
   score.
 - The original's end button goes to a page where you add your own name;
-  here it shares this wish, and the sender is fixed.
+  here it shares this wish, and the sender is fixed to Plethora.
 - No free-look orbit mode after the wish.
