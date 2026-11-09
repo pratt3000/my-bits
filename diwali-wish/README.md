@@ -21,11 +21,16 @@ package is the source and the manifest.
    sweep over six and a half seconds, the sender's initial in the middle,
    and a paper lantern swells into view at its centre. The pill returns over
    the lantern.
-5. **Lantern.** It lifts off, bobbing, then climbs into the night; fifty more
-   rise over the town behind.
-6. **Fireworks.** The camera pulls back over the roof and fourteen shells go
-   up over the town: peonies, chrysanthemums, crossettes, rings, crackles,
-   willows.
+5. **Lantern.** It lifts off, bobbing, then climbs into the night; the camera
+   tilts up to follow it and backs away as it rises, and three seconds in the
+   first shells go up over the roof while it is still climbing. Fifty more
+   lanterns rise over the town behind. (The original holds on the house
+   here until the fireworks phase; the continuous follow is a change made
+   on request, so there is no dead stretch between the lift-off and the
+   fireworks.)
+6. **Fireworks.** The camera pulls back over the roof and the show
+   continues: twenty-three shells in all over the town, peonies,
+   chrysanthemums, crossettes, rings, crackles, willows.
 7. **Wish.** Two more shells climb and burst into "Happy Diwali" and "from
    Plethora", the sparks sticking where the letters go, then whitening in a
    sweep from left to right. Tapping the sky launches more shells, and the

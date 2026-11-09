@@ -1223,8 +1223,16 @@ window.plethoraBit = {
       { at: 4.1, x: 4, z: -28, h: 26, kind: "ring", color: 5 }, { at: 4.6, x: -7, z: -26, h: 24, kind: "crossette", color: 2, color2: 0 },
       { at: 5.2, x: 8, z: -22, h: 21, kind: "peony", color: 0, color2: 1 }, { at: 5.9, x: -12, z: -30, h: 25, kind: "willow", color: 0 },
       { at: 6, x: 0, z: -28, h: 27, kind: "willow", color: 0 }, { at: 6.1, x: 12, z: -30, h: 25, kind: "willow", color: 0 },
-      { at: 6.6, x: -5, z: -24, h: 23, kind: "crackle", color: 0 }, { at: 6.7, x: 5, z: -24, h: 23, kind: "crackle", color: 5 }
+      { at: 6.6, x: -5, z: -24, h: 23, kind: "crackle", color: 0 }, { at: 6.7, x: 5, z: -24, h: 23, kind: "crackle", color: 5 },
+      { at: 7.3, x: -8, z: -26, h: 22, kind: "peony", color: 3, color2: 0 }, { at: 7.9, x: 7, z: -24, h: 21, kind: "ring", color: 1 },
+      { at: 8.6, x: -2, z: -28, h: 25, kind: "chrysanthemum", color: 4, color2: 5 }, { at: 9.2, x: 11, z: -27, h: 23, kind: "crossette", color: 2, color2: 5 },
+      { at: 9.8, x: -11, z: -29, h: 24, kind: "willow", color: 0 }, { at: 10.3, x: 3, z: -23, h: 20, kind: "crackle", color: 5 },
+      { at: 10.9, x: -5, z: -25, h: 22, kind: "peony", color: 1, color2: 3 }
     ];
+    // The first shells go up while the lantern is still climbing: the
+    // fireworks clock starts this many seconds into the lantern phase and
+    // runs on through the pull-back and the wish.
+    const FW_LEAD = 3.0;
     const FW_WIDE = [{ at: 2.4, x: -16, z: -29, h: 24, kind: "peony", color: 1, color2: 5 }, { at: 3.3, x: 16, z: -29, h: 25, kind: "crackle", color: 5 }];
     const SLOT = 1600, SLOTS = 14;
     const FW_VS = `
@@ -1369,11 +1377,9 @@ window.plethoraBit = {
       F.booms.push({ at: burst, kind: spec.kind, dist: centre.distanceTo(camera.position) });
       return burst;
     }
-    // The fireworks clock runs from the start of the fireworks phase and on
-    // through the wish, so taps can keep launching shells afterwards.
     function fireworksClock() {
-      const f = since("fireworks"), w = since("wish");
-      return f >= 0 ? f : w >= 0 ? 60 + w : -1;
+      const l = since("lantern");
+      return l >= 0 ? l - FW_LEAD : -1;
     }
     function updateFireworks(onBoom) {
       const F = fireworks;
@@ -1406,7 +1412,10 @@ window.plethoraBit = {
       lit: { pos: [HERO.x + 0.16, 0.2, HERO.z + 0.62], look: [HERO.x - 0.03, 0.13, HERO.z], fov: 28, dur: 3, ease: "sine.inOut" },
       spread: { pos: [0.3, 2.4, 5], look: [0, 2.6, -5], fov: 52, dur: 8.5, ease: "sine.inOut", drift: [-0.6, 0.5, 0.3] },
       rangoli: { pos: [0.7, 3.4, 3.5], look: [0, 0.2, -0.2], fov: 46, dur: 5.5, ease: "sine.inOut", drift: [-1.2, -1.2, 0.2] },
-      lantern: { pos: [1.9, 0.8, 3.3], look: [0, 0.9, 0], fov: 48, dur: 5, ease: "sine.inOut", drift: [0.6, -0.1, 0.8] },
+      // the lantern shot follows the lantern up: the look tracks it and the
+      // camera climbs and backs away as it goes, so the roof and the first
+      // shells over it stay in frame
+      lantern: { pos: [1.9, 0.8, 3.3], look: [0, 0.9, 0], fov: 48, dur: 5, ease: "sine.inOut", drift: [0.3, 0.2, 0.4], track: true, follow: (a) => [0.1 * a, 0.22 * a, 0.36 * a] },
       fireworks: { pos: [0, 3.2, 12], look: [0, 10, -24], fov: 58, dur: 7, ease: "sine.inOut", drift: [0, 0.3, -0.8], axes: { x: [0, 1], y: [0, 0.6], z: [0.3, 0.7] } },
       wish: { pos: [0.2, 3, 11.4], look: [0, 9, -24], fov: 56, dur: 3, ease: "sine.inOut", drift: [0.5, 0.1, -0.5] }
     };
@@ -2060,8 +2069,8 @@ window.plethoraBit = {
         case "lit": audio.duck(0.5, 0.9); audio.matchStrike(); schedule(p, 0.85, () => { audio.flameCatch(); flash(0.08); haptic("medium"); }); break;
         case "spread": audio.setLevel(0.7, 2); break;
         case "rangoli": audio.setLevel(0.85, 1.5); audio.sweep(0, 1, 1); audio.sweep(3.4, 1.06, 0.7); break;
-        case "lantern": audio.duck(0.4, 1.2); audio.lanternRelease(); haptic("light"); schedule(p, 0.3, () => haptic("light")); break;
-        case "fireworks": audio.setLevel(1, 1.5); break;
+        case "lantern": audio.duck(0.4, 1.2); audio.lanternRelease(); haptic("light"); schedule(p, 0.3, () => haptic("light")); schedule(p, FW_LEAD, () => audio.setLevel(1, 1.5)); break;
+        case "fireworks": break;
         case "wish": audio.setLevel(0.55, 3); schedule(p, 0.6, () => audio.bell()); schedule(p, wishBurstAt(0) + 0.2, () => audio.wishSwell()); break;
         default: break;
       }
@@ -2146,9 +2155,19 @@ window.plethoraBit = {
         if (u >= 1) T.to = null;
       }
       const s = T.shot, t = now() - T.t0;
+      // the lantern shot looks up to follow the lantern as it climbs; the
+      // blended look is written back so the next shot starts from it
+      if (s && s.track) {
+        const a = since("lantern");
+        if (a >= 0) {
+          const w = smooth(a, 1.0, 3.5), lp = lantern.g.position;
+          camState.lx = lerp(camState.lx, lp.x, w); camState.ly = lerp(camState.ly, Math.min(0.3 + 0.78 * lp.y, 8), w); camState.lz = lerp(camState.lz, lp.z, w);
+        }
+      }
       const d = s && s.drift ? s.drift : [0, 0, 0];
       const k = smooth(t, s && s.dur ? s.dur * 0.6 : 0, (s && s.dur ? s.dur : 1) * 2.4 + 4);
-      T.drift = [d[0] * k, d[1] * k, d[2] * k];
+      const f = s && s.follow ? s.follow(Math.max(0, since("lantern"))) : [0, 0, 0];
+      T.drift = [d[0] * k + f[0], d[1] * k + f[1], d[2] * k + f[2]];
       const target = { px: camState.px + T.drift[0], py: camState.py + T.drift[1], pz: camState.pz + T.drift[2], lx: camState.lx, ly: camState.ly, lz: camState.lz, fov: camState.fov };
       if (!camSmooth.set) { Object.assign(camSmooth, target); camSmooth.set = true; }
       else {
