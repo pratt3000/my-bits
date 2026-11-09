@@ -148,6 +148,30 @@
     onFrame(cb) { frameCbs.push(cb); },
     raf(cb) { frameCbs.push(cb); },
 
+    // SDK 1.8 ctx.input, the small part bits use: tap gestures and DOM activation.
+    input: {
+      on(target, name, handler) {
+        if (name !== "tap") { note("input.on", name); return () => {}; }
+        let down = null;
+        const d = (e) => { down = { x: e.offsetX, y: e.offsetY, t: performance.now() }; };
+        const u = (e) => { if (down && performance.now() - down.t < 400 && Math.hypot(e.offsetX - down.x, e.offsetY - down.y) < 12) handler({ x: e.offsetX, y: e.offsetY, clientX: e.clientX, clientY: e.clientY, normalizedX: e.offsetX / Math.max(1, target.clientWidth), normalizedY: e.offsetY / Math.max(1, target.clientHeight), pointerType: e.pointerType, target }); down = null; };
+        target.addEventListener("pointerdown", d); target.addEventListener("pointerup", u);
+        const off = () => { target.removeEventListener("pointerdown", d); target.removeEventListener("pointerup", u); };
+        listeners.push(off);
+        return off;
+      },
+      activate(target, handler) {
+        const h = (e) => handler(e);
+        target.addEventListener("click", h);
+        const k = (e) => { if (e.key === "Enter" || e.key === " ") handler(e); };
+        target.addEventListener("keydown", k);
+        const off = () => { target.removeEventListener("click", h); target.removeEventListener("keydown", k); };
+        listeners.push(off);
+        return off;
+      },
+      track() { throw new Error("ctx.input.track is not in the harness mock"); }
+    },
+
     timeout(fn, ms) {
       const id = setTimeout(fn, ms);
       destroyers.push(() => clearTimeout(id));
@@ -159,6 +183,20 @@
       return id;
     },
     onDestroy(fn) { destroyers.push(fn); },
+    // SDK 1.8 ctx.onResize: the container's size, with the insets, debounced a frame.
+    onResize(cb, opts) {
+      opts = opts || {};
+      const snap = () => { const r = rect(); return { width: r.w, height: r.h, dpr: DPR, nativeDpr: DPR, safeArea: ctx.safeArea, contentSafeArea: ctx.contentSafeArea, logoArea: ctx.logoArea }; };
+      let pending = 0;
+      const fire = () => { clearTimeout(pending); pending = setTimeout(() => { try { cb(snap()); } catch (e) { errors.push("onResize: " + (e.stack || e.message || e)); } }, opts.debounceMs || 0); };
+      let ro = null;
+      if (typeof ResizeObserver === "function") { ro = new ResizeObserver(fire); ro.observe(container); }
+      else window.addEventListener("resize", fire);
+      const off = () => { if (ro) ro.disconnect(); else window.removeEventListener("resize", fire); clearTimeout(pending); };
+      destroyers.push(off);
+      if (opts.immediate) { try { cb(snap()); } catch (e) { errors.push("onResize: " + (e.stack || e.message || e)); } }
+      return off;
+    },
 
     async loadScript(name, version) { throw new Error("no script deps in harness: " + name + "@" + version); },
     async importModule(name, version) {
